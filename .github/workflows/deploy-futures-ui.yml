@@ -210,6 +210,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'yarn'
+          cache-dependency-path: ui/yarn.lock
 
       - name: Create .env file
         id: create_env
@@ -222,7 +223,7 @@ jobs:
           
           # Create .env file with environment-scoped variables
           # GitHub Environments automatically scope secrets/vars to the environment
-          cat > .env << EOF
+          cat > ui/.env << EOF
           REACT_APP_BUY_LMR_URL=${{ secrets.REACT_APP_BUY_LMR_URL || vars.REACT_APP_BUY_LMR_URL }}
           REACT_APP_CHAIN_ID=${{ secrets.REACT_APP_CHAIN_ID || vars.REACT_APP_CHAIN_ID }}
           REACT_APP_CLONE_FACTORY=${{ secrets.REACT_APP_CLONE_FACTORY || vars.REACT_APP_CLONE_FACTORY }}
@@ -244,16 +245,18 @@ jobs:
           EOF
           
           echo "✅ .env file created"
-          echo "📄 Version in .env: $(grep REACT_APP_VERSION .env)"
+          echo "📄 Version in .env: $(grep REACT_APP_VERSION ui/.env)"
           echo "📄 .env contents (sanitized):"
-          cat .env | sed 's/=.*/=***/'
+          cat ui/.env | sed 's/=.*/=***/'
 
       - name: Install dependencies
+        working-directory: ui
         run: |
           echo "📦 Installing dependencies..."
           yarn install --frozen-lockfile
 
       - name: Build application
+        working-directory: ui
         run: |
           echo "🏗️ Building application..."
           yarn build
@@ -265,7 +268,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-${{ needs.generate-tag.outputs.environment }}
-          path: build/
+          path: ui/build/
           retention-days: 1
 
   deploy:
