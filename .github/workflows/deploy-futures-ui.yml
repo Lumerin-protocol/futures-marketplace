@@ -189,7 +189,7 @@ jobs:
     runs-on: ubuntu-latest
     # HAS environment scope - can access environment-scoped secrets/variables
     environment:
-      name: ${{ needs.generate-tag.outputs.environment == 'main' && 'prd' || needs.generate-tag.outputs.environment }}
+      name: ${{ needs.generate-tag.outputs.environment }}
       url: ${{ needs.setup.outputs.marketplace_url }}
     outputs:
       version: ${{ needs.generate-tag.outputs.vtag }}
