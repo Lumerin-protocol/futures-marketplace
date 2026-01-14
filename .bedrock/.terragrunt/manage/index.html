@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lumerin Hashpower Marketplace - Planned System Upgrade</title>
+  <meta name="theme-color" content="#1e1e1e" />
+  <meta name="description" content="Decentralized, global marketplace for buying, selling, and owning Bitcoin mining hashrate. Mine Bitcoin directly from your crypto wallet—no hardware required." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛏️</text></svg>" />
+  
+  <!-- Import Fonts matching the marketplace -->
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@100;200;300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Raleway:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,200;1,300;1,400&display=swap" rel="stylesheet">
+
+  <style>
+    /* Reset and base styles matching marketplace */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: auto;
+      background-color: #1e1e1e;
+      font-family: 'Montserrat', sans-serif;
+      color: #fff;
+    }
+
+    /* Main container with marketplace-style background */
+    .maintenance-container {
+      min-height: 100vh;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      
+      /* Background matching the marketplace landing page */
+      background: 
+        radial-gradient(ellipse 90% 350% at 82% 50%, rgb(41, 50, 54) 15%, #1e1e1e 35%);
+      background-position: top right;
+      background-repeat: no-repeat;
+      background-size: contain;
+    }
+
+    @media (max-width: 650px) {
+      .maintenance-container {
+        background: 
+          radial-gradient(ellipse 100% 80% at 50% 20%, rgb(41, 50, 54) 50%, #1e1e1e 75%);
+        background-size: cover;
+      }
+    }
+
+    /* Content card */
+    .maintenance-card {
+      max-width: 600px;
+      width: 100%;
+      text-align: center;
+      padding: 3rem 2rem;
+      border-radius: 15px;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Status badge */
+    .status-badge {
+      display: inline-block;
+      padding: 0.5rem 1rem;
+      background: rgba(17, 180, 191, 0.2);
+      color: #11B4BF;
+      border: 1px solid rgba(17, 180, 191, 0.3);
+      border-radius: 50px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 2rem;
+    }
+
+    /* Main headline - matching marketplace style */
+    .main-headline {
+      font-size: 3rem;
+      font-weight: 700;
+      color: #fff;
+      font-family: 'Raleway', sans-serif;
+      line-height: 1.25;
+      margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 650px) {
+      .main-headline {
+        font-size: 2.5rem;
+      }
+    }
+
+    @media (max-width: 450px) {
+      .main-headline {
+        font-size: 2rem;
+      }
+    }
+
+    /* USDC highlight */
+    .usdc-highlight {
+      color: #11B4BF;
+      font-weight: 700;
+    }
+
+    /* Subtitle */
+    .subtitle {
+      font-size: 1.25rem;
+      color: rgba(255, 255, 255, 0.8);
+      font-family: 'Montserrat', sans-serif;
+      margin-bottom: 2rem;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 650px) {
+      .subtitle {
+        font-size: 1.125rem;
+      }
+    }
+
+    /* Date highlight */
+    .date-highlight {
+      color: #5EF38C;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    /* Description */
+    .description {
+      font-size: 1rem;
+      color: rgba(255, 255, 255, 0.7);
+      font-family: 'Inter', sans-serif;
+      margin-bottom: 2.5rem;
+      line-height: 1.6;
+    }
+
+    /* Buttons container */
+    .buttons-wrapper {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      justify-content: center;
+      margin-bottom: 2rem;
+    }
+
+    /* Primary button matching marketplace style */
+    .btn-primary {
+      background: #11B4BF;
+      color: #fff;
+      border: none;
+      padding: 0.875rem 2rem;
+      border-radius: 10px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 0.875rem;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .btn-primary:hover {
+      background: #0E9AA3;
+      transform: translateY(-1px);
+    }
+
+    /* Secondary button */
+    .btn-secondary {
+      background: #4c5a5f;
+      background: linear-gradient(45deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 100%), #4c5a5f;
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 0.875rem 2rem;
+      border-radius: 10px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 500;
+      font-size: 0.875rem;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      box-shadow: 0px 4px 10px 0px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-secondary:hover {
+      background: linear-gradient(45deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.1) 100%), #5a6b70;
+      transform: translateY(-1px);
+    }
+
+    /* Footer links */
+    .footer-links {
+      font-size: 0.875rem;
+      color: rgba(255, 255, 255, 0.6);
+      font-family: 'Inter', sans-serif;
+    }
+
+    .footer-links a {
+      color: #11B4BF;
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s ease;
+    }
+
+    .footer-links a:hover {
+      color: #5EF38C;
+    }
+
+    /* Logo/Icon */
+    .maintenance-icon {
+      font-size: 4rem;
+      margin-bottom: 1rem;
+      opacity: 0.8;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 650px) {
+      .maintenance-card {
+        padding: 2rem 1.5rem;
+      }
+      
+      .buttons-wrapper {
+        flex-direction: column;
+        align-items: center;
+      }
+      
+      .btn-primary,
+      .btn-secondary {
+        width: 100%;
+        max-width: 300px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="maintenance-container">
+    <div class="maintenance-card">
+      <div class="maintenance-icon">⛏️</div>
+      
+      <div class="status-badge">Planned System Upgrade</div>
+      
+      <h1 class="main-headline">
+        Lumerin <span class="usdc-highlight">USDC</span><br>
+        Hashpower Marketplace
+      </h1>
+      
+      <p class="subtitle">
+        Will return on <span class="date-highlight">September 3rd, 2025 after Noon EST</span>!
+      </p>
+      
+      <p class="description">
+        We're upgrading the marketplace for better performance, enhanced stability, and a smoother USDC settlement experience. Thank you for your patience while we help bring you a better marketplace!
+      </p>
+      
+      <div class="buttons-wrapper">
+        <a href="https://marketplace.lumerin.io/" class="btn-primary">
+          Launch App (when we're back)
+        </a>
+        <a href="https://linktr.ee/lumerinprotocol" target="_blank" rel="noopener" class="btn-secondary">
+          Join Community
+        </a>
+      </div>
+      
+      <div class="footer-links">
+        Follow updates on 
+        <a href="https://twitter.com/hellolumerin" target="_blank" rel="noopener">X/Twitter</a>, 
+        <a href="https://t.me/LumerinOfficial" target="_blank" rel="noopener">Telegram</a>, and 
+        <a href="https://discord.gg/lumerin" target="_blank" rel="noopener">Discord</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
