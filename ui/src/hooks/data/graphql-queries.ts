@@ -138,12 +138,13 @@ export const ContractSpecsQuery = gql`
 `;
 
 export const HashrateIndexQuery = gql`
-  query HashpriceIndex($startDate: BigInt!, $first: Int!) {
+  query HashpriceIndex($startDate: BigInt!, $first: Int!, $skip: Int!) {
     hashrateIndexes(
       where: { updatedAt_gte: $startDate }
       orderBy: updatedAt
       orderDirection: desc
       first: $first
+      skip: $skip
     ) {
       id
       hashesForBTC
@@ -154,8 +155,8 @@ export const HashrateIndexQuery = gql`
 `;
 
 export const AggregatedHashrateIndexQuery = gql`
-  query AggregatedHashrateIndexQuery($interval: String!) {
-  hashesForTokenCandles(interval: $interval) {
+  query AggregatedHashrateIndexQuery($interval: String!, $first: Int!, $skip: Int!, $startTimestamp: BigInt!) {
+  hashesForTokenCandles(interval: $interval, first: $first, skip: $skip, where: { timestamp_gte: $startTimestamp }) {
     count
     id
     sum
