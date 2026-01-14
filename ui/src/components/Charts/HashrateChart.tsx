@@ -253,7 +253,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
           7D
         </PeriodButton>
         <PeriodButton $active={timePeriod === "month"} onClick={() => onTimePeriodChange("month")}>
-          1M
+          30D
         </PeriodButton>
       </PeriodSwitch>
       <div style={{ width: "100%", height: "450px", paddingTop: "1rem" }}>
