@@ -1,11 +1,10 @@
-import { Bars3BottomLeftIcon } from "@heroicons/react/24/outline";
 import styled from "@mui/material/styles/styled";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import { safeLazy } from "../utils/safeLazy";
+import LogoIcon from "../images/icons/nav-logo-white.png";
 
 type Props = {
-  setSidebarOpen: (isOpen: boolean) => void;
   pageTitle: string;
 };
 
@@ -18,15 +17,12 @@ const Web3ProviderLazy = safeLazy(() => import("../Web3Provider").then((module) 
 export const Header = (props: Props) => {
   return (
     <StyledToolbar>
-      <button
-        type="button"
-        className="border-gray-200 text-gray-500 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 md:hidden"
-        onClick={() => props.setSidebarOpen(true)}
-      >
-        <span className="sr-only">Open sidebar</span>
-        <Bars3BottomLeftIcon className="h-8 w-8" aria-hidden="true" />
-      </button>
-      <PageTitle>{props.pageTitle}</PageTitle>
+      <TitleWrapper>
+        <LogoCrop>
+          <img src={LogoIcon} alt="Lumerin" />
+        </LogoCrop>
+        <PageTitle>{props.pageTitle}</PageTitle>
+      </TitleWrapper>
       <Web3ProviderLazy>
         <HeaderConnectLazy />
       </Web3ProviderLazy>
@@ -38,6 +34,23 @@ const StyledToolbar = styled(Toolbar)`
   display: flex;
   justify-content: space-between;
   padding: 0 !important;
+`;
+
+const TitleWrapper = styled("div")`
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+`;
+
+const LogoCrop = styled("div")`
+  width: 70px;
+  height: auto;
+  overflow: hidden;
+  padding-bottom: 5px;
+
+  img {
+    min-width: 200px;
+  }
 `;
 
 const PageTitle = styled(Typography)`
