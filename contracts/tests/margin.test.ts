@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 import { getAddress, parseEventLogs, parseUnits, zeroAddress } from "viem";
 import { deployFuturesFixture } from "./fixtures";
-import { catchError } from "../../lib";
+import { catchError } from "../lib/lib";
 
 async function positionWithMarginFixture() {
   const data = await loadFixture(deployFuturesFixture);

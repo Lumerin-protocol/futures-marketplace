@@ -2,8 +2,7 @@ import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { parseEventLogs, parseUnits, getAddress, maxUint256 } from "viem";
 import { deployFuturesFixture } from "./fixtures";
-import { catchError } from "../../lib";
-import { quantizePrice } from "./utils";
+import { catchError } from "../lib/lib";
 
 describe("Futures Delivery Payment", function () {
   describe("depositDeliveryPayment", function () {

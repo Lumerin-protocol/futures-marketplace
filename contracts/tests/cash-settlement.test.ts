@@ -1,6 +1,6 @@
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { deployFuturesFixture } from "./fixtures";
-import { getAddress, parseEventLogs, parseUnits } from "viem";
+import { parseEventLogs, parseUnits } from "viem";
 import { expect } from "chai";
 import { quantizePrice } from "./utils";
 

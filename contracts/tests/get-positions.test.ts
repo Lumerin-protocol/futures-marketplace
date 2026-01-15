@@ -1,6 +1,6 @@
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { deployFuturesFixture } from "./fixtures";
-import { catchError } from "../../lib";
+import { catchError } from "../lib/lib";
 
 describe("Get Positions", function () {
   it("should get positions by participant and delivery date", async function () {

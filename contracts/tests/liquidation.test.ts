@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { parseEventLogs, parseUnits, getAddress, Account } from "viem";
 import { deployFuturesFixture } from "./fixtures";
-import { catchError, getTxDeltaBalance } from "../../lib";
+import { catchError } from "../lib/lib";
 import { viem } from "hardhat";
 
 async function positionWithMarginFixture() {

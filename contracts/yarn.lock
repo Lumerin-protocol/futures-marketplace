@@ -4829,9 +4829,9 @@ hash.js@1.1.7, hash.js@^1.0.0, hash.js@^1.0.3, hash.js@^1.1.7:
     inherits "^2.0.3"
     minimalistic-assert "^1.0.1"
 
-"hashprice-oracle@github:Lumerin-protocol/hashprice-oracle#main":
-  version "0.0.0"
-  resolved "https://codeload.github.com/Lumerin-protocol/hashprice-oracle/tar.gz/ec009c46f4523bd2536dd866e1af07b425495517"
+"hashprice-oracle@git+https://github.com/Lumerin-protocol/hashprice-oracle.git#main":
+  version "1.0.0"
+  resolved "git+https://github.com/Lumerin-protocol/hashprice-oracle.git#fb30634e2ceb415d591d1ede85862d5e3a14779b"
 
 hasown@^2.0.0:
   version "2.0.0"

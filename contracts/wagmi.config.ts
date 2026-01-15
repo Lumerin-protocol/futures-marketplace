@@ -6,12 +6,11 @@ export default defineConfig({
     hardhat({
       artifacts: "./artifacts/contracts",
       project: ".",
-      exclude: ["*Test.sol/**", "vesting/**"],
       commands: {
         build: "yarn hardhat compile",
         rebuild: "yarn hardhat compile",
       },
     }),
   ],
-  out: "./build-js/src/abi/abi.ts",
+  out: "./abi/abi.ts",
 });

@@ -2,7 +2,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { deployFuturesFixture } from "./fixtures";
 import { parseEventLogs, parseUnits, getAddress } from "viem";
 import { expect } from "chai";
-import { catchError } from "../../lib";
+import { catchError } from "../lib/lib";
 
 describe("Validator Functions", function () {
   it("should allow validator to close position after start time", async function () {

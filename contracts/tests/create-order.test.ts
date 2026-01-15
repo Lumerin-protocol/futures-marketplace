@@ -3,7 +3,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { parseEventLogs, parseUnits, getAddress, zeroAddress } from "viem";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { deployFuturesFixture } from "./fixtures";
-import { catchError } from "../../lib";
+import { catchError } from "../lib/lib";
 
 describe("Order Creation", function () {
   it("should validate delivery date is in the future", async function () {

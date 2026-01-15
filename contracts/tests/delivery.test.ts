@@ -1,9 +1,8 @@
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { deployFuturesFixture } from "./fixtures";
-import { Account, Client, parseEventLogs, parseUnits } from "viem";
-import { expect } from "chai";
+import { Client, parseEventLogs, parseUnits } from "viem";
 import { quantizePrice } from "./utils";
-import { catchError } from "../../lib";
+import { catchError } from "../lib/lib";
 
 describe("Futures Delivery", () => {
   async function positionFixture() {

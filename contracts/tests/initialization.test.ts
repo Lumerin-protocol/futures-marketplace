@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { parseUnits, getAddress } from "viem";
+import { getAddress } from "viem";
 import { deployFuturesFixture } from "./fixtures";
 describe("Futures - Initialization", function () {
   it("should initialize with correct parameters", async function () {

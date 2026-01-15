@@ -30,7 +30,7 @@ export async function deployOnlyFuturesFixture(
   const validatorURL = "//shev8.validator:anything@stratum.braiins.com:3333";
 
   // Deploy Futures contract
-  const futuresImpl = await viem.deployContract("contracts/marketplace/Futures.sol:Futures", []);
+  const futuresImpl = await viem.deployContract("contracts/Futures.sol:Futures", []);
   const futuresProxy = await viem.deployContract("ERC1967Proxy", [
     futuresImpl.address,
     encodeFunctionData({

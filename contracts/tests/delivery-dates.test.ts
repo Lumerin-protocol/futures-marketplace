@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { deployFuturesFixture } from "./fixtures";
-import { catchError } from "../../lib";
+import { catchError } from "../lib/lib";
 
 describe("Delivery Date Management", function () {
   it("should return correct delivery dates array", async function () {
