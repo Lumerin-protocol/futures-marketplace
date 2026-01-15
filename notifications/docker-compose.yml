@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: notifications
+      POSTGRES_USER: notifications_user
+      POSTGRES_PASSWORD: notifications_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notifications_user -d notifications"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Migration service - runs once and exits
+  migrate:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://notifications_user:notifications_password@postgres:5432/notifications
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["yarn", "db:migrate"]
+    restart: "no"
+
+  notifications:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://notifications_user:notifications_password@postgres:5432/notifications
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:
