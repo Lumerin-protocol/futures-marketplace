@@ -19,19 +19,8 @@ chai.use(chaiAsPromised);
 const config: HardhatUserConfig = {
   solidity: {
     compilers: [
-      // for older contracts
       {
-        version: "0.8.18",
-        settings: {
-          optimizer: {
-            enabled: true,
-            runs: 200,
-          },
-        },
-      },
-      // for validation regitry
-      {
-        version: "0.8.30",
+        version: "0.8.28",
         settings: {
           // viaIR: true,
           optimizer: {
