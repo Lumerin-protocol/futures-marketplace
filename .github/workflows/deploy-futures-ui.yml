@@ -1,4 +1,4 @@
-name: Deploy Marketplace to Hosted Environment
+name: Deploy Futures Marketplace
 
 on:
   workflow_dispatch:
@@ -10,7 +10,15 @@ on:
       - dev
       - cicd/*
 
-    paths: [".github/**", "ui/src/**", "ui/public/**", "ui/package.json", "ui/yarn.lock", "ui/vite.config.ts", "ui/tsconfig.json", "ui/index.html", "ui/LICENSE", "ui/README.md"]
+    paths: [
+      ".github/workflows/deploy-futures-ui.yml", 
+      "ui/src/**", 
+      "ui/public/**", 
+      "ui/package.json", 
+      "ui/yarn.lock", 
+      "ui/vite.config.ts", 
+      "ui/tsconfig.json", 
+      "ui/index.html"] 
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -477,7 +485,7 @@ jobs:
         with:
           status: ${{ steps.status.outputs.status }}
           environment: ${{ needs.generate-tag.outputs.environment }}
-          service_name: 'Futures Marketplace'
+          service_name: 'UI'
           version: ${{ needs.generate-tag.outputs.vtag }}
           slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
