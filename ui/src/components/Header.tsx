@@ -1,11 +1,9 @@
-import { Bars3BottomLeftIcon } from "@heroicons/react/24/outline";
 import styled from "@mui/material/styles/styled";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import { safeLazy } from "../utils/safeLazy";
 
 type Props = {
-  setSidebarOpen: (isOpen: boolean) => void;
   pageTitle: string;
 };
 
@@ -18,14 +16,6 @@ const Web3ProviderLazy = safeLazy(() => import("../Web3Provider").then((module) 
 export const Header = (props: Props) => {
   return (
     <StyledToolbar>
-      <button
-        type="button"
-        className="border-gray-200 text-gray-500 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 md:hidden"
-        onClick={() => props.setSidebarOpen(true)}
-      >
-        <span className="sr-only">Open sidebar</span>
-        <Bars3BottomLeftIcon className="h-8 w-8" aria-hidden="true" />
-      </button>
       <PageTitle>{props.pageTitle}</PageTitle>
       <Web3ProviderLazy>
         <HeaderConnectLazy />
