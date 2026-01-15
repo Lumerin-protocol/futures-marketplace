@@ -77,8 +77,6 @@ const fetchAllHistoricalPositions = async (
 
     blockNumber = response._meta.block.number;
 
-    debugger;
-
     const positions = response.positions.map((position) => ({
       id: position.id,
       timestamp: position.timestamp,
