@@ -217,9 +217,13 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         ensureNoCollateralDeficit(_msgSender());
     }
 
-    function _payOrderFee(address _participant) private {
+    function getOrderFee(address _participant) public view returns (uint256) {
         uint8 feeDiscountPercent = hashedAddressFeeDiscountPercent[keccak256(abi.encode(_participant))];
-        uint256 fee = orderFee - orderFee * feeDiscountPercent / 100;
+        return orderFee - orderFee * feeDiscountPercent / 100;
+    }
+
+    function _payOrderFee(address _participant) private {
+        uint256 fee = getOrderFee(_participant);
         collectedFeesBalance += fee;
         if (fee > 0) {
             _transfer(_participant, address(this), fee);
