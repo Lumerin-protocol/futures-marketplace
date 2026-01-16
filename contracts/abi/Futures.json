@@ -759,6 +759,19 @@
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "collectedFeesBalance",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "uint256",
@@ -1346,6 +1359,19 @@
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "reservePoolBalance",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "uint256",
@@ -1354,6 +1380,24 @@
       }
     ],
     "name": "setBreachPenaltyRatePerDay",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "_hashedAddress",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint8",
+        "name": "_feeDiscountPercent",
+        "type": "uint8"
+      }
+    ],
+    "name": "setFeeDiscountPercent",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1596,6 +1640,13 @@
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "withdrawCollectedFees",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
