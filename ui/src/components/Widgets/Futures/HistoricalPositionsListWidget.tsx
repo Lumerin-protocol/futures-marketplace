@@ -34,8 +34,7 @@ export const HistoricalPositionsListWidget = ({
 
   const formatPnl = (pnl: number) => {
     const pnlValue = pnl / 1e6;
-    const sign = pnlValue >= 0 ? "" : "-";
-    return `${sign}${pnlValue.toFixed(2)} USDC`;
+    return `${pnlValue.toFixed(2)}`;
   };
 
   const formatTimestamp = (timestamp: string) => {
@@ -65,6 +64,7 @@ export const HistoricalPositionsListWidget = ({
           amount: 0,
           realizedPnl: 0,
           closedAt: position.closedAt,
+          timestamp: position.timestamp,
         };
       }
 
@@ -82,6 +82,7 @@ export const HistoricalPositionsListWidget = ({
         amount: number;
         realizedPnl: number;
         closedAt: string | null;
+        timestamp: string;
       }
     >,
   );
@@ -109,10 +110,11 @@ export const HistoricalPositionsListWidget = ({
             <tr>
               <th>Contract Expiration</th>
               <th>Type</th>
-              <th>Price per day</th>
+              <th>Price (USDC)</th>
               <th>Quantity</th>
-              <th>Realized PnL</th>
-              <th>Closed At</th>
+              <th>Realized PnL (USDC)</th>
+              <th>Created</th>
+              <th>Closed</th>
             </tr>
           </thead>
           <tbody>
@@ -124,13 +126,14 @@ export const HistoricalPositionsListWidget = ({
                 <td>
                   <TypeBadge $type={groupedPosition.positionType}>{groupedPosition.positionType}</TypeBadge>
                 </td>
-                <td>{formatPrice(groupedPosition.pricePerDay)} USDC</td>
+                <td>{formatPrice(groupedPosition.pricePerDay)}</td>
                 <td>{groupedPosition.amount}</td>
                 <td>
                   <PnLCell $isPositive={groupedPosition.realizedPnl >= 0} $isZero={groupedPosition.realizedPnl === 0}>
                     {formatPnl(groupedPosition.realizedPnl)}
                   </PnLCell>
                 </td>
+                <td>{formatTimestamp(groupedPosition.timestamp)}</td>
                 <td>{groupedPosition.closedAt ? formatTimestamp(groupedPosition.closedAt) : "-"}</td>
               </TableRow>
             ))}
