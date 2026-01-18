@@ -1,8 +1,9 @@
 import styled from "@mui/material/styles/styled";
 import { useMemo } from "react";
-import { PrimaryButton } from "../../Forms/FormButtons/Buttons.styled";
 import { formatHashrateTHPS } from "../../../lib/units";
 import { useGetDeliveryDates } from "../../../hooks/data/useGetDeliveryDates";
+import { useFuturesContractConstants } from "../../../hooks/data/useFuturesContractConstants";
+import { useFuturesTokenInfo } from "../../../hooks/data/useFuturesTokenInfo";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 
 interface DetailedSpecsModalProps {
@@ -12,6 +13,8 @@ interface DetailedSpecsModalProps {
 
 export const DetailedSpecsModal = ({ closeForm, contractSpecs }: DetailedSpecsModalProps) => {
   const { data: deliveryDatesRaw } = useGetDeliveryDates();
+  const contractConstants = useFuturesContractConstants();
+  const tokenInfo = useFuturesTokenInfo();
 
   // Get the first available delivery date (filtered and sorted)
   const firstDeliveryDate = useMemo(() => {
@@ -24,13 +27,14 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs }: DetailedSpecsMo
     return validDates.length > 0 ? validDates[0] : null;
   }, [deliveryDatesRaw]);
 
-  // Format time only from timestamp
+  // Format time only from timestamp (UTC)
   const formatExpirationTime = (timestamp: number) => {
     const date = new Date(timestamp * 1000);
     return date.toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
+      timeZone: "UTC",
     });
   };
 
@@ -38,99 +42,221 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs }: DetailedSpecsMo
     return formatHashrateTHPS(speedHps).full;
   };
 
-  const formatDuration = (seconds: number) => {
-    const secondsInWeek = 7 * 24 * 60 * 60;
-    const secondsInDay = 24 * 60 * 60;
-
-    if (seconds < secondsInWeek) {
-      const days = Math.round(seconds / secondsInDay);
-      return `${days} day${days !== 1 ? "s" : ""}`;
-    }
-
-    const weeks = Math.round(seconds / secondsInWeek);
-    return `${weeks} week${weeks !== 1 ? "s" : ""}`;
+  // Calculate TH/s (speedHps / 10^12)
+  const formatSpeedTHs = (speedHps: bigint) => {
+    const thps = Number(speedHps) / 10 ** 12;
+    return thps.toFixed(0);
   };
 
   if (!contractSpecs) {
     return (
-      <div className="space-y-6">
-        <h2 className="text-2xl font-semibold text-white mb-6">Contract Specifications</h2>
-        <div>Loading contract specifications...</div>
-      </div>
+      <ModalContainer>
+        <h2>Contract Specifications</h2>
+        <LoadingText>Loading contract specifications...</LoadingText>
+      </ModalContainer>
     );
   }
 
-  const speedFormatted = formatSpeed(contractSpecs.speedHps);
-  const durationFormatted = formatDuration(contractSpecs.deliveryDurationSeconds);
+  const tokenSymbol = tokenInfo.symbol || "USDC";
+  const tokenName = tokenInfo.name || "USD Coin";
+  const contractAddress = process.env.REACT_APP_FUTURES_TOKEN_ADDRESS;
+  const docsUrl = process.env.REACT_APP_FUTURES_DOCS_URL;
+
+  // Calculate tick value: minimumPriceIncrement * deliveryDurationDays
+  const tickSize = Number(contractSpecs.minimumPriceIncrement) / 1e6;
+  const tickValue = tickSize * contractSpecs.deliveryDurationDays;
+
+  // Calculate total coverage days
+  const totalCoverageDays =
+    contractConstants.futureDeliveryDatesCount && contractConstants.deliveryIntervalDays
+      ? contractConstants.futureDeliveryDatesCount * contractConstants.deliveryIntervalDays
+      : null;
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-semibold text-white mb-6">Contract Specifications</h2>
+    <ModalContainer>
+      <h2>Contract Specifications</h2>
 
-      <div>
+      {/* CONTRACT SPECIFICATIONS */}
+      <SpecSection>
+        <SectionTitle>CONTRACT SPECIFICATIONS</SectionTitle>
         <SpecItem>
           <SpecLabel>Contract Unit</SpecLabel>
-          <SpecValue>
-            {speedFormatted} per {durationFormatted}
-          </SpecValue>
+          <SpecValue>{formatSpeedTHs(contractSpecs.speedHps)} TH/s per day</SpecValue>
         </SpecItem>
 
         <SpecItem>
-          <SpecLabel>Price Quotation</SpecLabel>
-          <SpecValue>U.S. dollars and cents per {speedFormatted} per day</SpecValue>
-        </SpecItem>
-
-        <SpecItem>
-          <SpecLabel>Tick Size</SpecLabel>
-          <SpecValue>$0.01</SpecValue>
-        </SpecItem>
-
-        <SpecItem>
-          <SpecLabel>Tick Value</SpecLabel>
-          <SpecValue>${contractSpecs.deliveryDurationDays * 0.01}</SpecValue>
-        </SpecItem>
-
-        <SpecItem>
-          <SpecLabel>Contract Address</SpecLabel>
-          <SpecValue style={{ wordBreak: "break-all", fontFamily: "monospace" }}>
-            {process.env.REACT_APP_FUTURES_TOKEN_ADDRESS || "Not configured"}
-          </SpecValue>
+          <SpecLabel>Margin Requirement</SpecLabel>
+          <SpecValue>{contractSpecs.liquidationMarginPercent}%</SpecValue>
         </SpecItem>
 
         <SpecItem>
           <SpecLabel>Expiration Time</SpecLabel>
-          <SpecValue>{firstDeliveryDate ? formatExpirationTime(firstDeliveryDate) : "No dates available"}</SpecValue>
+          <SpecValue>
+            {firstDeliveryDate ? `${formatExpirationTime(firstDeliveryDate)} (UTC)` : "No dates available"} on each
+            contract date
+          </SpecValue>
         </SpecItem>
-      </div>
-    </div>
+
+        <SpecItem>
+          <SpecLabel>Contract Address</SpecLabel>
+          <SpecValueMono>{contractAddress}</SpecValueMono>
+        </SpecItem>
+      </SpecSection>
+
+      {/* CONTRACT FREQUENCY */}
+      <SpecSection>
+        <SectionTitle>CONTRACT FREQUENCY</SectionTitle>
+        <SpecItem>
+          <SpecLabel>Available Expirations</SpecLabel>
+          <SpecValue>
+            {contractConstants.futureDeliveryDatesCount ?? "..."} contract
+            {contractConstants.futureDeliveryDatesCount !== 1 ? "s" : ""}
+          </SpecValue>
+        </SpecItem>
+
+        <SpecItem>
+          <SpecLabel>Expiration Interval</SpecLabel>
+          <SpecValue>
+            Every {contractConstants.deliveryIntervalDays ?? "..."} days
+            {/* {totalCoverageDays && ` (${totalCoverageDays} days)`} */}
+          </SpecValue>
+        </SpecItem>
+      </SpecSection>
+
+      {/* PRICING & SETTLEMENT */}
+      <SpecSection>
+        <SectionTitle>PRICING & SETTLEMENT</SectionTitle>
+        <SpecItem>
+          <SpecLabel>Settlement Currency</SpecLabel>
+          <SpecValue>
+            {tokenName} ({tokenSymbol})
+          </SpecValue>
+        </SpecItem>
+
+        <SpecItem>
+          <SpecLabel>Tick Size</SpecLabel>
+          <SpecValue>
+            {tickSize.toFixed(2)} {tokenSymbol}
+          </SpecValue>
+        </SpecItem>
+
+        <SpecItem>
+          <SpecLabel>Tick Value</SpecLabel>
+          <SpecValue>
+            {tickValue.toFixed(2)} {tokenSymbol}
+          </SpecValue>
+        </SpecItem>
+
+        <SpecItem>
+          <SpecLabel>Delivery Duration</SpecLabel>
+          <SpecValue>
+            {contractSpecs.deliveryDurationDays} day{contractSpecs.deliveryDurationDays !== 1 ? "s" : ""}
+          </SpecValue>
+        </SpecItem>
+      </SpecSection>
+
+      {/* FEES & LIMITS */}
+      <SpecSection>
+        <SectionTitle>FEES & LIMITS</SectionTitle>
+        <SpecItem>
+          <SpecLabel>Order Fee</SpecLabel>
+          <SpecValue>
+            {contractConstants.orderFeeFormatted?.toFixed(2) ?? "..."} {tokenSymbol}
+          </SpecValue>
+        </SpecItem>
+
+        <SpecItem>
+          <SpecLabel>Max Open Orders</SpecLabel>
+          <SpecValue>{contractConstants.maxOrdersPerParticipant ?? "..."}</SpecValue>
+        </SpecItem>
+      </SpecSection>
+      {/* MORE DETAILS */}
+      <SpecSection>
+        <SectionTitle>MORE DETAILS</SectionTitle>
+        <SpecItem>
+          <SpecLabel>Futures Documentation</SpecLabel>
+          <SpecLink href={docsUrl} target="_blank" rel="noopener noreferrer">
+            View Documentation ↗
+          </SpecLink>
+        </SpecItem>
+      </SpecSection>
+    </ModalContainer>
   );
 };
 
-const SpecItem = styled("div")`
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  padding-bottom: 1rem;
-  
-  &:last-child {
-    border-bottom: none;
+const ModalContainer = styled("div")`
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 1.5rem;
   }
 `;
 
-const SpecLabel = styled("h3")`
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #fff;
-  margin-bottom: 0.5rem;
+const LoadingText = styled("div")`
+  color: #a7a9b6;
+  font-size: 0.875rem;
 `;
 
-const SpecValue = styled("div")`
-  font-size: 1rem;
-  font-weight: 500;
-  color: #22c55e;
-  margin-bottom: 0.5rem;
+const SpecSection = styled("div")`
+  margin-bottom: 1.5rem;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
 `;
 
-const SpecDescription = styled("p")`
+const SectionTitle = styled("h3")`
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #a7a9b6;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+`;
+
+const SpecItem = styled("div")`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 0.5rem 0;
+
+  &:last-child {
+    padding-bottom: 0;
+  }
+`;
+
+const SpecLabel = styled("span")`
   font-size: 0.875rem;
   color: #a7a9b6;
-  line-height: 1.5;
+  flex-shrink: 0;
+`;
+
+const SpecValue = styled("span")`
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #22c55e;
+  text-align: right;
+  margin-left: 1rem;
+`;
+
+const SpecValueMono = styled(SpecValue)`
+  font-family: monospace;
+  font-size: 0.75rem;
+  word-break: break-all;
+  max-width: 280px;
+`;
+
+const SpecLink = styled("a")`
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #22c55e;
+  text-decoration: none;
+  transition: opacity 0.2s;
+
+  &:hover {
+    opacity: 0.8;
+    text-decoration: underline;
+  }
 `;
