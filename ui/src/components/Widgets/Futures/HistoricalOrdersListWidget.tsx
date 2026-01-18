@@ -46,6 +46,7 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
           deliveryAt: order.deliveryAt,
           amount: 0,
           closedAt: order.closedAt,
+          timestamp: order.timestamp,
         };
       }
 
@@ -61,6 +62,7 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
         deliveryAt: bigint;
         amount: number;
         closedAt: string | null;
+        timestamp: string;
       }
     >,
   );
@@ -88,9 +90,10 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
             <tr>
               <th>Contract Expiration</th>
               <th>Type</th>
-              <th>Price per day</th>
+              <th>Price (USDC)</th>
               <th>Quantity</th>
-              <th>Closed At</th>
+              <th>Created</th>
+              <th>Closed</th>
             </tr>
           </thead>
           <tbody>
@@ -102,8 +105,9 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
                     {groupedOrder.isBuy ? "Long" : "Short"}
                   </TypeBadge>
                 </td>
-                <td>{formatPrice(groupedOrder.pricePerDay)} USDC</td>
+                <td>{formatPrice(groupedOrder.pricePerDay)}</td>
                 <td>{groupedOrder.amount}</td>
+                <td>{formatTimestamp(groupedOrder.timestamp)}</td>
                 <td>{groupedOrder.closedAt ? formatTimestamp(groupedOrder.closedAt) : "-"}</td>
               </TableRow>
             ))}

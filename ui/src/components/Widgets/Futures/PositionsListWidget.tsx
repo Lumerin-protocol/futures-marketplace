@@ -122,7 +122,7 @@ export const PositionsListWidget = ({
 
   const formatPnL = (pnl: number | null, percentage: number | null): string => {
     if (pnl === null || percentage === null) return "-";
-    return `${pnl.toFixed(2)} USDC (${percentage.toFixed(2)}%)`;
+    return `${pnl.toFixed(2)} (${percentage.toFixed(2)}%)`;
   };
 
   const handleClosePosition = async (groupedPosition: {
@@ -244,10 +244,10 @@ export const PositionsListWidget = ({
             <tr>
               <th>Contract Expiration</th>
               <th>Type</th>
-              <th>Price per day</th>
+              <th>Price (USDC)</th>
               <th>Quantity</th>
               <th>Margin</th>
-              <th>Unrealized PnL</th>
+              <th>Unrealized PnL (USDC)</th>
               <th>Destination</th>
               <th>Payment</th>
               <th>Action</th>
@@ -262,7 +262,7 @@ export const PositionsListWidget = ({
                 <td>
                   <TypeBadge $type={groupedPosition.positionType}>{groupedPosition.positionType}</TypeBadge>
                 </td>
-                <td>{formatPrice(groupedPosition.pricePerDay)} USDC</td>
+                <td>{formatPrice(groupedPosition.pricePerDay)}</td>
                 <td>{groupedPosition.amount}</td>
                 <td>
                   {formatMargin(

@@ -1,0 +1,26 @@
+{
+  "localhost": {
+    "Futures": {
+      "address": "0x84ea74d481ee0a5332c457a4d796187f6ba67feb"
+    },
+    "HashrateOracle": {
+      "address": "0x959922be3caee4b8cd9a407cc3ac1c251c2007b1"
+    }
+  },
+  "arbitrum-sepolia": {
+    "Futures": {
+      "address": "0x74e3ab04fad3ba6534125f7aeae698a9cf94b4f5"
+    },
+    "HashrateOracle": {
+      "address": "0x6f736186d2c93913721e2570c283dff2a08575e9"
+    }
+  },
+  "arbitrum": {
+    "Futures": {
+      "address": "0xec76867e96d942282fc7aafe3f778de34d41a311"
+    },
+    "HashrateOracle": {
+      "address": "0xc7faf0a488ff0adf2f6226d7169d26f79db841ca"
+    }
+  }
+}

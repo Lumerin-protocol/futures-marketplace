@@ -1,0 +1,28 @@
+{
+  "name": "margin-call",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "copy-abi": "cp ../abi/Futures.json abi/Futures.json",
+    "start": "tsx main.ts",
+    "build": "node build.mjs"
+  },
+  "version": "1.0.0",
+  "main": "main.ts",
+  "license": "MIT",
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.41",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "env-schema": "^6.0.1",
+    "graphql": "^16.11.0",
+    "graphql-request": "^7.2.0",
+    "pino": "^9.11.0",
+    "viem": "^2.37.8"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "tsx": "^4.20.6"
+  }
+}

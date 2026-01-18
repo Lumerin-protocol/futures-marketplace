@@ -2,7 +2,7 @@ import styled from "@mui/material/styles/styled";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import { safeLazy } from "../utils/safeLazy";
-import LogoIcon from "../images/icons/nav-logo-white.png";
+import LogoIcon from "../images/icons/nav-logo-white-cropped.png";
 
 type Props = {
   pageTitle: string;
@@ -15,12 +15,14 @@ const HeaderConnectLazy = safeLazy(() =>
 const Web3ProviderLazy = safeLazy(() => import("../Web3Provider").then((module) => ({ default: module.Web3Provider })));
 
 export const Header = (props: Props) => {
+  const handleLogoClick = () => {
+    window.open("http://lumerin.io/", "_blank", "noopener,noreferrer");
+  };
+
   return (
     <StyledToolbar>
       <TitleWrapper>
-        <LogoCrop>
-          <img src={LogoIcon} alt="Lumerin" />
-        </LogoCrop>
+        <Logo src={LogoIcon} alt="Lumerin" onClick={handleLogoClick} />
         <PageTitle>{props.pageTitle}</PageTitle>
       </TitleWrapper>
       <Web3ProviderLazy>
@@ -42,15 +44,11 @@ const TitleWrapper = styled("div")`
   gap: 0.75rem;
 `;
 
-const LogoCrop = styled("div")`
-  width: 70px;
+const Logo = styled("img")`
   height: auto;
-  overflow: hidden;
-  padding-bottom: 5px;
-
-  img {
-    min-width: 200px;
-  }
+  width: auto;
+  max-height: 50px;
+  cursor: pointer;
 `;
 
 const PageTitle = styled(Typography)`
