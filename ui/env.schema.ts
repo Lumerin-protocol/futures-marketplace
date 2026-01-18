@@ -26,6 +26,10 @@ export const EnvSchema = Type.Object({
   REACT_APP_SUBGRAPH_FUTURES_URL: Type.String({ format: "uri" }),
   REACT_APP_FUTURES_HIGH_PRICE_PERCENTAGE: Type.Integer({ minimum: 0, maximum: 300, default: 50 }),
   REACT_APP_MARGIN_UTILIZATION_WARNING_PERCENT: Type.Integer({ minimum: 0, maximum: 100, default: 80 }),
+  REACT_APP_FUTURES_DOCS_URL: Type.String({
+    format: "uri",
+    default: "https://gitbook.lumerin.io/lumerin-hashpower-marketplace/lumerin-futures/02.contract-specifications",
+  }),
 });
 
 // Inferred type of environment variables

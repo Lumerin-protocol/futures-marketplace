@@ -1,0 +1,12 @@
+# Virtual environment
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Environment file (contains secrets)
+.env
+
+# Output files
+market_maker_fees*.csv
+*.csv

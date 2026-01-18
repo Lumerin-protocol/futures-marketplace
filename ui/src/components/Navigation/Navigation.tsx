@@ -15,7 +15,7 @@ import SellerIconInactive from "../../images/icons/seller-grey.png";
 import { Link, useLocation, useNavigate } from "react-router";
 import BuyerIconActive from "../../images/icons/buyer-blue.png";
 import BuyerIconInactive from "../../images/icons/buyer-grey.png";
-import LogoIcon from "../../images/icons/nav-logo-white.png";
+import LogoIcon from "../../images/icons/nav-logo-white-cropped.png";
 import MarketplaceIconActive from "../../images/icons/store-blue.png";
 import MarketplaceIconInactive from "../../images/icons/store-grey.png";
 import { PathName } from "../../types/types";
