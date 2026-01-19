@@ -1,6 +1,6 @@
 {
-  "name": "smart-contracts-v2",
-  "version": "1.0.1",
+  "name": "futures-contracts",
+  "version": "1.0.0",
   "main": "index.js",
   "author": "Oleksandr Shevchuk <shev@titan.io>",
   "license": "MIT",

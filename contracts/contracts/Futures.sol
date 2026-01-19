@@ -11,13 +11,14 @@ import { ERC20Upgradeable } from "@openzeppelin/contracts-upgradeable/token/ERC2
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import { HashrateOracle } from "hashprice-oracle/contracts/contracts/HashrateOracle.sol";
 import { StructuredLinkedList } from "solidity-linked-list/contracts/StructuredLinkedList.sol";
+import { Versionable } from "./Versionable.sol";
 
 // import { console } from "hardhat/console.sol";
 
 // TODO:
 // 6. Do we need to batch same price and delivery date orders/positions so it is a single entry?
 
-contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, MulticallUpgradeable {
+contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, MulticallUpgradeable, Versionable {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableSet for EnumerableSet.Bytes32Set;
@@ -60,6 +61,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     uint8 public constant BREACH_PENALTY_DECIMALS = 18;
     uint32 private constant SECONDS_PER_DAY = 3600 * 24;
     uint256 private constant MAX_BREACH_PENALTY_RATE_PER_DAY = 5 * 10 ** (BREACH_PENALTY_DECIMALS - 2); // 5%
+    string public constant VERSION = "1.0.0";
 
     /// @notice Represents an order to buy or sell a futures contract
     /// @dev Created when a participant places an order

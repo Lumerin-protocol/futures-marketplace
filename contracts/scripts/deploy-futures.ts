@@ -95,6 +95,7 @@ async function main() {
     [futuresImpl.address, encodedInitFn]
   );
   console.log("Deployed at:", futuresProxy.address);
+  await verifyContract(futuresProxy.address, [futuresImpl.address, encodedInitFn]);
 
   const futures = await viem.getContractAt("Futures", futuresProxy.address);
 

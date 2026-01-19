@@ -28,12 +28,21 @@ async function main() {
   console.log("Payment token:", await futuresProxy.read.token());
   console.log("Hashrate oracle:", await futuresProxy.read.hashrateOracle());
   console.log("Validator address:", await futuresProxy.read.validatorAddress());
+
+  const currentVersion = await futuresProxy.read.VERSION().catch(() => "unknown");
+  console.log("Version:", currentVersion);
   console.log();
 
   console.log("Deploying new Futures implementation...");
-  const futuresImpl = await viem.deployContract("contracts/marketplace/Futures.sol:Futures", []);
+  const futuresImpl = await viem.deployContract("Futures", []);
   console.log("Deployed at:", futuresImpl.address);
   await verifyContract(futuresImpl.address, []);
+  const newVersion = await futuresImpl.read.VERSION();
+  console.log("New version:", newVersion);
+  if (newVersion === currentVersion) {
+    console.error("New version is the same as the current version. Exiting...");
+    process.exit(1);
+  }
   // const futuresImpl = await viem.getContractAt(
   //   "Futures",
   //   "0x080f8eab214a56d16b16035788bdfe92552c480f"
