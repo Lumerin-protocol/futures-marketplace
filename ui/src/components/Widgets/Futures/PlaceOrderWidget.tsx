@@ -67,7 +67,7 @@ export const PlaceOrderWidget = ({
   const { address } = useAccount();
   const balanceQuery = useGetFutureBalance(address);
   const accountBalanceQuery = usePaymentTokenBalance(address);
-  const { data: orderFeeRaw } = useOrderFee();
+  const { data: orderFeeRaw } = useOrderFee(address);
 
   // Calculate price step from contract specs
   const priceStep = contractSpecsQuery.data?.data?.minimumPriceIncrement
