@@ -11,13 +11,14 @@ import { ERC20Upgradeable } from "@openzeppelin/contracts-upgradeable/token/ERC2
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import { HashrateOracle } from "hashprice-oracle/contracts/contracts/HashrateOracle.sol";
 import { StructuredLinkedList } from "solidity-linked-list/contracts/StructuredLinkedList.sol";
+import { Versionable } from "./Versionable.sol";
 
 // import { console } from "hardhat/console.sol";
 
 // TODO:
 // 6. Do we need to batch same price and delivery date orders/positions so it is a single entry?
 
-contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, MulticallUpgradeable {
+contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, MulticallUpgradeable, Versionable {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableSet for EnumerableSet.Bytes32Set;
@@ -51,12 +52,16 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     uint8 public liquidationMarginPercent;
     uint8 private _decimals; // decimals of the wrapped token
     string public validatorURL;
+    uint256 public collectedFeesBalance;
+    uint256 public reservePoolBalance;
+    mapping(bytes32 => uint8) private hashedAddressFeeDiscountPercent;
 
     // constants
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     uint8 public constant BREACH_PENALTY_DECIMALS = 18;
     uint32 private constant SECONDS_PER_DAY = 3600 * 24;
     uint256 private constant MAX_BREACH_PENALTY_RATE_PER_DAY = 5 * 10 ** (BREACH_PENALTY_DECIMALS - 2); // 5%
+    string public constant VERSION = "1.0.0";
 
     /// @notice Represents an order to buy or sell a futures contract
     /// @dev Created when a participant places an order
@@ -209,9 +214,29 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
 
         // order fee only for created or matched orders
         if (orderCreatedOrMatched) {
-            _transfer(_msgSender(), address(this), orderFee);
+            _payOrderFee(_msgSender());
         }
         ensureNoCollateralDeficit(_msgSender());
+    }
+
+    function getOrderFee(address _participant) public view returns (uint256) {
+        uint8 feeDiscountPercent = hashedAddressFeeDiscountPercent[keccak256(abi.encode(_participant))];
+        return orderFee - orderFee * feeDiscountPercent / 100;
+    }
+
+    function _payOrderFee(address _participant) private {
+        uint256 fee = getOrderFee(_participant);
+        collectedFeesBalance += fee;
+        if (fee > 0) {
+            _transfer(_participant, address(this), fee);
+        }
+    }
+
+    function setFeeDiscountPercent(bytes32 _hashedAddress, uint8 _feeDiscountPercent) external onlyOwner {
+        if (_feeDiscountPercent > 100) {
+            revert ValueOutOfRange(0, 100);
+        }
+        hashedAddressFeeDiscountPercent[_hashedAddress] = _feeDiscountPercent;
     }
 
     /// @notice Creates or matches a single order
@@ -970,6 +995,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     /// @notice Deposits collateral into the contract to credit participant when position is exited
     /// @param _amount The amount of collateral to deposit
     function depositReservePool(uint256 _amount) external {
+        reservePoolBalance += _amount;
         _mint(address(this), _amount);
         token.safeTransferFrom(_msgSender(), address(this), _amount);
     }
@@ -977,8 +1003,18 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     /// @notice Withdraws collateral from the contract to the sender
     /// @param _amount The amount of collateral to withdraw
     function withdrawReservePool(uint256 _amount) external onlyOwner {
+        if (_amount > reservePoolBalance) {
+            revert ERC20InsufficientBalance(address(this), reservePoolBalance, _amount);
+        }
+        reservePoolBalance -= _amount;
         _burn(address(this), _amount);
         token.safeTransfer(_msgSender(), _amount);
+    }
+
+    function withdrawCollectedFees() external onlyOwner {
+        uint256 collectedFees = collectedFeesBalance;
+        collectedFeesBalance = 0;
+        _transfer(address(this), _msgSender(), collectedFees);
     }
 
     function _transferPnl(address _from, address _to, int256 _pnl) private {
