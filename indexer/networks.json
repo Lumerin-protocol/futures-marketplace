@@ -5,6 +5,9 @@
     },
     "HashrateOracle": {
       "address": "0x959922be3caee4b8cd9a407cc3ac1c251c2007b1"
+    },
+    "BtcTokenOracle": {
+      "address": "0x0000000000000000000000000000000000000000"
     }
   },
   "arbitrum-sepolia": {
@@ -13,6 +16,9 @@
     },
     "HashrateOracle": {
       "address": "0x6f736186d2c93913721e2570c283dff2a08575e9"
+    },
+    "BtcTokenOracle": {
+      "address": "0x8d71cD231c2C9b1C85cfa8Cc2b5d0e89974480ea"
     }
   },
   "arbitrum": {
@@ -21,6 +27,9 @@
     },
     "HashrateOracle": {
       "address": "0xc7faf0a488ff0adf2f6226d7169d26f79db841ca"
+    },
+    "BtcTokenOracle": {
+      "address": "0x0000000000000000000000000000000000000000"
     }
   }
 }

@@ -97,6 +97,12 @@ type HashrateOracle @entity(immutable: false) {
   initializeTimestamp: BigInt!
 }
 
+type BtcTokenOracle @entity(immutable: false) {
+  id: Int8!
+  initializedBlockNumber: BigInt!
+  initializeTimestamp: BigInt!
+}
+
 # Delivery Date Orders - tracks buy/sell counts per price level for each delivery date
 type DeliveryDateOrder @entity(immutable: false) {
   "ID format: {deliveryDate}-{price}"
@@ -135,6 +141,26 @@ type HashesForTokenCandle @aggregation(intervals: ["hour", "day"], source: "Hash
   low: BigInt! @aggregate(fn: "min", arg: "hashesForToken")
   sum: BigInt! @aggregate(fn: "sum", arg: "hashesForToken")
   count: BigInt! @aggregate(fn: "count", arg: "hashesForToken")
+
+  timestamp: Timestamp!
+}
+
+# BtcTokenOracle Timeseries Entities
+type BtcPriceIndex @entity(timeseries: true) {
+  id: Int8!
+  price: BigInt!
+  updatedAt: BigInt! # deprecated, use timestamp instead
+  timestamp: Timestamp!
+  blockNumber: BigInt!
+}
+
+type BtcPriceCandle @aggregation(intervals: ["hour", "day"], source: "BtcPriceIndex") {
+  id: Int8!
+
+  high: BigInt! @aggregate(fn: "max", arg: "price")
+  low: BigInt! @aggregate(fn: "min", arg: "price")
+  sum: BigInt! @aggregate(fn: "sum", arg: "price")
+  count: BigInt! @aggregate(fn: "count", arg: "price")
 
   timestamp: Timestamp!
 }
