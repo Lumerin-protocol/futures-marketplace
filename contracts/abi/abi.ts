@@ -536,12 +536,9 @@ export const futuresAbi = [
   },
   {
     type: 'function',
-    inputs: [
-      { name: '_amount', internalType: 'uint256', type: 'uint256' },
-      { name: '_deliveryDate', internalType: 'uint256', type: 'uint256' },
-    ],
-    name: 'depositDeliveryPayment',
-    outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
+    inputs: [{ name: 'positionId', internalType: 'bytes32', type: 'bytes32' }],
+    name: 'depositDeliveryPaymentV2',
+    outputs: [],
     stateMutability: 'nonpayable',
   },
   {

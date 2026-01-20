@@ -57,7 +57,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     mapping(address => uint8) private addressFeeDiscountPercent;
 
     // constants
-    string public constant VERSION = "1.1.0";
+    string public constant VERSION = "1.2.0";
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     uint8 public constant BREACH_PENALTY_DECIMALS = 18;
     uint32 private constant SECONDS_PER_DAY = 3600 * 24;
@@ -319,16 +319,9 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     function _createPosition(bytes32 orderId, Order memory order, address _otherParticipant, string memory _destURL)
         private
     {
-        if (order.participant == _otherParticipant) {
-            // TODO: check if this correct for buying your own order
-            // if the order is already created by the participant, then do not create a position
-            // but this will happen only if the participant order is the oldest
-            // otherwise it will create an position with the one who has the oldest order
-            // keeping participant order still active
-
-            // not sure how to display this to the user
-            return;
-        }
+        // if (order.participant == _otherParticipant) {
+        // should never happen
+        // }
 
         // create position
 
@@ -730,10 +723,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
      * @param _positionId The id of the position to liquidate
      * @param position The position to liquidate
      */
-    function _forceLiquidatePosition(bytes32 _positionId, Position storage position, address _participant)
-        private
-        returns (int256)
-    {
+    function _forceLiquidatePosition(bytes32 _positionId, Position storage position, address _participant) private {
         // Create order from a counterparty position
         address counterparty = position.seller == _participant ? position.buyer : position.seller;
         bool isBuy = position.buyer == counterparty;
@@ -750,8 +740,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         );
 
         _closeAndCashSettleDelivery(_positionId, position);
-
-        return 0;
     }
 
     function _removePosition(bytes32 _positionId, Position memory position) private {
@@ -815,60 +803,35 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         return 0;
     }
 
-    // Delivery deposit functions
-    /**
-     * @notice Deposits delivery payment for a position
-     * @param _amount The amount of delivery payment to deposit
-     * @param _deliveryDate The delivery date to deposit payment for
-     * @return true if all positions for the delivery date were paid, false if not all positions were paid
-     */
-    function depositDeliveryPayment(uint256 _amount, uint256 _deliveryDate) external returns (bool) {
-        if (block.timestamp > _deliveryDate) {
-            revert DeliveryDateExpired();
-        }
-
-        // get all user positions for the delivery date
-        EnumerableSet.Bytes32Set storage _positions =
-            participantDeliveryDatePositionIdsIndex[_msgSender()][_deliveryDate];
-        for (uint256 i = 0; i < _positions.length(); i++) {
-            bytes32 positionId = _positions.at(i);
-            Position storage position = positions[positionId];
-            if (position.buyer == _msgSender()) {
-                uint256 totalPayment = position.buyPricePerDay * deliveryDurationDays;
-                if (totalPayment > _amount) {
-                    return false;
-                }
-                _amount -= totalPayment;
-                // TODO: make sure it is not withdrawable by owner
-                _transfer(position.buyer, address(this), totalPayment);
-                position.paid = true;
-                emit PositionPaid(positionId);
-            }
-        }
-        return true;
-    }
-
+    /// @notice Deposits delivery payment for a list of positions
+    /// @dev DEPRECATED, use depositDeliveryPaymentV2 instead with multicall
     function depositDeliveryPayment(bytes32[] memory _positionIds) external {
         for (uint256 i = 0; i < _positionIds.length; i++) {
-            bytes32 positionId = _positionIds[i];
-            Position storage position = positions[positionId];
-            if (position.deliveryAt <= block.timestamp) {
-                revert DeliveryDateExpired();
-            }
-            if (position.buyer != _msgSender()) {
-                revert OnlyPositionBuyer();
-            }
-            if (position.paid) {
-                revert PositionAlreadyPaid();
-            }
-            if (bytes(position.destURL).length == 0) {
-                revert PositionDestURLNotSet();
-            }
-            uint256 totalPayment = position.buyPricePerDay * deliveryDurationDays;
-            _transferEnsureMarginBalance(position.buyer, address(this), totalPayment);
-            position.paid = true;
-            emit PositionPaid(positionId);
+            depositDeliveryPaymentV2(_positionIds[i]);
         }
+    }
+
+    /// @notice Deposits delivery payment for a single position
+    /// @param positionId The id of the position to deposit payment for
+    /// @dev Use multicall to deposit payment for multiple positions
+    function depositDeliveryPaymentV2(bytes32 positionId) public {
+        Position storage position = positions[positionId];
+        if (position.deliveryAt <= block.timestamp) {
+            revert DeliveryDateExpired();
+        }
+        if (position.buyer != _msgSender()) {
+            revert OnlyPositionBuyer();
+        }
+        if (position.paid) {
+            revert PositionAlreadyPaid();
+        }
+        if (bytes(position.destURL).length == 0) {
+            revert PositionDestURLNotSet();
+        }
+        uint256 totalPayment = position.buyPricePerDay * deliveryDurationDays;
+        _transferEnsureMarginBalance(position.buyer, address(this), totalPayment);
+        position.paid = true;
+        emit PositionPaid(positionId);
     }
 
     function withdrawDeliveryPayment(uint256 _deliveryDate) external {
@@ -1012,9 +975,10 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     }
 
     function withdrawCollectedFees() external onlyOwner {
-        uint256 collectedFees = collectedFeesBalance;
+        uint256 amount = collectedFeesBalance;
         collectedFeesBalance = 0;
-        _transfer(address(this), _msgSender(), collectedFees);
+        _burn(address(this), amount);
+        token.safeTransfer(owner(), amount);
     }
 
     function _transferPnl(address _from, address _to, int256 _pnl) private {
