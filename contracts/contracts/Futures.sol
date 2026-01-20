@@ -120,7 +120,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     error InvalidQty();
     error DeliveryDateShouldBeInTheFuture();
     error DeliveryDateNotAvailable();
-    error OrderNotBelongToSender();
     error InsufficientMarginBalance();
     error OnlyValidator(); // when the function is called by a non-validator address
     error OnlyValidatorOrPositionParticipant();

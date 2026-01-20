@@ -13,7 +13,7 @@
     "test-coverage": "SOLIDITY_COVERAGE=true yarn hardhat coverage",
     "compile": "yarn wagmi generate",
     "clean": "rm -rf abi artifacts cache abi",
-    "aderyn": "yarn run aderyn",
+    "static-analysis": "yarn run aderyn",
     "deploy-local": "yarn hardhat run scripts/deploy-local.ts"
   },
   "devDependencies": {
