@@ -54,14 +54,14 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     string public validatorURL;
     uint256 public collectedFeesBalance;
     uint256 public reservePoolBalance;
-    mapping(bytes32 => uint8) private hashedAddressFeeDiscountPercent;
+    mapping(address => uint8) private addressFeeDiscountPercent;
 
     // constants
+    string public constant VERSION = "1.1.0";
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     uint8 public constant BREACH_PENALTY_DECIMALS = 18;
     uint32 private constant SECONDS_PER_DAY = 3600 * 24;
     uint256 private constant MAX_BREACH_PENALTY_RATE_PER_DAY = 5 * 10 ** (BREACH_PENALTY_DECIMALS - 2); // 5%
-    string public constant VERSION = "1.0.0";
 
     /// @notice Represents an order to buy or sell a futures contract
     /// @dev Created when a participant places an order
@@ -220,7 +220,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     }
 
     function getOrderFee(address _participant) public view returns (uint256) {
-        uint8 feeDiscountPercent = hashedAddressFeeDiscountPercent[keccak256(abi.encode(_participant))];
+        uint8 feeDiscountPercent = addressFeeDiscountPercent[_participant];
         return orderFee - orderFee * feeDiscountPercent / 100;
     }
 
@@ -232,11 +232,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         }
     }
 
-    function setFeeDiscountPercent(bytes32 _hashedAddress, uint8 _feeDiscountPercent) external onlyOwner {
+    function setFeeDiscountPercent(address _address, uint8 _feeDiscountPercent) external onlyOwner {
         if (_feeDiscountPercent > 100) {
             revert ValueOutOfRange(0, 100);
         }
-        hashedAddressFeeDiscountPercent[_hashedAddress] = _feeDiscountPercent;
+        addressFeeDiscountPercent[_address] = _feeDiscountPercent;
     }
 
     /// @notice Creates or matches a single order

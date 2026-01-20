@@ -73,10 +73,7 @@ describe("Fees", function () {
     const { owner, seller, buyer } = accounts;
 
     const discountPercent = 50;
-    const hashedSeller = keccak256(
-      encodeAbiParameters([{ type: "address" }], [seller.account.address])
-    );
-    await futures.write.setFeeDiscountPercent([hashedSeller, discountPercent], {
+    await futures.write.setFeeDiscountPercent([seller.account.address, discountPercent], {
       account: owner.account,
     });
 
@@ -112,10 +109,7 @@ describe("Fees", function () {
     const { owner, seller } = accounts;
 
     const discountPercent = 0;
-    const hashedSeller = keccak256(
-      encodeAbiParameters([{ type: "address" }], [seller.account.address])
-    );
-    await futures.write.setFeeDiscountPercent([hashedSeller, discountPercent], {
+    await futures.write.setFeeDiscountPercent([seller.account.address, discountPercent], {
       account: owner.account,
     });
 
@@ -143,10 +137,7 @@ describe("Fees", function () {
     const { owner, seller } = accounts;
 
     const discountPercent = 100;
-    const hashedSeller = keccak256(
-      encodeAbiParameters([{ type: "address" }], [seller.account.address])
-    );
-    await futures.write.setFeeDiscountPercent([hashedSeller, discountPercent], {
+    await futures.write.setFeeDiscountPercent([seller.account.address, discountPercent], {
       account: owner.account,
     });
 

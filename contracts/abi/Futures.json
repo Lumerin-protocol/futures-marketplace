@@ -1419,9 +1419,9 @@
   {
     "inputs": [
       {
-        "internalType": "bytes32",
-        "name": "_hashedAddress",
-        "type": "bytes32"
+        "internalType": "address",
+        "name": "_address",
+        "type": "address"
       },
       {
         "internalType": "uint8",
