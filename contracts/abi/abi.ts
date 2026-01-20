@@ -429,6 +429,13 @@ export const futuresAbi = [
   },
   {
     type: 'function',
+    inputs: [],
+    name: 'VERSION',
+    outputs: [{ name: '', internalType: 'string', type: 'string' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     inputs: [{ name: '_amount', internalType: 'uint256', type: 'uint256' }],
     name: 'addMargin',
     outputs: [],
@@ -818,7 +825,7 @@ export const futuresAbi = [
   {
     type: 'function',
     inputs: [
-      { name: '_hashedAddress', internalType: 'bytes32', type: 'bytes32' },
+      { name: '_address', internalType: 'address', type: 'address' },
       { name: '_feeDiscountPercent', internalType: 'uint8', type: 'uint8' },
     ],
     name: 'setFeeDiscountPercent',
