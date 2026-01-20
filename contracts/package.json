@@ -11,6 +11,7 @@
     "format:sol": "forge fmt ./contracts/**/*.sol",
     "test": "yarn hardhat --network hardhat test ./tests/*",
     "test-coverage": "SOLIDITY_COVERAGE=true yarn hardhat coverage",
+    "gas-report": "REPORT_GAS=true yarn hardhat test ./tests/*",
     "compile": "yarn wagmi generate",
     "clean": "rm -rf abi artifacts cache abi",
     "static-analysis": "yarn run aderyn",

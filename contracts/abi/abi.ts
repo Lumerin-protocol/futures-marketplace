@@ -70,7 +70,6 @@ export const futuresAbi = [
   { type: 'error', inputs: [], name: 'OnlyPositionBuyer' },
   { type: 'error', inputs: [], name: 'OnlyValidator' },
   { type: 'error', inputs: [], name: 'OnlyValidatorOrPositionParticipant' },
-  { type: 'error', inputs: [], name: 'OrderNotBelongToSender' },
   {
     type: 'error',
     inputs: [{ name: 'owner', internalType: 'address', type: 'address' }],

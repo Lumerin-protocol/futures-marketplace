@@ -116,7 +116,7 @@ describe("Order Creation", function () {
     const { futures } = contracts;
     const { seller, pc } = accounts;
 
-    const qty = 5;
+    const qty = 50;
     const price = await futures.read.getMarketPrice();
     const margin = await futures.read.getMinMarginForPosition([price, BigInt(qty)]);
     const deliveryDate = BigInt(config.deliveryDates[0]);
@@ -136,7 +136,7 @@ describe("Order Creation", function () {
       eventName: "OrderCreated",
     });
 
-    expect(events.length).to.equal(5);
+    expect(events.length).to.equal(qty);
 
     for (const event of events) {
       expect(event.args.orderId).to.not.be.undefined;
