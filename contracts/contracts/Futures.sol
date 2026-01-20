@@ -196,17 +196,18 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         bool orderCreatedOrMatched = false;
 
         for (uint8 i = 0; i < abs8(_qty); i++) {
-            bool created = _createOrMatchSingleOrder(
-                orderIndex,
-                oppositeOrderIndex,
-                participantPriceOrderIds,
-                _msgSender(),
-                _price,
-                _deliveryDate,
-                _destURL,
-                _isBuy
-            );
-            if (created) {
+            if (
+                _createOrMatchSingleOrder(
+                    orderIndex,
+                    oppositeOrderIndex,
+                    participantPriceOrderIds,
+                    _msgSender(),
+                    _price,
+                    _deliveryDate,
+                    _destURL,
+                    _isBuy
+                )
+            ) {
                 orderCreatedOrMatched = true;
             }
         }
