@@ -23,7 +23,7 @@ const config: HardhatUserConfig = {
         version: "0.8.30",
         settings: {
           evmVersion: "osaka",
-          // viaIR: true,
+          viaIR: true,
           optimizer: {
             enabled: true,
             runs: 800,
@@ -79,6 +79,8 @@ const config: HardhatUserConfig = {
     currency: "USD",
     gasPrice: 1,
     outputFile: "gas-report.md",
+    outputJSON: true,
+    outputJSONFile: "gas-report.json",
     reportPureAndViewMethods: true,
     reportFormat: "markdown",
   },
