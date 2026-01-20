@@ -46,10 +46,9 @@ describe("Futures Delivery Payment", function () {
       const contractBalanceBefore = await futures.read.balanceOf([futures.address]);
 
       // Deposit delivery payment
-      const depositTxHash = await futures.write.depositDeliveryPayment(
-        [totalPayment, deliveryDate],
-        { account: buyer.account }
-      );
+      const depositTxHash = await futures.write.depositDeliveryPaymentV2([positionId], {
+        account: buyer.account,
+      });
 
       const depositReceipt = await pc.waitForTransactionReceipt({ hash: depositTxHash });
       expect(depositReceipt.status).to.equal("success");
@@ -88,209 +87,27 @@ describe("Futures Delivery Payment", function () {
       await futures.write.createOrder([price, deliveryDate, "", -1], {
         account: seller.account,
       });
-      await futures.write.createOrder([price, deliveryDate, "https://dest.com", 1], {
+      const txHash = await futures.write.createOrder([price, deliveryDate, "https://dest.com", 1], {
         account: buyer.account,
       });
+
+      const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
+      const [positionEvent] = parseEventLogs({
+        logs: receipt.logs,
+        abi: futures.abi,
+        eventName: "PositionCreated",
+      });
+      const { positionId } = positionEvent.args;
 
       // Move time past delivery date
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
 
       // Try to deposit after delivery date
       await catchError(futures.abi, "DeliveryDateExpired", async () => {
-        await futures.write.depositDeliveryPayment([totalPayment, deliveryDate], {
+        await futures.write.depositDeliveryPaymentV2([positionId], {
           account: buyer.account,
         });
       });
-    });
-
-    it("should handle multiple positions for same delivery date", async function () {
-      const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-      const { futures } = contracts;
-      const { seller, buyer, buyer2, pc } = accounts;
-
-      const price = await futures.read.getMarketPrice();
-      const marginAmount = parseUnits("10000", 6);
-      const deliveryDate = config.deliveryDates[0];
-      const totalPayment = price * BigInt(config.deliveryDurationDays);
-
-      // Add margin for all participants
-      await futures.write.addMargin([marginAmount], {
-        account: seller.account,
-      });
-      await futures.write.addMargin([marginAmount], {
-        account: buyer.account,
-      });
-      await futures.write.addMargin([marginAmount], {
-        account: buyer2.account,
-      });
-
-      // Create first position: seller with buyer
-      await futures.write.createOrder([price, deliveryDate, "", -1], {
-        account: seller.account,
-      });
-      const txHash1 = await futures.write.createOrder(
-        [price, deliveryDate, "https://dest1.com", 1],
-        { account: buyer.account }
-      );
-
-      // Create second position: seller with buyer2
-      await futures.write.createOrder([price, deliveryDate, "", -1], {
-        account: buyer2.account,
-      });
-      const txHash2 = await futures.write.createOrder(
-        [price, deliveryDate, "https://dest2.com", 1],
-        { account: buyer.account }
-      );
-
-      const receipt1 = await pc.waitForTransactionReceipt({ hash: txHash1 });
-      const [positionEvent1] = parseEventLogs({
-        logs: receipt1.logs,
-        abi: futures.abi,
-        eventName: "PositionCreated",
-      });
-
-      const receipt2 = await pc.waitForTransactionReceipt({ hash: txHash2 });
-      const [positionEvent2] = parseEventLogs({
-        logs: receipt2.logs,
-        abi: futures.abi,
-        eventName: "PositionCreated",
-      });
-
-      const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
-      const contractBalanceBefore = await futures.read.balanceOf([futures.address]);
-
-      // Deposit payment for both positions (buyer has one position)
-      await futures.write.depositDeliveryPayment([totalPayment * 2n, deliveryDate], {
-        account: buyer.account,
-      });
-
-      const buyerBalanceAfter = await futures.read.balanceOf([buyer.account.address]);
-      const contractBalanceAfter = await futures.read.balanceOf([futures.address]);
-
-      expect(buyerBalanceAfter).to.equal(buyerBalanceBefore - totalPayment * 2n);
-      expect(contractBalanceAfter).to.equal(contractBalanceBefore + totalPayment * 2n);
-
-      // Check that buyer's position is marked as paid
-      const position1 = await futures.read.getPositionById([positionEvent1.args.positionId]);
-      expect(position1.paid).to.equal(true);
-
-      // Check that buyer2's position is not paid
-      const position2 = await futures.read.getPositionById([positionEvent2.args.positionId]);
-      expect(position2.paid).to.equal(true);
-    });
-
-    it("should only process positions where caller is the buyer", async function () {
-      const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-      const { futures } = contracts;
-      const { seller, buyer, buyer2, pc } = accounts;
-
-      const price = await futures.read.getMarketPrice();
-      const marginAmount = parseUnits("10000", 6);
-      const deliveryDate = config.deliveryDates[0];
-      const totalPayment = price * BigInt(config.deliveryDurationDays);
-
-      // Add margin for all participants
-      await futures.write.addMargin([marginAmount], {
-        account: seller.account,
-      });
-      await futures.write.addMargin([marginAmount], {
-        account: buyer.account,
-      });
-      await futures.write.addMargin([marginAmount], {
-        account: buyer2.account,
-      });
-
-      // Create position where buyer is the buyer
-      await futures.write.createOrder([price, deliveryDate, "", -1], {
-        account: seller.account,
-      });
-      const txHash1 = await futures.write.createOrder(
-        [price, deliveryDate, "https://dest1.com", 1],
-        {
-          account: buyer.account,
-        }
-      );
-
-      // Create position where buyer2 is the buyer
-      await futures.write.createOrder([price, deliveryDate, "", -1], {
-        account: seller.account,
-      });
-      const txHash2 = await futures.write.createOrder(
-        [price, deliveryDate, "https://dest2.com", 1],
-        {
-          account: buyer2.account,
-        }
-      );
-
-      const receipt1 = await pc.waitForTransactionReceipt({ hash: txHash1 });
-      const [positionEvent1] = parseEventLogs({
-        logs: receipt1.logs,
-        abi: futures.abi,
-        eventName: "PositionCreated",
-      });
-
-      const receipt2 = await pc.waitForTransactionReceipt({ hash: txHash2 });
-      const [positionEvent2] = parseEventLogs({
-        logs: receipt2.logs,
-        abi: futures.abi,
-        eventName: "PositionCreated",
-      });
-
-      // Buyer deposits payment - should only affect buyer's position
-      await futures.write.depositDeliveryPayment([totalPayment, deliveryDate], {
-        account: buyer.account,
-      });
-
-      const position1 = await futures.read.getPositionById([positionEvent1.args.positionId]);
-      const position2 = await futures.read.getPositionById([positionEvent2.args.positionId]);
-
-      expect(position1.paid).to.equal(true);
-      expect(position2.paid).to.equal(false);
-    });
-
-    it("should stop processing if amount is insufficient for a position", async function () {
-      const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-      const { futures } = contracts;
-      const { seller, buyer, pc } = accounts;
-
-      const price = await futures.read.getMarketPrice();
-      const marginAmount = parseUnits("10000", 6);
-      const deliveryDate = config.deliveryDates[0];
-      const totalPayment = price * BigInt(config.deliveryDurationDays);
-
-      // Add margin for both participants
-      await futures.write.addMargin([marginAmount], {
-        account: seller.account,
-      });
-      await futures.write.addMargin([marginAmount], {
-        account: buyer.account,
-      });
-
-      // Create two positions for buyer
-      await futures.write.createOrder([price, deliveryDate, "", -1], {
-        account: seller.account,
-      });
-      await futures.write.createOrder([price, deliveryDate, "https://dest1.com", 1], {
-        account: buyer.account,
-      });
-
-      await futures.write.createOrder([price, deliveryDate, "", -1], {
-        account: seller.account,
-      });
-      await futures.write.createOrder([price, deliveryDate, "https://dest2.com", 1], {
-        account: buyer.account,
-      });
-
-      // Try to deposit less than required for both positions
-      const insufficientAmount = totalPayment; // Only enough for one position
-      await futures.write.depositDeliveryPayment([insufficientAmount, deliveryDate], {
-        account: buyer.account,
-      });
-
-      // Should have processed only one position
-      // We can't easily check which one, but we can verify the contract balance increased
-      const contractBalance = await futures.read.balanceOf([futures.address]);
-      expect(contractBalance > insufficientAmount).to.be.true;
     });
   });
 
@@ -529,7 +346,7 @@ describe("Futures Delivery Payment", function () {
       const { positionId } = positionEvent.args;
 
       // Buyer deposits payment
-      await futures.write.depositDeliveryPayment([totalPayment, deliveryDate], {
+      await futures.write.depositDeliveryPaymentV2([positionId], {
         account: buyer.account,
       });
 
@@ -583,12 +400,19 @@ describe("Futures Delivery Payment", function () {
       await futures.write.createOrder([price, deliveryDate, "", -1], {
         account: seller.account,
       });
-      await futures.write.createOrder([price, deliveryDate, "https://dest.com", 1], {
+      const hash = await futures.write.createOrder([price, deliveryDate, "https://dest.com", 1], {
         account: buyer.account,
       });
 
+      const receipt = await pc.waitForTransactionReceipt({ hash });
+      const [positionEvent] = parseEventLogs({
+        logs: receipt.logs,
+        abi: futures.abi,
+        eventName: "PositionCreated",
+      });
+
       // Buyer deposits payment
-      await futures.write.depositDeliveryPayment([totalPayment, deliveryDate], {
+      await futures.write.depositDeliveryPaymentV2([positionEvent.args.positionId], {
         account: buyer.account,
       });
 
@@ -658,7 +482,10 @@ describe("Futures Delivery Payment", function () {
       });
 
       // Buyer deposits payment for both positions
-      await futures.write.depositDeliveryPayment([totalPayment * 2n, deliveryDate], {
+      await futures.write.depositDeliveryPaymentV2([positionEvent1.args.positionId], {
+        account: buyer.account,
+      });
+      await futures.write.depositDeliveryPaymentV2([positionEvent2.args.positionId], {
         account: buyer.account,
       });
 
@@ -740,7 +567,7 @@ describe("Futures Delivery Payment", function () {
       });
 
       // Only buyer deposits payment (buyer2 does not)
-      await futures.write.depositDeliveryPayment([totalPayment, deliveryDate], {
+      await futures.write.depositDeliveryPaymentV2([positionEvent1.args.positionId], {
         account: buyer.account,
       });
 

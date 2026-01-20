@@ -40,7 +40,7 @@ describe("Fees", function () {
 
   it("should withdraw correct amount of fees", async function () {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, usdcMock } = contracts;
     const { owner, seller } = accounts;
 
     const price = await futures.read.getMarketPrice();
@@ -53,13 +53,13 @@ describe("Fees", function () {
     const feesAccrued = await futures.read.collectedFeesBalance();
     expect(feesAccrued).to.equal(config.orderFee);
 
-    const ownerBalanceBefore = await futures.read.balanceOf([owner.account.address]);
-    const contractBalanceBefore = await futures.read.balanceOf([futures.address]);
+    const ownerBalanceBefore = await usdcMock.read.balanceOf([owner.account.address]);
+    const contractBalanceBefore = await usdcMock.read.balanceOf([futures.address]);
 
     await futures.write.withdrawCollectedFees({ account: owner.account });
 
-    const ownerBalanceAfter = await futures.read.balanceOf([owner.account.address]);
-    const contractBalanceAfter = await futures.read.balanceOf([futures.address]);
+    const ownerBalanceAfter = await usdcMock.read.balanceOf([owner.account.address]);
+    const contractBalanceAfter = await usdcMock.read.balanceOf([futures.address]);
     const feesAfter = await futures.read.collectedFeesBalance();
 
     expect(feesAfter).to.equal(0n);
