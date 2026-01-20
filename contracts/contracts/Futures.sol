@@ -410,10 +410,9 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     /// @return count The number of outdated orders removed
     function removeOutdatedOrdersForParticipant(address _participant) public returns (uint256 count) {
         EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[_participant];
-        uint256 ordersLength = _orders.length();
 
         // Iterate backwards to safely remove items while iterating
-        for (uint256 i = ordersLength; i > 0; i--) {
+        for (uint256 i = _orders.length(); i > 0; i--) {
             bytes32 orderId = _orders.at(i - 1);
             Order memory order = orders[orderId];
 
