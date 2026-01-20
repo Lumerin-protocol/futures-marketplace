@@ -7,72 +7,72 @@
 |                                                    |     Min |        Max |     Avg | Calls | usd avg |
 | :------------------------------------------------- | ------: | ---------: | ------: | ----: | ------: |
 | **BTCPriceOracleMock**                             |         |            |         |       |         |
-|        *setPrice*                                  |       - |          - |  31,786 |     2 |       - |
+|        *setPrice*                                  |       - |          - |  31,782 |     2 |       - |
 | **Futures**                                        |         |            |         |       |         |
-|        *addMargin*                                 |  59,240 |    110,552 |  73,223 |   123 |       - |
-|        *approve*                                   |       - |          - |  51,687 |     3 |       - |
-|     **◯**  *balanceOf*                             |       - |          - |   7,716 |   108 |       - |
-|     **◯**  *breachPenaltyRatePerDay*               |       - |          - |   7,251 |     1 |       - |
-|        *closeDelivery*                             | 151,564 |    164,950 | 155,440 |    11 |       - |
-|     **◯**  *collectedFeesBalance*                  |       - |          - |   7,320 |    10 |       - |
-|        *createOrder*                               |  98,564 | 12,269,739 | 899,218 |   321 |       - |
-|     **◯**  *decimals*                              |       - |          - |   7,271 |     1 |       - |
-|     **◯**  *deliveryDurationDays*                  |       - |          - |   7,288 |     4 |       - |
-|     **◯**  *deliveryIntervalDays*                  |       - |          - |   7,289 |     6 |       - |
-|        *depositDeliveryPayment*                    | 124,778 |    198,599 | 161,689 |     2 |       - |
-|        *depositDeliveryPayment*                    |  74,187 |    107,713 |  82,415 |     9 |       - |
-|        *depositReservePool*                        |  64,378 |    132,778 |  98,578 |     2 |       - |
-|     **◯**  *firstFutureDeliveryDate*               |       - |          - |   7,275 |     6 |       - |
-|     **◯**  *futureDeliveryDatesCount*              |       - |          - |   7,309 |     1 |       - |
-|     **◯**  *getCollateralDeficit*                  |  12,621 |     63,786 |  38,204 |     2 |       - |
-|     **◯**  *getDeliveryDates*                      |  12,098 |     21,477 |  19,209 |    11 |       - |
-|     **◯**  *getMarketPrice*                        |       - |          - |  35,403 |    57 |       - |
-|     **◯**  *getMinMargin*                          |  10,136 |    110,687 |  72,119 |    32 |       - |
-|     **◯**  *getMinMarginForPosition*               |  42,530 |     42,613 |  42,572 |     6 |       - |
-|     **◯**  *getOrderById*                          |       - |          - |  17,348 |    10 |       - |
-|     **◯**  *getPositionById*                       |  24,037 |     24,288 |  24,252 |    14 |       - |
-|     **◯**  *getPositionsByParticipantDeliveryDate* |   8,185 |     10,631 |   9,000 |     3 |       - |
-|     **◯**  *hashrateOracle*                        |       - |          - |   7,360 |     1 |       - |
-|     **◯**  *liquidationMarginPercent*              |       - |          - |   7,354 |     1 |       - |
-|        *marginCall*                                |  90,682 |    721,297 | 361,664 |    17 |       - |
-|     **◯**  *MAX_ORDERS_PER_PARTICIPANT*            |       - |          - |   5,184 |     1 |       - |
-|        *multicall*                                 | 188,892 |    710,511 | 449,702 |     4 |       - |
-|     **◯**  *name*                                  |       - |          - |   8,363 |     1 |       - |
-|     **◯**  *orderFee*                              |       - |          - |   7,299 |     6 |       - |
-|        *removeMargin*                              |  61,832 |    141,491 |  95,967 |     4 |       - |
-|     **◯**  *reservePoolBalance*                    |       - |          - |   7,252 |     4 |       - |
-|        *setFeeDiscountPercent*                     |  31,515 |     51,427 |  44,790 |     3 |       - |
-|        *setFutureDeliveryDatesCount*               |       - |          - |  33,785 |     5 |       - |
-|        *setOrderFee*                               |  29,892 |     51,828 |  40,860 |     2 |       - |
-|        *setValidatorURL*                           |       - |          - |  99,221 |     1 |       - |
-|     **◯**  *speedHps*                              |       - |          - |   7,319 |     1 |       - |
-|     **◯**  *symbol*                                |       - |          - |   8,382 |     1 |       - |
-|     **◯**  *token*                                 |       - |          - |   7,315 |     1 |       - |
-|     **◯**  *validatorAddress*                      |       - |          - |   7,317 |     1 |       - |
-|        *withdrawCollectedFees*                     |       - |          - |  58,173 |     1 |       - |
-|        *withdrawDeliveryPayment*                   |  52,396 |     59,343 |  53,785 |     5 |       - |
-|        *withdrawReservePool*                       |  51,390 |     64,237 |  57,814 |     2 |       - |
+|        *addMargin*                                 |  59,207 |    110,519 |  73,190 |   123 |       - |
+|        *approve*                                   |       - |          - |  51,669 |     3 |       - |
+|     **◯**  *balanceOf*                             |       - |          - |   7,700 |   108 |       - |
+|     **◯**  *breachPenaltyRatePerDay*               |       - |          - |   7,241 |     1 |       - |
+|        *closeDelivery*                             | 151,449 |    164,823 | 155,322 |    11 |       - |
+|     **◯**  *collectedFeesBalance*                  |       - |          - |   7,310 |    10 |       - |
+|        *createOrder*                               |  98,465 | 12,262,519 | 897,773 |   321 |       - |
+|     **◯**  *decimals*                              |       - |          - |   7,261 |     1 |       - |
+|     **◯**  *deliveryDurationDays*                  |       - |          - |   7,278 |     4 |       - |
+|     **◯**  *deliveryIntervalDays*                  |       - |          - |   7,279 |     6 |       - |
+|        *depositDeliveryPayment*                    | 124,678 |    198,287 | 161,483 |     2 |       - |
+|        *depositDeliveryPayment*                    |  74,155 |    107,664 |  82,379 |     9 |       - |
+|        *depositReservePool*                        |  64,344 |    132,744 |  98,544 |     2 |       - |
+|     **◯**  *firstFutureDeliveryDate*               |       - |          - |   7,265 |     6 |       - |
+|     **◯**  *futureDeliveryDatesCount*              |       - |          - |   7,299 |     1 |       - |
+|     **◯**  *getCollateralDeficit*                  |  12,597 |     63,698 |  38,148 |     2 |       - |
+|     **◯**  *getDeliveryDates*                      |  12,079 |     21,449 |  19,183 |    11 |       - |
+|     **◯**  *getMarketPrice*                        |       - |          - |  35,798 |    57 |       - |
+|     **◯**  *getMinMargin*                          |  10,121 |    110,481 |  72,023 |    32 |       - |
+|     **◯**  *getMinMarginForPosition*               |  42,467 |     42,548 |  42,508 |     6 |       - |
+|     **◯**  *getOrderById*                          |       - |          - |  17,286 |    10 |       - |
+|     **◯**  *getPositionById*                       |  23,973 |     24,159 |  24,132 |    14 |       - |
+|     **◯**  *getPositionsByParticipantDeliveryDate* |   8,169 |     10,613 |   8,984 |     3 |       - |
+|     **◯**  *hashrateOracle*                        |       - |          - |   7,460 |     1 |       - |
+|     **◯**  *liquidationMarginPercent*              |       - |          - |   7,454 |     1 |       - |
+|        *marginCall*                                |  90,598 |    720,578 | 361,337 |    17 |       - |
+|     **◯**  *MAX_ORDERS_PER_PARTICIPANT*            |       - |          - |   5,174 |     1 |       - |
+|        *multicall*                                 | 187,885 |    709,066 | 448,476 |     4 |       - |
+|     **◯**  *name*                                  |       - |          - |   8,240 |     1 |       - |
+|     **◯**  *orderFee*                              |       - |          - |   7,289 |     6 |       - |
+|        *removeMargin*                              |  61,791 |    141,320 |  95,878 |     4 |       - |
+|     **◯**  *reservePoolBalance*                    |       - |          - |   7,242 |     4 |       - |
+|        *setFeeDiscountPercent*                     |  31,502 |     51,414 |  44,777 |     3 |       - |
+|        *setFutureDeliveryDatesCount*               |       - |          - |  33,774 |     5 |       - |
+|        *setOrderFee*                               |  29,881 |     51,817 |  40,849 |     2 |       - |
+|        *setValidatorURL*                           |       - |          - |  99,031 |     1 |       - |
+|     **◯**  *speedHps*                              |       - |          - |   7,309 |     1 |       - |
+|     **◯**  *symbol*                                |       - |          - |   8,259 |     1 |       - |
+|     **◯**  *token*                                 |       - |          - |   7,305 |     1 |       - |
+|     **◯**  *validatorAddress*                      |       - |          - |   7,307 |     1 |       - |
+|        *withdrawCollectedFees*                     |       - |          - |  58,155 |     1 |       - |
+|        *withdrawDeliveryPayment*                   |  52,365 |     59,304 |  53,753 |     5 |       - |
+|        *withdrawReservePool*                       |  51,365 |     64,206 |  57,786 |     2 |       - |
 | **HashrateOracle**                                 |         |            |         |       |         |
-|     **◯**  *getHashesForBTC*                       |       - |          - |  11,936 |    10 |       - |
-|        *setHashesForBTC*                           |  38,569 |     72,781 |  41,687 |    11 |       - |
-|        *setTTL*                                    |       - |          - |  73,726 |     1 |       - |
-|        *setUpdaterAddress*                         |       - |          - |  51,017 |     1 |       - |
+|     **◯**  *getHashesForBTC*                       |       - |          - |  11,922 |    10 |       - |
+|        *setHashesForBTC*                           |  38,555 |     72,767 |  41,673 |    11 |       - |
+|        *setTTL*                                    |       - |          - |  73,714 |     1 |       - |
+|        *setUpdaterAddress*                         |       - |          - |  51,006 |     1 |       - |
 | **USDCMock**                                       |         |            |         |       |         |
-|        *approve*                                   |       - |          - |  46,683 |     5 |       - |
-|     **◯**  *balanceOf*                             |       - |          - |   2,562 |     6 |       - |
-|     **◯**  *decimals*                              |       - |          - |     177 |     1 |       - |
-|     **◯**  *symbol*                                |       - |          - |   3,216 |     1 |       - |
-|        *transfer*                                  |  51,584 |     51,596 |  51,594 |     5 |       - |
+|        *approve*                                   |       - |          - |  46,678 |     5 |       - |
+|     **◯**  *balanceOf*                             |       - |          - |   2,559 |     6 |       - |
+|     **◯**  *decimals*                              |       - |          - |     176 |     1 |       - |
+|     **◯**  *symbol*                                |       - |          - |   3,129 |     1 |       - |
+|        *transfer*                                  |  51,577 |     51,589 |  51,587 |     5 |       - |
 
 ## Deployments
 |                        |     Min |    Max  |       Avg | Block % | usd avg |
 | :--------------------- | ------: | ------: | --------: | ------: | ------: |
-| **BTCPriceOracleMock** |       - |       - |   296,627 |     1 % |       - |
-| **ERC1967Proxy**       | 180,114 | 376,802 |   278,458 |   0.9 % |       - |
-| **Futures**            |       - |       - | 5,300,044 |  17.7 % |       - |
-| **HashrateOracle**     |       - |       - | 1,145,530 |   3.8 % |       - |
-| **Multicall3**         |       - |       - |   763,329 |   2.5 % |       - |
-| **USDCMock**           |       - |       - |   557,667 |   1.9 % |       - |
+| **BTCPriceOracleMock** |       - |       - |   287,680 |     1 % |       - |
+| **ERC1967Proxy**       | 177,746 | 372,569 |   275,158 |   0.9 % |       - |
+| **Futures**            |       - |       - | 5,172,179 |  17.2 % |       - |
+| **HashrateOracle**     |       - |       - | 1,116,832 |   3.7 % |       - |
+| **Multicall3**         |       - |       - |   740,586 |   2.5 % |       - |
+| **USDCMock**           |       - |       - |   544,630 |   1.8 % |       - |
 
 ## Solidity and Network Config
 | **Settings**        | **Value**  |

@@ -22,6 +22,7 @@ const config: HardhatUserConfig = {
       {
         version: "0.8.30",
         settings: {
+          evmVersion: "osaka",
           // viaIR: true,
           optimizer: {
             enabled: true,
