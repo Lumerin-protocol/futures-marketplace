@@ -1,0 +1,55 @@
+name: Update Futures Contracts
+
+on:
+  push:
+    branches:
+      - dev
+      - stg
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment/branch
+        required: true
+        type: choice
+        options:
+          - dev
+          - stg
+          - main
+
+jobs:
+  update-futures:
+    name: Update futures contracts
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: contracts/yarn.lock
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Run update script
+        run: yarn hardhat --config hardhat-prod.config.ts run scripts/update-futures.ts --network default
+        env:
+          ETH_NODE_ADDRESS: ${{ secrets.ETH_NODE_ADDRESS }}
+          OWNER_PRIVATEKEY: ${{ secrets.OWNER_PRIVATEKEY }}
+          PROPOSER_PRIVATEKEY: ${{ secrets.PROPOSER_PRIVATEKEY }}
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+          FUTURES_ADDRESS: ${{ secrets.FUTURES_ADDRESS }}
+          SAFE_OWNER_ADDRESS: ${{ secrets.SAFE_OWNER_ADDRESS }}

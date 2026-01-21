@@ -1,0 +1,49 @@
+name: Check Futures Version Bump
+
+on:
+  pull_request:
+    paths:
+      - "contracts/contracts/Futures.sol"
+      - ".github/workflows/check-version-bump.yml"
+
+jobs:
+  check-version-bump:
+    name: Require Futures VERSION bump
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify VERSION updated when Futures.sol changes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          if ! git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- contracts/contracts/Futures.sol | grep -q .; then
+            echo "Futures.sol not changed; skipping version check."
+            exit 0
+          fi
+
+          base_version=$(git show "$BASE_SHA:contracts/contracts/Futures.sol" | sed -n 's/.*VERSION = "\(.*\)";/\1/p' | head -n1)
+          head_version=$(git show "$HEAD_SHA:contracts/contracts/Futures.sol" | sed -n 's/.*VERSION = "\(.*\)";/\1/p' | head -n1)
+
+          if [ -z "$base_version" ] || [ -z "$head_version" ]; then
+            echo "Unable to determine VERSION from Futures.sol."
+            echo "Base VERSION: ${base_version:-<missing>}"
+            echo "Head VERSION: ${head_version:-<missing>}"
+            exit 1
+          fi
+
+          if [ "$base_version" = "$head_version" ]; then
+            echo "VERSION was not bumped in Futures.sol."
+            echo "Base VERSION: $base_version"
+            echo "Head VERSION: $head_version"
+            exit 1
+          fi
+
+          echo "VERSION bumped from $base_version to $head_version."

@@ -648,6 +648,19 @@
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "VERSION",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "uint256",
@@ -759,6 +772,19 @@
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "collectedFeesBalance",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "uint256",
@@ -841,24 +867,13 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "_amount",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_deliveryDate",
-        "type": "uint256"
+        "internalType": "bytes32",
+        "name": "positionId",
+        "type": "bytes32"
       }
     ],
-    "name": "depositDeliveryPayment",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
+    "name": "depositDeliveryPaymentV2",
+    "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
   },
@@ -1035,6 +1050,25 @@
         "internalType": "struct Futures.Order",
         "name": "",
         "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      }
+    ],
+    "name": "getOrderFee",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -1346,6 +1380,19 @@
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "reservePoolBalance",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "uint256",
@@ -1354,6 +1401,24 @@
       }
     ],
     "name": "setBreachPenaltyRatePerDay",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_address",
+        "type": "address"
+      },
+      {
+        "internalType": "uint8",
+        "name": "_feeDiscountPercent",
+        "type": "uint8"
+      }
+    ],
+    "name": "setFeeDiscountPercent",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1596,6 +1661,13 @@
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "withdrawCollectedFees",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
