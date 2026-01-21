@@ -37,7 +37,7 @@ async function main() {
       },
     });
     for (const event of events) {
-      if ((event.args.value = orderFee)) {
+      if (event.args.value === orderFee) {
         totalFees += event.args.value;
         console.log("Tx:", event.transactionHash);
       }
