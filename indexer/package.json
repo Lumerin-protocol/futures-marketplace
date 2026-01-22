@@ -1,5 +1,5 @@
 {
-  "name": "marketplace",
+  "name": "futures",
   "license": "UNLICENSED",
   "scripts": {
     "clean": "rm -rf data generated build",
@@ -7,10 +7,10 @@
     "prepare:env": "envsubst < subgraph.template.yaml > subgraph.yaml",
     "prepare-local": "set -a && source .env && set +a && envsubst < subgraph.template.yaml > subgraph.yaml",
     "build": "graph build",
-    "deploy": "graph deploy --node https://api.studio.thegraph.com/deploy/ hr-futures",
-    "create-local": "graph create --node http://localhost:8020/ marketplace",
-    "remove-local": "graph remove --node http://localhost:8020/ marketplace",
-    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 --version-label 0 marketplace",
+    "deploy": "graph deploy --node https://api.studio.thegraph.com/deploy/ futures",
+    "create-local": "graph create --node http://localhost:8020/ futures",
+    "remove-local": "graph remove --node http://localhost:8020/ futures",
+    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 --version-label 0 futures",
     "setup-local": "yarn prepare-local && yarn codegen && yarn build && yarn create-local && yarn deploy-local",
     "test": "graph test",
     "indexer": "docker-compose up"
