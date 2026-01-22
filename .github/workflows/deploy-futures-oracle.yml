@@ -169,7 +169,7 @@ jobs:
       - name: Prepare subgraph configuration
         working-directory: ./indexer
         env:
-          NETWORK: ${{ vars.REACT_APP_CHAIN_ID }}
+          NETWORK: ${{ vars.NETWORK }}
           FUTURES_ADDRESS: ${{ vars.REACT_APP_FUTURES_TOKEN_ADDRESS }}
           START_BLOCK_FUTURES: ${{ vars.START_BLOCK_FUTURES }}
 
