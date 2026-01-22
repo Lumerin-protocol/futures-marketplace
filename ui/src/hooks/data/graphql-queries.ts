@@ -269,3 +269,31 @@ export const HistoricalOrdersQuery = gql`
     }
   }
 `;
+
+// BTC Price Oracle queries (similar to Hashrate Index)
+export const BtcPriceIndexQuery = gql`
+  query BtcPriceIndex($startDate: BigInt!, $first: Int!, $skip: Int!) {
+    btcPriceIndexes(
+      where: { updatedAt_gte: $startDate }
+      orderBy: updatedAt
+      orderDirection: desc
+      first: $first
+      skip: $skip
+    ) {
+      id
+      price
+      updatedAt
+    }
+  }
+`;
+
+export const AggregatedBtcPriceIndexQuery = gql`
+  query AggregatedBtcPriceIndexQuery($interval: String!, $first: Int!, $skip: Int!, $startTimestamp: BigInt!) {
+    btcPriceCandles(interval: $interval, first: $first, skip: $skip, where: { timestamp_gte: $startTimestamp }) {
+      count
+      id
+      sum
+      timestamp
+    }
+  }
+`;

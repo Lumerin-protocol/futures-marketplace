@@ -8,6 +8,7 @@ import { PlaceOrderWidget } from "../../components/Widgets/Futures/PlaceOrderWid
 import { OrdersPositionsTabWidget } from "../../components/Widgets/Futures/OrdersPositionsTabWidget";
 import { ClosePositionModal, useClosePositionModal } from "../../components/Widgets/Futures/ClosePositionModal";
 import { useHashrateIndexData, type TimePeriod } from "../../hooks/data/useHashRateIndexData";
+import { useBtcPriceIndexData } from "../../hooks/data/useBtcPriceIndexData";
 import { useParticipant } from "../../hooks/data/useParticipant";
 import { usePositionBook } from "../../hooks/data/usePositionBook";
 import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpecs";
@@ -37,6 +38,7 @@ export const Futures: FC = () => {
   }, [address]);
   const [chartTimePeriod, setChartTimePeriod] = useState<TimePeriod>("week");
   const hashrateQuery = useHashrateIndexData({ timePeriod: chartTimePeriod });
+  const btcPriceQuery = useBtcPriceIndexData({ timePeriod: chartTimePeriod });
   const contractSpecsQuery = useFuturesContractSpecs();
   const { data: participantData, isLoading: isParticipantLoading } = useParticipant(address);
   const { data: positionBookData, isLoading: isPositionBookLoading } = usePositionBook(address);
@@ -156,7 +158,9 @@ export const Futures: FC = () => {
         <SmallWidget className="w-full" style={{ marginBottom: 0, paddingLeft: 5, paddingRight: 10 }}>
           <HashrateChart
             data={hashrateQuery.data || []}
+            btcPriceData={btcPriceQuery.data || []}
             isLoading={hashrateQuery.isLoading}
+            isBtcPriceLoading={btcPriceQuery.isLoading}
             marketPrice={marketPrice}
             marketPriceFetchedAt={marketPriceFetchedAt}
             timePeriod={chartTimePeriod}

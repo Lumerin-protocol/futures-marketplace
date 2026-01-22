@@ -64,11 +64,15 @@ async function fetchDayHashrateIndex() {
   let hasMore = true;
 
   while (hasMore) {
-    const req = await graphqlRequest<HashrateIndexRes>(HashrateIndexQuery, {
-      startDate,
-      first: PAGE_SIZE,
-      skip,
-    });
+    const req = await graphqlRequest<HashrateIndexRes>(
+      HashrateIndexQuery,
+      {
+        startDate,
+        first: PAGE_SIZE,
+        skip,
+      },
+      process.env.REACT_APP_SUBGRAPH_ORACLES_URL,
+    );
 
     allIndexes = [...allIndexes, ...req.hashrateIndexes];
 
@@ -116,12 +120,16 @@ async function fetchAggregatedHashrateIndex(timePeriod: "week" | "month") {
   let hasMore = true;
 
   while (hasMore) {
-    const req = await graphqlRequest<AggregatedHashrateIndexRes>(AggregatedHashrateIndexQuery, {
-      interval,
-      first: PAGE_SIZE,
-      skip,
-      startTimestamp,
-    });
+    const req = await graphqlRequest<AggregatedHashrateIndexRes>(
+      AggregatedHashrateIndexQuery,
+      {
+        interval,
+        first: PAGE_SIZE,
+        skip,
+        startTimestamp,
+      },
+      process.env.REACT_APP_SUBGRAPH_ORACLES_URL,
+    );
 
     allCandles = [...allCandles, ...req.hashesForTokenCandles];
 

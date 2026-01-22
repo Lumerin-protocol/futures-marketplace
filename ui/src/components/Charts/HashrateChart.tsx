@@ -1,4 +1,4 @@
-import { type FC, useMemo, useEffect } from "react";
+import { type FC, useMemo, useEffect, useState } from "react";
 import Highcharts from "highcharts";
 import HighchartsReact from "highcharts-react-official";
 import styled from "@mui/material/styles/styled";
@@ -36,13 +36,46 @@ const PeriodButton = styled("button")<{ $active: boolean }>`
   }
 `;
 
+const ChartControls = styled("div")`
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding-left: 18px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+`;
+
+const CheckboxLabel = styled("label")`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+  user-select: none;
+
+  input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #f7931a;
+    cursor: pointer;
+  }
+`;
+
 interface HashrateChartProps {
   data: Array<{
     updatedAtDate?: Date;
     updatedAt?: string;
     priceToken: bigint;
   }>;
+  btcPriceData?: Array<{
+    updatedAtDate?: Date;
+    updatedAt?: string;
+    price: bigint;
+  }>;
   isLoading?: boolean;
+  isBtcPriceLoading?: boolean;
   marketPrice?: bigint | null;
   marketPriceFetchedAt?: Date;
   timePeriod: TimePeriod;
@@ -51,12 +84,17 @@ interface HashrateChartProps {
 
 export const HashrateChart: FC<HashrateChartProps> = ({
   data,
+  btcPriceData,
   isLoading = false,
+  isBtcPriceLoading = false,
   marketPrice,
   marketPriceFetchedAt,
   timePeriod,
   onTimePeriodChange,
 }) => {
+  // State for showing/hiding BTC price data
+  const [showBtcPrice, setShowBtcPrice] = useState(true);
+
   // Track time period changes and log to console
   useEffect(() => {
     console.log("Time period changed to:", timePeriod);
@@ -102,6 +140,22 @@ export const HashrateChart: FC<HashrateChartProps> = ({
       ];
     });
 
+  // Transform BTC price data for Highcharts
+  const btcPriceChartData = useMemo(() => {
+    if (!btcPriceData || btcPriceData.length === 0) return [];
+
+    return btcPriceData
+      .filter((item) => item.updatedAtDate || item.updatedAt)
+      .filter((item) => item.price > 0n)
+      .map((item) => {
+        const date = item.updatedAtDate || new Date(Number(item.updatedAt) * 1000);
+        return [
+          date.getTime(), // X-axis: timestamp
+          Number(item.price) / 10 ** 8, // Y-axis: BTC price (assuming 8 decimals)
+        ];
+      });
+  }, [btcPriceData]);
+
   const options: Highcharts.Options = {
     chart: {
       type: "spline",
@@ -111,14 +165,6 @@ export const HashrateChart: FC<HashrateChartProps> = ({
       },
     },
     title: { text: undefined },
-    // title: {
-    //   text: "Hashprice Index",
-    //   style: {
-    //     color: "#ffffff",
-    //     fontWeight: "600",
-    //     fontSize: "1.3em",
-    //   },
-    // },
     xAxis: {
       type: "datetime",
       title: {
@@ -134,43 +180,89 @@ export const HashrateChart: FC<HashrateChartProps> = ({
       },
       gridLineColor: "#333333",
     },
-    yAxis: {
-      title: {
-        text: "USDC",
-        style: {
-          color: "#ffffff",
+    yAxis: [
+      {
+        // Primary Y-axis for Hashprice (USDC)
+        title: {
+          text: "Hashprice (USDC)",
+          style: {
+            color: "white",
+          },
         },
+        labels: {
+          style: {
+            color: "white",
+          },
+          formatter: function () {
+            return Number(this.value).toFixed(2);
+          },
+        },
+        gridLineColor: "#333333",
       },
-      // min: 100,   // Minimum value on Y-axis
-      // max: 150,
-      labels: {
-        style: {
-          color: "#ffffff",
-        },
-        formatter: function () {
-          return Number(this.value).toFixed(2);
-        },
-      },
-      gridLineColor: "#333333",
-    },
+      ...(showBtcPrice
+        ? [
+            {
+              // Secondary Y-axis for BTC Price (USD)
+              title: {
+                text: "BTC Price (USD)",
+                style: {
+                  color: "white",
+                },
+              },
+              labels: {
+                style: {
+                  color: "white",
+                },
+                formatter: function (this: Highcharts.AxisLabelsFormatterContextObject) {
+                  return "$" + Number(this.value).toLocaleString();
+                },
+              },
+              opposite: true,
+              gridLineWidth: 0,
+            } as Highcharts.YAxisOptions,
+          ]
+        : []),
+    ],
     series: [
       {
         connectNulls: false,
         dataSorting: { enabled: false },
         dataGrouping: { enabled: false },
         type: "line",
-        name: "Price Token",
-        showInLegend: false,
+        name: "Hashprice",
+        showInLegend: true,
         data: chartData,
-        color: "#22c55e", // "#509EBA",
+        color: "#22c55e",
         lineWidth: 2,
+        yAxis: 0,
         marker: {
           enabled: false,
           radius: 4,
         },
       },
+      ...(showBtcPrice
+        ? [
+            {
+              connectNulls: false,
+              dataSorting: { enabled: false },
+              dataGrouping: { enabled: false },
+              type: "line" as const,
+              name: "BTC Price",
+              showInLegend: true,
+              data: btcPriceChartData,
+              color: "#f7931a",
+              lineWidth: 2,
+              yAxis: 1,
+              marker: {
+                enabled: false,
+                radius: 4,
+              },
+            },
+          ]
+        : []),
     ],
     legend: {
+      enabled: true,
       itemStyle: {
         color: "#ffffff",
       },
@@ -183,13 +275,13 @@ export const HashrateChart: FC<HashrateChartProps> = ({
       },
     },
     tooltip: {
+      shared: true,
       backgroundColor: "#1a1a1a",
       borderColor: "#333333",
       style: {
         color: "#ffffff",
       },
       formatter: function () {
-        // const date = new Date(this.x as number).toLocaleDateString();
         const date = new Date(this.x as number).toLocaleString(undefined, {
           year: "numeric",
           month: "short",
@@ -197,10 +289,20 @@ export const HashrateChart: FC<HashrateChartProps> = ({
           hour: "2-digit",
           minute: "2-digit",
         });
-        const value = (this.y as number).toFixed(2);
 
-        const style = "color: grey; font-size: 10px;";
-        return `<b>Price (100 TH/s per day):</b> ${value}<br/> <span style="${style}">${date}</span>`;
+        let tooltipHtml = `<span style="color: grey; font-size: 10px;">${date}</span><br/>`;
+
+        this.points?.forEach((point) => {
+          const color = point.series.color;
+          const name = point.series.name;
+          const value =
+            name === "BTC Price"
+              ? (point.y as number).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+              : (point.y as number).toFixed(2);
+          tooltipHtml += `<span style="color:${color}">\u25CF</span> <b>${name}:</b> ${value}<br/>`;
+        });
+
+        return tooltipHtml;
       },
     },
     credits: {
@@ -208,7 +310,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
     },
   };
 
-  if (isLoading) {
+  if (isLoading && isBtcPriceLoading) {
     return (
       <div
         style={{
@@ -245,17 +347,27 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   return (
     <>
       <h3>Hashprice Index</h3>
-      <PeriodSwitch>
-        <PeriodButton $active={timePeriod === "day"} onClick={() => onTimePeriodChange("day")}>
-          1D
-        </PeriodButton>
-        <PeriodButton $active={timePeriod === "week"} onClick={() => onTimePeriodChange("week")}>
-          7D
-        </PeriodButton>
-        <PeriodButton $active={timePeriod === "month"} onClick={() => onTimePeriodChange("month")}>
-          30D
-        </PeriodButton>
-      </PeriodSwitch>
+      <ChartControls>
+      <CheckboxLabel>
+          <input
+            type="checkbox"
+            checked={showBtcPrice}
+            onChange={(e) => setShowBtcPrice(e.target.checked)}
+          />
+          BTC Price
+        </CheckboxLabel>
+        <PeriodSwitch>
+          <PeriodButton $active={timePeriod === "day"} onClick={() => onTimePeriodChange("day")}>
+            1D
+          </PeriodButton>
+          <PeriodButton $active={timePeriod === "week"} onClick={() => onTimePeriodChange("week")}>
+            7D
+          </PeriodButton>
+          <PeriodButton $active={timePeriod === "month"} onClick={() => onTimePeriodChange("month")}>
+            30D
+          </PeriodButton>
+        </PeriodSwitch>
+      </ChartControls>
       <div style={{ width: "100%", height: "450px", paddingTop: "1rem" }}>
         <HighchartsReact highcharts={Highcharts} options={options} containerProps={{ style: { height: "100%" } }} />
       </div>
