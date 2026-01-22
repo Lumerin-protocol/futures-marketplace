@@ -24,7 +24,7 @@ on:
           - main
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-futures-oracle-${{ github.ref }}
   cancel-in-progress: true
 
 defaults:

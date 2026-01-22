@@ -31,7 +31,7 @@ on:
           - main
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-futures-ui-${{ github.ref }}
   cancel-in-progress: true
 
 defaults:
