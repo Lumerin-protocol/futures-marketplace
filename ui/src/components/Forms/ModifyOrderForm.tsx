@@ -52,7 +52,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
     const { address } = useAccount();
     const balanceQuery = useGetFutureBalance(address);
     const accountBalanceQuery = usePaymentTokenBalance(address);
-    const { data: orderFeeRaw } = useOrderFee();
+    const { data: orderFeeRaw } = useOrderFee(address);
 
     // Determine order type from quantity sign
     const isBuy = order.isBuy;

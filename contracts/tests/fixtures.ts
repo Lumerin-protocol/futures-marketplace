@@ -76,6 +76,7 @@ export async function deployOnlyFuturesFixture(
       firstFutureDeliveryDate,
       deliveryDurationDays,
       deliveryIntervalDays: deliveryDurationDays,
+      collateralAmount,
     },
     contracts: {
       usdcMock,

@@ -52,7 +52,7 @@ export const PlaceOrderForm: FC<Props> = ({
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const contractSpecsQuery = useFuturesContractSpecs();
-  const { orderFeeUSDC, isLoading: isOrderFeeLoading } = useOrderFee();
+  const { orderFeeUSDC, isLoading: isOrderFeeLoading } = useOrderFee(address);
 
   // Determine order type from quantity sign
   const isBuy = quantity > 0;
