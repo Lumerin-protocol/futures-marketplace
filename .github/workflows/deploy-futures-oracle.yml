@@ -7,9 +7,11 @@ on:
       - stg
       - main
       - 'cicd/**'
+
     paths:
       - 'indexer/**'
       - '.github/workflows/deploy-futures-oracle.yml'
+
   workflow_dispatch:
     inputs:
       environment:
@@ -21,6 +23,14 @@ on:
           - stg
           - main
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+    
 permissions:
   id-token: write   # Required for OIDC
   contents: write   # Required for creating git tags

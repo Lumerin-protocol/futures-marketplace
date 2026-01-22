@@ -6,16 +6,30 @@ on:
       - dev
       - stg
       - main
+
+    paths:
+      - '.github/workflows/update-futures-contracts.yml'
+      - 'contracts/contracts/Futures.sol'
+      - 'contracts/scripts/update-futures.ts'
+
   workflow_dispatch:
     inputs:
       environment:
-        description: Target environment/branch
+        description: 'Target environment (dev=DEV, stg=STG, main=LMN/PROD)'
         required: true
         type: choice
         options:
           - dev
           - stg
           - main
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   update-futures:
