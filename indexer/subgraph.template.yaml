@@ -24,7 +24,7 @@ dataSources:
         - Order
       abis:
         - name: Futures
-          file: ../abi/Futures.json
+          file: ../contracts/abi/Futures.json
       eventHandlers:
         - event: Initialized(uint64)
           handler: handleInitialized
@@ -53,31 +53,6 @@ dataSources:
         - event: ValidatorURLUpdated(string)
           handler: handleValidatorURLUpdated
       file: ./src/futures.ts
-  - kind: ethereum
-    name: HashrateOracle
-    network: "${NETWORK}"
-    source:
-      address: "${HASHRATE_ORACLE_ADDRESS}"
-      startBlock: ${START_BLOCK_HASHRATE_ORACLE}
-      abi: HashrateOracle
-    mapping:
-      kind: ethereum/events
-      apiVersion: 0.0.9
-      language: wasm/assemblyscript
-      entities:
-        - HashrateIndex
-      abis:
-        - name: HashrateOracle
-          file: ../abi/HashrateOracle.json
-      eventHandlers:
-        - event: Initialized(uint64)
-          handler: handleInitialized
-      blockHandlers:
-        - handler: handleBlock
-          filter:
-            kind: polling
-            every: ${HASHRATE_ORACLE_POLLING_BLOCK_INTERVAL}
-      file: ./src/hashrate-oracle.ts
 # features:
 #   - grafting
 # graft:
