@@ -1,19 +1,37 @@
 name: Deploy Marketplace to Hosted Environment
 
 on:
-  workflow_dispatch:
-
   push:
     branches:
-      - main
-      - stg
       - dev
-      - cicd/*
+      - stg
+      - main
+      - 'cicd/**'
 
-    paths: [".github/**", "ui/src/**", "ui/public/**", "ui/package.json", "ui/yarn.lock", "ui/vite.config.ts", "ui/tsconfig.json", "ui/index.html", "ui/LICENSE", "ui/README.md"]
+    paths: 
+      - '.github/workflows/deploy-futures-ui.yml'
+      - 'ui/src/**'
+      - 'ui/public/**'
+      - 'ui/package.json'
+      - 'ui/yarn.lock'
+      - 'ui/vite.config.ts'
+      - 'ui/tsconfig.json'
+      - 'ui/index.html'
+
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment (dev=DEV, stg=STG, main=LMN/PROD)'
+        required: true
+        type: choice
+        options:
+          - dev
+          - stg
+          - main
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-futures-ui-${{ github.ref }}
   cancel-in-progress: true
 
 defaults:
