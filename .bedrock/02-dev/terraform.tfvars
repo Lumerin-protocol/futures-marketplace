@@ -1,7 +1,36 @@
 
 #Create Switches for Lumerin Marketplace and Indexer / proxy-router-ui  
+create_core      = true
 
-create_marketplace_s3cf      = true
+ecs_cluster = {
+  create  = true
+  protect = false
+}
+# Configure Market Maker
+market_maker = {
+  create                      = true
+  mm_imagetag                 = "auto" #"v0.1.0-dev"
+  mm_ghcr_repo                = "ghcr.io/lumerin-protocol/market-maker"
+  svc_name                    = "market-maker"
+  cnt_name                    = "market-maker"
+  cnt_port                    = 3000
+  task_cpu                    = 256
+  task_ram                    = 512
+  task_worker_qty             = 1
+  friendly_name               = "market-maker"
+  subgraph_url_futures        = "https://graph.dev.lumerin.io/subgraphs/name/futures"
+  subgraph_url_oracles        = "https://graph.dev.lumerin.io/subgraphs/name/oracles"
+  subgraph_api_key            = ""
+  float_amount                = 300000000  # 1000n * 10n ** 6n
+  spread_amount               = 10000       # 2n * 10n ** 4n
+  grid_levels                 = 5
+  active_quoting_amount_ratio = 0.4
+  risk_aversion               = 3000000           # Risk aversion parameter (higher = more conservative)
+  loop_interval_ms            = 15000
+  max_position                = 10
+  log_level                   = "info"
+  chain_id                    = 421614
+}
 
 ########################################
 # Shared Contract Addresses

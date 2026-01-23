@@ -64,7 +64,6 @@ data "aws_subnet" "middle_use1_1a" {
 
 # Find the xxx.Lumerin.io Certificate created in foundation-extra
 data "aws_acm_certificate" "lumerin_marketplace_ext" {
-  count       = var.create_marketplace_s3cf ? 1 : 0
   provider    = aws.use1
   # domain      = var.account_lifecycle == "prd" ? data.aws_route53_zone.public_lumerin_root.name : data.aws_route53_zone.public_lumerin.name
   domain      = data.aws_route53_zone.public_lumerin.name
@@ -74,7 +73,6 @@ data "aws_acm_certificate" "lumerin_marketplace_ext" {
 
 # Find the xxx.Lumerin.io Certificate created in foundation-extra
 data "aws_acm_certificate" "lumerin_marketplace_website" {
-  count       = var.create_marketplace_s3cf ? 1 : 0
   provider    = aws.use1
   domain      = var.account_lifecycle == "prd" ? data.aws_route53_zone.public_lumerin_root.name : data.aws_route53_zone.public_lumerin.name
   types       = ["AMAZON_ISSUED"]
@@ -85,7 +83,6 @@ data "aws_acm_certificate" "lumerin_marketplace_website" {
 # WAF Protection 
 ################################
 data "aws_wafv2_web_acl" "bedrock_waf_use1_1" {
-  count    = var.create_marketplace_s3cf ? 1 : 0
   provider = aws.use1
   name     = "waf-bedrock-use1-1"
   scope    = "REGIONAL"

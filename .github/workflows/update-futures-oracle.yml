@@ -1,4 +1,4 @@
-name: Update Futures Contract Oracle
+name: Update Futures Oracle
 
 on:
   push:

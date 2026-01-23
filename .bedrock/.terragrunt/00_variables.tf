@@ -1,13 +1,32 @@
-################################################################################
-# VARIABLES 
-################################################################################
-# All variables set in ./terraform.tfvars must be initialized here
-# Any of these variables can be used in any of this environment's .tf files
-
-variable "create_marketplace_s3cf" {
-  description = "Decide whether or not to create the Marketplace Website environment "
+variable "create_core" {
+  description = "Decide whether or not to create the core resources"
   type        = bool
   default     = false
+}
+
+variable "ecs_cluster" {
+  description = "ECS Cluster Variables"
+  type    = map(any)
+  default = {}
+}
+
+variable "market_maker" {
+  description = "Market Maker Service Variables"
+  type    = map(any)
+  default = {}
+}
+
+variable "market_maker_private_key" {
+  description = "Private key for the market maker"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "market_maker_eth_node_url" {
+  description = "ETH Node URL for the market maker"
+  type        = string
+  default     = ""
 }
 
 ################################################################################
