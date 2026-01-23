@@ -1,8 +1,8 @@
-import { privateKeyToAccount } from "viem/accounts";
-import { Subgraph } from "./subgraph.ts";
+import { FuturesSubgraph } from "./clients/futures-subgraph.ts";
+import { OraclesSubgraph } from "./clients/oracles-subgraph.ts";
 import pino from "pino";
 import { FuturesContract } from "./contract.ts";
-import { NowSeconds, mult, wait, clamp, abs, roundToNearest, getGasFee } from "./lib.ts";
+import { NowSeconds, mult, wait, clamp, roundToNearest, getGasFee } from "./lib.ts";
 import {
   resampleHourlyClose,
   realizedVolatility,
@@ -33,23 +33,25 @@ export async function main() {
       MAX_POSITION: config.MAX_POSITION,
       RISK_AVERSION: config.RISK_AVERSION,
       SPREAD_AMOUNT: `${formatUnits(config.SPREAD_AMOUNT, 6)} USDC`,
-      SUBGRAPH_URL: config.SUBGRAPH_URL,
+      FUTURES_SUBGRAPH_URL: config.FUTURES_SUBGRAPH_URL,
+      ORACLES_SUBGRAPH_URL: config.ORACLES_SUBGRAPH_URL,
     },
-    "Config"
+    "Config",
   );
 
-  const subgraph = new Subgraph(config.SUBGRAPH_URL, config.SUBGRAPH_API_KEY);
+  const futuresSubgraph = new FuturesSubgraph(config.FUTURES_SUBGRAPH_URL);
+  const oraclesSubgraph = new OraclesSubgraph(config.ORACLES_SUBGRAPH_URL);
   const contract = new FuturesContract(
     config.FUTURES_ADDRESS,
     config.ETH_NODE_URL,
     config.PRIVATE_KEY,
-    config.CHAIN_ID
+    config.CHAIN_ID,
   );
   const volatilityDurationSeconds = 30 * 24 * 3600;
   const nowSeconds = NowSeconds();
-  const historicalPrices = await subgraph.getHistoricalPrices(
+  const historicalPrices = await oraclesSubgraph.getHistoricalPrices(
     nowSeconds - volatilityDurationSeconds,
-    nowSeconds
+    nowSeconds,
   );
   const resampledPrices = resampleHourlyClose(historicalPrices, 3600);
   const { sigmaPerStep: volatilityPerHour } = realizedVolatility(resampledPrices);
@@ -63,12 +65,12 @@ export async function main() {
       tickSize,
       commitHash: config.COMMIT_HASH,
     },
-    "Derived data"
+    "Derived data",
   );
 
   if (config.SPREAD_AMOUNT % tickSize !== 0n) {
     throw new Error(
-      `Spread amount (${config.SPREAD_AMOUNT}) is not divisible by tick size (${tickSize}), please adjust the spread amount`
+      `Spread amount (${config.SPREAD_AMOUNT}) is not divisible by tick size (${tickSize}), please adjust the spread amount`,
     );
   }
 
@@ -81,7 +83,7 @@ export async function main() {
       usdcBalance: `${formatUnits(usdcBalance, 6)} USDC`,
       floatAmount: `${formatUnits(config.FLOAT_AMOUNT, 6)} USDC`,
     },
-    "Account balances"
+    "Account balances",
   );
 
   if (futuresBalance < config.FLOAT_AMOUNT) {
@@ -95,7 +97,7 @@ export async function main() {
             depositAmount,
             blockNumber,
           },
-          "Deposited to margin account"
+          "Deposited to margin account",
         );
       } else {
         log.info("Dry run, skipping deposit");
@@ -103,7 +105,7 @@ export async function main() {
     } else {
       log.warn(
         { depositAmount, accountBalance: usdcBalance },
-        "Deposit amount is greater than account balance, skipping..."
+        "Deposit amount is greater than account balance, skipping...",
       );
     }
   }
@@ -117,11 +119,11 @@ export async function main() {
     const remainingGas = await contract.getETHBalance();
     const indexPrice = await contract.getIndexPrice();
     const deliveryDate = await contract.getCurrentDeliveryDate();
-    const currentPosition = await subgraph.getCurrentPosition(
+    const currentPosition = await futuresSubgraph.getCurrentPosition(
       BigInt(deliveryDate),
       config.DRY_RUN && config.DRY_RUN_WALLET_ADDRESS
         ? config.DRY_RUN_WALLET_ADDRESS
-        : contract.getWalletAddress()
+        : contract.getWalletAddress(),
     );
     const unrealizedPnL = currentPosition.position * (indexPrice - currentPosition.averagePrice);
 
@@ -139,7 +141,7 @@ export async function main() {
         marginAccountBalance: `${formatUnits(marginAccountBalance, 6)} USDC`,
         remainingGas: `${formatUnits(remainingGas, 18)} ETH`,
       },
-      "Margin account balance and remaining gas"
+      "Margin account balance and remaining gas",
     );
 
     log.info(
@@ -152,7 +154,7 @@ export async function main() {
         remainingTimeToMarginCallHours,
         volatilityPerHour,
       },
-      "Market data"
+      "Market data",
     );
 
     // 	•	Optionally estimate a “fair” mid price (for example, midpoint of bid/ask) and some measure of recent volatility to know how “calm” or “wild” the market is.
@@ -162,7 +164,7 @@ export async function main() {
       currentPosition.position * contractMultiplier,
       config.RISK_AVERSION,
       volatilityPerHour,
-      remainingTimeToMarginCallHours
+      remainingTimeToMarginCallHours,
     );
     reservationPrice = roundToNearest(reservationPrice, tickSize);
     log.info(
@@ -170,7 +172,7 @@ export async function main() {
         reservationPrice: `${formatUnits(reservationPrice, 6)} USDC`,
         priceShift: `${formatUnits(reservationPrice - indexPrice, 6)} USDC`,
       },
-      "Reservation price"
+      "Reservation price",
     );
 
     // inventory skew shifts the middle price up or down based on the current position
@@ -183,7 +185,7 @@ export async function main() {
     const normalizedInventory = clamp(
       Number(currentPosition.position) / Number(config.MAX_POSITION),
       -1,
-      1
+      1,
     );
     const bidSkew = clamp(1 - Math.max(normalizedInventory, 0), 0, null);
     const askSkew = clamp(1 + Math.min(normalizedInventory, 0), 0, null);
@@ -199,7 +201,7 @@ export async function main() {
         bidBudget: `${formatUnits(bidBudget, 6)} USDC`,
         askBudget: `${formatUnits(askBudget, 6)} USDC`,
       },
-      "Bid and ask budgets"
+      "Bid and ask budgets",
     );
     // geometric taper allocations are used to distribute the budget across the grid levels
     // more distributed closer to the middle price, less further away
@@ -216,16 +218,16 @@ export async function main() {
     const bidOrderValues = generateContractValues(
       (reservationPrice + bidSpread) * contractMultiplier,
       tickSize * contractMultiplier,
-      -Number(config.GRID_LEVELS)
+      -Number(config.GRID_LEVELS),
     );
     const askOrderValues = generateContractValues(
       (reservationPrice + askSpread) * contractMultiplier,
       tickSize * contractMultiplier,
-      Number(config.GRID_LEVELS)
+      Number(config.GRID_LEVELS),
     );
     const bidOrders = currencyToQuantityAllocations(
       bidOrdersNotional.allocations.reverse(),
-      bidOrderValues
+      bidOrderValues,
     );
     const askOrders = currencyToQuantityAllocations(askOrdersNotional.allocations, askOrderValues);
 
@@ -245,11 +247,11 @@ export async function main() {
     log.info(ordersToString(modelledOrders), "Modelled orders");
 
     // 3. Query current orders
-    const currentOrders = await subgraph.getCurrentOrders(
+    const currentOrders = await futuresSubgraph.getCurrentOrders(
       BigInt(deliveryDate),
       config.DRY_RUN && config.DRY_RUN_WALLET_ADDRESS
         ? config.DRY_RUN_WALLET_ADDRESS
-        : contract.getWalletAddress()
+        : contract.getWalletAddress(),
     );
     log.info(ordersToString(currentOrders), "Current orders");
 
@@ -270,7 +272,7 @@ export async function main() {
             blockNumber: rec.blockNumber,
             gasFee: `${formatUnits(getGasFee(rec), 18)} ETH`,
           },
-          "Orders placed"
+          "Orders placed",
         );
       } else {
         log.info("Dry run, skipping orders placement");
@@ -287,7 +289,7 @@ export async function main() {
       wait(config.LOOP_INTERVAL_MS).then(() => {
         log.info(
           { LOOP_INTERVAL_MS: config.LOOP_INTERVAL_MS },
-          "Loop interval timeout, continuing..."
+          "Loop interval timeout, continuing...",
         );
       }),
     ]);
