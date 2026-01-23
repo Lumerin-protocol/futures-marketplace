@@ -18,13 +18,12 @@ const schema = Type.Object({
       Type.Literal("error"),
       Type.Literal("fatal"),
     ],
-    { default: "info" }
+    { default: "info" },
   ),
   MARGIN_UTILIZATION_WARNING_PERCENT: Type.Number({ minimum: 0, maximum: 100, default: 80 }),
   NOTIFICATIONS_SERVICE_URL: Type.String({ format: "uri" }),
   MULTICALL_ADDRESS: TypeEthAddress(),
-  SUBGRAPH_URL: Type.String({ format: "uri" }),
-  SUBGRAPH_API_KEY: Type.Optional(Type.String()),
+  FUTURES_SUBGRAPH_URL: Type.String({ format: "uri" }),
 });
 
 export type Config = Static<typeof schema>;
