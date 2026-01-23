@@ -5,6 +5,7 @@ logs
 # Environment files
 .env
 .env.*
+!.env.example
 
 # Binary folders
 dist

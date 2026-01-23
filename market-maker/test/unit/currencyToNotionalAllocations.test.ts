@@ -137,14 +137,14 @@ describe("currencyToNotionalAllocations", () => {
     test("throws when arrays have different lengths", () => {
       assert.throws(
         () => currencyToNotionalAllocations([100n, 200n], [10n]),
-        /must have the same length/
+        /must have the same length/,
       );
     });
 
     test("throws when arrays have different lengths (other direction)", () => {
       assert.throws(
         () => currencyToNotionalAllocations([100n], [10n, 20n]),
-        /must have the same length/
+        /must have the same length/,
       );
     });
   });
@@ -153,7 +153,7 @@ describe("currencyToNotionalAllocations", () => {
     test("throws when contract value is zero", () => {
       assert.throws(
         () => currencyToNotionalAllocations([100n], [0n]),
-        /Division by zero/ // or whatever error JS throws
+        /Division by zero/, // or whatever error JS throws
       );
     });
   });
@@ -176,11 +176,10 @@ describe("currencyToNotionalAllocations", () => {
     });
 
     test("remainder is always less than smallest contract value", () => {
-      const currencies = [99n, 199n, 299n];
-      const values = [10n, 20n, 30n];
-      const result = currencyToNotionalAllocations(currencies, values);
-
-      const minValue = values.reduce((a, b) => (a < b ? a : b));
+      // const currencies = [99n, 199n, 299n];
+      // const values = [10n, 20n, 30n];
+      // const result = currencyToNotionalAllocations(currencies, values);
+      // const minValue = values.reduce((a, b) => (a < b ? a : b));
       // This might not always be true - let's see
       // Actually the remainder can be larger if we can't add any more contracts
       // because none of them are affordable

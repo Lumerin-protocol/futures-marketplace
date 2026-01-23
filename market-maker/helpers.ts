@@ -1,6 +1,6 @@
 import { formatUnits } from "viem/utils";
 import { abs, mult } from "./lib.ts";
-import { type Order } from "./subgraph.ts";
+import type { Order } from "./subgraph.ts";
 
 /**
  * Calculate the orders needed to transition from currentOrders to modelledOrders.
@@ -66,7 +66,7 @@ export function geometricTaperAllocations(
   if (levels === 0) return { perSideBudget, weights: [], allocations: [] };
 
   // unnormalized weights u_i = alpha^i
-  const u = Array.from({ length: levels }, (_, i) => Math.pow(alpha, i));
+  const u = Array.from({ length: levels }, (_, i) => alpha ** i);
 
   // sum(u)
   const sumU = u.reduce((a, b) => a + b, 0);
@@ -88,8 +88,8 @@ export function currencyToNotionalAllocations(
       `currencyAllocations and contractValues must have the same length: ${currencyAllocations.length} !== ${contractValues.length}`
     );
   }
-  let baseAllocations: bigint[] = Array(currencyAllocations.length);
-  let remainders: bigint[] = Array(currencyAllocations.length);
+  const baseAllocations: bigint[] = Array(currencyAllocations.length);
+  const remainders: bigint[] = Array(currencyAllocations.length);
   let totalRemainder: bigint = 0n;
   for (let i = 0; i < currencyAllocations.length; i++) {
     const baseAllocation = currencyAllocations[i] / contractValues[i];
@@ -231,7 +231,7 @@ export function realizedVolatility(prices: { date: number; price: bigint }[], sa
 export function generateContractValues(price: bigint, tickSize: bigint, levels: number): bigint[] {
   const absLevels = Math.abs(levels);
   const direction = levels < 0 ? -1n : 1n;
-  let array: bigint[] = Array(absLevels);
+  const array: bigint[] = Array(absLevels);
   for (let i = 0; i < absLevels; i++) {
     array[i] = price + direction * BigInt(i) * tickSize;
   }
