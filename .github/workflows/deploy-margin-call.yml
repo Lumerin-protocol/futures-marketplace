@@ -1,5 +1,4 @@
 name: Deploy Margin Call Lambda Function
-
 on:
   push:
     branches:
