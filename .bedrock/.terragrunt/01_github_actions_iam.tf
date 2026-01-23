@@ -1,15 +1,6 @@
 ################################################################################
 # GITHUB ACTIONS IAM ROLE AND POLICIES
 ################################################################################
-
-################################################################################
-# OIDC PROVIDER FOR GITHUB
-################################################################################
-
-data "aws_iam_openid_connect_provider" "github" {
-  url = "https://token.actions.githubusercontent.com"
-}
-
 # If the OIDC provider doesn't exist, create it
 # Run this once manually if needed:
 # aws iam create-open-id-connect-provider \
@@ -23,13 +14,19 @@ data "aws_iam_openid_connect_provider" "github" {
 # - 1b511abead59c6ce207077c0bf0e0043b1382612 (current as of 2023)
 
 ################################################################################
+# OIDC PROVIDER FOR GITHUB
+################################################################################
+data "aws_iam_openid_connect_provider" "github" {
+  url = "https://token.actions.githubusercontent.com"
+}
+
+################################################################################
 # IAM ROLE FOR GITHUB ACTIONS
 ################################################################################
-
 resource "aws_iam_role" "github_actions_futures" {
-  count = var.create_marketplace_s3cf ? 1 : 0
+  count = var.create_core ? 1 : 0
   name  = "github-actions-futures-v3-${substr(var.account_shortname, 8, 3)}"
-
+  provider = aws.use1
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -44,27 +41,11 @@ resource "aws_iam_role" "github_actions_futures" {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           }
           StringLike = {
-            # Allow GitHub repos:
-            # 1. Lumerin-protocol/proxy-smart-contracts (services: notifications, margin-call, subgraph)
-            # 2. Lumerin-protocol/proxy-router-ui (marketplace UI)
-            # 3. Lumerin-protocol/proxy-indexer (spot indexer)
-            # Branch filters are auto-derived based on environment lifecycle
             "token.actions.githubusercontent.com:sub" = concat(
-              # Smart contracts repo (services)
-              # [
-              #   for branch_filter in local.github_branch_filter :
-              #   "repo:${local.github_org_repo}:${branch_filter}"
-              # ],
-              # Router UI repo (marketplace)
-              var.create_marketplace_s3cf ? [
+              var.create_core ? [
                 for branch_filter in local.github_branch_filter :
                 "repo:Lumerin-protocol/futures-marketplace:${branch_filter}"
-              ] : [] #,
-              # # Spot Indexer repo
-              # var.create_lumerin_indexer ? [
-              #   for branch_filter in local.github_branch_filter :
-              #   "repo:Lumerin-protocol/proxy-indexer:${branch_filter}"
-              # ] : []
+              ] : []
             )
           }
         }
@@ -81,11 +62,11 @@ resource "aws_iam_role" "github_actions_futures" {
 ################################################################################
 # SECRETS ACCESS POLICY (for reading deployment secrets and configuration)
 ################################################################################
-
 resource "aws_iam_role_policy" "github_secrets_read" {
-  count = var.create_marketplace_s3cf ? 1 : 0
+  count = var.create_core ? 1 : 0
+  provider = aws.use1
   name  = "secrets-read-futures"
-  role  = aws_iam_role.github_actions_futures[0].id
+  role  = aws_iam_role.github_actions_futures[count.index].id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -97,7 +78,9 @@ resource "aws_iam_role_policy" "github_secrets_read" {
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret"
         ]
-        Resource = aws_secretsmanager_secret.futures[count.index].arn
+        Resource = [
+          var.create_core ? aws_secretsmanager_secret.futures.arn : null, 
+          var.market_maker.create ? aws_secretsmanager_secret.market_maker.arn : null          ]
       }
     ]
   })
@@ -106,12 +89,11 @@ resource "aws_iam_role_policy" "github_secrets_read" {
 ################################################################################
 # MARKETPLACE DEPLOYMENT POLICY (for S3 and CloudFront)
 ################################################################################
-
 resource "aws_iam_role_policy" "github_marketplace_deploy" {
-  count = var.create_marketplace_s3cf ? 1 : 0
+  count = var.create_core ? 1 : 0
+  provider = aws.use1
   name  = "marketplace-deploy-s3-cloudfront"
-  role  = aws_iam_role.github_actions_futures[0].id
-
+  role  = aws_iam_role.github_actions_futures[count.index].id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [

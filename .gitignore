@@ -50,3 +50,8 @@ secret.*
 
 # hide any .internal.md files (LOcal AI discussion notes)
 *.internal.md
+
+# dependencies
+node_modules/
+.pnp/
+.pnp.js
