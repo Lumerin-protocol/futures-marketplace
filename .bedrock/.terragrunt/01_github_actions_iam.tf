@@ -80,7 +80,8 @@ resource "aws_iam_role_policy" "github_secrets_read" {
         ]
         Resource = [
           var.create_core ? aws_secretsmanager_secret.futures.arn : null, 
-          var.market_maker.create ? aws_secretsmanager_secret.market_maker.arn : null          ]
+          var.market_maker.create ? aws_secretsmanager_secret.market_maker.arn : null   
+       ]
       }
     ]
   })
@@ -134,4 +135,97 @@ resource "aws_iam_role_policy" "github_marketplace_deploy" {
     ]
   })
 }
+
+################################################################################
+# ECS UPDATE POLICY (for Market Maker)
+################################################################################
+resource "aws_iam_role_policy" "github_ecs_update" {
+  count = var.market_maker.create ? 1 : 0
+  name  = "ecs-update-market-maker"
+  role  = aws_iam_role.github_actions_futures[count.index].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "UpdateMarketMakerECSService"
+        Effect = "Allow"
+        Action = [
+          "ecs:UpdateService",
+          "ecs:DescribeServices"
+        ]
+        Resource = aws_ecs_service.market_maker_use1[count.index].id
+      },
+      {
+        Sid    = "TaskDefinitionOperations"
+        Effect = "Allow"
+        Action = [
+          "ecs:DescribeTaskDefinition",
+          "ecs:RegisterTaskDefinition"
+        ]
+        # These actions don't support resource-level permissions
+        Resource = "*"
+      },
+      {
+        Sid    = "PassRoleToECS"
+        Effect = "Allow"
+        Action = "iam:PassRole"
+        Resource = [
+          var.ecs_task_role_arn,
+          local.titanio_role_arn
+        ]
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = "ecs-tasks.amazonaws.com"
+          }
+        }
+      },
+      {
+        Sid    = "ReadECSCluster"
+        Effect = "Allow"
+        Action = [
+          "ecs:ListServices",
+          "ecs:DescribeClusters"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+################################################################################
+# LAMBDA UPDATE POLICY (for Margin Call Lambda)
+################################################################################
+
+# resource "aws_iam_role_policy" "github_lambda_update" {
+#   count = var.margin_call_lambda.create ? 1 : 0
+#   name  = "lambda-update-margin-call"
+#   role  = aws_iam_role.github_actions_futures[count.index].id
+
+#   policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [
+#       {
+#         Sid    = "UpdateLambdaFunction"
+#         Effect = "Allow"
+#         Action = [
+#           "lambda:UpdateFunctionCode",
+#           "lambda:GetFunction",
+#           "lambda:GetFunctionConfiguration",
+#           "lambda:PublishVersion",
+#           "lambda:InvokeFunction" # Allow testing the Lambda function
+#         ]
+#         Resource = aws_lambda_function.margin_call[count.index].arn
+#       },
+#       {
+#         Sid    = "UpdateLambdaEnvironment"
+#         Effect = "Allow"
+#         Action = [
+#           "lambda:UpdateFunctionConfiguration"
+#         ]
+#         Resource = aws_lambda_function.margin_call[0].arn
+#       }
+#     ]
+#   })
+# }
+
 

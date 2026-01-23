@@ -32,6 +32,10 @@ market_maker = {
   chain_id                    = 421614
 }
 
+margin_call_lambda = {
+  create = false
+}
+
 ########################################
 # Shared Contract Addresses
 ########################################

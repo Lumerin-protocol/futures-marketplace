@@ -101,7 +101,7 @@ jobs:
           LAST_TAG=$(git tag -l "market-maker-v*" | sort -V | tail -n 1)
           
           if [ -z "$LAST_TAG" ]; then
-            VERSION="0.1.0"
+            VERSION="2.0.0"
           else
             LAST_VERSION=$(echo $LAST_TAG | sed 's/market-maker-v//' | sed 's/-.*$//')
             IFS='.' read -r MAJOR MINOR PATCH <<< "$LAST_VERSION"
