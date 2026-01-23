@@ -79,7 +79,7 @@ resource "aws_cloudwatch_log_group" "market_maker_use1" {
 
 # Define Service
 resource "aws_ecs_service" "market_maker_use1" {
-  # lifecycle {ignore_changes = [task_definition] }
+  lifecycle {ignore_changes = [task_definition] }
   count                  = var.market_maker.create ? 1 : 0
   provider               = aws.use1
   name                   = "svc-${var.market_maker["svc_name"]}-${substr(var.account_shortname, 8, 3)}"
@@ -124,7 +124,7 @@ resource "aws_ecs_service" "market_maker_use1" {
 
 # Define Task  
 resource "aws_ecs_task_definition" "market_maker_use1" {
-  # lifecycle { ignore_changes = [container_definitions] }
+  lifecycle { ignore_changes = [container_definitions] }
   count                    = var.market_maker.create ? 1 : 0
   provider                 = aws.use1
   family                   = "tsk-${var.market_maker["svc_name"]}"

@@ -35,6 +35,11 @@ variable "margin_call_lambda" {
   default = {}
 }
 
+variable "notifications_service" {
+  description = "Notifications Service Variables"
+  type    = map(any)
+  default = {}
+}
 ################################################################################
 # SHARED INFRASTRUCTURE (used across multiple services)
 ################################################################################
