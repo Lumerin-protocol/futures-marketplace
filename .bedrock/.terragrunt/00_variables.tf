@@ -29,6 +29,12 @@ variable "market_maker_eth_node_url" {
   default     = ""
 }
 
+variable "margin_call_lambda" {
+  description = "Margin Call Lambda Service Variables"
+  type    = map(any)
+  default = {}
+}
+
 ################################################################################
 # SHARED INFRASTRUCTURE (used across multiple services)
 ################################################################################
