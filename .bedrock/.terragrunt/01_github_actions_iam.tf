@@ -196,36 +196,36 @@ resource "aws_iam_role_policy" "github_ecs_update" {
 # LAMBDA UPDATE POLICY (for Margin Call Lambda)
 ################################################################################
 
-# resource "aws_iam_role_policy" "github_lambda_update" {
-#   count = var.margin_call_lambda.create ? 1 : 0
-#   name  = "lambda-update-margin-call"
-#   role  = aws_iam_role.github_actions_futures[count.index].id
+resource "aws_iam_role_policy" "github_lambda_update" {
+  count = var.margin_call_lambda.create ? 1 : 0
+  name  = "lambda-update-margin-call-v2"
+  role  = aws_iam_role.github_actions_futures[count.index].id
 
-#   policy = jsonencode({
-#     Version = "2012-10-17"
-#     Statement = [
-#       {
-#         Sid    = "UpdateLambdaFunction"
-#         Effect = "Allow"
-#         Action = [
-#           "lambda:UpdateFunctionCode",
-#           "lambda:GetFunction",
-#           "lambda:GetFunctionConfiguration",
-#           "lambda:PublishVersion",
-#           "lambda:InvokeFunction" # Allow testing the Lambda function
-#         ]
-#         Resource = aws_lambda_function.margin_call[count.index].arn
-#       },
-#       {
-#         Sid    = "UpdateLambdaEnvironment"
-#         Effect = "Allow"
-#         Action = [
-#           "lambda:UpdateFunctionConfiguration"
-#         ]
-#         Resource = aws_lambda_function.margin_call[0].arn
-#       }
-#     ]
-#   })
-# }
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "UpdateLambdaFunction"
+        Effect = "Allow"
+        Action = [
+          "lambda:UpdateFunctionCode",
+          "lambda:GetFunction",
+          "lambda:GetFunctionConfiguration",
+          "lambda:PublishVersion",
+          "lambda:InvokeFunction" # Allow testing the Lambda function
+        ]
+        Resource = aws_lambda_function.margin_call[count.index].arn
+      },
+      {
+        Sid    = "UpdateLambdaEnvironment"
+        Effect = "Allow"
+        Action = [
+          "lambda:UpdateFunctionConfiguration"
+        ]
+        Resource = aws_lambda_function.margin_call[count.index].arn
+      }
+    ]
+  })
+}
 
 

@@ -1,6 +1,6 @@
 
 #Create Switches for Lumerin Marketplace and Indexer / proxy-router-ui  
-create_core      = true
+create_core = true
 
 ecs_cluster = {
   create  = true
@@ -21,11 +21,11 @@ market_maker = {
   subgraph_url_futures        = "https://graph.dev.lumerin.io/subgraphs/name/futures"
   subgraph_url_oracles        = "https://graph.dev.lumerin.io/subgraphs/name/oracles"
   subgraph_api_key            = ""
-  float_amount                = 300000000  # 1000n * 10n ** 6n
-  spread_amount               = 10000       # 2n * 10n ** 4n
+  float_amount                = 300000000 # 1000n * 10n ** 6n
+  spread_amount               = 10000     # 2n * 10n ** 4n
   grid_levels                 = 5
   active_quoting_amount_ratio = 0.4
-  risk_aversion               = 3000000           # Risk aversion parameter (higher = more conservative)
+  risk_aversion               = 3000000 # Risk aversion parameter (higher = more conservative)
   loop_interval_ms            = 15000
   max_position                = 10
   log_level                   = "info"
@@ -33,9 +33,22 @@ market_maker = {
 }
 
 margin_call_lambda = {
-  create = false
+  create                             = true
+  log_level                          = "debug"
+  job_interval                       = "15"
+  timeout                            = 300
+  memory_size                        = 512
+  margin_utilization_warning_percent = "80"
+  daily_schedule_hour                = "0"           # UTC hour (0-23). Examples: 0=midnight UTC, 14=09:00 EST/10:00 EDT, 21=16:00 EST/17:00 EDT
+  daily_schedule_minute              = "0"           # UTC minute (0-59)
+  subgraph_api_key                   = "self-hosted" # Self-hosted Graph Node doesn't require API key, but validation requires non-empty string
+  futures_subgraph_url               = "https://graph.dev.lumerin.io/subgraphs/name/futures"
 }
 
+notifications_service = {
+  create   = true
+  alb_name = "notifyint."
+}
 ########################################
 # Shared Contract Addresses
 ########################################
@@ -43,8 +56,8 @@ margin_call_lambda = {
 # Contract addresses for the environment
 # DEV uses Arbitrum Sepolia testnet, STG/LMN use Arbitrum mainnet
 clone_factory_address   = "0x998135c509b64083cd27ed976c1bcda35ab7a40b"
-hashrate_oracle_address = "0x6f736186d2c93913721e2570c283dff2a08575e9" 
-futures_address         = "0xec76867e96d942282fc7aafe3f778de34d41a311" 
+hashrate_oracle_address = "0x6f736186d2c93913721e2570c283dff2a08575e9"
+futures_address         = "0xec76867e96d942282fc7aafe3f778de34d41a311"
 multicall_address       = "0xcA11bde05977b3631167028862bE2a173976CA11"
 
 ########################################

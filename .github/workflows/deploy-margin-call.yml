@@ -1,15 +1,15 @@
 name: Deploy Margin Call Lambda Function
 
 on:
-  # push:
-  #   branches:
-  #     - dev
-  #     - stg
-  #     - main
-  #     - 'cicd/**'
-  #   paths:
-  #     - 'margin-call/**'
-  #     - '.github/workflows/deploy-margin-call.yml'
+  push:
+    branches:
+      - dev
+      - stg
+      - main
+      - 'cicd/**'
+    paths:
+      - 'margin-call/**'
+      - '.github/workflows/deploy-margin-call.yml'
 
   workflow_dispatch:
     inputs:
@@ -89,15 +89,15 @@ jobs:
           case $ENV in
             dev)
               echo "aws_region=us-east-1" >> $GITHUB_OUTPUT
-              echo "lambda_function=margin-call-dev" >> $GITHUB_OUTPUT
+              echo "lambda_function=margin-call-v2-dev" >> $GITHUB_OUTPUT
               ;;
             stg)
               echo "aws_region=us-east-1" >> $GITHUB_OUTPUT
-              echo "lambda_function=margin-call-stg" >> $GITHUB_OUTPUT
+              echo "lambda_function=margin-call-v2-stg" >> $GITHUB_OUTPUT
               ;;
             main)
               echo "aws_region=us-east-1" >> $GITHUB_OUTPUT
-              echo "lambda_function=margin-call-lmn" >> $GITHUB_OUTPUT
+              echo "lambda_function=margin-call-v2-lmn" >> $GITHUB_OUTPUT
               ;;
           esac
 
@@ -107,7 +107,7 @@ jobs:
           LAST_TAG=$(git tag -l "margin-call-v*" | sort -V | tail -n 1)
           
           if [ -z "$LAST_TAG" ]; then
-            VERSION="0.1.0"
+            VERSION="2.0.0"
           else
             LAST_VERSION=$(echo $LAST_TAG | sed 's/margin-call-v//' | sed 's/-.*$//')
             IFS='.' read -r MAJOR MINOR PATCH <<< "$LAST_VERSION"

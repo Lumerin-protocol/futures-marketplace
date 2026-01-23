@@ -37,4 +37,7 @@ locals {
   # Get the appropriate domain zone name based on environment
   # prd uses "lumerin.io", dev/stg use "dev.lumerin.io" or "stg.lumerin.io"
   domain_zone_name = var.account_lifecycle == "prd" ? data.aws_route53_zone.public_lumerin_root.name : data.aws_route53_zone.public_lumerin.name
+
+  notifications_url = var.notifications_service.create ? "https://${var.notifications_service["alb_name"]}${local.domain_zone_name}/notifications" : ""
+
 }
