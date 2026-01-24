@@ -46,8 +46,26 @@ margin_call_lambda = {
 }
 
 notifications_service = {
-  create   = true
-  alb_name = "notifyint."
+  create                     = true
+  protect                    = false
+  ntf_imagetag               = "v0.1.0-dev"
+  ntf_ghcr_repo              = "ghcr.io/lumerin-protocol/futures-notifications"
+  svc_name                   = "futures-notifications"
+  cnt_name                   = "futures-notifications"
+  cnt_port                   = 3000
+  task_cpu                   = 256
+  task_ram                   = 512
+  task_worker_qty            = 1
+  friendly_name              = "notifications"
+  db_instance_class          = "db.t3.micro"
+  db_allocated_storage       = 20
+  db_max_allocated_storage   = 50
+  db_max_connections         = "100"
+  db_backup_retention_period = 7
+  db_backup_window           = "03:00-04:00"
+  db_maintenance_window      = "sun:04:00-sun:05:00"
+  alb_internal               = true
+  alb_name                   = "notifyint."
 }
 ########################################
 # Shared Contract Addresses
