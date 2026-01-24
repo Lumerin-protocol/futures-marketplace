@@ -10,7 +10,7 @@ on:
 
     paths:
       - 'indexer/**'
-      - '.github/workflows/deploy-futures-oracle.yml'
+      - '.github/workflows/update-futures-oracle.yml'
 
   workflow_dispatch:
     inputs:
