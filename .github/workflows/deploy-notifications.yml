@@ -1,16 +1,17 @@
 name: Deploy Notifications ECS Service
 
 on:
-  # push:
-  #   branches:
-  #     - dev
-  #     - stg
-  #     - main
-  #     - 'cicd/**'
-  #   paths:
-  #     - 'notifications/**'
-  #     - '.github/workflows/deploy-notifications.yml'
-  workflow_dispatch:
+   push:
+     branches:
+       - dev
+       - stg
+       - main
+       - 'cicd/**'
+     paths:
+       - 'notifications/**'
+       - '.github/workflows/deploy-notifications.yml'
+  
+   workflow_dispatch:
     inputs:
       environment:
         description: 'Target environment (dev=DEV, stg=STG, main=LMN/PROD)'
@@ -29,7 +30,7 @@ permissions:
 env:
   SERVICE_NAME: notifications
   GHCR_REGISTRY: ghcr.io
-  GHCR_IMAGE: ghcr.io/lumerin-protocol/proxy-notifications
+  GHCR_IMAGE: ghcr.io/lumerin-protocol/futures-notifications
 
 jobs:
   build:
@@ -76,18 +77,18 @@ jobs:
           case $ENV in
             dev)
               echo "aws_region=us-east-1" >> $GITHUB_OUTPUT
-              echo "ecs_cluster=ecs-lumerin-marketplace-dev-use1" >> $GITHUB_OUTPUT
-              echo "ecs_service=svc-lumerin-notifications-dev-use1" >> $GITHUB_OUTPUT
+              echo "ecs_cluster=ecs-futures-marketplace-dev" >> $GITHUB_OUTPUT
+              echo "ecs_service=svc-futures-notifications-dev" >> $GITHUB_OUTPUT
               ;;
             stg)
               echo "aws_region=us-east-1" >> $GITHUB_OUTPUT
-              echo "ecs_cluster=ecs-lumerin-marketplace-stg-use1" >> $GITHUB_OUTPUT
-              echo "ecs_service=svc-lumerin-notifications-stg-use1" >> $GITHUB_OUTPUT
+              echo "ecs_cluster=ecs-futures-marketplace-stg" >> $GITHUB_OUTPUT
+              echo "ecs_service=svc-notifications-stg" >> $GITHUB_OUTPUT
               ;;
             main)
               echo "aws_region=us-east-1" >> $GITHUB_OUTPUT
-              echo "ecs_cluster=ecs-lumerin-marketplace-lmn-use1" >> $GITHUB_OUTPUT
-              echo "ecs_service=svc-lumerin-notifications-lmn-use1" >> $GITHUB_OUTPUT
+              echo "ecs_cluster=ecs-futures-marketplace-lmn" >> $GITHUB_OUTPUT
+              echo "ecs_service=svc-notifications-lmn" >> $GITHUB_OUTPUT
               ;;
           esac
 
@@ -97,7 +98,7 @@ jobs:
           LAST_TAG=$(git tag -l "notifications-v*" | sort -V | tail -n 1)
           
           if [ -z "$LAST_TAG" ]; then
-            VERSION="0.1.0"
+            VERSION="2.0.0"
           else
             LAST_VERSION=$(echo $LAST_TAG | sed 's/notifications-v//' | sed 's/-.*$//')
             IFS='.' read -r MAJOR MINOR PATCH <<< "$LAST_VERSION"
@@ -283,7 +284,7 @@ jobs:
         with:
           status: ${{ steps.status.outputs.status }}
           environment: ${{ needs.build.outputs.environment }}
-          service_name: 'Notifications'
+          service_name: 'Futures Notifications'
           version: ${{ needs.build.outputs.version }}
           slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
           github_token: ${{ secrets.GITHUB_TOKEN }}

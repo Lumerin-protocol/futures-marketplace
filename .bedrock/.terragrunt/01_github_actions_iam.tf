@@ -80,7 +80,8 @@ resource "aws_iam_role_policy" "github_secrets_read" {
         ]
         Resource = [
           var.create_core ? aws_secretsmanager_secret.futures.arn : null, 
-          var.market_maker.create ? aws_secretsmanager_secret.market_maker.arn : null   
+          var.market_maker.create ? aws_secretsmanager_secret.market_maker.arn : null,
+          var.notifications_service.create ? aws_secretsmanager_secret.notifications.arn : null
        ]
       }
     ]
@@ -137,11 +138,11 @@ resource "aws_iam_role_policy" "github_marketplace_deploy" {
 }
 
 ################################################################################
-# ECS UPDATE POLICY (for Market Maker)
+# ECS UPDATE POLICY (for Market Maker and Notifications)
 ################################################################################
 resource "aws_iam_role_policy" "github_ecs_update" {
-  count = var.market_maker.create ? 1 : 0
-  name  = "ecs-update-market-maker"
+  count = var.market_maker.create || var.notifications_service.create ? 1 : 0
+  name  = "ecs-update-market-maker-and-notifications"
   role  = aws_iam_role.github_actions_futures[count.index].id
   policy = jsonencode({
     Version = "2012-10-17"
@@ -153,7 +154,10 @@ resource "aws_iam_role_policy" "github_ecs_update" {
           "ecs:UpdateService",
           "ecs:DescribeServices"
         ]
-        Resource = aws_ecs_service.market_maker_use1[count.index].id
+        Resource = compact([
+          var.market_maker.create ? aws_ecs_service.market_maker_use1[count.index].id : null,
+          var.notifications_service.create ? aws_ecs_service.notifications_use1[count.index].id : null
+        ])
       },
       {
         Sid    = "TaskDefinitionOperations"

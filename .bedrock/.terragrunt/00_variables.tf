@@ -40,6 +40,14 @@ variable "notifications_service" {
   type    = map(any)
   default = {}
 }
+
+variable "telegram_bot_token" {
+  description = "Telegram Bot Token for Notifications service"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 ################################################################################
 # SHARED INFRASTRUCTURE (used across multiple services)
 ################################################################################
