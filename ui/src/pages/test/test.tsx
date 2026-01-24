@@ -9,6 +9,7 @@ import MenuItem from "@mui/material/MenuItem";
 import { useModal } from "../../hooks/useModal";
 import Button from "@mui/material/Button";
 import { useHashrateIndexData, type TimePeriod } from "../../hooks/data/useHashRateIndexData";
+import { useBtcPriceIndexData } from "../../hooks/data/useBtcPriceIndexData";
 import { HashrateChart } from "../../components/Charts/HashrateChart";
 
 export const Test: FC = () => {
@@ -17,6 +18,7 @@ export const Test: FC = () => {
   const [chartTimePeriod, setChartTimePeriod] = useState<TimePeriod>("day");
 
   const hashrateQuery = useHashrateIndexData({ timePeriod: chartTimePeriod });
+  const btcPriceQuery = useBtcPriceIndexData({ timePeriod: chartTimePeriod });
 
   if (hashrateQuery.isSuccess) {
     console.log(hashrateQuery.data);
@@ -31,7 +33,9 @@ export const Test: FC = () => {
         <div style={{ marginBottom: "2rem" }}>
           <HashrateChart
             data={hashrateQuery.data || []}
+            btcPriceData={btcPriceQuery.data || []}
             isLoading={hashrateQuery.isLoading}
+            isBtcPriceLoading={btcPriceQuery.isLoading}
             timePeriod={chartTimePeriod}
             onTimePeriodChange={setChartTimePeriod}
           />

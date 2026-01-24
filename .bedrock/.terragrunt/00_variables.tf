@@ -1,13 +1,51 @@
-################################################################################
-# VARIABLES 
-################################################################################
-# All variables set in ./terraform.tfvars must be initialized here
-# Any of these variables can be used in any of this environment's .tf files
-
-variable "create_marketplace_s3cf" {
-  description = "Decide whether or not to create the Marketplace Website environment "
+variable "create_core" {
+  description = "Decide whether or not to create the core resources"
   type        = bool
   default     = false
+}
+
+variable "ecs_cluster" {
+  description = "ECS Cluster Variables"
+  type    = map(any)
+  default = {}
+}
+
+variable "market_maker" {
+  description = "Market Maker Service Variables"
+  type    = map(any)
+  default = {}
+}
+
+variable "market_maker_private_key" {
+  description = "Private key for the market maker"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "market_maker_eth_node_url" {
+  description = "ETH Node URL for the market maker"
+  type        = string
+  default     = ""
+}
+
+variable "margin_call_lambda" {
+  description = "Margin Call Lambda Service Variables"
+  type    = map(any)
+  default = {}
+}
+
+variable "notifications_service" {
+  description = "Notifications Service Variables"
+  type    = map(any)
+  default = {}
+}
+
+variable "telegram_bot_token" {
+  description = "Telegram Bot Token for Notifications service"
+  type        = string
+  sensitive   = true
+  default     = ""
 }
 
 ################################################################################
@@ -49,12 +87,72 @@ variable "multicall_address" {
   default     = ""
 }
 
-### Secret Variables
-# These variables are now only for documentation and input validation; values are always pulled from AWS Secrets Manager
 
+################################################################################
+# MONITORING CONFIGURATION
+################################################################################
 
-# Note: GitHub Actions CI/CD configuration is now auto-derived from account_lifecycle
-# No manual variables needed - prevents human error
+variable "monitoring" {
+  description = "Monitoring configuration for alarms, dashboards, and metric filters"
+  type = object({
+    create                    = bool
+    create_alarms             = bool
+    create_dashboards         = bool
+    create_metric_filters     = bool
+    create_synthetics_canary  = bool     # Synthetics canary for UI (production only)
+    notifications_enabled     = bool     # Set false to disable SNS notifications (alarms still visible in console)
+    dev_alerts_topic_name     = string   # Slack notifications
+    devops_alerts_topic_name  = string   # Cell phone (critical, prod only)
+    dashboard_period          = number
+  })
+  default = {
+    create                    = false
+    create_alarms             = false
+    create_dashboards         = false
+    create_metric_filters     = false
+    create_synthetics_canary  = false
+    notifications_enabled     = false
+    dev_alerts_topic_name     = ""
+    devops_alerts_topic_name  = ""
+    dashboard_period          = 300
+  }
+}
+
+variable "alarm_thresholds" {
+  description = "Environment-specific alarm thresholds (relaxed for dev/stg, strict for prod)"
+  type = object({
+    ecs_cpu_threshold           = number
+    ecs_memory_threshold        = number
+    ecs_min_running_tasks       = number
+    lambda_error_threshold      = number
+    lambda_duration_threshold   = number
+    lambda_throttle_threshold   = number
+    alb_5xx_threshold           = number
+    alb_unhealthy_threshold     = number
+    alb_latency_threshold       = number
+    rds_cpu_threshold           = number
+    rds_storage_threshold       = number
+    rds_connections_threshold   = number
+    cloudfront_5xx_threshold    = number  # Percentage
+    cloudfront_4xx_threshold    = number  # Percentage
+  })
+  default = {
+    ecs_cpu_threshold           = 90
+    ecs_memory_threshold        = 90
+    ecs_min_running_tasks       = 1
+    lambda_error_threshold      = 5
+    lambda_duration_threshold   = 240000
+    lambda_throttle_threshold   = 10
+    alb_5xx_threshold           = 20
+    alb_unhealthy_threshold     = 1
+    alb_latency_threshold       = 15
+    rds_cpu_threshold           = 90
+    rds_storage_threshold       = 5
+    rds_connections_threshold   = 90
+    cloudfront_5xx_threshold    = 5
+    cloudfront_4xx_threshold    = 10
+  }
+}
 
 # Common Account Variables
 variable "account_shortname" { description = "Code describing customer  and lifecycle. E.g., mst, sbx, dev, stg, prd" }

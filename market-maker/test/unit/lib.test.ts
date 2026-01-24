@@ -1,4 +1,4 @@
-import test, { describe, mock } from "node:test";
+import test, { describe } from "node:test";
 import assert from "node:assert";
 import { mult, wait, NowSeconds, clamp, abs } from "../../lib.ts";
 

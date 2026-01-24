@@ -16,7 +16,6 @@ locals {
 # WAF Protection - for Cloudfront (Global Scope)
 ################################
 data "aws_wafv2_web_acl" "bedrock_waf_cloudfront" {
-  count    = var.create_marketplace_s3cf ? 1 : 0
   provider = aws.use1
   name     = "waf-bedrock-cloudfront"
   scope    = "CLOUDFRONT"

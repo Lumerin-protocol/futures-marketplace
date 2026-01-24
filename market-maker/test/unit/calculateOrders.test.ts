@@ -318,7 +318,7 @@ describe("calculateOrders", () => {
       ];
       const current: Order[] = [{ price: 100n, qty: 3n }];
 
-      const firstResult = calculateOrders(modelled, current);
+      const _firstResult = calculateOrders(modelled, current);
 
       // Now calculate what's needed to go from modelled to modelled
       const secondResult = calculateOrders(modelled, modelled);
