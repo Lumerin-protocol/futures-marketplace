@@ -168,18 +168,51 @@ jobs:
           aws-region: ${{ needs.build.outputs.aws_region }}
           role-session-name: GitHubActions-Notifications-${{ github.run_id }}
 
-      - name: Update ECS service
+      - name: Update task definition and deploy
         run: |
-          echo "🚀 Deploying to ${{ needs.build.outputs.environment }} environment"
-          echo "   Cluster: ${{ needs.build.outputs.ecs_cluster }}"
-          echo "   Service: ${{ needs.build.outputs.ecs_service }}"
-          echo "   Image: ${{ env.GHCR_IMAGE }}:${{ needs.build.outputs.version }}"
+          CLUSTER="${{ needs.build.outputs.ecs_cluster }}"
+          SERVICE="${{ needs.build.outputs.ecs_service }}"
+          TASK_FAMILY="${{ needs.build.outputs.task_family }}"
+          IMAGE="${{ env.GHCR_IMAGE }}:${{ needs.build.outputs.version }}"
+          REGION="${{ needs.build.outputs.aws_region }}"
           
+          echo "🚀 Deploying to ${{ needs.build.outputs.environment }} environment"
+          echo "   Cluster: ${CLUSTER}"
+          echo "   Service: ${SERVICE}"
+          echo "   Task Family: ${TASK_FAMILY}"
+          echo "   Image: ${IMAGE}"
+          
+          # Get current task definition
+          echo "📥 Fetching current task definition..."
+          aws ecs describe-task-definition \
+            --task-definition ${TASK_FAMILY} \
+            --region ${REGION} \
+            --query 'taskDefinition' > task-def.json
+          
+          # Update task definition with new image
+          echo "🔧 Updating container image in task definition..."
+          jq --arg IMAGE "${IMAGE}" \
+              '.containerDefinitions[0].image = $IMAGE |
+              del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' \
+            task-def.json > new-task-def.json
+          
+          # Register new task definition
+          echo "📝 Registering new task definition revision..."
+          NEW_TASK_DEF=$(aws ecs register-task-definition \
+            --cli-input-json file://new-task-def.json \
+            --region ${REGION} \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          
+          echo "✅ Registered new task definition: ${NEW_TASK_DEF}"
+          
+          # Update ECS service with new task definition
+          echo "🚀 Updating ECS service..."
           aws ecs update-service \
-            --cluster ${{ needs.build.outputs.ecs_cluster }} \
-            --service ${{ needs.build.outputs.ecs_service }} \
-            --force-new-deployment \
-            --region ${{ needs.build.outputs.aws_region }}
+            --cluster ${CLUSTER} \
+            --service ${SERVICE} \
+            --task-definition ${NEW_TASK_DEF} \
+            --region ${REGION} \
+            --force-new-deployment
           
           echo "✅ Deployment triggered successfully"
 
