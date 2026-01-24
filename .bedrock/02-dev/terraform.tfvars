@@ -1,4 +1,3 @@
-
 #Create Switches for Lumerin Marketplace and Indexer / proxy-router-ui  
 create_core = true
 
@@ -6,6 +5,7 @@ ecs_cluster = {
   create  = true
   protect = false
 }
+
 # Configure Market Maker
 market_maker = {
   create                      = true
@@ -67,6 +67,7 @@ notifications_service = {
   alb_internal               = true
   alb_name                   = "notifyint."
 }
+
 ########################################
 # Shared Contract Addresses
 ########################################

@@ -1,6 +1,71 @@
+create_core = true
 
-#Create Switches for Lumerin Marketplace and Indexer / proxy-router-ui  
-create_marketplace_s3cf      = true
+ecs_cluster = {
+  create  = true
+  protect = false
+}
+
+# Configure Market Maker
+market_maker = {
+  create                      = true
+  mm_imagetag                 = "auto" #"v0.1.0-dev"
+  mm_ghcr_repo                = "ghcr.io/lumerin-protocol/market-maker"
+  svc_name                    = "market-maker"
+  cnt_name                    = "market-maker"
+  cnt_port                    = 3000
+  task_cpu                    = 256
+  task_ram                    = 512
+  task_worker_qty             = 1
+  friendly_name               = "market-maker"
+  subgraph_url_futures        = "https://graph.lmn.lumerin.io/subgraphs/name/futures"
+  subgraph_url_oracles        = "https://graph.lmn.lumerin.io/subgraphs/name/oracles"
+  subgraph_api_key            = ""
+  float_amount                = 1000000000  
+  spread_amount               = 10000      
+  grid_levels                 = 5
+  active_quoting_amount_ratio = 0.4
+  risk_aversion               = 15000       
+  loop_interval_ms            = 15000   
+  max_position                = 10
+  log_level                   = "info"
+  chain_id                    = 42161
+}
+
+margin_call_lambda = {
+  create                             = true
+  log_level                          = "info"
+  job_interval                       = "15"
+  timeout                            = 300
+  memory_size                        = 1024
+  margin_utilization_warning_percent = "80"
+  daily_schedule_hour                = "0"           # UTC hour (0-23). Examples: 0=midnight UTC, 14=09:00 EST/10:00 EDT, 21=16:00 EST/17:00 EDT
+  daily_schedule_minute              = "0"           # UTC minute (0-59)
+  subgraph_api_key                   = "self-hosted" # Self-hosted Graph Node doesn't require API key, but validation requires non-empty string
+  futures_subgraph_url               = "https://graph.lmn.lumerin.io/subgraphs/name/futures"
+}
+
+notifications_service = {
+  create                     = true
+  protect                    = false
+  ntf_imagetag               = "stg-latest"
+  ntf_ghcr_repo              = "ghcr.io/lumerin-protocol/futures-notifications"
+  svc_name                   = "futures-notifications"
+  cnt_name                   = "futures-notifications"
+  cnt_port                   = 3000
+  task_cpu                   = 256
+  task_ram                   = 512
+  task_worker_qty            = 1
+  friendly_name              = "notifications"
+  db_instance_class          = "db.t3.small"
+  db_allocated_storage       = 50
+  db_max_allocated_storage   = 100
+  db_max_connections         = "200"
+  db_backup_retention_period = 30
+  db_backup_window           = "03:00-04:00"
+  db_maintenance_window      = "sun:04:00-sun:05:00"
+  alb_internal               = true
+  alb_name                   = "notifyint."
+}
 
 ########################################
 # Shared Contract Addresses
