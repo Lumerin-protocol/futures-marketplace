@@ -79,6 +79,39 @@ futures_address         = "0xec76867e96d942282fc7aafe3f778de34d41a311"
 multicall_address       = "0xcA11bde05977b3631167028862bE2a173976CA11"
 
 ########################################
+# Monitoring Configuration
+########################################
+monitoring = {
+  create                    = true
+  create_alarms             = true
+  create_dashboards         = true
+  create_metric_filters     = true
+  create_synthetics_canary  = true  # Canary only in production
+  notifications_enabled     = false  # Disabled to reduce noise in dev
+  dev_alerts_topic_name     = "titanio-dev-dev-alerts"
+  devops_alerts_topic_name  = "titanio-dev-dev-alerts"
+  dashboard_period          = 300
+}
+
+# DEV environment - relaxed thresholds
+alarm_thresholds = {
+  ecs_cpu_threshold           = 90
+  ecs_memory_threshold        = 90
+  ecs_min_running_tasks       = 1
+  lambda_error_threshold      = 5
+  lambda_duration_threshold   = 240000  # 80% of 300s timeout
+  lambda_throttle_threshold   = 10
+  alb_5xx_threshold           = 20
+  alb_unhealthy_threshold     = 1
+  alb_latency_threshold       = 15
+  rds_cpu_threshold           = 90
+  rds_storage_threshold       = 5
+  rds_connections_threshold   = 90
+  cloudfront_5xx_threshold    = 5
+  cloudfront_4xx_threshold    = 10
+}
+
+########################################
 # Account metadata
 ########################################
 provider_profile  = "titanio-dev"  # Local account profile ... should match account_shortname..kept separate for future ci/cd

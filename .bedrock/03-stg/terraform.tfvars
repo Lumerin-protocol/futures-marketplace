@@ -13,6 +13,38 @@ hashrate_oracle_address = "0x2c1db79d2f3df568275c940dac81ad251871faf4"
 futures_address         = "0xe11594879beb6c28c67bc251aa5e26ce126b82ba"
 multicall_address       = "0xcA11bde05977b3631167028862bE2a173976CA11"
 
+########################################
+# Monitoring Configuration
+########################################
+monitoring = {
+  create                    = false  # Services not deployed in STG yet
+  create_alarms             = false
+  create_dashboards         = false
+  create_metric_filters     = false
+  create_synthetics_canary  = false
+  notifications_enabled     = false
+  dev_alerts_topic_name     = "titanio-stg-dev-alerts"
+  devops_alerts_topic_name  = "titanio-stg-dev-alerts"
+  dashboard_period          = 300
+}
+
+# STG environment - moderate thresholds (for when services are deployed)
+alarm_thresholds = {
+  ecs_cpu_threshold           = 85
+  ecs_memory_threshold        = 85
+  ecs_min_running_tasks       = 1
+  lambda_error_threshold      = 3
+  lambda_duration_threshold   = 240000
+  lambda_throttle_threshold   = 5
+  alb_5xx_threshold           = 10
+  alb_unhealthy_threshold     = 1
+  alb_latency_threshold       = 10
+  rds_cpu_threshold           = 85
+  rds_storage_threshold       = 5
+  rds_connections_threshold   = 85
+  cloudfront_5xx_threshold    = 3
+  cloudfront_4xx_threshold    = 8
+}
 
 ########################################
 # Account metadata

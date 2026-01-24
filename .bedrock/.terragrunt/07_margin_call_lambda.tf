@@ -251,64 +251,6 @@ resource "aws_lambda_permission" "allow_cloudwatch_margin_call_daily" {
 }
 
 ################################
-# CLOUDWATCH ALARMS
-################################
-
-resource "aws_cloudwatch_metric_alarm" "margin_call_errors" {
-  count               = var.margin_call_lambda.create ? 1 : 0
-  alarm_name          = "margin-call-lambda-errors-v2-${substr(var.account_shortname, 8, 3)}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "1"
-  metric_name         = "Errors"
-  namespace           = "AWS/Lambda"
-  period              = "300"
-  statistic           = "Sum"
-  threshold           = "0"
-  alarm_description   = "This metric monitors margin call lambda errors"
-  treat_missing_data  = "notBreaching"
-
-  dimensions = {
-    FunctionName = aws_lambda_function.margin_call[0].function_name
-  }
-
-  tags = merge(
-    var.default_tags,
-    var.foundation_tags,
-    {
-      Name       = "Margin Call Lambda Errors Alarm",
-      Capability = null,
-    },
-  )
-}
-
-resource "aws_cloudwatch_metric_alarm" "margin_call_duration" {
-  count               = var.margin_call_lambda.create ? 1 : 0
-  alarm_name          = "margin-call-lambda-duration-v2-${substr(var.account_shortname, 8, 3)}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "1"
-  metric_name         = "Duration"
-  namespace           = "AWS/Lambda"
-  period              = "300"
-  statistic           = "Average"
-  threshold           = tostring(var.margin_call_lambda["timeout"] * 1000 * 0.8) # 80% of timeout in ms
-  alarm_description   = "This metric monitors margin call lambda duration approaching timeout"
-  treat_missing_data  = "notBreaching"
-
-  dimensions = {
-    FunctionName = aws_lambda_function.margin_call[0].function_name
-  }
-
-  tags = merge(
-    var.default_tags,
-    var.foundation_tags,
-    {
-      Name       = "Margin Call Lambda Duration Alarm",
-      Capability = null,
-    },
-  )
-}
-
-################################
 # PLACEHOLDER LAMBDA ZIP
 ################################
 

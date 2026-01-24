@@ -14,6 +14,39 @@ futures_address         = "0x8464dc5ab80e76e497fad318fe6d444408e5ccda"
 multicall_address       = "0xcA11bde05977b3631167028862bE2a173976CA11"
 
 ########################################
+# Monitoring Configuration
+########################################
+monitoring = {
+  create                    = false  # Services not deployed in LMN yet
+  create_alarms             = false
+  create_dashboards         = false
+  create_metric_filters     = false
+  create_synthetics_canary  = false  # Enable when services deployed (true for production)
+  notifications_enabled     = false  # Enable when services deployed (true for production)
+  dev_alerts_topic_name     = "titanio-lmn-dev-alerts"      # Slack
+  devops_alerts_topic_name  = "titanio-lmn-devops-alerts"   # Cell phone (critical)
+  dashboard_period          = 300
+}
+
+# LMN/PROD environment - strict thresholds
+alarm_thresholds = {
+  ecs_cpu_threshold           = 80
+  ecs_memory_threshold        = 85
+  ecs_min_running_tasks       = 1
+  lambda_error_threshold      = 1
+  lambda_duration_threshold   = 240000
+  lambda_throttle_threshold   = 1
+  alb_5xx_threshold           = 5
+  alb_unhealthy_threshold     = 1
+  alb_latency_threshold       = 5
+  rds_cpu_threshold           = 80
+  rds_storage_threshold       = 10
+  rds_connections_threshold   = 80
+  cloudfront_5xx_threshold    = 1
+  cloudfront_4xx_threshold    = 5
+}
+
+########################################
 # Account metadata
 ########################################
 provider_profile  = "titanio-lmn"  # Local account profile ... should match account_shortname..kept separate for future ci/cd
