@@ -42,6 +42,7 @@ jobs:
       environment: ${{ steps.env.outputs.environment }}
       ecs_cluster: ${{ steps.env.outputs.ecs_cluster }}
       ecs_service: ${{ steps.env.outputs.ecs_service }}
+      task_family: ${{ steps.env.outputs.task_family }}
       aws_region: ${{ steps.env.outputs.aws_region }}
       is_cicd_branch: ${{ steps.env.outputs.is_cicd_branch }}
     
@@ -73,6 +74,10 @@ jobs:
           fi
           echo "environment=${ENV}" >> $GITHUB_OUTPUT
           echo "is_cicd_branch=${IS_CICD}" >> $GITHUB_OUTPUT
+
+
+          # Task family is the same across all environments (per Terraform config)
+          echo "task_family=tsk-futures-notifications" >> $GITHUB_OUTPUT
           
           case $ENV in
             dev)
@@ -83,24 +88,24 @@ jobs:
             stg)
               echo "aws_region=us-east-1" >> $GITHUB_OUTPUT
               echo "ecs_cluster=ecs-futures-marketplace-stg" >> $GITHUB_OUTPUT
-              echo "ecs_service=svc-notifications-stg" >> $GITHUB_OUTPUT
+              echo "ecs_service=svc-futures-notifications-stg" >> $GITHUB_OUTPUT
               ;;
             main)
               echo "aws_region=us-east-1" >> $GITHUB_OUTPUT
               echo "ecs_cluster=ecs-futures-marketplace-lmn" >> $GITHUB_OUTPUT
-              echo "ecs_service=svc-notifications-lmn" >> $GITHUB_OUTPUT
+              echo "ecs_service=svc-futures-notifications-lmn" >> $GITHUB_OUTPUT
               ;;
           esac
 
       - name: Generate version tag
         id: version
         run: |
-          LAST_TAG=$(git tag -l "notifications-v*" | sort -V | tail -n 1)
+          LAST_TAG=$(git tag -l "futures-notifications-v*" | sort -V | tail -n 1)
           
           if [ -z "$LAST_TAG" ]; then
             VERSION="2.0.0"
           else
-            LAST_VERSION=$(echo $LAST_TAG | sed 's/notifications-v//' | sed 's/-.*$//')
+            LAST_VERSION=$(echo $LAST_TAG | sed 's/futures-notifications-v//' | sed 's/-.*$//')
             IFS='.' read -r MAJOR MINOR PATCH <<< "$LAST_VERSION"
             PATCH=$((PATCH + 1))
             VERSION="${MAJOR}.${MINOR}.${PATCH}"
@@ -114,7 +119,7 @@ jobs:
           fi
           
           echo "version=${FULL_VERSION}" >> $GITHUB_OUTPUT
-          echo "tag=notifications-${FULL_VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=futures-notifications-${FULL_VERSION}" >> $GITHUB_OUTPUT
           echo "📦 Version: ${FULL_VERSION}"
 
       - name: Set up Docker Buildx
@@ -166,7 +171,7 @@ jobs:
         with:
           role-to-assume: ${{ needs.build.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || needs.build.outputs.environment == 'stg' && secrets.AWS_ROLE_ARN_STG || secrets.AWS_ROLE_ARN_LMN }}
           aws-region: ${{ needs.build.outputs.aws_region }}
-          role-session-name: GitHubActions-Notifications-${{ github.run_id }}
+          role-session-name: GitHubActions-FuturesNotifications-${{ github.run_id }}
 
       - name: Update task definition and deploy
         run: |
@@ -228,7 +233,7 @@ jobs:
         with:
           role-to-assume: ${{ needs.build.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || needs.build.outputs.environment == 'stg' && secrets.AWS_ROLE_ARN_STG || secrets.AWS_ROLE_ARN_LMN }}
           aws-region: ${{ needs.build.outputs.aws_region }}
-          role-session-name: GitHubActions-Notifications-Verify-${{ github.run_id }}
+          role-session-name: GitHubActions-FuturesNotifications-Verify-${{ github.run_id }}
 
       - name: Wait for service to stabilize
         run: |
@@ -265,7 +270,7 @@ jobs:
         run: |
           echo "## 🎉 Deployment Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Service:** Notifications" >> $GITHUB_STEP_SUMMARY
+          echo "**Service:** Futures Notifications" >> $GITHUB_STEP_SUMMARY
           echo "**Environment:** ${{ needs.build.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** ${{ needs.build.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** \`${{ env.GHCR_IMAGE }}:${{ needs.build.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
@@ -279,7 +284,7 @@ jobs:
         run: |
           echo "## ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Service:** Notifications" >> $GITHUB_STEP_SUMMARY
+          echo "**Service:** Futures Notifications" >> $GITHUB_STEP_SUMMARY
           echo "**Environment:** ${{ needs.build.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** ${{ needs.build.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
