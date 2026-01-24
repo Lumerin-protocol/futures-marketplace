@@ -10,7 +10,7 @@
 
 resource "aws_cloudwatch_composite_alarm" "futures_ui_unhealthy" {
   count             = var.monitoring.create && var.monitoring.create_alarms && var.create_core ? 1 : 0
-  alarm_name        = "futures-ui-unhealthy-${local.env_suffix}"
+  alarm_name        = "futures-ui-${local.env_suffix}"
   alarm_description = "Futures UI is unhealthy - Route53 health check failing, CloudFront errors, or canary failing (prod only)"
 
   # Alarm rule: ANY of the UI component alarms in ALARM state
@@ -40,10 +40,13 @@ resource "aws_cloudwatch_composite_alarm" "futures_ui_unhealthy" {
     },
   )
 
+  # Include canary_failed in depends_on even when count=0
+  # This ensures proper deletion order when canary is disabled
   depends_on = [
     aws_cloudwatch_metric_alarm.futures_ui_unreachable,
     aws_cloudwatch_metric_alarm.futures_ui_5xx,
-    aws_cloudwatch_metric_alarm.futures_ui_4xx
+    aws_cloudwatch_metric_alarm.futures_ui_4xx,
+    aws_cloudwatch_metric_alarm.canary_failed
   ]
 }
 
@@ -53,7 +56,7 @@ resource "aws_cloudwatch_composite_alarm" "futures_ui_unhealthy" {
 
 resource "aws_cloudwatch_composite_alarm" "market_maker_unhealthy" {
   count             = var.monitoring.create && var.monitoring.create_alarms && var.market_maker.create ? 1 : 0
-  alarm_name        = "market-maker-unhealthy-${local.env_suffix}"
+  alarm_name        = "market-maker-${local.env_suffix}"
   alarm_description = "Market Maker service is unhealthy - ECS issues detected"
 
   # Alarm rule: ANY of the Market Maker component alarms in ALARM state
@@ -88,7 +91,7 @@ resource "aws_cloudwatch_composite_alarm" "market_maker_unhealthy" {
 
 resource "aws_cloudwatch_composite_alarm" "margin_call_unhealthy" {
   count             = var.monitoring.create && var.monitoring.create_alarms && var.margin_call_lambda.create ? 1 : 0
-  alarm_name        = "margin-call-unhealthy-${local.env_suffix}"
+  alarm_name        = "margin-call-${local.env_suffix}"
   alarm_description = "Margin Call monitoring is failing - Lambda errors or throttling"
 
   # Alarm rule: ANY of the Margin Call component alarms in ALARM state
@@ -123,7 +126,7 @@ resource "aws_cloudwatch_composite_alarm" "margin_call_unhealthy" {
 
 resource "aws_cloudwatch_composite_alarm" "notifications_unhealthy" {
   count             = var.monitoring.create && var.monitoring.create_alarms && var.notifications_service.create ? 1 : 0
-  alarm_name        = "notifications-unhealthy-${local.env_suffix}"
+  alarm_name        = "notifications-${local.env_suffix}"
   alarm_description = "Notifications service is unhealthy - ECS or ALB issues"
 
   # Alarm rule: ANY of the Notifications component alarms in ALARM state
@@ -162,7 +165,7 @@ resource "aws_cloudwatch_composite_alarm" "notifications_unhealthy" {
 
 resource "aws_cloudwatch_composite_alarm" "rds_unhealthy" {
   count             = var.monitoring.create && var.monitoring.create_alarms && var.notifications_service.create ? 1 : 0
-  alarm_name        = "rds-unhealthy-${local.env_suffix}"
+  alarm_name        = "notificationsrds-${local.env_suffix}"
   alarm_description = "RDS PostgreSQL is unhealthy - CPU, storage, or connection issues"
 
   # Alarm rule: ANY of the RDS component alarms in ALARM state
@@ -179,7 +182,7 @@ resource "aws_cloudwatch_composite_alarm" "rds_unhealthy" {
     var.default_tags,
     var.foundation_tags,
     {
-      Name       = "RDS Unhealthy Composite Alarm",
+      Name       = "Notifications RDS Unhealthy Composite Alarm",
       Capability = "Monitoring",
     },
   )

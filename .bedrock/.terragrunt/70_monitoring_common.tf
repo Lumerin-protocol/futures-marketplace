@@ -170,8 +170,9 @@ resource "aws_iam_role_policy" "synthetics_canary" {
 ################################################################################
 
 resource "aws_s3_bucket" "synthetics_artifacts" {
-  count  = var.monitoring.create && var.monitoring.create_synthetics_canary ? 1 : 0
-  bucket = "futures-synthetics-${var.account_number}-${local.env_suffix}"
+  count         = var.monitoring.create && var.monitoring.create_synthetics_canary ? 1 : 0
+  bucket        = "futures-synthetics-${var.account_number}-${local.env_suffix}"
+  force_destroy = true  # Allow deletion even with artifacts present
 
   tags = merge(
     var.default_tags,

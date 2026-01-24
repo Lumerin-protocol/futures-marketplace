@@ -1,4 +1,3 @@
-
 #Create Switches for Lumerin Marketplace and Indexer / proxy-router-ui  
 create_core = true
 
@@ -6,6 +5,7 @@ ecs_cluster = {
   create  = true
   protect = false
 }
+
 # Configure Market Maker
 market_maker = {
   create                      = true
@@ -67,6 +67,7 @@ notifications_service = {
   alb_internal               = true
   alb_name                   = "notifyint."
 }
+
 ########################################
 # Shared Contract Addresses
 ########################################
@@ -86,7 +87,7 @@ monitoring = {
   create_alarms             = true
   create_dashboards         = true
   create_metric_filters     = true
-  create_synthetics_canary  = true  # Canary only in production
+  create_synthetics_canary  = false  # Canary only in production
   notifications_enabled     = false  # Disabled to reduce noise in dev
   dev_alerts_topic_name     = "titanio-dev-dev-alerts"
   devops_alerts_topic_name  = "titanio-dev-dev-alerts"
