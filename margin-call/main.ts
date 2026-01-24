@@ -6,7 +6,7 @@ import { config } from "./config/env";
 import { hardhat } from "viem/chains";
 import { sendDeficitAlerts } from "./gateway/marginAlert";
 import { executeMarginCalls } from "./gateway/marginCall";
-import { BalanceEntry } from "./gateway/balanceEntry";
+import type { BalanceEntry } from "./gateway/balanceEntry";
 
 async function main(executeMarginCall = false) {
   const ethClient = viem.createClient({
@@ -22,7 +22,7 @@ async function main(executeMarginCall = false) {
     },
   });
 
-  const subgraphClient = new Subgraph(config.SUBGRAPH_URL, config.SUBGRAPH_API_KEY);
+  const subgraphClient = new Subgraph(config.FUTURES_SUBGRAPH_URL);
 
   const log = pino({
     level: config.LOG_LEVEL,
@@ -46,7 +46,7 @@ async function main(executeMarginCall = false) {
       const marginUtilizationRatio = Number(minMargin) / Number(balance);
 
       log.debug(
-        `Participant ${participant.address} has min margin ${minMargin} and balance ${balance} and margin utilization ratio ${marginUtilizationRatio}`
+        `Participant ${participant.address} has min margin ${minMargin} and balance ${balance} and margin utilization ratio ${marginUtilizationRatio}`,
       );
 
       return {
@@ -55,7 +55,7 @@ async function main(executeMarginCall = false) {
         balance: balance,
         marginUtilizationRatio: marginUtilizationRatio,
       };
-    })
+    }),
   );
 
   const addressesForMarginCall: BalanceEntry[] = [];
@@ -74,7 +74,7 @@ async function main(executeMarginCall = false) {
     addressesForAlert,
     config.NOTIFICATIONS_SERVICE_URL,
     config.MARGIN_UTILIZATION_WARNING_PERCENT,
-    log
+    log,
   );
   if (executeMarginCall) {
     await executeMarginCalls(addressesForMarginCall, ethClient, log);

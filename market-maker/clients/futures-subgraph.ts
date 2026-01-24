@@ -1,33 +1,12 @@
-import { request, gql } from "graphql-request";
+import { abs } from "../lib.ts";
+import { gql, request } from "graphql-request";
 import { getAddress } from "viem/utils";
-import { abs } from "./lib.ts";
 
-export class Subgraph {
-  private apiKey: string;
+export class FuturesSubgraph {
   private url: string;
 
-  constructor(url: string, apiKey?: string) {
-    this.apiKey = apiKey ?? "";
+  constructor(url: string) {
     this.url = url;
-  }
-
-  async getHistoricalPrices(startSeconds: number, endSeconds: number) {
-    const res: HistoricalPricesRes = await request(this.url, HistoricalPricesQuery, {
-      from: startSeconds,
-      to: endSeconds,
-    });
-
-    return res.hashrateIndexes.map((item) => ({
-      date: Number(item.updatedAt),
-      price: hashesForTokenToPrice(BigInt(item.hashesForToken)),
-    }));
-  }
-
-  async getCurrentPrice() {
-    const res = await request<MarketPriceRes>(this.url, MarketPriceQuery);
-    return {
-      hashpriceIndex: BigInt(res.hashrateIndexes[0].hashesForToken),
-    };
   }
 
   async getCurrentOrders(deliveryDate: bigint, address: `0x${string}`) {
@@ -72,47 +51,7 @@ export class Subgraph {
   }
 }
 
-export type Order = { price: bigint; qty: bigint };
-
-export const HistoricalPricesQuery = gql`
-  query MyQuery($from: BigInt!, $to: BigInt!) {
-    hashrateIndexes(
-      orderBy: updatedAt
-      orderDirection: asc
-      where: { updatedAt_gt: $from, updatedAt_lte: $to }
-    ) {
-      id
-      hashesForToken
-      updatedAt
-    }
-  }
-`;
-
-type HistoricalPricesRes = {
-  hashrateIndexes: {
-    id: number;
-    hashesForToken: string;
-    updatedAt: string;
-  }[];
-};
-
-export const MarketPriceQuery = gql`
-  query MyQuery {
-    hashrateIndexes(orderBy: updatedAt, orderDirection: desc, first: 1) {
-      hashesForToken
-      updatedAt
-    }
-  }
-`;
-
-type MarketPriceRes = {
-  hashrateIndexes: {
-    hashesForToken: string;
-    updatedAt: string;
-  }[];
-};
-
-export const CurrentPositionQuery = gql`
+const CurrentPositionQuery = gql`
   query CurrentPosition($addr: String, $deliveryAt: BigInt) {
     positions(
       where: {
@@ -149,7 +88,7 @@ type CurrentPositionRes = {
   }[];
 };
 
-export const CurrentOrdersQuery = gql`
+const CurrentOrdersQuery = gql`
   query CurrentOrders($deliveryAt: BigInt, $addr: String) {
     orders(where: { deliveryAt: $deliveryAt, participant: $addr, isActive: true, closedAt: null }) {
       id
@@ -168,9 +107,3 @@ type CurrentOrdersRes = {
     isActive: boolean;
   }[];
 };
-
-const SECONDS_PER_DAY = 3600n * 24n;
-
-function hashesForTokenToPrice(hashesForToken: bigint) {
-  return (SECONDS_PER_DAY * 100n * 10n ** 12n) / hashesForToken;
-}

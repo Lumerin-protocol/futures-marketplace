@@ -1,10 +1,90 @@
 ################################
+# S3 Bucket  for Marketplace Website 
+################################
+resource "aws_s3_bucket" "marketplace" {
+  count    = var.create_core ? 1 : 0
+  provider = aws.use1
+  bucket   = var.account_lifecycle == "prd" ? "${local.s3_cf_origin}.${data.aws_route53_zone.public_lumerin_root.name}" : "${local.s3_cf_origin}.${data.aws_route53_zone.public_lumerin.name}"
+  lifecycle {
+    prevent_destroy = false
+  }
+  tags = merge(
+    var.default_tags,
+    var.foundation_tags,
+    {
+      Capability = "S3 Bucket",
+    },
+  )
+}
+
+# Enable Bucket Versioning 
+resource "aws_s3_bucket_versioning" "marketplace" {
+  count    = var.create_core ? 1 : 0
+  provider = aws.use1
+  bucket   = aws_s3_bucket.marketplace[0].id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_policy" "marketplace" {
+  count    = var.create_core ? 1 : 0
+  provider = aws.use1
+  bucket   = aws_s3_bucket.marketplace[0].id
+  policy   = data.aws_iam_policy_document.s3_marketplace[0].json
+}
+
+data "aws_iam_policy_document" "s3_marketplace" {
+  count    = var.create_core ? 1 : 0
+  provider = aws.use1
+  statement {
+    sid = "AllowCloudFrontServicePrincipal"
+    principals {
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+    actions = [
+      "s3:GetObject",
+    ]
+    resources = [
+
+      "${aws_s3_bucket.marketplace[0].arn}/*",
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceARN"
+      values   = [aws_cloudfront_distribution.marketplace[0].arn]
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "marketplace" {
+  count                   = var.create_core ? 1 : 0
+  provider                = aws.use1
+  bucket                  = aws_s3_bucket.marketplace[0].id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_ownership_controls" "marketplace" {
+  count    = var.create_core ? 1 : 0
+  provider = aws.use1
+  bucket   = aws_s3_bucket.marketplace[0].id
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
+
+################################
 # GLOBAL CloudFront and DNS 
 ################################
 
 # Create CloudFront Distribution: 
 resource "aws_cloudfront_distribution" "marketplace" {
-  count    = var.create_marketplace_s3cf ? 1 : 0
+  count    = var.create_core ? 1 : 0
   provider = aws.use1
   origin {
     domain_name              = aws_s3_bucket.marketplace[0].bucket_regional_domain_name
@@ -12,7 +92,7 @@ resource "aws_cloudfront_distribution" "marketplace" {
     origin_id                = "${var.account_shortname}-${local.s3_cf_origin}"
   }
   http_version        = "http2and3"
-  web_acl_id          = data.aws_wafv2_web_acl.bedrock_waf_cloudfront[0].arn
+  web_acl_id          = data.aws_wafv2_web_acl.bedrock_waf_cloudfront.arn
   retain_on_delete    = true
   enabled             = true
   is_ipv6_enabled     = true
@@ -61,7 +141,7 @@ resource "aws_cloudfront_distribution" "marketplace" {
     },
   )
   viewer_certificate {
-    acm_certificate_arn      = data.aws_acm_certificate.lumerin_marketplace_website[0].arn
+    acm_certificate_arn      = data.aws_acm_certificate.lumerin_marketplace_website.arn
     minimum_protocol_version = "TLSv1.2_2021"
     ssl_support_method       = "sni-only"
   }
@@ -80,7 +160,7 @@ resource "aws_cloudfront_distribution" "marketplace" {
 }
 
 resource "aws_cloudfront_origin_access_control" "marketplace" {
-  count                             = var.create_marketplace_s3cf ? 1 : 0
+  count                             = var.create_core ? 1 : 0
   provider                          = aws.use1
   name                              = "${var.account_shortname}-${local.s3_cf_origin}"
   description                       = "${local.s3_cf_origin} CF Access Control"
@@ -92,7 +172,7 @@ resource "aws_cloudfront_origin_access_control" "marketplace" {
 
 ########## DNS Record  
 resource "aws_route53_record" "marketplace" {
-  count    = var.create_marketplace_s3cf ? 1 : 0
+  count    = var.create_core ? 1 : 0
   provider = aws.special-dns
   zone_id  = var.account_lifecycle == "prd" ? data.aws_route53_zone.public_lumerin_root.zone_id : data.aws_route53_zone.public_lumerin.zone_id
   name     = var.account_lifecycle == "prd" ? "${local.s3_cf_website}.${data.aws_route53_zone.public_lumerin_root.name}" : "${local.s3_cf_website}.${data.aws_route53_zone.public_lumerin.name}"
@@ -106,7 +186,7 @@ resource "aws_route53_record" "marketplace" {
 
 ########## DNS Record Source Alias
 resource "aws_route53_record" "marketplace_origin_alias" {
-  count    = var.create_marketplace_s3cf ? 1 : 0
+  count    = var.create_core ? 1 : 0
   provider = aws.special-dns
   zone_id  = var.account_lifecycle == "prd" ? data.aws_route53_zone.public_lumerin_root.zone_id : data.aws_route53_zone.public_lumerin.zone_id
   name     = var.account_lifecycle == "prd" ? "${local.s3_cf_origin}.${data.aws_route53_zone.public_lumerin_root.name}" : "${local.s3_cf_origin}.${data.aws_route53_zone.public_lumerin.name}"

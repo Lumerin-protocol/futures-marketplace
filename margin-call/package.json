@@ -22,6 +22,7 @@
     "viem": "^2.37.8"
   },
   "devDependencies": {
+    "@types/node": "^25.0.10",
     "esbuild": "^0.24.0",
     "tsx": "^4.20.6"
   }

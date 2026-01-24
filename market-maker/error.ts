@@ -4,8 +4,8 @@ import {
   ContractFunctionRevertedError,
   UnknownRpcError,
 } from "viem";
-import { decodeErrorResult, DecodeErrorResultReturnType } from "viem/utils";
-import { Abi } from "viem";
+import { decodeErrorResult, type DecodeErrorResultReturnType } from "viem/utils";
+import type { Abi } from "viem";
 
 /**
  * Check if the error is a custom solidity error from the given ABI

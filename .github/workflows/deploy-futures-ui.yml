@@ -1,19 +1,37 @@
 name: Deploy Marketplace to Hosted Environment
 
 on:
-  workflow_dispatch:
-
   push:
     branches:
-      - main
-      - stg
       - dev
-      - cicd/*
+      - stg
+      - main
+      - 'cicd/**'
 
-    paths: [".github/**", "ui/src/**", "ui/public/**", "ui/package.json", "ui/yarn.lock", "ui/vite.config.ts", "ui/tsconfig.json", "ui/index.html", "ui/LICENSE", "ui/README.md"]
+    paths: 
+      - '.github/workflows/deploy-futures-ui.yml'
+      - 'ui/src/**'
+      - 'ui/public/**'
+      - 'ui/package.json'
+      - 'ui/yarn.lock'
+      - 'ui/vite.config.ts'
+      - 'ui/tsconfig.json'
+      - 'ui/index.html'
+
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment (dev=DEV, stg=STG, main=LMN/PROD)'
+        required: true
+        type: choice
+        options:
+          - dev
+          - stg
+          - main
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-futures-ui-${{ github.ref }}
   cancel-in-progress: true
 
 defaults:
@@ -224,30 +242,40 @@ jobs:
           # Create .env file with environment-scoped variables
           # GitHub Environments automatically scope secrets/vars to the environment
           cat > ui/.env << EOF
-          REACT_APP_BUY_LMR_URL=${{ secrets.REACT_APP_BUY_LMR_URL || vars.REACT_APP_BUY_LMR_URL }}
-          REACT_APP_CHAIN_ID=${{ secrets.REACT_APP_CHAIN_ID || vars.REACT_APP_CHAIN_ID }}
-          REACT_APP_CLONE_FACTORY=${{ secrets.REACT_APP_CLONE_FACTORY || vars.REACT_APP_CLONE_FACTORY }}
-          REACT_APP_ETHERSCAN_URL=${{ secrets.REACT_APP_ETHERSCAN_URL || vars.REACT_APP_ETHERSCAN_URL }}
-          REACT_APP_GITBOOK_URL=${{ secrets.REACT_APP_GITBOOK_URL || vars.REACT_APP_GITBOOK_URL }}
-          REACT_APP_INDEXER_URL=${{ secrets.REACT_APP_INDEXER_URL || vars.REACT_APP_INDEXER_URL }}
-          REACT_APP_MULTICALL_ADDRESS=${{ secrets.REACT_APP_MULTICALL_ADDRESS || vars.REACT_APP_MULTICALL_ADDRESS }}
-          REACT_APP_PAYMENT_SLIPPAGE_PERCENT=${{ secrets.REACT_APP_PAYMENT_SLIPPAGE_PERCENT || vars.REACT_APP_PAYMENT_SLIPPAGE_PERCENT || '1' }}
+          REACT_APP_BUY_LMR_URL=${{ vars.REACT_APP_BUY_LMR_URL }}
+          REACT_APP_CHAIN_ID=${{ vars.REACT_APP_CHAIN_ID }}
+          REACT_APP_CLONE_FACTORY=${{ vars.REACT_APP_CLONE_FACTORY }}
+          REACT_APP_ETHERSCAN_URL=${{ vars.REACT_APP_ETHERSCAN_URL }}
+          REACT_APP_GITBOOK_URL=${{ vars.REACT_APP_GITBOOK_URL }}
+          REACT_APP_INDEXER_URL=${{ vars.REACT_APP_INDEXER_URL }}
+          REACT_APP_MULTICALL_ADDRESS=${{ vars.REACT_APP_MULTICALL_ADDRESS }}
+          REACT_APP_PAYMENT_SLIPPAGE_PERCENT=${{ vars.REACT_APP_PAYMENT_SLIPPAGE_PERCENT }}
           REACT_APP_READ_ONLY_ETH_NODE_URL=${{ secrets.REACT_APP_READ_ONLY_ETH_NODE_URL }}
-          REACT_APP_TITAN_LIGHTNING_POOL=${{ secrets.REACT_APP_TITAN_LIGHTNING_POOL || vars.REACT_APP_TITAN_LIGHTNING_POOL || 'pplp.titan.io:4141' }}
+          REACT_APP_TITAN_LIGHTNING_POOL=${{ vars.REACT_APP_TITAN_LIGHTNING_POOL }}
           REACT_APP_URL=${{ needs.setup.outputs.marketplace_url }}
-          REACT_APP_VALIDATOR_REGISTRY_ADDRESS=${{ secrets.REACT_APP_VALIDATOR_REGISTRY_ADDRESS || vars.REACT_APP_VALIDATOR_REGISTRY_ADDRESS }}
+          REACT_APP_VALIDATOR_REGISTRY_ADDRESS=${{ vars.REACT_APP_VALIDATOR_REGISTRY_ADDRESS }}
           REACT_APP_VERSION=${{ needs.generate-tag.outputs.vtag }}
           REACT_APP_WALLET_CONNECT_ID=${{ secrets.REACT_APP_WALLET_CONNECT_ID }}
           DEV_SERVER_HTTPS=false
-          REACT_APP_FUTURES_TOKEN_ADDRESS=${{ secrets.REACT_APP_FUTURES_TOKEN_ADDRESS || vars.REACT_APP_FUTURES_TOKEN_ADDRESS }}
-          REACT_APP_FUTURES_REQUIRED_LMR=${{ secrets.REACT_APP_FUTURES_REQUIRED_LMR || vars.REACT_APP_FUTURES_REQUIRED_LMR || '10000' }}
-          REACT_APP_SUBGRAPH_FUTURES_URL=${{ secrets.REACT_APP_SUBGRAPH_FUTURES_URL || vars.REACT_APP_SUBGRAPH_FUTURES_URL }}
+          REACT_APP_FUTURES_TOKEN_ADDRESS=${{ vars.REACT_APP_FUTURES_TOKEN_ADDRESS }}
+          REACT_APP_FUTURES_REQUIRED_LMR=${{ vars.REACT_APP_FUTURES_REQUIRED_LMR }}
+          REACT_APP_SUBGRAPH_FUTURES_URL=${{ vars.REACT_APP_SUBGRAPH_FUTURES_URL }}
+          REACT_APP_SUBGRAPH_ORACLES_URL=${{ vars.REACT_APP_SUBGRAPH_ORACLES_URL }}
           EOF
           
           echo "✅ .env file created"
           echo "📄 Version in .env: $(grep REACT_APP_VERSION ui/.env)"
           echo "📄 .env contents (sanitized):"
-          cat ui/.env | sed 's/=.*/=***/'
+          # Print .env contents, but mask secret values to protect sensitive data
+          echo "------------------------------"
+          while IFS='=' read -r key value; do
+            if [[ "$key" =~ ^REACT_APP_READ_ONLY_ETH_NODE_URL$ || "$key" =~ ^REACT_APP_WALLET_CONNECT_ID$ ]]; then
+              echo "$key=$(printf '%s' "$value" | cut -c1-4)****"
+            else
+              echo "$key=$value"
+            fi
+          done < ui/.env
+          echo "------------------------------"
 
       - name: Install dependencies
         working-directory: ui
