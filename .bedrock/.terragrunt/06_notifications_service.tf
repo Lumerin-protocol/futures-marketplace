@@ -294,7 +294,7 @@ resource "aws_cloudwatch_log_group" "notifications_use1" {
 
 # Define Service
 resource "aws_ecs_service" "notifications_use1" {
-  # lifecycle {ignore_changes = [task_definition] }
+  lifecycle {ignore_changes = [task_definition] }
   count                  = var.notifications_service.create ? 1 : 0
   provider               = aws.use1
   name                   = "svc-${var.notifications_service["svc_name"]}-${substr(var.account_shortname, 8, 3)}"
@@ -344,7 +344,7 @@ resource "aws_ecs_service" "notifications_use1" {
 
 # Define Task  
 resource "aws_ecs_task_definition" "notifications_use1" {
-  # lifecycle { ignore_changes = [container_definitions] }
+  lifecycle { ignore_changes = [container_definitions] }
   count                    = var.notifications_service.create ? 1 : 0
   provider                 = aws.use1
   family                   = "tsk-${var.notifications_service["svc_name"]}"
