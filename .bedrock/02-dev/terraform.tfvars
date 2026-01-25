@@ -94,6 +94,12 @@ monitoring = {
   dashboard_period          = 300
 }
 
+# DEV environment
+monitoring_schedule = {
+  synthetics_canary_rate_minutes = 60  # If canary enabled, run every 60 min
+  unhealthy_alarm_period_minutes = 60  # How long to tolerate "bad" before alarm triggers
+}
+
 # DEV environment - relaxed thresholds
 alarm_thresholds = {
   ecs_cpu_threshold           = 90

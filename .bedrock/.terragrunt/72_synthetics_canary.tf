@@ -13,7 +13,7 @@ resource "aws_synthetics_canary" "futures_ui" {
   start_canary         = true
 
   schedule {
-    expression = "rate(5 minutes)"
+    expression = "rate(${var.monitoring_schedule.synthetics_canary_rate_minutes} minutes)"
   }
 
   run_config {
@@ -120,13 +120,13 @@ resource "aws_cloudwatch_metric_alarm" "canary_failed" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.monitoring.create_synthetics_canary ? 1 : 0
   alarm_name          = "futures-ui-canary-failed-${local.env_suffix}"
   comparison_operator = "LessThanThreshold"
-  evaluation_periods  = 2
+  evaluation_periods  = local.canary_alarm_evaluation_periods  # unhealthy_alarm_period / canary_rate
   metric_name         = "SuccessPercent"
   namespace           = "CloudWatchSynthetics"
-  period              = 300
+  period              = var.monitoring_schedule.synthetics_canary_rate_minutes * 60  # Match canary rate
   statistic           = "Average"
   threshold           = 100
-  alarm_description   = "Futures UI Synthetics Canary is failing - page may not be loading correctly"
+  alarm_description   = "Futures UI Canary failing for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} minutes"
   treat_missing_data  = "breaching"
 
   dimensions = {

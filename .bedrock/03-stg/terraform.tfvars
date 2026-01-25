@@ -93,6 +93,12 @@ monitoring = {
   dashboard_period          = 300
 }
 
+# STG environment - moderate frequency
+monitoring_schedule = {
+  synthetics_canary_rate_minutes = 30  # Run canary every 30 min
+  unhealthy_alarm_period_minutes = 30  # How long to tolerate "bad" before alarm triggers
+}
+
 # STG environment - moderate thresholds (for when services are deployed)
 alarm_thresholds = {
   ecs_cpu_threshold           = 85
