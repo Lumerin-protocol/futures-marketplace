@@ -46,20 +46,31 @@ const ChartControls = styled("div")`
   gap: 1rem;
 `;
 
-const CheckboxLabel = styled("label")`
+const DataModeSwitch = styled("div")`
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: #fff;
-  font-size: 0.9rem;
-  cursor: pointer;
-  user-select: none;
+  gap: 0;
+  border: 1px solid rgba(171, 171, 171, 1);
+  border-radius: 6px;
+  overflow: hidden;
+`;
 
-  input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    accent-color: #f7931a;
-    cursor: pointer;
+const DataModeButton = styled("button")<{ $active: boolean }>`
+  padding: 0.5rem 1rem;
+  background: ${(props) => (props.$active ? "#4c5a5f" : "transparent")};
+  color: #fff;
+  border: none;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  white-space: nowrap;
+
+  &:hover {
+    background: ${(props) => (props.$active ? "#4c5a5f" : "rgba(76, 90, 95, 0.5)")};
+  }
+
+  &:not(:last-child) {
+    border-right: 1px solid rgba(171, 171, 171, 0.5);
   }
 `;
 
@@ -93,7 +104,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   onTimePeriodChange,
 }) => {
   // State for showing/hiding BTC price data
-  const [showBtcPrice, setShowBtcPrice] = useState(true);
+  const [showBtcPrice, setShowBtcPrice] = useState(false);
 
   // Track time period changes and log to console
   useEffect(() => {
@@ -266,6 +277,12 @@ export const HashrateChart: FC<HashrateChartProps> = ({
       itemStyle: {
         color: "#ffffff",
       },
+      itemHoverStyle: {
+        color: "#ffffff",
+      },
+      itemHiddenStyle: {
+        color: "#666666",
+      },
     },
     plotOptions: {
       line: {
@@ -348,14 +365,14 @@ export const HashrateChart: FC<HashrateChartProps> = ({
     <>
       <h3>Hashprice Index</h3>
       <ChartControls>
-      <CheckboxLabel>
-          <input
-            type="checkbox"
-            checked={showBtcPrice}
-            onChange={(e) => setShowBtcPrice(e.target.checked)}
-          />
-          BTC Price
-        </CheckboxLabel>
+        <DataModeSwitch>
+          <DataModeButton $active={!showBtcPrice} onClick={() => setShowBtcPrice(false)}>
+            Hashprice
+          </DataModeButton>
+          <DataModeButton $active={showBtcPrice} onClick={() => setShowBtcPrice(true)}>
+            Hashprice + BTC
+          </DataModeButton>
+        </DataModeSwitch>
         <PeriodSwitch>
           <PeriodButton $active={timePeriod === "day"} onClick={() => onTimePeriodChange("day")}>
             1D
