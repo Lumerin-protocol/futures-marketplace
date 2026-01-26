@@ -1,4 +1,4 @@
-import { type FC, useMemo, useEffect, useState } from "react";
+import { type FC, useMemo, useEffect, useState, useCallback } from "react";
 import Highcharts from "highcharts";
 import HighchartsReact from "highcharts-react-official";
 import styled from "@mui/material/styles/styled";
@@ -41,37 +41,9 @@ const ChartControls = styled("div")`
   align-items: center;
   width: 100%;
   padding-left: 18px;
-  justify-content: space-between;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 1rem;
-`;
-
-const DataModeSwitch = styled("div")`
-  display: flex;
-  gap: 0;
-  border: 1px solid rgba(171, 171, 171, 1);
-  border-radius: 6px;
-  overflow: hidden;
-`;
-
-const DataModeButton = styled("button")<{ $active: boolean }>`
-  padding: 0.5rem 1rem;
-  background: ${(props) => (props.$active ? "#4c5a5f" : "transparent")};
-  color: #fff;
-  border: none;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  white-space: nowrap;
-
-  &:hover {
-    background: ${(props) => (props.$active ? "#4c5a5f" : "rgba(76, 90, 95, 0.5)")};
-  }
-
-  &:not(:last-child) {
-    border-right: 1px solid rgba(171, 171, 171, 0.5);
-  }
 `;
 
 interface HashrateChartProps {
@@ -103,13 +75,19 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   timePeriod,
   onTimePeriodChange,
 }) => {
-  // State for showing/hiding BTC price data
-  const [showBtcPrice, setShowBtcPrice] = useState(false);
+  // State to track BTC Price visibility
+  const [isBtcPriceVisible, setIsBtcPriceVisible] = useState(false);
 
   // Track time period changes and log to console
   useEffect(() => {
     console.log("Time period changed to:", timePeriod);
   }, [timePeriod]);
+
+  // Handler for BTC Price legend click
+  const handleBtcPriceLegendClick = useCallback(() => {
+    setIsBtcPriceVisible((prev) => !prev);
+    return false; // We handle visibility via state
+  }, []);
 
   // Merge market price with historical data if it differs from the first item
   const enhancedData = useMemo(() => {
@@ -210,29 +188,25 @@ export const HashrateChart: FC<HashrateChartProps> = ({
         },
         gridLineColor: "#333333",
       },
-      ...(showBtcPrice
-        ? [
-            {
-              // Secondary Y-axis for BTC Price (USD)
-              title: {
-                text: "BTC Price (USD)",
-                style: {
-                  color: "white",
-                },
-              },
-              labels: {
-                style: {
-                  color: "white",
-                },
-                formatter: function (this: Highcharts.AxisLabelsFormatterContextObject) {
-                  return "$" + Number(this.value).toLocaleString();
-                },
-              },
-              opposite: true,
-              gridLineWidth: 0,
-            } as Highcharts.YAxisOptions,
-          ]
-        : []),
+      {
+        // Secondary Y-axis for BTC Price (USD)
+        title: {
+          text: "BTC Price (USD)",
+          style: {
+            color: "white",
+          },
+        },
+        labels: {
+          style: {
+            color: "white",
+          },
+          formatter: function () {
+            return Number(this.value).toLocaleString();
+          },
+        },
+        opposite: true,
+        gridLineWidth: 0,
+      },
     ],
     series: [
       {
@@ -250,39 +224,73 @@ export const HashrateChart: FC<HashrateChartProps> = ({
           enabled: false,
           radius: 4,
         },
+        events: {
+          legendItemClick: function () {
+            const series = this;
+            if (!series.visible) {
+              series.show();
+            }
+            return false; // Prevent unchecking Hashprice
+          },
+        },
       },
-      ...(showBtcPrice
-        ? [
-            {
-              connectNulls: false,
-              dataSorting: { enabled: false },
-              dataGrouping: { enabled: false },
-              type: "line" as const,
-              name: "BTC Price",
-              showInLegend: true,
-              data: btcPriceChartData,
-              color: "#f7931a",
-              lineWidth: 2,
-              yAxis: 1,
-              marker: {
-                enabled: false,
-                radius: 4,
-              },
-            },
-          ]
-        : []),
+      {
+        connectNulls: false,
+        dataSorting: { enabled: false },
+        dataGrouping: { enabled: false },
+        type: "line",
+        name: "BTC Price",
+        showInLegend: true,
+        visible: isBtcPriceVisible,
+        data: btcPriceChartData,
+        color: "#f7931a",
+        lineWidth: 2,
+        yAxis: 1,
+        marker: {
+          enabled: false,
+          radius: 4,
+        },
+        events: {
+          legendItemClick: handleBtcPriceLegendClick,
+        },
+      },
     ],
     legend: {
       enabled: true,
+      useHTML: true,
       itemStyle: {
         color: "#ffffff",
+        cursor: "pointer",
       },
       itemHoverStyle: {
         color: "#ffffff",
       },
       itemHiddenStyle: {
-        color: "#666666",
+        color: "#888888",
+        textDecoration: "none",
       },
+      labelFormatter: function () {
+        const series = this as Highcharts.Series;
+        const checked = series.visible;
+        const checkboxStyle = `
+          display: inline-block;
+          width: 14px;
+          height: 14px;
+          border: 2px solid ${series.color};
+          border-radius: 3px;
+          margin-right: 6px;
+          vertical-align: middle;
+          background: ${checked ? series.color : "transparent"};
+          position: relative;
+        `;
+        const checkmark = checked && series.name !== "Hashprice"
+          ? `<span style="position: absolute; top: -1px; left: 0px; color: #fff; font-size: 11px; font-weight: bold;">✓</span>`
+          : "";
+        return `<span style="${checkboxStyle}">${checkmark}</span><span style="vertical-align: middle;">${series.name}</span>`;
+      },
+      symbolWidth: 0,
+      symbolHeight: 0,
+      symbolRadius: 0,
     },
     plotOptions: {
       line: {
@@ -365,14 +373,6 @@ export const HashrateChart: FC<HashrateChartProps> = ({
     <>
       <h3>Hashprice Index</h3>
       <ChartControls>
-        <DataModeSwitch>
-          <DataModeButton $active={!showBtcPrice} onClick={() => setShowBtcPrice(false)}>
-            Hashprice
-          </DataModeButton>
-          <DataModeButton $active={showBtcPrice} onClick={() => setShowBtcPrice(true)}>
-            Hashprice + BTC
-          </DataModeButton>
-        </DataModeSwitch>
         <PeriodSwitch>
           <PeriodButton $active={timePeriod === "day"} onClick={() => onTimePeriodChange("day")}>
             1D
