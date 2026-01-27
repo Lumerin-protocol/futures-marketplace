@@ -82,15 +82,21 @@ multicall_address       = "0xcA11bde05977b3631167028862bE2a173976CA11"
 # Monitoring Configuration
 ########################################
 monitoring = {
-  create                    = false  # Services not deployed in STG yet
-  create_alarms             = false
-  create_dashboards         = false
-  create_metric_filters     = false
-  create_synthetics_canary  = false
-  notifications_enabled     = false
+  create                    = true  # Services not deployed in STG yet
+  create_alarms             = true
+  create_dashboards         = true
+  create_metric_filters     = true
+  create_synthetics_canary  = true
+  notifications_enabled     = true
   dev_alerts_topic_name     = "titanio-stg-dev-alerts"
   devops_alerts_topic_name  = "titanio-stg-dev-alerts"
   dashboard_period          = 300
+}
+
+# STG environment - moderate frequency
+monitoring_schedule = {
+  synthetics_canary_rate_minutes = 30  # Run canary every 30 min
+  unhealthy_alarm_period_minutes = 30  # How long to tolerate "bad" before alarm triggers
 }
 
 # STG environment - moderate thresholds (for when services are deployed)

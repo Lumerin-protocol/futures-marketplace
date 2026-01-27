@@ -13,7 +13,7 @@
 ################################
 data "http" "github_market_maker_tags" {
   count = var.market_maker.create ? 1 : 0
-  url   = "https://api.github.com/repos/lumerin-protocol/proxy-smart-contracts/tags"
+  url   = "https://api.github.com/repos/lumerin-protocol/futures-marketplace/tags"
 
   request_headers = {
     Accept = "application/vnd.github+json"
@@ -66,7 +66,7 @@ locals {
   # Fallback pattern by environment:
   # - dev: "dev-latest"
   # - stg: "stg-latest"  
-  # - lmn/prd: "latest"
+  # - lmn/prd: "main-latest"
   market_maker_fallback_tag = var.account_lifecycle == "dev" ? "dev-latest" : (
     var.account_lifecycle == "stg" ? "stg-latest" : "main-latest"
   )
