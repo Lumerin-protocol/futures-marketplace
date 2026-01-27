@@ -27,6 +27,15 @@ locals {
   # Composite alarms - send notifications only when enabled
   composite_alarm_actions = var.monitoring.notifications_enabled ? [local.critical_sns_arn] : []
   
+  # Alarm evaluation periods - calculated from unhealthy_alarm_period_minutes
+  # Different metric sources have different native periods:
+  #   - Standard CloudWatch ECS/Lambda/ALB metrics: 300 sec (5 min) periods
+  #   - Route53 health checks: 60 sec (1 min) periods
+  #   - Canary: runs at configurable rate
+  standard_alarm_evaluation_periods = ceil(var.monitoring_schedule.unhealthy_alarm_period_minutes / 5)
+  route53_alarm_evaluation_periods  = var.monitoring_schedule.unhealthy_alarm_period_minutes  # period = 60 sec = 1 min
+  canary_alarm_evaluation_periods   = max(1, ceil(var.monitoring_schedule.unhealthy_alarm_period_minutes / var.monitoring_schedule.synthetics_canary_rate_minutes))
+  
   # Resource references (conditional on service creation)
   ecs_cluster_name = var.ecs_cluster.create ? aws_ecs_cluster.futures_marketplace[0].name : ""
   

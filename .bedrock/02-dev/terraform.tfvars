@@ -87,11 +87,17 @@ monitoring = {
   create_alarms             = true
   create_dashboards         = true
   create_metric_filters     = true
-  create_synthetics_canary  = false  # Canary only in production
-  notifications_enabled     = false  # Disabled to reduce noise in dev
+  create_synthetics_canary  = true  # Canary only in production
+  notifications_enabled     = true  # Disabled to reduce noise in dev
   dev_alerts_topic_name     = "titanio-dev-dev-alerts"
   devops_alerts_topic_name  = "titanio-dev-dev-alerts"
   dashboard_period          = 300
+}
+
+# DEV environment
+monitoring_schedule = {
+  synthetics_canary_rate_minutes = 60  # If canary enabled, run every 60 min
+  unhealthy_alarm_period_minutes = 60  # How long to tolerate "bad" before alarm triggers
 }
 
 # DEV environment - relaxed thresholds

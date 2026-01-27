@@ -105,9 +105,6 @@ resource "aws_ecs_service" "market_maker_use1" {
     assign_public_ip = false
     security_groups  = [aws_security_group.market_maker_ecs_use1[count.index].id]
   }
-
-  # No load balancer - this is an internal trading service with no HTTP endpoints
-
   depends_on = [
     aws_ecs_task_definition.market_maker_use1
   ]

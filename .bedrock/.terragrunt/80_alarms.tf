@@ -13,13 +13,13 @@ resource "aws_cloudwatch_metric_alarm" "futures_ui_5xx" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.create_core ? 1 : 0
   alarm_name          = "futures-ui-5xx-errors-${local.env_suffix}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 2
+  evaluation_periods  = local.standard_alarm_evaluation_periods
   metric_name         = "5xxErrorRate"
   namespace           = "AWS/CloudFront"
   period              = 300
   statistic           = "Average"
   threshold           = var.alarm_thresholds.cloudfront_5xx_threshold
-  alarm_description   = "Futures UI CloudFront 5xx error rate is elevated"
+  alarm_description   = "Futures UI CloudFront 5xx errors for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} minutes"
   treat_missing_data  = "notBreaching"
 
   dimensions = {
@@ -45,13 +45,13 @@ resource "aws_cloudwatch_metric_alarm" "futures_ui_4xx" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.create_core ? 1 : 0
   alarm_name          = "futures-ui-4xx-errors-${local.env_suffix}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 2
+  evaluation_periods  = local.standard_alarm_evaluation_periods
   metric_name         = "4xxErrorRate"
   namespace           = "AWS/CloudFront"
   period              = 300
   statistic           = "Average"
   threshold           = var.alarm_thresholds.cloudfront_4xx_threshold
-  alarm_description   = "Futures UI CloudFront 4xx error rate is elevated - may indicate missing content"
+  alarm_description   = "Futures UI CloudFront 4xx errors for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} minutes"
   treat_missing_data  = "notBreaching"
 
   dimensions = {
@@ -80,13 +80,13 @@ resource "aws_cloudwatch_metric_alarm" "futures_ui_unreachable" {
   provider            = aws.use1  # Route53 metrics are only in us-east-1
   alarm_name          = "futures-ui-unreachable-${local.env_suffix}"
   comparison_operator = "LessThanThreshold"
-  evaluation_periods  = 2
+  evaluation_periods  = local.route53_alarm_evaluation_periods  # unhealthy_alarm_period (1 min periods)
   metric_name         = "HealthCheckStatus"
   namespace           = "AWS/Route53"
   period              = 60
   statistic           = "Minimum"
   threshold           = 1
-  alarm_description   = "Futures UI is unreachable - Route53 health check failing"
+  alarm_description   = "Futures UI unreachable for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} minutes"
   treat_missing_data  = "breaching"
 
   dimensions = {
@@ -115,9 +115,9 @@ resource "aws_cloudwatch_metric_alarm" "mm_ecs_cpu_high" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.market_maker.create ? 1 : 0
   alarm_name          = "market-maker-cpu-high-${local.env_suffix}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 2
+  evaluation_periods  = local.standard_alarm_evaluation_periods
   threshold           = var.alarm_thresholds.ecs_cpu_threshold
-  alarm_description   = "Market Maker ECS CPU utilization is high (>${var.alarm_thresholds.ecs_cpu_threshold}%)"
+  alarm_description   = "Market Maker CPU >${var.alarm_thresholds.ecs_cpu_threshold}% for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
   treat_missing_data  = "notBreaching"
 
   metric_query {
@@ -173,9 +173,9 @@ resource "aws_cloudwatch_metric_alarm" "mm_ecs_memory_high" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.market_maker.create ? 1 : 0
   alarm_name          = "market-maker-memory-high-${local.env_suffix}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 2
+  evaluation_periods  = local.standard_alarm_evaluation_periods
   threshold           = var.alarm_thresholds.ecs_memory_threshold
-  alarm_description   = "Market Maker ECS memory utilization is high (>${var.alarm_thresholds.ecs_memory_threshold}%)"
+  alarm_description   = "Market Maker Memory >${var.alarm_thresholds.ecs_memory_threshold}% for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
   treat_missing_data  = "notBreaching"
 
   metric_query {
@@ -231,13 +231,13 @@ resource "aws_cloudwatch_metric_alarm" "mm_ecs_running_tasks" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.market_maker.create ? 1 : 0
   alarm_name          = "market-maker-running-tasks-${local.env_suffix}"
   comparison_operator = "LessThanThreshold"
-  evaluation_periods  = 2
+  evaluation_periods  = local.standard_alarm_evaluation_periods
   metric_name         = "RunningTaskCount"
   namespace           = "ECS/ContainerInsights"
   period              = 300
   statistic           = "Average"
   threshold           = var.alarm_thresholds.ecs_min_running_tasks
-  alarm_description   = "Market Maker has fewer than expected running tasks"
+  alarm_description   = "Market Maker down for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
   treat_missing_data  = "breaching"
 
   dimensions = {
@@ -267,9 +267,9 @@ resource "aws_cloudwatch_metric_alarm" "notifications_ecs_cpu_high" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.notifications_service.create ? 1 : 0
   alarm_name          = "notifications-cpu-high-${local.env_suffix}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 2
+  evaluation_periods  = local.standard_alarm_evaluation_periods
   threshold           = var.alarm_thresholds.ecs_cpu_threshold
-  alarm_description   = "Notifications ECS CPU utilization is high (>${var.alarm_thresholds.ecs_cpu_threshold}%)"
+  alarm_description   = "Notifications CPU >${var.alarm_thresholds.ecs_cpu_threshold}% for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
   treat_missing_data  = "notBreaching"
 
   metric_query {
@@ -325,9 +325,9 @@ resource "aws_cloudwatch_metric_alarm" "notifications_ecs_memory_high" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.notifications_service.create ? 1 : 0
   alarm_name          = "notifications-memory-high-${local.env_suffix}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 2
+  evaluation_periods  = local.standard_alarm_evaluation_periods
   threshold           = var.alarm_thresholds.ecs_memory_threshold
-  alarm_description   = "Notifications ECS memory utilization is high (>${var.alarm_thresholds.ecs_memory_threshold}%)"
+  alarm_description   = "Notifications Memory >${var.alarm_thresholds.ecs_memory_threshold}% for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
   treat_missing_data  = "notBreaching"
 
   metric_query {
@@ -383,13 +383,13 @@ resource "aws_cloudwatch_metric_alarm" "notifications_ecs_running_tasks" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.notifications_service.create ? 1 : 0
   alarm_name          = "notifications-running-tasks-${local.env_suffix}"
   comparison_operator = "LessThanThreshold"
-  evaluation_periods  = 2
+  evaluation_periods  = local.standard_alarm_evaluation_periods
   metric_name         = "RunningTaskCount"
   namespace           = "ECS/ContainerInsights"
   period              = 300
   statistic           = "Average"
   threshold           = var.alarm_thresholds.ecs_min_running_tasks
-  alarm_description   = "Notifications service has fewer than expected running tasks"
+  alarm_description   = "Notifications down for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
   treat_missing_data  = "breaching"
 
   dimensions = {
@@ -420,13 +420,13 @@ resource "aws_cloudwatch_metric_alarm" "margin_call_errors" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.margin_call_lambda.create ? 1 : 0
   alarm_name          = "margin-call-errors-${local.env_suffix}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
+  evaluation_periods  = local.standard_alarm_evaluation_periods
   metric_name         = "Errors"
   namespace           = "AWS/Lambda"
   period              = 300
   statistic           = "Sum"
   threshold           = var.alarm_thresholds.lambda_error_threshold
-  alarm_description   = "Margin Call Lambda is experiencing errors"
+  alarm_description   = "Margin Call errors for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
   treat_missing_data  = "notBreaching"
 
   dimensions = {
@@ -451,13 +451,13 @@ resource "aws_cloudwatch_metric_alarm" "margin_call_duration" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.margin_call_lambda.create ? 1 : 0
   alarm_name          = "margin-call-duration-${local.env_suffix}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
+  evaluation_periods  = local.standard_alarm_evaluation_periods
   metric_name         = "Duration"
   namespace           = "AWS/Lambda"
   period              = 300
   statistic           = "Average"
   threshold           = var.alarm_thresholds.lambda_duration_threshold
-  alarm_description   = "Margin Call Lambda duration approaching timeout"
+  alarm_description   = "Margin Call duration high for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
   treat_missing_data  = "notBreaching"
 
   dimensions = {
@@ -482,13 +482,13 @@ resource "aws_cloudwatch_metric_alarm" "margin_call_throttles" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.margin_call_lambda.create ? 1 : 0
   alarm_name          = "margin-call-throttles-${local.env_suffix}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
+  evaluation_periods  = local.standard_alarm_evaluation_periods
   metric_name         = "Throttles"
   namespace           = "AWS/Lambda"
   period              = 300
   statistic           = "Sum"
   threshold           = var.alarm_thresholds.lambda_throttle_threshold
-  alarm_description   = "Margin Call Lambda is being throttled"
+  alarm_description   = "Margin Call throttled for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
   treat_missing_data  = "notBreaching"
 
   dimensions = {
@@ -517,13 +517,13 @@ resource "aws_cloudwatch_metric_alarm" "notifications_rds_cpu" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.notifications_service.create ? 1 : 0
   alarm_name          = "notifications-rds-cpu-${local.env_suffix}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 2
+  evaluation_periods  = local.standard_alarm_evaluation_periods
   metric_name         = "CPUUtilization"
   namespace           = "AWS/RDS"
   period              = 300
   statistic           = "Average"
   threshold           = var.alarm_thresholds.rds_cpu_threshold
-  alarm_description   = "Notifications RDS CPU utilization is high"
+  alarm_description   = "Notifications RDS CPU high for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
   treat_missing_data  = "notBreaching"
 
   dimensions = {
@@ -548,13 +548,13 @@ resource "aws_cloudwatch_metric_alarm" "notifications_rds_storage" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.notifications_service.create ? 1 : 0
   alarm_name          = "notifications-rds-storage-${local.env_suffix}"
   comparison_operator = "LessThanThreshold"
-  evaluation_periods  = 2
+  evaluation_periods  = local.standard_alarm_evaluation_periods
   metric_name         = "FreeStorageSpace"
   namespace           = "AWS/RDS"
   period              = 300
   statistic           = "Average"
   threshold           = var.alarm_thresholds.rds_storage_threshold * 1024 * 1024 * 1024  # Convert GB to bytes
-  alarm_description   = "Notifications RDS free storage is low"
+  alarm_description   = "Notifications RDS storage low for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
   treat_missing_data  = "notBreaching"
 
   dimensions = {
@@ -579,13 +579,13 @@ resource "aws_cloudwatch_metric_alarm" "notifications_rds_connections" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.notifications_service.create ? 1 : 0
   alarm_name          = "notifications-rds-connections-${local.env_suffix}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 2
+  evaluation_periods  = local.standard_alarm_evaluation_periods
   metric_name         = "DatabaseConnections"
   namespace           = "AWS/RDS"
   period              = 300
   statistic           = "Average"
   threshold           = var.alarm_thresholds.rds_connections_threshold
-  alarm_description   = "Notifications RDS connection count is high"
+  alarm_description   = "Notifications RDS connections high for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
   treat_missing_data  = "notBreaching"
 
   dimensions = {
@@ -614,13 +614,13 @@ resource "aws_cloudwatch_metric_alarm" "notifications_alb_5xx" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.notifications_service.create ? 1 : 0
   alarm_name          = "notifications-alb-5xx-${local.env_suffix}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 2
+  evaluation_periods  = local.standard_alarm_evaluation_periods
   metric_name         = "HTTPCode_ELB_5XX_Count"
   namespace           = "AWS/ApplicationELB"
   period              = 300
   statistic           = "Sum"
   threshold           = var.alarm_thresholds.alb_5xx_threshold
-  alarm_description   = "Notifications ALB is returning 5xx errors"
+  alarm_description   = "Notifications ALB 5xx errors for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
   treat_missing_data  = "notBreaching"
 
   dimensions = {
@@ -645,13 +645,13 @@ resource "aws_cloudwatch_metric_alarm" "notifications_alb_unhealthy" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.notifications_service.create ? 1 : 0
   alarm_name          = "notifications-alb-unhealthy-${local.env_suffix}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 2
+  evaluation_periods  = local.route53_alarm_evaluation_periods  # period = 60 sec
   metric_name         = "UnHealthyHostCount"
   namespace           = "AWS/ApplicationELB"
   period              = 60
   statistic           = "Average"
   threshold           = var.alarm_thresholds.alb_unhealthy_threshold
-  alarm_description   = "Notifications ALB has unhealthy targets"
+  alarm_description   = "Notifications ALB unhealthy for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
   treat_missing_data  = "notBreaching"
 
   dimensions = {

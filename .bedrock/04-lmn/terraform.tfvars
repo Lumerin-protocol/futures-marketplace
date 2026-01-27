@@ -47,7 +47,7 @@ margin_call_lambda = {
 notifications_service = {
   create                     = true
   protect                    = false
-  ntf_imagetag               = "stg-latest"
+  ntf_imagetag               = "latest"
   ntf_ghcr_repo              = "ghcr.io/lumerin-protocol/futures-notifications"
   svc_name                   = "futures-notifications"
   cnt_name                   = "futures-notifications"
@@ -82,15 +82,21 @@ multicall_address       = "0xcA11bde05977b3631167028862bE2a173976CA11"
 # Monitoring Configuration
 ########################################
 monitoring = {
-  create                    = false  # Services not deployed in LMN yet
-  create_alarms             = false
-  create_dashboards         = false
-  create_metric_filters     = false
-  create_synthetics_canary  = false  # Enable when services deployed (true for production)
-  notifications_enabled     = false  # Enable when services deployed (true for production)
+  create                    = true  # Services not deployed in LMN yet
+  create_alarms             = true
+  create_dashboards         = true
+  create_metric_filters     = true
+  create_synthetics_canary  = true  # Enable when services deployed (true for production)
+  notifications_enabled     = true  # Enable when services deployed (true for production)
   dev_alerts_topic_name     = "titanio-lmn-dev-alerts"      # Slack
   devops_alerts_topic_name  = "titanio-lmn-devops-alerts"   # Cell phone (critical)
   dashboard_period          = 300
+}
+
+# LMN/PROD environment - highest frequency for rapid detection
+monitoring_schedule = {
+  synthetics_canary_rate_minutes = 15  # Run canary every 15 min (production critical)
+  unhealthy_alarm_period_minutes = 15  # How long to tolerate "bad" before alarm triggers
 }
 
 # LMN/PROD environment - strict thresholds
