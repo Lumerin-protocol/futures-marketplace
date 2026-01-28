@@ -17,9 +17,6 @@ market_maker = {
   task_ram                    = 512
   task_worker_qty             = 1
   friendly_name               = "market-maker"
-  subgraph_url_futures        = "https://graph.lmn.lumerin.io/subgraphs/name/futures"
-  subgraph_url_oracles        = "https://graph.lmn.lumerin.io/subgraphs/name/oracles"
-  subgraph_api_key            = ""
   float_amount                = 1000000000  
   spread_amount               = 10000      
   grid_levels                 = 5
@@ -40,8 +37,6 @@ margin_call_lambda = {
   margin_utilization_warning_percent = "80"
   daily_schedule_hour                = "0"           # UTC hour (0-23). Examples: 0=midnight UTC, 14=09:00 EST/10:00 EDT, 21=16:00 EST/17:00 EDT
   daily_schedule_minute              = "0"           # UTC minute (0-59)
-  subgraph_api_key                   = "self-hosted" # Self-hosted Graph Node doesn't require API key, but validation requires non-empty string
-  futures_subgraph_url               = "https://graph.lmn.lumerin.io/subgraphs/name/futures"
 }
 
 notifications_service = {

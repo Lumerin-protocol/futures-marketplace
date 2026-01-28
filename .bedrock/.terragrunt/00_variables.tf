@@ -60,6 +60,32 @@ variable "ethereum_rpc_url" {
 }
 
 ################################################################################
+# THE GRAPH NETWORK CONFIGURATION
+# API key and subgraph IDs for querying published subgraphs
+################################################################################
+
+variable "graph_api_key" {
+  description = "The Graph API Key for accessing published subgraphs"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "futures_subgraph_id" {
+  description = "The Graph Subgraph ID for Futures (from published subgraph)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "oracles_subgraph_id" {
+  description = "The Graph Subgraph ID for Oracles (from published subgraph)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+################################################################################
 # SHARED CONTRACT ADDRESSES (used across multiple services)
 ################################################################################
 

@@ -37,45 +37,35 @@ jobs:
     name: 🔨 Build
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      tag: ${{ steps.version.outputs.tag }}
-      environment: ${{ steps.env.outputs.environment }}
-      ecs_cluster: ${{ steps.env.outputs.ecs_cluster }}
-      ecs_service: ${{ steps.env.outputs.ecs_service }}
-      task_family: ${{ steps.env.outputs.task_family }}
-      aws_region: ${{ steps.env.outputs.aws_region }}
-      is_cicd_branch: ${{ steps.env.outputs.is_cicd_branch }}
+      version: ${{ steps.gen_tag.outputs.version }}
+      tag: ${{ steps.gen_tag.outputs.tag_name }}
+      environment: ${{ steps.gen_tag.outputs.environment }}
+      ecs_cluster: ${{ steps.env_config.outputs.ecs_cluster }}
+      ecs_service: ${{ steps.env_config.outputs.ecs_service }}
+      task_family: ${{ steps.env_config.outputs.task_family }}
+      aws_region: ${{ steps.env_config.outputs.aws_region }}
+      is_cicd_branch: ${{ steps.gen_tag.outputs.is_cicd_branch }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
 
-      - name: Determine environment
-        id: env
+      - name: Generate version tag
+        id: gen_tag
+        uses: ./.github/actions/gen-tag
+        with:
+          component: notifications
+          major_version: '3'
+          environment_override: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || '' }}
+
+      - name: Environment config
+        id: env_config
         run: |
-          IS_CICD="false"
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            ENV="${{ github.event.inputs.environment }}"
-          else
-            BRANCH="${{ github.ref_name }}"
-            if [ "$BRANCH" == "main" ]; then
-              ENV="main"
-            elif [ "$BRANCH" == "stg" ]; then
-              ENV="stg"
-            elif [[ "$BRANCH" == cicd/* ]]; then
-              ENV="dev"
-              IS_CICD="true"
-              echo "🔧 CI/CD test branch - will build but skip deploy"
-            else
-              ENV="dev"
-            fi
-          fi
-          echo "environment=${ENV}" >> $GITHUB_OUTPUT
-          echo "is_cicd_branch=${IS_CICD}" >> $GITHUB_OUTPUT
-
-
+          ENV="${{ steps.gen_tag.outputs.environment }}"
+          
           # Task family is the same across all environments (per Terraform config)
           echo "task_family=tsk-futures-notifications" >> $GITHUB_OUTPUT
           
@@ -97,31 +87,6 @@ jobs:
               ;;
           esac
 
-      - name: Generate version tag
-        id: version
-        run: |
-          LAST_TAG=$(git tag -l "futures-notifications-v*" | sort -V | tail -n 1)
-          
-          if [ -z "$LAST_TAG" ]; then
-            VERSION="2.0.0"
-          else
-            LAST_VERSION=$(echo $LAST_TAG | sed 's/futures-notifications-v//' | sed 's/-.*$//')
-            IFS='.' read -r MAJOR MINOR PATCH <<< "$LAST_VERSION"
-            PATCH=$((PATCH + 1))
-            VERSION="${MAJOR}.${MINOR}.${PATCH}"
-          fi
-          
-          ENV=${{ steps.env.outputs.environment }}
-          if [ "$ENV" != "main" ]; then
-            FULL_VERSION="v${VERSION}-${ENV}"
-          else
-            FULL_VERSION="v${VERSION}"
-          fi
-          
-          echo "version=${FULL_VERSION}" >> $GITHUB_OUTPUT
-          echo "tag=futures-notifications-${FULL_VERSION}" >> $GITHUB_OUTPUT
-          echo "📦 Version: ${FULL_VERSION}"
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -136,25 +101,25 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./notifications
-          push: ${{ steps.env.outputs.is_cicd_branch != 'true' }}
-          load: ${{ steps.env.outputs.is_cicd_branch == 'true' }}
+          push: ${{ steps.gen_tag.outputs.is_cicd_branch != 'true' }}
+          load: ${{ steps.gen_tag.outputs.is_cicd_branch == 'true' }}
           tags: |
-            ${{ env.GHCR_IMAGE }}:${{ steps.version.outputs.version }}
-            ${{ env.GHCR_IMAGE }}:${{ steps.env.outputs.environment }}-latest
+            ${{ env.GHCR_IMAGE }}:${{ steps.gen_tag.outputs.version }}
+            ${{ env.GHCR_IMAGE }}:${{ steps.gen_tag.outputs.environment }}-latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
           labels: |
             org.opencontainers.image.source=${{ github.repositoryUrl }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.version=${{ steps.gen_tag.outputs.version }}
 
       - name: CI/CD test summary
-        if: steps.env.outputs.is_cicd_branch == 'true'
+        if: steps.gen_tag.outputs.is_cicd_branch == 'true'
         run: |
           echo "## 🔧 CI/CD Test Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Mode:** Test only (no deployment)" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.gen_tag.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** Built locally, not pushed to GHCR" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ Build verification successful" >> $GITHUB_STEP_SUMMARY
@@ -257,13 +222,26 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Create Git tag
-        if: needs.build.outputs.environment == 'main' && needs.verify.result == 'success'
+      - name: Configure Git
+        if: needs.verify.result == 'success'
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git tag -a "${{ needs.build.outputs.tag }}" -m "Release ${{ needs.build.outputs.version }}"
-          git push origin "${{ needs.build.outputs.tag }}"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create and push tag
+        if: needs.verify.result == 'success'
+        run: |
+          TAG_NAME="${{ needs.build.outputs.tag }}"
+          echo "🏷️ Creating tag after successful deployment: $TAG_NAME"
+          
+          # Check if tag already exists
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "⚠️ Tag $TAG_NAME already exists, skipping tag creation"
+          else
+            git tag -a "$TAG_NAME" -m "Release ${{ needs.build.outputs.version }} - Deployed to ${{ needs.build.outputs.environment }}"
+            git push origin "$TAG_NAME"
+            echo "✅ Tag $TAG_NAME created and pushed"
+          fi
 
       - name: Deployment summary
         if: needs.verify.result == 'success'

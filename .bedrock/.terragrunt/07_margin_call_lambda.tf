@@ -52,9 +52,10 @@ resource "aws_iam_role_policy" "margin_call_secrets_policy" {
         Action = [
           "secretsmanager:GetSecretValue"
         ]
-        Resource = [
-          var.create_core ? aws_secretsmanager_secret.futures.arn : null
-        ]
+        Resource = compact([
+          var.create_core ? aws_secretsmanager_secret.futures.arn : "",
+          aws_secretsmanager_secret.margin_call.arn
+        ])
       }
     ]
   })
@@ -152,8 +153,7 @@ resource "aws_lambda_function" "margin_call" {
   environment {
     variables = {
       ETH_NODE_URL                       = var.ethereum_rpc_url # Shev's code expects ETH_NODE_URL
-      FUTURES_SUBGRAPH_URL               = var.margin_call_lambda.futures_subgraph_url  # Auto-constructed from alb_name + domain
-      SUBGRAPH_API_KEY                   = var.margin_call_lambda.subgraph_api_key
+      FUTURES_SUBGRAPH_URL               = "https://gateway.thegraph.com/api/${var.graph_api_key}/subgraphs/id/${var.futures_subgraph_id}"
       FUTURES_ADDRESS                    = var.futures_address         # Shared variable
       HASHRATE_ORACLE_ADDRESS            = var.hashrate_oracle_address # Shared variable
       MULTICALL_ADDRESS                  = var.multicall_address       # Shared variable (Multicall3)
