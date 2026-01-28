@@ -1,11 +1,11 @@
 import { request, gql, rawRequest } from "graphql-request";
 
 export class Subgraph {
-  private apiKey: string;
+  private apiKey: string | undefined;
   private url: string;
 
   constructor(url: string, apiKey?: string) {
-    this.apiKey = apiKey ?? "";
+    this.apiKey = apiKey;
     this.url = url;
   }
 
@@ -14,9 +14,10 @@ export class Subgraph {
   }
 
   async request<T>(query: string, variables: Record<string, any> = {}) {
-    return await request<T>(this.url, query, variables, {
-      Authorization: `Bearer ${this.apiKey}`,
-    });
+    // Only include Authorization header if apiKey is provided
+    // The Graph Network uses API key in URL path, not Bearer token
+    const headers = this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {};
+    return await request<T>(this.url, query, variables, headers);
   }
 }
 
