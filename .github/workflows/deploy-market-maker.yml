@@ -100,11 +100,11 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./market-maker
-          push: ${{ steps.env.outputs.is_cicd_branch != 'true' }}
-          load: ${{ steps.env.outputs.is_cicd_branch == 'true' }}
+          push: ${{ steps.gen_tag.outputs.is_cicd_branch != 'true' }}
+          load: ${{ steps.gen_tag.outputs.is_cicd_branch == 'true' }}
           tags: |
-            ${{ env.GHCR_IMAGE }}:${{ steps.version.outputs.version }}
-            ${{ env.GHCR_IMAGE }}:${{ steps.env.outputs.environment }}-latest
+            ${{ env.GHCR_IMAGE }}:${{ steps.gen_tag.outputs.version }}
+            ${{ env.GHCR_IMAGE }}:${{ steps.gen_tag.outputs.environment }}-latest
           build-args: |
             COMMIT_HASH=${{ github.sha }}
           cache-from: type=gha
@@ -112,15 +112,15 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.repositoryUrl }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.version=${{ steps.gen_tag.outputs.version }}
 
       - name: CI/CD test summary
-        if: steps.env.outputs.is_cicd_branch == 'true'
+        if: steps.gen_tag.outputs.is_cicd_branch == 'true'
         run: |
           echo "## 🔧 CI/CD Test Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Mode:** Test only (no deployment)" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.gen_tag.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** Built locally, not pushed to GHCR" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ Build verification successful" >> $GITHUB_STEP_SUMMARY

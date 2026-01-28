@@ -127,12 +127,12 @@ jobs:
           retention-days: 1
 
       - name: CI/CD test summary
-        if: steps.env.outputs.is_cicd_branch == 'true'
+        if: steps.gen_tag.outputs.is_cicd_branch == 'true'
         run: |
           echo "## 🔧 CI/CD Test Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Mode:** Test only (no deployment)" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.gen_tag.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Package:** margin-call-lambda.zip built successfully" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ Build verification successful" >> $GITHUB_STEP_SUMMARY

@@ -1,4 +1,4 @@
-name: Deploy Marketplace to Hosted Environment
+name: Deploy Futures UI
 
 on:
   push:
