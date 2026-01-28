@@ -179,6 +179,27 @@ jobs:
           echo "🔧 Creating .env file for ${ENV} environment"
           echo "📌 Version tag: ${VERSION}"
           
+          # Construct Graph URLs from org secrets/vars based on environment
+          case $ENV in
+            dev)
+              GRAPH_API_KEY="${{ secrets.DEV_GRAPH_APIKEY }}"
+              FUTURES_SUBGRAPH_ID="${{ vars.DEV_FUTURES_SUBGRAPH_ID }}"
+              ORACLES_SUBGRAPH_ID="${{ vars.DEV_ORACLES_SUBGRAPH_ID }}"
+              ;;
+            stg)
+              GRAPH_API_KEY="${{ secrets.STG_GRAPH_APIKEY }}"
+              FUTURES_SUBGRAPH_ID="${{ vars.STG_FUTURES_SUBGRAPH_ID }}"
+              ORACLES_SUBGRAPH_ID="${{ vars.STG_ORACLES_SUBGRAPH_ID }}"
+              ;;
+            main)
+              GRAPH_API_KEY="${{ secrets.LMN_GRAPH_APIKEY }}"
+              FUTURES_SUBGRAPH_ID="${{ vars.LMN_FUTURES_SUBGRAPH_ID }}"
+              ORACLES_SUBGRAPH_ID="${{ vars.LMN_ORACLES_SUBGRAPH_ID }}"
+              ;;
+          esac
+          FUTURES_SUBGRAPH_URL="https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/${FUTURES_SUBGRAPH_ID}"
+          ORACLES_SUBGRAPH_URL="https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/${ORACLES_SUBGRAPH_ID}"
+          
           # Create .env file with environment-scoped variables
           # GitHub Environments automatically scope secrets/vars to the environment
           cat > ui/.env << EOF
@@ -199,8 +220,8 @@ jobs:
           DEV_SERVER_HTTPS=false
           REACT_APP_FUTURES_TOKEN_ADDRESS=${{ vars.REACT_APP_FUTURES_TOKEN_ADDRESS }}
           REACT_APP_FUTURES_REQUIRED_LMR=${{ vars.REACT_APP_FUTURES_REQUIRED_LMR }}
-          REACT_APP_SUBGRAPH_FUTURES_URL=${{ vars.REACT_APP_SUBGRAPH_FUTURES_URL }}
-          REACT_APP_SUBGRAPH_ORACLES_URL=${{ vars.REACT_APP_SUBGRAPH_ORACLES_URL }}
+          REACT_APP_SUBGRAPH_FUTURES_URL=${FUTURES_SUBGRAPH_URL}
+          REACT_APP_SUBGRAPH_ORACLES_URL=${ORACLES_SUBGRAPH_URL}
           EOF
           
           echo "✅ .env file created"
@@ -445,7 +466,7 @@ jobs:
         with:
           status: ${{ steps.status.outputs.status }}
           environment: ${{ needs.generate-tag.outputs.environment }}
-          service_name: 'Futures Marketplace'
+          service_name: 'Futures UI'
           version: ${{ needs.generate-tag.outputs.vtag }}
           slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
           github_token: ${{ secrets.GITHUB_TOKEN }}

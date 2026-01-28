@@ -79,7 +79,7 @@ resource "aws_cloudwatch_log_group" "market_maker_use1" {
 
 # Define Service
 resource "aws_ecs_service" "market_maker_use1" {
-  lifecycle {ignore_changes = [task_definition] }
+  # lifecycle {ignore_changes = [task_definition] }
   count                  = var.market_maker.create ? 1 : 0
   provider               = aws.use1
   name                   = "svc-${var.market_maker["svc_name"]}-${substr(var.account_shortname, 8, 3)}"
@@ -121,7 +121,7 @@ resource "aws_ecs_service" "market_maker_use1" {
 
 # Define Task  
 resource "aws_ecs_task_definition" "market_maker_use1" {
-  lifecycle { ignore_changes = [container_definitions] }
+  # lifecycle { ignore_changes = [container_definitions] }
   count                    = var.market_maker.create ? 1 : 0
   provider                 = aws.use1
   family                   = "tsk-${var.market_maker["svc_name"]}"
@@ -142,19 +142,6 @@ resource "aws_ecs_task_definition" "market_maker_use1" {
 
       # No port mappings - this is a background worker with no HTTP endpoints
       environment = [
-        # Subgraph Configuration
-        {
-          name  = "FUTURES_SUBGRAPH_URL"
-          value = tostring(var.market_maker.subgraph_url_futures)
-        },
-        {
-          name  = "ORACLES_SUBGRAPH_URL"
-          value = tostring(var.market_maker.subgraph_url_oracles)
-        },
-        {
-          name  = "SUBGRAPH_API_KEY"
-          value = tostring(var.market_maker.subgraph_api_key)
-        },
         # Trading Parameters
         {
           name  = "FLOAT_AMOUNT"
@@ -202,12 +189,20 @@ resource "aws_ecs_task_definition" "market_maker_use1" {
       secrets = [
         # Secrets (from Secrets Manager)
         {
-          name  = "ETH_NODE_URL"
+          name      = "ETH_NODE_URL"
           valueFrom = "${aws_secretsmanager_secret.market_maker.arn}:eth_node_url::"
         },
         {
-          name  = "PRIVATE_KEY"
+          name      = "PRIVATE_KEY"
           valueFrom = "${aws_secretsmanager_secret.market_maker.arn}:private_key::"
+        },
+        {
+          name      = "FUTURES_SUBGRAPH_URL"
+          valueFrom = "${aws_secretsmanager_secret.market_maker.arn}:futures_subgraph_url::"
+        },
+        {
+          name      = "ORACLES_SUBGRAPH_URL"
+          valueFrom = "${aws_secretsmanager_secret.market_maker.arn}:oracles_subgraph_url::"
         }
       ]
 
