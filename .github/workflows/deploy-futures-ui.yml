@@ -445,7 +445,7 @@ jobs:
         with:
           status: ${{ steps.status.outputs.status }}
           environment: ${{ needs.generate-tag.outputs.environment }}
-          service_name: 'Futures Marketplace'
+          service_name: 'Futures UI'
           version: ${{ needs.generate-tag.outputs.vtag }}
           slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
