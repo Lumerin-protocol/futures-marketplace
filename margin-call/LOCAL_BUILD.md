@@ -17,7 +17,7 @@ yarn build
 ```bash
 # Set environment variables
 export ETH_NODE_URL="https://arb-sepolia.g.alchemy.com/v2/YOUR_KEY"
-export SUBGRAPH_URL="https://graphidx.dev.lumerin.io/subgraphs/name/marketplace"
+export SUBGRAPH_URL="https://api.studio.thegraph.com/query/1724245/lumerin-dev-futures/version/latest"
 export SUBGRAPH_API_KEY="self-hosted"
 export FUTURES_ADDRESS="0x74e3ab04fad3ba6534125f7aeae698a9cf94b4f5"
 export HASHRATE_ORACLE_ADDRESS="0xdc64a140aa3e981100a9beca4e685f962f0cf6c9"
