@@ -146,6 +146,9 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   }, [btcPriceData]);
 
   const options: Highcharts.Options = {
+    time: {
+      useUTC: false, // Display dates in local timezone
+    } as Highcharts.TimeOptions,
     chart: {
       type: "spline",
       backgroundColor: "transparent",
@@ -191,12 +194,13 @@ export const HashrateChart: FC<HashrateChartProps> = ({
       {
         // Secondary Y-axis for BTC Price (USD)
         title: {
-          text: "BTC Price (USD)",
+          text: isBtcPriceVisible ? "BTC Price (USD)" : "",
           style: {
             color: "white",
           },
         },
         labels: {
+          enabled: isBtcPriceVisible,
           style: {
             color: "white",
           },
