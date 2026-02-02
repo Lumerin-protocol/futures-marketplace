@@ -13,7 +13,8 @@ resource "aws_synthetics_canary" "futures_ui" {
   start_canary         = true
 
   schedule {
-    expression = "rate(${var.monitoring_schedule.synthetics_canary_rate_minutes} minutes)"
+    # AWS normalizes "rate(60 minutes)" to "rate(1 hour)" - use hour format to avoid perpetual drift
+    expression = var.monitoring_schedule.synthetics_canary_rate_minutes == 60 ? "rate(1 hour)" : "rate(${var.monitoring_schedule.synthetics_canary_rate_minutes} minutes)"
   }
 
   run_config {
