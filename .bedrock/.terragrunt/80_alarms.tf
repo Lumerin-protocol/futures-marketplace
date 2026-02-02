@@ -203,6 +203,35 @@ resource "aws_cloudwatch_metric_alarm" "mm_lambda_throttles" {
   )
 }
 
+# Market Maker Insufficient Funds - DIRECT ALERT (not composite)
+# This is an operational issue requiring immediate attention
+resource "aws_cloudwatch_metric_alarm" "mm_insufficient_funds" {
+  count               = var.monitoring.create && var.monitoring.create_alarms && var.market_maker.create ? 1 : 0
+  alarm_name          = "market-maker-insufficient-funds-${local.env_suffix}"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1  # Alert immediately on first occurrence
+  metric_name         = "InsufficientBalance"
+  namespace           = local.monitoring_namespace
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "Market Maker has insufficient ETH or USDC - needs wallet funding"
+  treat_missing_data  = "notBreaching"
+
+  # Direct alert - bypasses composite alarm
+  alarm_actions = local.composite_alarm_actions
+  ok_actions    = local.composite_alarm_actions
+
+  tags = merge(
+    var.default_tags,
+    var.foundation_tags,
+    {
+      Name       = "Market Maker Insufficient Funds Alarm",
+      Capability = "Monitoring",
+    },
+  )
+}
+
 ################################################################################
 # NOTIFICATIONS ECS ALARMS (3)
 ################################################################################
