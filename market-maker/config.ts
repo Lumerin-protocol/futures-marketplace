@@ -31,7 +31,7 @@ const schema = Type.Object({
   SPREAD_AMOUNT: Type.Number({ minimum: 0, multipleOf: 1 }),
   // Lambda-specific: Secrets Manager ARN and balance thresholds
   SECRETS_ARN: Type.Optional(Type.String()),
-  MIN_ETH_BALANCE: Type.String({ default: "10000000000000000" }), // 0.01 ETH in wei
+  MIN_ETH_BALANCE: Type.String({ default: "100000000000000" }), // 0.0001 ETH in wei (~1.4 txns on Arbitrum)
   MIN_USDC_BALANCE: Type.String({ default: "10000000" }), // 10 USDC
 });
 
