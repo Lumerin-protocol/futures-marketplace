@@ -57,13 +57,13 @@ resource "aws_cloudwatch_composite_alarm" "futures_ui_unhealthy" {
 resource "aws_cloudwatch_composite_alarm" "market_maker_unhealthy" {
   count             = var.monitoring.create && var.monitoring.create_alarms && var.market_maker.create ? 1 : 0
   alarm_name        = "market-maker-${local.env_suffix}"
-  alarm_description = "Market Maker service is unhealthy - ECS issues detected"
+  alarm_description = "Market Maker Lambda is unhealthy - errors or throttling"
 
-  # Alarm rule: ANY of the Market Maker component alarms in ALARM state
+  # Alarm rule: ANY of the Market Maker Lambda component alarms in ALARM state
   alarm_rule = join(" OR ", [
-    "ALARM(${aws_cloudwatch_metric_alarm.mm_ecs_cpu_high[0].alarm_name})",
-    "ALARM(${aws_cloudwatch_metric_alarm.mm_ecs_memory_high[0].alarm_name})",
-    "ALARM(${aws_cloudwatch_metric_alarm.mm_ecs_running_tasks[0].alarm_name})"
+    "ALARM(${aws_cloudwatch_metric_alarm.mm_lambda_errors[0].alarm_name})",
+    "ALARM(${aws_cloudwatch_metric_alarm.mm_lambda_duration[0].alarm_name})",
+    "ALARM(${aws_cloudwatch_metric_alarm.mm_lambda_throttles[0].alarm_name})"
   ])
 
   alarm_actions = local.composite_alarm_actions
@@ -79,9 +79,9 @@ resource "aws_cloudwatch_composite_alarm" "market_maker_unhealthy" {
   )
 
   depends_on = [
-    aws_cloudwatch_metric_alarm.mm_ecs_cpu_high,
-    aws_cloudwatch_metric_alarm.mm_ecs_memory_high,
-    aws_cloudwatch_metric_alarm.mm_ecs_running_tasks
+    aws_cloudwatch_metric_alarm.mm_lambda_errors,
+    aws_cloudwatch_metric_alarm.mm_lambda_duration,
+    aws_cloudwatch_metric_alarm.mm_lambda_throttles
   ]
 }
 

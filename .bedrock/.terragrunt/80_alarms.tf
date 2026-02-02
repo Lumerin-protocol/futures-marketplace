@@ -107,142 +107,25 @@ resource "aws_cloudwatch_metric_alarm" "futures_ui_unreachable" {
 }
 
 ################################################################################
-# MARKET MAKER ECS ALARMS (3)
+# MARKET MAKER LAMBDA ALARMS (3)
 ################################################################################
 
-# Market Maker CPU High (using metric math for percentage)
-resource "aws_cloudwatch_metric_alarm" "mm_ecs_cpu_high" {
+# Market Maker Lambda Errors
+resource "aws_cloudwatch_metric_alarm" "mm_lambda_errors" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.market_maker.create ? 1 : 0
-  alarm_name          = "market-maker-cpu-high-${local.env_suffix}"
+  alarm_name          = "market-maker-errors-${local.env_suffix}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = local.standard_alarm_evaluation_periods
-  threshold           = var.alarm_thresholds.ecs_cpu_threshold
-  alarm_description   = "Market Maker CPU >${var.alarm_thresholds.ecs_cpu_threshold}% for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
-  treat_missing_data  = "notBreaching"
-
-  metric_query {
-    id          = "cpu_percent"
-    expression  = "(cpu_used / cpu_reserved) * 100"
-    label       = "CPU Utilization %"
-    return_data = true
-  }
-
-  metric_query {
-    id = "cpu_used"
-    metric {
-      metric_name = "CpuUtilized"
-      namespace   = "ECS/ContainerInsights"
-      period      = 300
-      stat        = "Average"
-      dimensions = {
-        ClusterName = local.ecs_cluster_name
-        ServiceName = local.market_maker_service_name
-      }
-    }
-  }
-
-  metric_query {
-    id = "cpu_reserved"
-    metric {
-      metric_name = "CpuReserved"
-      namespace   = "ECS/ContainerInsights"
-      period      = 300
-      stat        = "Average"
-      dimensions = {
-        ClusterName = local.ecs_cluster_name
-        ServiceName = local.market_maker_service_name
-      }
-    }
-  }
-
-  alarm_actions = local.component_alarm_actions
-  ok_actions    = local.component_alarm_actions
-
-  tags = merge(
-    var.default_tags,
-    var.foundation_tags,
-    {
-      Name       = "Market Maker CPU High Alarm",
-      Capability = "Monitoring",
-    },
-  )
-}
-
-# Market Maker Memory High (using metric math for percentage)
-resource "aws_cloudwatch_metric_alarm" "mm_ecs_memory_high" {
-  count               = var.monitoring.create && var.monitoring.create_alarms && var.market_maker.create ? 1 : 0
-  alarm_name          = "market-maker-memory-high-${local.env_suffix}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = local.standard_alarm_evaluation_periods
-  threshold           = var.alarm_thresholds.ecs_memory_threshold
-  alarm_description   = "Market Maker Memory >${var.alarm_thresholds.ecs_memory_threshold}% for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
-  treat_missing_data  = "notBreaching"
-
-  metric_query {
-    id          = "mem_percent"
-    expression  = "(mem_used / mem_reserved) * 100"
-    label       = "Memory Utilization %"
-    return_data = true
-  }
-
-  metric_query {
-    id = "mem_used"
-    metric {
-      metric_name = "MemoryUtilized"
-      namespace   = "ECS/ContainerInsights"
-      period      = 300
-      stat        = "Average"
-      dimensions = {
-        ClusterName = local.ecs_cluster_name
-        ServiceName = local.market_maker_service_name
-      }
-    }
-  }
-
-  metric_query {
-    id = "mem_reserved"
-    metric {
-      metric_name = "MemoryReserved"
-      namespace   = "ECS/ContainerInsights"
-      period      = 300
-      stat        = "Average"
-      dimensions = {
-        ClusterName = local.ecs_cluster_name
-        ServiceName = local.market_maker_service_name
-      }
-    }
-  }
-
-  alarm_actions = local.component_alarm_actions
-  ok_actions    = local.component_alarm_actions
-
-  tags = merge(
-    var.default_tags,
-    var.foundation_tags,
-    {
-      Name       = "Market Maker Memory High Alarm",
-      Capability = "Monitoring",
-    },
-  )
-}
-
-# Market Maker Running Tasks
-resource "aws_cloudwatch_metric_alarm" "mm_ecs_running_tasks" {
-  count               = var.monitoring.create && var.monitoring.create_alarms && var.market_maker.create ? 1 : 0
-  alarm_name          = "market-maker-running-tasks-${local.env_suffix}"
-  comparison_operator = "LessThanThreshold"
-  evaluation_periods  = local.standard_alarm_evaluation_periods
-  metric_name         = "RunningTaskCount"
-  namespace           = "ECS/ContainerInsights"
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
   period              = 300
-  statistic           = "Average"
-  threshold           = var.alarm_thresholds.ecs_min_running_tasks
-  alarm_description   = "Market Maker down for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
-  treat_missing_data  = "breaching"
+  statistic           = "Sum"
+  threshold           = var.alarm_thresholds.lambda_error_threshold
+  alarm_description   = "Market Maker Lambda errors for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
+  treat_missing_data  = "notBreaching"
 
   dimensions = {
-    ClusterName = local.ecs_cluster_name
-    ServiceName = local.market_maker_service_name
+    FunctionName = local.market_maker_function_name
   }
 
   alarm_actions = local.component_alarm_actions
@@ -252,7 +135,69 @@ resource "aws_cloudwatch_metric_alarm" "mm_ecs_running_tasks" {
     var.default_tags,
     var.foundation_tags,
     {
-      Name       = "Market Maker Running Tasks Alarm",
+      Name       = "Market Maker Errors Alarm",
+      Capability = "Monitoring",
+    },
+  )
+}
+
+# Market Maker Lambda Duration
+resource "aws_cloudwatch_metric_alarm" "mm_lambda_duration" {
+  count               = var.monitoring.create && var.monitoring.create_alarms && var.market_maker.create ? 1 : 0
+  alarm_name          = "market-maker-duration-${local.env_suffix}"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = local.standard_alarm_evaluation_periods
+  metric_name         = "Duration"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Average"
+  threshold           = var.alarm_thresholds.lambda_duration_threshold
+  alarm_description   = "Market Maker Lambda duration high for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = local.market_maker_function_name
+  }
+
+  alarm_actions = local.component_alarm_actions
+  ok_actions    = local.component_alarm_actions
+
+  tags = merge(
+    var.default_tags,
+    var.foundation_tags,
+    {
+      Name       = "Market Maker Duration Alarm",
+      Capability = "Monitoring",
+    },
+  )
+}
+
+# Market Maker Lambda Throttles
+resource "aws_cloudwatch_metric_alarm" "mm_lambda_throttles" {
+  count               = var.monitoring.create && var.monitoring.create_alarms && var.market_maker.create ? 1 : 0
+  alarm_name          = "market-maker-throttles-${local.env_suffix}"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = local.standard_alarm_evaluation_periods
+  metric_name         = "Throttles"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = var.alarm_thresholds.lambda_throttle_threshold
+  alarm_description   = "Market Maker Lambda throttled for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = local.market_maker_function_name
+  }
+
+  alarm_actions = local.component_alarm_actions
+  ok_actions    = local.component_alarm_actions
+
+  tags = merge(
+    var.default_tags,
+    var.foundation_tags,
+    {
+      Name       = "Market Maker Throttles Alarm",
       Capability = "Monitoring",
     },
   )

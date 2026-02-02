@@ -94,7 +94,7 @@ resource "aws_cloudwatch_dashboard" "futures_marketplace" {
         }
       },
 
-      # Row 2: Market Maker
+      # Row 2: Market Maker Lambda
       {
         type   = "metric"
         x      = 0
@@ -102,12 +102,13 @@ resource "aws_cloudwatch_dashboard" "futures_marketplace" {
         width  = 6
         height = 6
         properties = {
-          title  = "Market Maker - Running Tasks"
+          title  = "Market Maker - Invocations & Errors"
           region = var.default_region
-          stat   = "Average"
+          stat   = "Sum"
           period = var.monitoring.dashboard_period
           metrics = [
-            ["ECS/ContainerInsights", "RunningTaskCount", "ClusterName", local.ecs_cluster_name, "ServiceName", local.market_maker_service_name]
+            ["AWS/Lambda", "Invocations", "FunctionName", local.market_maker_function_name, { label = "Invocations" }],
+            [".", "Errors", ".", ".", { label = "Errors", color = "#ff0000" }]
           ]
         }
       },
@@ -118,13 +119,12 @@ resource "aws_cloudwatch_dashboard" "futures_marketplace" {
         width  = 6
         height = 6
         properties = {
-          title  = "Market Maker - CPU & Memory"
+          title  = "Market Maker - Duration"
           region = var.default_region
           stat   = "Average"
           period = var.monitoring.dashboard_period
           metrics = [
-            ["ECS/ContainerInsights", "CpuUtilized", "ClusterName", local.ecs_cluster_name, "ServiceName", local.market_maker_service_name, { label = "CPU %" }],
-            [".", "MemoryUtilized", ".", ".", ".", ".", { label = "Memory %" }]
+            ["AWS/Lambda", "Duration", "FunctionName", local.market_maker_function_name, { label = "Duration (ms)" }]
           ]
         }
       },
@@ -135,13 +135,13 @@ resource "aws_cloudwatch_dashboard" "futures_marketplace" {
         width  = 6
         height = 6
         properties = {
-          title  = "Market Maker - Transaction Failures"
+          title  = "Market Maker - Concurrent Executions"
           region = var.default_region
-          stat   = "Sum"
+          stat   = "Maximum"
           period = var.monitoring.dashboard_period
           metrics = [
-            [local.monitoring_namespace, "TransactionFailures", { label = "TX Failures" }],
-            [".", "InsufficientBalance", { label = "Insufficient Balance" }]
+            ["AWS/Lambda", "ConcurrentExecutions", "FunctionName", local.market_maker_function_name, { label = "Concurrent" }],
+            [".", "Throttles", ".", ".", { label = "Throttles", color = "#ff9900" }]
           ]
         }
       },
@@ -152,7 +152,7 @@ resource "aws_cloudwatch_dashboard" "futures_marketplace" {
         width  = 6
         height = 6
         properties = {
-          markdown = "## Market Maker Status\n\n**Service**: ${local.market_maker_service_name}\n\n**Cluster**: ${local.ecs_cluster_name}\n\n**Composite Alarm**: `market-maker-unhealthy-${local.env_suffix}`\n\n---\n*Automated trading bot for Futures Marketplace*"
+          markdown = "## Market Maker Status\n\n**Lambda**: ${local.market_maker_function_name}\n\n**Schedule**: Every 1 minute\n\n**Composite Alarm**: `market-maker-${local.env_suffix}`\n\n---\n*Automated trading bot for Futures Marketplace*"
         }
       },
 

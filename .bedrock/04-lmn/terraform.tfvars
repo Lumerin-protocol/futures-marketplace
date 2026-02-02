@@ -5,27 +5,25 @@ ecs_cluster = {
   protect = false
 }
 
-# Configure Market Maker
+# Configure Market Maker Lambda
 market_maker = {
   create                      = true
-  mm_imagetag                 = "auto" #"v0.1.0-dev"
-  mm_ghcr_repo                = "ghcr.io/lumerin-protocol/market-maker"
-  svc_name                    = "market-maker"
-  cnt_name                    = "market-maker"
-  cnt_port                    = 3000
-  task_cpu                    = 256
-  task_ram                    = 512
-  task_worker_qty             = 1
-  friendly_name               = "market-maker"
-  float_amount                = 1000000000  
-  spread_amount               = 10000      
+  # Lambda Configuration
+  timeout                     = 60          # 60 seconds (enough for blockchain tx)
+  memory_size                 = 1024        # 1GB RAM
+  schedule_rate               = 1           # Run every 1 minute
+  # Trading Parameters
+  float_amount                = 1000000000  # 1000 USDC (1000n * 10n ** 6n)
+  spread_amount               = 10000       # 0.01 USDC (1n * 10n ** 4n)
   grid_levels                 = 5
   active_quoting_amount_ratio = 0.4
-  risk_aversion               = 15000       
-  loop_interval_ms            = 60000 #15000   
+  risk_aversion               = 15000
   max_position                = 10
   log_level                   = "info"
-  chain_id                    = 42161
+  chain_id                    = 42161       # Arbitrum Mainnet
+  # Balance Thresholds (graceful exit when funds low)
+  min_eth_balance             = "100000000000000"     # 0.0001 ETH in wei (~1.4 txns - stops before failing)
+  min_usdc_balance            = "10000000"            # 10 USDC (10n * 10n ** 6n)
 }
 
 margin_call_lambda = {
