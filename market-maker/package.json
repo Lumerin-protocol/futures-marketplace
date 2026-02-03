@@ -4,10 +4,12 @@
   "main": "index.js",
   "license": "MIT",
   "engines": {
-    "node": "24.x"
+    "node": "22.x"
   },
   "scripts": {
-    "start": "node index.ts | pino-pretty",
+    "start": "npx tsx index.ts | pino-pretty",
+    "build": "npx esbuild index.ts --bundle --platform=node --target=node22 --outfile=dist/index.js --external:@aws-sdk/*",
+    "package": "cd dist && zip -r ../lambda.zip .",
     "test": "node --test",
     "lint:fix": "biome lint --write"
   },
@@ -24,8 +26,12 @@
     "viem": "^2.41.2"
   },
   "devDependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.600.0",
     "@biomejs/biome": "2.3.11",
     "@nomicfoundation/hardhat-viem": "^2.0.0",
-    "hardhat": "^2.27.2"
+    "@types/aws-lambda": "^8.10.140",
+    "esbuild": "^0.21.0",
+    "hardhat": "^2.27.2",
+    "tsx": "^4.19.0"
   }
 }
