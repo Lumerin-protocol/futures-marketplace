@@ -138,26 +138,25 @@ resource "aws_iam_role_policy" "github_marketplace_deploy" {
 }
 
 ################################################################################
-# ECS UPDATE POLICY (for Market Maker and Notifications)
+# ECS UPDATE POLICY (for Notifications service only)
 ################################################################################
 resource "aws_iam_role_policy" "github_ecs_update" {
-  count = var.market_maker.create || var.notifications_service.create ? 1 : 0
-  name  = "ecs-update-market-maker-and-notifications"
+  count = var.notifications_service.create ? 1 : 0
+  name  = "ecs-update-notifications"
   role  = aws_iam_role.github_actions_futures[count.index].id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "UpdateMarketMakerECSService"
+        Sid    = "UpdateNotificationsECSService"
         Effect = "Allow"
         Action = [
           "ecs:UpdateService",
           "ecs:DescribeServices"
         ]
-        Resource = compact([
-          var.market_maker.create ? aws_ecs_service.market_maker_use1[count.index].id : null,
-          var.notifications_service.create ? aws_ecs_service.notifications_use1[count.index].id : null
-        ])
+        Resource = [
+          aws_ecs_service.notifications_use1[count.index].id
+        ]
       },
       {
         Sid    = "TaskDefinitionOperations"
@@ -197,12 +196,12 @@ resource "aws_iam_role_policy" "github_ecs_update" {
 }
 
 ################################################################################
-# LAMBDA UPDATE POLICY (for Margin Call Lambda)
+# LAMBDA UPDATE POLICY (for Margin Call and Market Maker Lambdas)
 ################################################################################
 
 resource "aws_iam_role_policy" "github_lambda_update" {
-  count = var.margin_call_lambda.create ? 1 : 0
-  name  = "lambda-update-margin-call-v2"
+  count = var.margin_call_lambda.create || var.market_maker.create ? 1 : 0
+  name  = "lambda-update-futures-lambdas"
   role  = aws_iam_role.github_actions_futures[count.index].id
 
   policy = jsonencode({
@@ -218,7 +217,10 @@ resource "aws_iam_role_policy" "github_lambda_update" {
           "lambda:PublishVersion",
           "lambda:InvokeFunction" # Allow testing the Lambda function
         ]
-        Resource = aws_lambda_function.margin_call[count.index].arn
+        Resource = compact([
+          var.margin_call_lambda.create ? aws_lambda_function.margin_call[0].arn : null,
+          var.market_maker.create ? aws_lambda_function.market_maker[0].arn : null
+        ])
       },
       {
         Sid    = "UpdateLambdaEnvironment"
@@ -226,7 +228,10 @@ resource "aws_iam_role_policy" "github_lambda_update" {
         Action = [
           "lambda:UpdateFunctionConfiguration"
         ]
-        Resource = aws_lambda_function.margin_call[count.index].arn
+        Resource = compact([
+          var.margin_call_lambda.create ? aws_lambda_function.margin_call[0].arn : null,
+          var.market_maker.create ? aws_lambda_function.market_maker[0].arn : null
+        ])
       }
     ]
   })
