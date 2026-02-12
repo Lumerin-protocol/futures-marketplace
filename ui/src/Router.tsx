@@ -28,7 +28,7 @@ export const Router: FC = () => {
         <Route
           path={"/trade/perpetual"}
           element={
-            <SuspenseLayoutLazy pageTitle="Lumerin Perpetual Marketplace">
+            <SuspenseLayoutLazy pageTitle="Lumerin Perpetuals Marketplace">
               <Perpetual />
             </SuspenseLayoutLazy>
           }

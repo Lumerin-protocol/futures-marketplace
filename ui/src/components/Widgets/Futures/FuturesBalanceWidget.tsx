@@ -184,7 +184,7 @@ export const FuturesBalanceWidget = ({
       </BalanceWidgetContainer>
 
       <ModalItem open={depositModal.isOpen} setOpen={depositModal.setOpen}>
-        <DepositForm closeForm={handleDepositSuccess} accountBalance={accountBalance} />
+        <DepositForm closeForm={handleDepositSuccess} accountBalance={accountBalance} contractMode={contractMode} />
       </ModalItem>
 
       <ModalItem open={withdrawalModal.isOpen} setOpen={withdrawalModal.setOpen}>
