@@ -320,7 +320,7 @@ export const OrderBookTable = ({
           <thead>
             <tr>
               <th>Bid</th>
-              <th>{contractMode === "futures" ? "Price/Day" : "Price"}</th>
+              <th>Price</th>
               <th>Ask</th>
             </tr>
           </thead>

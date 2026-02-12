@@ -1,13 +1,13 @@
 import { usdcMockAbi } from "contracts-js/dist/abi/abi";
-import { FuturesABI } from "../../abi/Futures";
+import { PerpsABI } from "../../../abi/Perps";
 import { useReadContract } from "wagmi";
-import { backgroundRefetchOpts } from "./config";
+import { backgroundRefetchOpts } from "../config";
 
 function usePaymentTokenAddress() {
   return useReadContract({
-    address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS,
-    abi: FuturesABI,
-    functionName: "token",
+    address: process.env.REACT_APP_PERPS_TOKEN_ADDRESS,
+    abi: PerpsABI,
+    functionName: "collateralToken",
     query: {
       staleTime: Number.POSITIVE_INFINITY,
       gcTime: Number.POSITIVE_INFINITY,
@@ -15,7 +15,7 @@ function usePaymentTokenAddress() {
   });
 }
 
-export function useFuturesPaymentTokenBalance(address: `0x${string}` | undefined) {
+export function usePerpsPaymentTokenBalance(address: `0x${string}` | undefined) {
   const { data: paymentTokenAddress } = usePaymentTokenAddress();
 
   // Read balance using the payment token address

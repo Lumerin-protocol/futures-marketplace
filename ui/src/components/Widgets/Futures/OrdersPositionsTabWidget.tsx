@@ -20,6 +20,8 @@ import { useHistoricalPositions } from "../../../hooks/data/useHistoricalPositio
 // import { waitForBlockNumberPositionBook } from "../../../hooks/data/usePositionBook";
 // import type { TransactionReceipt } from "viem";
 
+import type { AccountBalance } from "../../../types/types";
+
 type TimeFilter = "OPEN" | "LAST_30_DAYS";
 
 interface OrdersPositionsTabWidgetProps {
@@ -31,6 +33,7 @@ interface OrdersPositionsTabWidgetProps {
   onClosePosition?: (price: string, amount: number, isBuy: boolean) => void;
   participantData?: any;
   minMargin?: bigint | null;
+  accountBalance?: AccountBalance;
 }
 
 export const OrdersPositionsTabWidget = ({
@@ -42,6 +45,7 @@ export const OrdersPositionsTabWidget = ({
   onClosePosition,
   participantData,
   minMargin,
+  accountBalance,
 }: OrdersPositionsTabWidgetProps) => {
   const [activeTab, setActiveTab] = useState<"ORDERS" | "POSITIONS">("ORDERS");
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("OPEN");
@@ -147,6 +151,7 @@ export const OrdersPositionsTabWidget = ({
               isLoading={ordersLoading}
               participantData={participantData}
               minMargin={minMargin}
+              accountBalance={accountBalance}
             />
           </OrdersWrapper>
         )}

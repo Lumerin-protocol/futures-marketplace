@@ -16,22 +16,30 @@ import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpec
 import { useGetMinMargin } from "../../hooks/data/useGetMinMargin";
 import { useGetMarketPrice } from "../../hooks/data/useGetMarketPrice";
 import { useHistoricalPositions } from "../../hooks/data/useHistoricalPositions";
+import { useGetFutureBalance } from "../../hooks/data/useGetFutureBalance";
+import { useGetPerpsBalance } from "../../hooks/data/perps/useGetPerpsBalance";
+import { useFuturesPaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
+import { usePerpsPaymentTokenBalance } from "../../hooks/data/perps/usePerpsPaymentTokenBalance";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
 import type { PositionBookPosition } from "../../hooks/data/usePositionBook";
 import type { ContractMode } from "../../types/types";
 import styled from "@mui/material/styles/styled";
 
-export const Futures: FC = () => {
+interface TradingPageProps {
+  defaultMode?: ContractMode;
+}
+
+export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const { isConnected, address } = useAccount();
   const location = useLocation();
   const navigate = useNavigate();
   const previousAddressRef = useRef<string | undefined>(undefined);
 
-  // Infer initial contract mode from URL
+  // Infer initial contract mode from URL or use defaultMode prop
   const getInitialMode = (): ContractMode => {
-    if (location.pathname.includes("/trade/perpetual")) return "perpetual";
-    if (location.pathname.includes("/trade/futures")) return "futures";
-    return "futures"; // Default to futures
+    if (location.pathname.includes("/trade/perpetual") || location.pathname.includes("/perpetual")) return "perpetual";
+    if (location.pathname.includes("/trade/futures") || location.pathname.includes("/futures")) return "futures";
+    return defaultMode;
   };
 
   // Contract mode state - controls Perpetual vs Expiring Futures
@@ -72,6 +80,30 @@ export const Futures: FC = () => {
   const minMarginQuery = useGetMinMargin(address);
   const minMargin = minMarginQuery.data ?? null;
   const isLoadingMinMargin = minMarginQuery.isLoading;
+
+  // Get balance based on contract mode
+  const futuresBalanceQuery = useGetFutureBalance(address);
+  const perpsBalanceQuery = useGetPerpsBalance(address);
+  const balanceQuery = useMemo(() => {
+    const query = contractMode === "perpetual" ? perpsBalanceQuery : futuresBalanceQuery;
+    return {
+      data: query.data,
+      isLoading: query.isLoading,
+      isSuccess: query.isSuccess,
+      refetch: query.refetch,
+    };
+  }, [contractMode, futuresBalanceQuery, perpsBalanceQuery]);
+
+  // Get account (wallet) payment token balance based on contract mode
+  const futuresAccountBalance = useFuturesPaymentTokenBalance(address);
+  const perpsAccountBalance = usePerpsPaymentTokenBalance(address);
+  const accountBalanceQuery = useMemo(() => {
+    const query = contractMode === "perpetual" ? perpsAccountBalance : futuresAccountBalance;
+    return {
+      data: query.data,
+      isLoading: query.isLoading,
+    };
+  }, [contractMode, futuresAccountBalance, perpsAccountBalance]);
 
   // Get market price from contract - polls every 10 seconds
   const {
@@ -196,6 +228,8 @@ export const Futures: FC = () => {
           realizedPnL30D={totalRealizedPnL30D}
           isLoadingRealizedPnL={isHistoricalPositionsLoading}
           contractMode={contractMode}
+          balanceQuery={balanceQuery}
+          accountBalance={accountBalanceQuery}
         />
       </BalanceWidgetArea>
 
@@ -234,6 +268,7 @@ export const Futures: FC = () => {
             latestPrice={marketPrice ?? null}
             minMargin={minMargin}
             contractMode={contractMode}
+            accountBalance={accountBalanceQuery}
             onOrderPlaced={async () => {
               await minMarginQuery.refetch();
             }}
@@ -264,6 +299,7 @@ export const Futures: FC = () => {
             onClosePosition={closePositionModal.handleClosePosition}
             participantData={participantData?.data}
             minMargin={minMargin}
+            accountBalance={accountBalanceQuery}
           />
         </OrdersPositionsArea>
       )}

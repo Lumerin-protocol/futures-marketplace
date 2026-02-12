@@ -2,8 +2,8 @@ import { type FC, useCallback, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useAccount } from "wagmi";
 import { useAddMargin, useApproveAddMargin } from "../../hooks/data/useAddMargin";
-import { usePaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
 import { useApproveERC20 } from "../../hooks/data/useApproveERC20";
+import type { AccountBalance } from "../../types/types";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import { AmountInputForm } from "./Shared/AmountInputForm";
 import { formatValue, paymentToken } from "../../lib/units";
@@ -11,18 +11,19 @@ import { parseUnits } from "viem";
 
 interface DepositFormProps {
   closeForm: () => void;
+  accountBalance?: AccountBalance;
 }
 
 interface InputValues {
   amount: string;
 }
 
-export const DepositForm: FC<DepositFormProps> = ({ closeForm }) => {
+export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance }) => {
   const { address } = useAccount();
   const { addMarginAsync } = useAddMargin();
   const { approveAsync } = useApproveAddMargin();
 
-  const paymentTokenBalance = usePaymentTokenBalance(address);
+  const paymentTokenBalance = accountBalance ?? { data: undefined, isLoading: false };
 
   const form = useForm<InputValues>({
     mode: "onBlur",

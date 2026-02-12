@@ -13,8 +13,8 @@ import styled from "@mui/material/styles/styled";
 import { handleNumericDecimalInput } from "./Shared/AmountInputForm";
 import { getMinMarginForPositionManual } from "../../hooks/data/getMinMarginForPositionManual";
 import { useGetFutureBalance } from "../../hooks/data/useGetFutureBalance";
-import { usePaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
 import { useOrderFee } from "../../hooks/data/useOrderFee";
+import type { AccountBalance } from "../../types/types";
 
 interface ModifyOrderFormProps {
   order: ParticipantOrder;
@@ -27,6 +27,7 @@ interface ModifyOrderFormProps {
   deliveryDurationDays: number;
   minMargin?: bigint | null;
   newestItemPrice: number | null;
+  accountBalance?: AccountBalance;
 }
 
 interface ModifyFormValues {
@@ -46,12 +47,13 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
     deliveryDurationDays,
     minMargin,
     newestItemPrice,
+    accountBalance,
   }) => {
     const { modifyOrderAsync } = useModifyOrder();
     const qc = useQueryClient();
     const { address } = useAccount();
     const balanceQuery = useGetFutureBalance(address);
-    const accountBalanceQuery = usePaymentTokenBalance(address);
+    const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
     const { data: orderFeeRaw } = useOrderFee(address);
 
     // Determine order type from quantity sign

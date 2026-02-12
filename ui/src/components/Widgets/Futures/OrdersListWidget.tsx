@@ -11,15 +11,17 @@ import Tooltip from "@mui/material/Tooltip";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
+import type { AccountBalance } from "../../../types/types";
 
 interface OrdersListWidgetProps {
   orders: ParticipantOrder[];
   isLoading?: boolean;
   participantData?: any;
   minMargin?: bigint | null;
+  accountBalance?: AccountBalance;
 }
 
-export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin }: OrdersListWidgetProps) => {
+export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin, accountBalance }: OrdersListWidgetProps) => {
   const modifyModal = useModal();
   const closeModal = useModal();
   const { data: marketPrice } = useGetMarketPrice();
@@ -238,6 +240,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
             deliveryDurationDays={deliveryDurationDays}
             minMargin={minMargin}
             newestItemPrice={newestItemPrice}
+            accountBalance={accountBalance}
             closeForm={() => {
               modifyModal.close();
               setSelectedOrder(null);

@@ -1,7 +1,6 @@
 import styled from "@mui/material/styles/styled";
 import { useAccount } from "wagmi";
 import { useMemo } from "react";
-import { useGetFutureBalance } from "../../../hooks/data/useGetFutureBalance";
 import { useLmrBalanceValidation } from "../../../hooks/data/useLmrBalanceValidation";
 import { useModal } from "../../../hooks/useModal";
 import { SmallWidget } from "../../Cards/Cards.styled";
@@ -13,7 +12,14 @@ import { ModalItem } from "../../Modal";
 import { DepositForm } from "../../Forms/DepositForm";
 import { WithdrawalForm } from "../../Forms/WithdrawalForm";
 import EastIcon from "@mui/icons-material/East";
-import type { ContractMode } from "../../../types/types";
+import type { ContractMode, AccountBalance } from "../../../types/types";
+
+interface BalanceQueryResult {
+  data: bigint | undefined;
+  isLoading: boolean;
+  isSuccess: boolean;
+  refetch: () => void;
+}
 
 interface FuturesBalanceWidgetProps {
   minMargin: bigint | null;
@@ -22,6 +28,8 @@ interface FuturesBalanceWidgetProps {
   realizedPnL30D: number | null;
   isLoadingRealizedPnL?: boolean;
   contractMode?: ContractMode;
+  balanceQuery: BalanceQueryResult;
+  accountBalance?: AccountBalance;
 }
 
 export const FuturesBalanceWidget = ({
@@ -31,26 +39,27 @@ export const FuturesBalanceWidget = ({
   realizedPnL30D,
   isLoadingRealizedPnL,
   contractMode = "futures",
+  balanceQuery,
+  accountBalance,
 }: FuturesBalanceWidgetProps) => {
   const { address } = useAccount();
-  const futureBalance = useGetFutureBalance(address);
   const lmrBalanceValidation = useLmrBalanceValidation(address);
   const depositModal = useModal();
   const withdrawalModal = useModal();
 
   const handleDepositSuccess = () => {
-    futureBalance.refetch();
+    balanceQuery.refetch();
     depositModal.close();
   };
 
   const handleWithdrawalSuccess = () => {
-    futureBalance.refetch();
+    balanceQuery.refetch();
     withdrawalModal.close();
   };
 
-  const isLoading = futureBalance.isLoading;
-  const isSuccess = !!(futureBalance.isSuccess && address);
-  const balanceValue = formatValue(futureBalance.data ?? 0n, paymentToken);
+  const isLoading = balanceQuery.isLoading;
+  const isSuccess = !!(balanceQuery.isSuccess && address);
+  const balanceValue = formatValue(balanceQuery.data ?? 0n, paymentToken);
   const lockedBalanceValue = formatValue(minMargin ?? 0n, paymentToken);
   const unrealizedPnLValue = formatValue(unrealizedPnL ?? 0n, paymentToken);
   const unrealizedPnlColor =
@@ -67,11 +76,11 @@ export const FuturesBalanceWidget = ({
   // Check if locked amount is at or above threshold percentage of balance
   const lockedBalanceThreshold = Number(process.env.REACT_APP_MARGIN_UTILIZATION_WARNING_PERCENT || "80");
   const shouldHighlight = useMemo(() => {
-    if (!futureBalance.data || !minMargin || futureBalance.data === 0n) return false;
+    if (!balanceQuery.data || !minMargin || balanceQuery.data === 0n) return false;
     const lockedAmount = minMargin > 0n ? minMargin : -minMargin; // Use absolute value
-    const lockedPercentage = (Number(lockedAmount) / Number(futureBalance.data)) * 100;
+    const lockedPercentage = (Number(lockedAmount) / Number(balanceQuery.data)) * 100;
     return lockedPercentage >= lockedBalanceThreshold;
-  }, [futureBalance.data, minMargin, lockedBalanceThreshold]);
+  }, [balanceQuery.data, minMargin, lockedBalanceThreshold]);
 
   return (
     <>
@@ -175,7 +184,7 @@ export const FuturesBalanceWidget = ({
       </BalanceWidgetContainer>
 
       <ModalItem open={depositModal.isOpen} setOpen={depositModal.setOpen}>
-        <DepositForm closeForm={handleDepositSuccess} />
+        <DepositForm closeForm={handleDepositSuccess} accountBalance={accountBalance} />
       </ModalItem>
 
       <ModalItem open={withdrawalModal.isOpen} setOpen={withdrawalModal.setOpen}>

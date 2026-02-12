@@ -28,12 +28,11 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { Participant } from "../../../hooks/data/useParticipant";
-import type { ContractMode } from "../../../types/types";
+import type { ContractMode, AccountBalance } from "../../../types/types";
 import { useAccount } from "wagmi";
 import { useGetFutureBalance } from "../../../hooks/data/useGetFutureBalance";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
 import { handleNumericDecimalInput } from "../../Forms/Shared/AmountInputForm";
-import { usePaymentTokenBalance } from "../../../hooks/data/usePaymentTokenBalance";
 import { useOrderFee } from "../../../hooks/data/useOrderFee";
 
 interface PlaceOrderWidgetProps {
@@ -50,6 +49,7 @@ interface PlaceOrderWidgetProps {
   onOrderPlaced?: () => void | Promise<void>;
   minMargin?: bigint | null;
   contractMode?: ContractMode;
+  accountBalance?: AccountBalance;
 }
 
 export const PlaceOrderWidget = ({
@@ -65,11 +65,12 @@ export const PlaceOrderWidget = ({
   onOrderPlaced,
   minMargin,
   contractMode = "futures",
+  accountBalance,
 }: PlaceOrderWidgetProps) => {
   const { data: marketPrice, isLoading: isMarketPriceLoading } = useGetMarketPrice();
   const { address } = useAccount();
   const balanceQuery = useGetFutureBalance(address);
-  const accountBalanceQuery = usePaymentTokenBalance(address);
+  const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
   const { data: orderFeeRaw } = useOrderFee(address);
 
   // Calculate price step from contract specs
