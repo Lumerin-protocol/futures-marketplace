@@ -13,6 +13,7 @@ import { ModalItem } from "../../Modal";
 import { DepositForm } from "../../Forms/DepositForm";
 import { WithdrawalForm } from "../../Forms/WithdrawalForm";
 import EastIcon from "@mui/icons-material/East";
+import type { ContractMode } from "../../../types/types";
 
 interface FuturesBalanceWidgetProps {
   minMargin: bigint | null;
@@ -20,6 +21,7 @@ interface FuturesBalanceWidgetProps {
   unrealizedPnL: bigint | null;
   realizedPnL30D: number | null;
   isLoadingRealizedPnL?: boolean;
+  contractMode?: ContractMode;
 }
 
 export const FuturesBalanceWidget = ({
@@ -28,6 +30,7 @@ export const FuturesBalanceWidget = ({
   unrealizedPnL,
   realizedPnL30D,
   isLoadingRealizedPnL,
+  contractMode = "futures",
 }: FuturesBalanceWidgetProps) => {
   const { address } = useAccount();
   const futureBalance = useGetFutureBalance(address);
@@ -76,7 +79,7 @@ export const FuturesBalanceWidget = ({
         {address && (
           <div className="flex items-center justify-center" style={{ fontSize: "0.75rem" }}>
             <UsdcIcon style={{ width: "18px", marginRight: "6px" }} />
-            <span>Portfolio Overview (USDC)</span>
+            <span>{contractMode === "perpetual" ? "Perpetual" : "Futures"} Portfolio Overview (USDC)</span>
           </div>
         )}
         <BalanceContainer $shouldHighlight={shouldHighlight}>

@@ -195,6 +195,7 @@ export const Futures: FC = () => {
           unrealizedPnL={totalUnrealizedPnL}
           realizedPnL30D={totalRealizedPnL30D}
           isLoadingRealizedPnL={isHistoricalPositionsLoading}
+          contractMode={contractMode}
         />
       </BalanceWidgetArea>
 
