@@ -14,8 +14,27 @@ export const Router: FC = () => {
   return (
     <Suspense>
       <Routes>
+        {/* Default route - redirects to futures mode */}
         <Route
           path={"/"}
+          element={
+            <SuspenseLayoutLazy pageTitle="Lumerin Futures Marketplace">
+              <Futures />
+            </SuspenseLayoutLazy>
+          }
+        />
+        {/* Perpetual trading mode */}
+        <Route
+          path={"/trade/perpetual"}
+          element={
+            <SuspenseLayoutLazy pageTitle="Lumerin Futures Marketplace">
+              <Futures />
+            </SuspenseLayoutLazy>
+          }
+        />
+        {/* Expiring Futures trading mode */}
+        <Route
+          path={"/trade/futures"}
           element={
             <SuspenseLayoutLazy pageTitle="Lumerin Futures Marketplace">
               <Futures />

@@ -8,12 +8,14 @@ import { createFinalOrderBookData } from "./orderBookHelpers";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
+import type { ContractMode } from "../../../types/types";
 
 interface OrderBookTableProps {
   onRowClick?: (price: string, amount: number | null) => void;
   onDeliveryDateChange?: (deliveryDate: number | undefined) => void;
   contractSpecsQuery: UseQueryResult<GetResponse<FuturesContractSpecs>, Error>;
   previousOrderBookStateRef: React.MutableRefObject<Map<number, { bidUnits: number | null; askUnits: number | null }>>;
+  contractMode?: ContractMode;
 }
 
 export const OrderBookTable = ({
@@ -21,6 +23,7 @@ export const OrderBookTable = ({
   onDeliveryDateChange,
   contractSpecsQuery,
   previousOrderBookStateRef,
+  contractMode = "futures",
 }: OrderBookTableProps) => {
   const [selectedDateIndex, setSelectedDateIndex] = useState(0);
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -295,27 +298,29 @@ export const OrderBookTable = ({
 
   return (
     <OrderBookWidget>
-      <h3>Order Book</h3>
-      <Header>
-        <button onClick={goToPreviousDate} className="nav-arrow" disabled={selectedDateIndex === 0 || isLoading}>
-          ←
-        </button>
-        <h3>{selectedDateDisplay}</h3>
-        <button
-          onClick={goToNextDate}
-          className="nav-arrow"
-          disabled={selectedDateIndex === deliveryDates.length - 1 || isLoading}
-        >
-          →
-        </button>
-      </Header>
+      <h3>Order Book{contractMode === "perpetual" ? " - PERP" : ""}</h3>
+      {contractMode === "futures" && (
+        <Header>
+          <button onClick={goToPreviousDate} className="nav-arrow" disabled={selectedDateIndex === 0 || isLoading}>
+            ←
+          </button>
+          <h3>{selectedDateDisplay}</h3>
+          <button
+            onClick={goToNextDate}
+            className="nav-arrow"
+            disabled={selectedDateIndex === deliveryDates.length - 1 || isLoading}
+          >
+            →
+          </button>
+        </Header>
+      )}
 
       <TableContainer ref={tableContainerRef}>
         <Table>
           <thead>
             <tr>
               <th>Bid</th>
-              <th>Price</th>
+              <th>{contractMode === "futures" ? "Price/Day" : "Price"}</th>
               <th>Ask</th>
             </tr>
           </thead>

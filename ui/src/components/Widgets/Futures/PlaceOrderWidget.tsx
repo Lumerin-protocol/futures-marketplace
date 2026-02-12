@@ -28,6 +28,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { Participant } from "../../../hooks/data/useParticipant";
+import type { ContractMode } from "../../../types/types";
 import { useAccount } from "wagmi";
 import { useGetFutureBalance } from "../../../hooks/data/useGetFutureBalance";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
@@ -48,6 +49,7 @@ interface PlaceOrderWidgetProps {
   highlightMode: "inputs" | "buttons" | undefined;
   onOrderPlaced?: () => void | Promise<void>;
   minMargin?: bigint | null;
+  contractMode?: ContractMode;
 }
 
 export const PlaceOrderWidget = ({
@@ -62,6 +64,7 @@ export const PlaceOrderWidget = ({
   highlightMode,
   onOrderPlaced,
   minMargin,
+  contractMode = "futures",
 }: PlaceOrderWidgetProps) => {
   const { data: marketPrice, isLoading: isMarketPriceLoading } = useGetMarketPrice();
   const { address } = useAccount();
@@ -401,7 +404,7 @@ export const PlaceOrderWidget = ({
         <MainSection>
           <InputSection>
             <InputGroup $isHighlighted={highlightedButton !== null}>
-              <label>Price per day (USDC)</label>
+              <label>{contractMode === "futures" ? "Price per day (USDC)" : "Price (USDC)"}</label>
               <PriceInputContainer $isHighlighted={highlightedButton !== null}>
                 <PriceButton
                   onClick={decrementPrice}

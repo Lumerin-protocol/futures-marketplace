@@ -25,6 +25,8 @@ export const EnvSchema = Type.Object({
   REACT_APP_FUTURES_REQUIRED_LMR: Type.String({ default: "10000" }),
   REACT_APP_SUBGRAPH_FUTURES_URL: Type.String({ format: "uri" }),
   REACT_APP_SUBGRAPH_ORACLES_URL: Type.String({ format: "uri" }),
+  REACT_APP_PERPS_TOKEN_ADDRESS: Type.Optional(TypeEthAddress()),
+  REACT_APP_SUBGRAPH_PERPS_URL: Type.Optional(Type.String({ format: "uri" })),
   REACT_APP_FUTURES_HIGH_PRICE_PERCENTAGE: Type.Integer({ minimum: 0, maximum: 300, default: 50 }),
   REACT_APP_MARGIN_UTILIZATION_WARNING_PERCENT: Type.Integer({ minimum: 0, maximum: 100, default: 80 }),
   REACT_APP_FUTURES_DOCS_URL: Type.String({

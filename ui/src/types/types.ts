@@ -1,6 +1,9 @@
 // Exported types here
 // Types local to a file will be in that file
 
+// Contract Mode for Perpetual vs Expiring Futures
+export type ContractMode = "perpetual" | "futures";
+
 // Enums
 export enum WalletText {
   ConnectViaMetaMask = "MetaMask",
