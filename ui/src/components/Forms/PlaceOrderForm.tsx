@@ -181,7 +181,9 @@ export const PlaceOrderForm: FC<Props> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-300">Quantity:</span>
-                <span className="text-white">{absoluteQuantity} units</span>
+                <span className="text-white">
+                  {contractMode === "perpetual" ? absoluteQuantity.toFixed(6) : absoluteQuantity} units
+                </span>
               </div>
               {contractMode === "futures" && (
                 <div className="flex justify-between">

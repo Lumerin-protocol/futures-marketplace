@@ -2,17 +2,16 @@ import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { getContract } from "viem";
 import { PerpsABI } from "../../../abi/Perps";
 
-interface CreatePerpsOrderProps {
-  price: bigint;
-  quantity: number; // Positive for Buy, Negative for Sell
+interface CancelPerpsOrderProps {
+  orderId: `0x${string}`;
 }
 
-export function useCreatePerpsOrder() {
+export function useCancelPerpsOrder() {
   const { writeContractAsync, isPending, isError, error, data: hash } = useWriteContract();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
 
-  const createOrderAsync = async (props: CreatePerpsOrderProps) => {
+  const cancelOrderAsync = async (props: CancelPerpsOrderProps) => {
     if (!writeContractAsync || !publicClient || !walletClient) return;
 
     const perpsContract = getContract({
@@ -21,14 +20,8 @@ export function useCreatePerpsOrder() {
       client: publicClient,
     });
 
-    // Convert quantity to bigint (int256 in contract)
-    // Contract expects: positive = Buy, negative = Sell
-    // Multiply by 1e6 to convert decimal to integer (6 decimals precision)
-    const quantityWithDecimals = Math.round(props.quantity * 1e6);
-    const quantityBigInt = BigInt(quantityWithDecimals);
-
-    const req = await perpsContract.simulate.createOrder(
-      [props.price, quantityBigInt],
+    const req = await perpsContract.simulate.cancelOrder(
+      [props.orderId],
       { account: walletClient.account.address },
     );
 
@@ -36,7 +29,7 @@ export function useCreatePerpsOrder() {
   };
 
   return {
-    createOrderAsync,
+    cancelOrderAsync,
     isPending,
     isError,
     error,
