@@ -1,6 +1,6 @@
 import { memo, useCallback, useState, type FC } from "react";
 import { useForm, useController, type Control } from "react-hook-form";
-import { waitForAggregateBlockNumber, AGGREGATE_ORDER_BOOK_QK } from "../../hooks/data/useAggregateOrderBook";
+import { waitForOrderBookBlockNumber, getOrderBookQueryKey } from "../../hooks/data/orderBookHelpers";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import type { TransactionReceipt } from "viem";
 import { useModifyOrder } from "../../hooks/data/useModifyOrder";
@@ -13,8 +13,8 @@ import styled from "@mui/material/styles/styled";
 import { handleNumericDecimalInput } from "./Shared/AmountInputForm";
 import { getMinMarginForPositionManual } from "../../hooks/data/getMinMarginForPositionManual";
 import { useGetFutureBalance } from "../../hooks/data/useGetFutureBalance";
-import { usePaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
 import { useOrderFee } from "../../hooks/data/useOrderFee";
+import type { AccountBalance, ContractMode } from "../../types/types";
 
 interface ModifyOrderFormProps {
   order: ParticipantOrder;
@@ -27,6 +27,8 @@ interface ModifyOrderFormProps {
   deliveryDurationDays: number;
   minMargin?: bigint | null;
   newestItemPrice: number | null;
+  accountBalance?: AccountBalance;
+  contractMode?: ContractMode;
 }
 
 interface ModifyFormValues {
@@ -46,12 +48,14 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
     deliveryDurationDays,
     minMargin,
     newestItemPrice,
+    accountBalance,
+    contractMode = "futures",
   }) => {
     const { modifyOrderAsync } = useModifyOrder();
     const qc = useQueryClient();
     const { address } = useAccount();
     const balanceQuery = useGetFutureBalance(address);
-    const accountBalanceQuery = usePaymentTokenBalance(address);
+    const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
     const { data: orderFeeRaw } = useOrderFee(address);
 
     // Determine order type from quantity sign
@@ -273,11 +277,11 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
             },
             postConfirmation: async (receipt: TransactionReceipt) => {
               // Wait for block number to ensure indexer has updated
-              await waitForAggregateBlockNumber(receipt.blockNumber, qc, Number(order.deliveryAt));
+              await waitForOrderBookBlockNumber(receipt.blockNumber, qc, contractMode, Number(order.deliveryAt));
 
               // Refetch order book, positions, and participant data
               await Promise.all([
-                qc.invalidateQueries({ queryKey: [AGGREGATE_ORDER_BOOK_QK] }),
+                qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
                 address && qc.invalidateQueries({ queryKey: [POSITION_BOOK_QK] }),
                 address && qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
               ]);

@@ -9,12 +9,14 @@ import { DetailedSpecsModal } from "./DetailedSpecsModal";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
+import type { ContractMode } from "../../../types/types";
 
 interface FuturesMarketWidgetProps {
   contractSpecsQuery: UseQueryResult<GetResponse<FuturesContractSpecs>, Error>;
+  contractMode?: ContractMode;
 }
 
-export const FuturesMarketWidget = ({ contractSpecsQuery }: FuturesMarketWidgetProps) => {
+export const FuturesMarketWidget = ({ contractSpecsQuery, contractMode = "futures" }: FuturesMarketWidgetProps) => {
   const { data: contractSpecs, isLoading, error } = contractSpecsQuery;
   const detailedSpecsModal = useModal();
 
@@ -52,10 +54,18 @@ export const FuturesMarketWidget = ({ contractSpecsQuery }: FuturesMarketWidgetP
                 <h4>{formatSpeed(contractSpecs.data.speedHps)}</h4>
                 <p>CONTRACT SPEED</p>
               </div>
-              <div className="stat">
-                <h4>{formatDuration(contractSpecs.data.deliveryDurationSeconds)}</h4>
-                <p>DELIVERY DURATION</p>
-              </div>
+              {contractMode === "futures" && (
+                <div className="stat">
+                  <h4>{formatDuration(contractSpecs.data.deliveryDurationSeconds)}</h4>
+                  <p>DELIVERY DURATION</p>
+                </div>
+              )}
+              {contractMode === "perpetual" && (
+                <div className="stat">
+                  <h4>0.01%</h4>
+                  <p>FUNDING RATE</p>
+                </div>
+              )}
             </>
           )}
         </MarketStats>

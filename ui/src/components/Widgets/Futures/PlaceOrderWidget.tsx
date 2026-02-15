@@ -28,11 +28,11 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { Participant } from "../../../hooks/data/useParticipant";
+import type { ContractMode, AccountBalance } from "../../../types/types";
 import { useAccount } from "wagmi";
 import { useGetFutureBalance } from "../../../hooks/data/useGetFutureBalance";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
-import { handleNumericDecimalInput } from "../../Forms/Shared/AmountInputForm";
-import { usePaymentTokenBalance } from "../../../hooks/data/usePaymentTokenBalance";
+import { handleNumericDecimalInput, handleNumericDecimalInput6Decimals } from "../../Forms/Shared/AmountInputForm";
 import { useOrderFee } from "../../../hooks/data/useOrderFee";
 
 interface PlaceOrderWidgetProps {
@@ -48,6 +48,8 @@ interface PlaceOrderWidgetProps {
   highlightMode: "inputs" | "buttons" | undefined;
   onOrderPlaced?: () => void | Promise<void>;
   minMargin?: bigint | null;
+  contractMode?: ContractMode;
+  accountBalance?: AccountBalance;
 }
 
 export const PlaceOrderWidget = ({
@@ -62,11 +64,13 @@ export const PlaceOrderWidget = ({
   highlightMode,
   onOrderPlaced,
   minMargin,
+  contractMode = "futures",
+  accountBalance,
 }: PlaceOrderWidgetProps) => {
   const { data: marketPrice, isLoading: isMarketPriceLoading } = useGetMarketPrice();
   const { address } = useAccount();
   const balanceQuery = useGetFutureBalance(address);
-  const accountBalanceQuery = usePaymentTokenBalance(address);
+  const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
   const { data: orderFeeRaw } = useOrderFee(address);
 
   // Calculate price step from contract specs
@@ -83,7 +87,7 @@ export const PlaceOrderWidget = ({
 
   const [price, setPrice] = useState("5.00"); // Will be updated when hashrate data loads
   const [priceInitialized, setPriceInitialized] = useState(false); // Track if price has been initialized from hashrate
-  const [amount, setAmount] = useState(1);
+  const [amount, setAmount] = useState<number | string>(1); // Can be number or string to support decimals in perpetuals
   const [highlightedButton, setHighlightedButton] = useState<"buy" | "sell" | "inputs" | null>(null);
   const [showHighPriceModal, setShowHighPriceModal] = useState(false);
   const [showConflictModal, setShowConflictModal] = useState(false);
@@ -123,6 +127,12 @@ export const PlaceOrderWidget = ({
       setAmount(externalAmount);
     }
   }, [externalAmount]);
+
+  // Helper to get numeric amount value for calculations
+  const getNumericAmount = (): number => {
+    const parsed = typeof amount === "string" ? parseFloat(amount) : amount;
+    return isNaN(parsed) || parsed <= 0 ? 0 : parsed;
+  };
 
   // Highlight button when position is closed and values are substituted
   useEffect(() => {
@@ -185,8 +195,14 @@ export const PlaceOrderWidget = ({
   };
 
   const handleBuy = async () => {
-    if (!externalDeliveryDate) {
+    if (!externalDeliveryDate && contractMode === "futures") {
       alert("Please select a price from the order book to set delivery date");
+      return;
+    }
+
+    const numericAmount = getNumericAmount();
+    if (numericAmount <= 0) {
+      alert("Quantity must be greater than 0");
       return;
     }
 
@@ -204,7 +220,7 @@ export const PlaceOrderWidget = ({
 
     const requiredMargin = getMinMarginForPositionManual(
       priceInWei,
-      amount, // Positive quantity for Buy
+      numericAmount, // Positive quantity for Buy
       latestPrice,
       marginPercent,
       deliveryDurationDays,
@@ -230,15 +246,15 @@ export const PlaceOrderWidget = ({
     }
 
     // Check for conflicting orders (opposite action, same price, same delivery date)
-    if (participantData?.orders) {
+    if (participantData?.orders && (contractMode === "perpetual" || externalDeliveryDate !== undefined)) {
       const priceInWei = BigInt(Math.round(currentPrice * 1e6));
-      const deliveryDateValue = BigInt(externalDeliveryDate);
+      const deliveryDateValue = externalDeliveryDate ? BigInt(externalDeliveryDate) : 0n;
       const conflictingOrder = participantData.orders.find(
         (order) =>
           order.isActive &&
           !order.isBuy && // Opposite action (Sell)
           order.pricePerDay === priceInWei &&
-          order.deliveryAt === deliveryDateValue,
+          (contractMode === "perpetual" || order.deliveryAt === deliveryDateValue),
       );
 
       if (conflictingOrder) {
@@ -246,8 +262,8 @@ export const PlaceOrderWidget = ({
         setConflictingOrderQuantity(null);
         setPendingOrder({
           price: currentPrice,
-          amount: amount,
-          quantity: amount, // Positive for Buy
+          amount: numericAmount,
+          quantity: numericAmount, // Positive for Buy
         });
         setShowConflictModal(true);
         return;
@@ -260,19 +276,25 @@ export const PlaceOrderWidget = ({
     if (currentPrice > maxAllowedPrice) {
       setPendingOrder({
         price: currentPrice,
-        amount: amount,
-        quantity: amount, // Positive for Buy
+        amount: numericAmount,
+        quantity: numericAmount, // Positive for Buy
       });
       setShowHighPriceModal(true);
       return;
     }
 
-    openOrderForm(currentPrice, amount, amount); // Positive quantity for Buy
+    openOrderForm(currentPrice, numericAmount, numericAmount); // Positive quantity for Buy
   };
 
   const handleSell = async () => {
-    if (!externalDeliveryDate) {
+    if (!externalDeliveryDate && contractMode === "futures") {
       alert("Please select a price from the order book to set delivery date");
+      return;
+    }
+
+    const numericAmount = getNumericAmount();
+    if (numericAmount <= 0) {
+      alert("Quantity must be greater than 0");
       return;
     }
 
@@ -290,7 +312,7 @@ export const PlaceOrderWidget = ({
 
     const requiredMargin = getMinMarginForPositionManual(
       priceInWei,
-      -amount, // Negative quantity for Sell
+      -numericAmount, // Negative quantity for Sell
       latestPrice,
       marginPercent,
       deliveryDurationDays,
@@ -316,15 +338,15 @@ export const PlaceOrderWidget = ({
     }
 
     // Check for conflicting orders (opposite action, same price, same delivery date)
-    if (participantData?.orders) {
+    if (participantData?.orders && (contractMode === "perpetual" || externalDeliveryDate !== undefined)) {
       const priceInWei = BigInt(Math.round(currentPrice * 1e6));
-      const deliveryDateValue = BigInt(externalDeliveryDate);
+      const deliveryDateValue = externalDeliveryDate ? BigInt(externalDeliveryDate) : 0n;
       const conflictingOrder = participantData.orders.find(
         (order) =>
           order.isActive &&
           order.isBuy && // Opposite action (Buy)
           order.pricePerDay === priceInWei &&
-          order.deliveryAt === deliveryDateValue,
+          (contractMode === "perpetual" || order.deliveryAt === deliveryDateValue),
       );
 
       if (conflictingOrder) {
@@ -332,8 +354,8 @@ export const PlaceOrderWidget = ({
         setConflictingOrderQuantity(null);
         setPendingOrder({
           price: currentPrice,
-          amount: amount,
-          quantity: -amount, // Negative for Sell
+          amount: numericAmount,
+          quantity: -numericAmount, // Negative for Sell
         });
         setShowConflictModal(true);
         return;
@@ -346,14 +368,14 @@ export const PlaceOrderWidget = ({
     if (currentPrice > maxAllowedPrice) {
       setPendingOrder({
         price: currentPrice,
-        amount: amount,
-        quantity: -amount, // Negative for Sell
+        amount: numericAmount,
+        quantity: -numericAmount, // Negative for Sell
       });
       setShowHighPriceModal(true);
       return;
     }
 
-    openOrderForm(currentPrice, amount, -amount); // Negative quantity for Sell
+    openOrderForm(currentPrice, numericAmount, -numericAmount); // Negative quantity for Sell
   };
 
   const openOrderForm = (orderPrice: number, orderAmount: number, quantity: number) => {
@@ -401,7 +423,7 @@ export const PlaceOrderWidget = ({
         <MainSection>
           <InputSection>
             <InputGroup $isHighlighted={highlightedButton !== null}>
-              <label>Price per day (USDC)</label>
+              <label>{contractMode === "futures" ? "Price per day (USDC)" : "Price (USDC)"}</label>
               <PriceInputContainer $isHighlighted={highlightedButton !== null}>
                 <PriceButton
                   onClick={decrementPrice}
@@ -434,13 +456,25 @@ export const PlaceOrderWidget = ({
 
             <InputGroup $isHighlighted={highlightedButton !== null}>
               <label>Quantity</label>
-              <input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(Number(e.target.value.replace("-", "")))}
-                min="1"
-                max="50"
-              />
+              {contractMode === "perpetual" ? (
+                <input
+                  type="text"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value.replace("-", ""))}
+                  onBeforeInput={handleNumericDecimalInput6Decimals}
+                  inputMode="decimal"
+                  placeholder="0.000001"
+                  style={{ minWidth: "70px" }}
+                />
+              ) : (
+                <input
+                  type="number"
+                  value={amount}
+                  onChange={(e) => setAmount(Number(e.target.value.replace("-", "")))}
+                  min="1"
+                  max="50"
+                />
+              )}
             </InputGroup>
           </InputSection>
 
@@ -463,6 +497,7 @@ export const PlaceOrderWidget = ({
           contractSpecsQuery={contractSpecsQuery}
           onConfirm={handleConfirmHighPrice}
           onCancel={handleCancelHighPrice}
+          contractMode={contractMode}
         />
       </ModalItem>
 
@@ -473,6 +508,7 @@ export const PlaceOrderWidget = ({
           externalDeliveryDate={externalDeliveryDate}
           onConfirm={handleConfirmConflict}
           onCancel={handleCancelConflict}
+          contractMode={contractMode}
         />
       </ModalItem>
 
@@ -494,6 +530,7 @@ export const PlaceOrderWidget = ({
             latestPrice={latestPrice}
             onOrderPlaced={onOrderPlaced}
             bypassConflictCheck={bypassConflictCheck}
+            contractMode={contractMode}
             closeForm={() => {
               setShowOrderForm(false);
               setPendingOrder(null);
@@ -513,12 +550,14 @@ const ConflictingOrderModal = ({
   externalDeliveryDate,
   onConfirm,
   onCancel,
+  contractMode = "futures",
 }: {
   pendingOrder: { price: number; amount: number; quantity: number } | null;
   conflictingOrderQuantity: number | null;
   externalDeliveryDate?: number;
   onConfirm: () => void;
   onCancel: () => void;
+  contractMode?: ContractMode;
 }) => {
   if (!pendingOrder) return null;
 
@@ -533,7 +572,7 @@ const ConflictingOrderModal = ({
       <div className="bg-orange-900/20 border border-orange-500/30 rounded-lg p-4">
         <p className="text-gray-300 text-sm mb-3">
           You already have an active <strong className="text-white">{oppositeAction}</strong> order at the same price
-          and delivery date.
+          {contractMode === "futures" && " and delivery date"}.
         </p>
 
         <div className="space-y-2 text-sm">
@@ -541,18 +580,23 @@ const ConflictingOrderModal = ({
             <span className="text-gray-300">Price:</span>
             <span className="text-white font-medium">{pendingOrder.price.toFixed(2)} USDC</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-300">Delivery Date:</span>
-            <span className="text-white font-medium">{deliveryDateFormatted}</span>
-          </div>
+          {contractMode === "futures" && (
+            <div className="flex justify-between">
+              <span className="text-gray-300">Delivery Date:</span>
+              <span className="text-white font-medium">{deliveryDateFormatted}</span>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="bg-white-900/20 border border-white-500/30 rounded-lg p-4">
         <p className="text-white-300 text-sm leading-relaxed">
-          <strong>Important:</strong> Your order of <strong>{pendingOrder.amount} units</strong> will be placed as
-          specified. However, it will be matched against your existing {oppositeAction} order and offset orders will be
-          closed.
+          <strong>Important:</strong> Your order of{" "}
+          <strong>
+            {contractMode === "perpetual" ? pendingOrder.amount.toFixed(6) : pendingOrder.amount} units
+          </strong>{" "}
+          will be placed as specified. However, it will be matched against your existing {oppositeAction} order and
+          offset orders will be closed.
         </p>
       </div>
 
@@ -571,6 +615,7 @@ const HighPriceConfirmationModal = ({
   contractSpecsQuery,
   onConfirm,
   onCancel,
+  contractMode = "futures",
 }: {
   pendingOrder: { price: number; amount: number; quantity: number } | null;
   newestItemPrice: number;
@@ -578,6 +623,7 @@ const HighPriceConfirmationModal = ({
   contractSpecsQuery: UseQueryResult<GetResponse<FuturesContractSpecs>, Error>;
   onConfirm: () => void;
   onCancel: () => void;
+  contractMode?: ContractMode;
 }) => {
   if (!pendingOrder) return null;
 
@@ -622,7 +668,9 @@ const HighPriceConfirmationModal = ({
           </div>
           <div className="flex justify-between">
             <span className="text-gray-300">Amount:</span>
-            <span className="text-white">{pendingOrder.amount} units</span>
+            <span className="text-white">
+              {contractMode === "perpetual" ? pendingOrder.amount.toFixed(6) : pendingOrder.amount} units
+            </span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-300">Total Value:</span>
@@ -630,10 +678,12 @@ const HighPriceConfirmationModal = ({
               {(pendingOrder.price * pendingOrder.amount * deliveryDurationDays).toFixed(2)} USDC
             </span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-300">Expected Hashrate:</span>
-            <span className="text-white">{pendingOrder.amount * 100} Th/s</span>
-          </div>
+          {contractMode === "futures" && (
+            <div className="flex justify-between">
+              <span className="text-gray-300">Expected Hashrate:</span>
+              <span className="text-white">{pendingOrder.amount * 100} Th/s</span>
+            </div>
+          )}
         </div>
       </div>
 

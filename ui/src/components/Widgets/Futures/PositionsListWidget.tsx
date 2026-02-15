@@ -3,6 +3,7 @@ import Tooltip from "@mui/material/Tooltip";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import type { PositionBookPosition } from "../../../hooks/data/usePositionBook";
 import { useCreateOrder } from "../../../hooks/data/useCreateOrder";
+import { useCreatePerpsOrder } from "../../../hooks/data/perps/useCreatePerpsOrder";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { ServerStackIcon, CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
 import { useModal } from "../../../hooks/useModal";
@@ -11,12 +12,14 @@ import { DepositDeliveryPaymentForm } from "../../Forms/DepositDeliveryPaymentFo
 import { useState } from "react";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
 import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
+import type { ContractMode } from "../../../types/types";
 
 interface PositionsListWidgetProps {
   positions: PositionBookPosition[];
   isLoading?: boolean;
   participantAddress?: `0x${string}`;
   onClosePosition?: (price: string, amount: number, isBuy: boolean) => void;
+  contractMode?: ContractMode;
 }
 
 export const PositionsListWidget = ({
@@ -24,8 +27,12 @@ export const PositionsListWidget = ({
   isLoading,
   participantAddress,
   onClosePosition,
+  contractMode = "futures",
 }: PositionsListWidgetProps) => {
-  const { createOrderAsync, isPending } = useCreateOrder();
+  // Conditionally use futures or perps create order hook
+  const futuresCreateOrder = useCreateOrder();
+  const perpsCreateOrder = useCreatePerpsOrder();
+  const { createOrderAsync, isPending } = contractMode === "perpetual" ? perpsCreateOrder : futuresCreateOrder;
   const { data: marketPrice } = useGetMarketPrice();
   const contractSpecsQuery = useFuturesContractSpecs();
   const depositModal = useModal();
@@ -161,12 +168,21 @@ export const PositionsListWidget = ({
       // Use market price for the order
       const closePrice = latestPriceBigInt ?? groupedPosition.pricePerDay;
 
-      await createOrderAsync({
-        price: closePrice,
-        deliveryDate: deliveryDate,
-        quantity: quantity,
-        destUrl: "",
-      });
+      if (contractMode === "perpetual") {
+        // Perps only needs price and quantity
+        await createOrderAsync({
+          price: closePrice,
+          quantity: quantity,
+        });
+      } else {
+        // Futures needs price, deliveryDate, quantity, and destUrl
+        await createOrderAsync({
+          price: closePrice,
+          deliveryDate: deliveryDate,
+          quantity: quantity,
+          destUrl: "",
+        });
+      }
 
       console.log(
         `Created ${isBuy ? "buy" : "sell"} order to close ${Math.abs(quantity)} ${groupedPosition.positionType} positions at market price`,

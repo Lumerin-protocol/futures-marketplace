@@ -1,11 +1,13 @@
 import { type FC, useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { useAccount } from "wagmi";
+import { useLocation, useNavigate } from "react-router";
 import { FuturesBalanceWidget } from "../../components/Widgets/Futures/FuturesBalanceWidget";
 import { FuturesMarketWidget } from "../../components/Widgets/Futures/FuturesMarketWidget";
 import { OrderBookTable } from "../../components/Widgets/Futures/OrderBookTable";
 import { HashrateChart } from "../../components/Charts/HashrateChart";
 import { PlaceOrderWidget } from "../../components/Widgets/Futures/PlaceOrderWidget";
 import { OrdersPositionsTabWidget } from "../../components/Widgets/Futures/OrdersPositionsTabWidget";
+import { PerpsOrdersPositionsTabWidget } from "../../components/Widgets/Futures/PerpsOrdersPositionsTabWidget";
 import { ClosePositionModal, useClosePositionModal } from "../../components/Widgets/Futures/ClosePositionModal";
 import { useHashrateIndexData, type TimePeriod } from "../../hooks/data/useHashRateIndexData";
 import { useBtcPriceIndexData } from "../../hooks/data/useBtcPriceIndexData";
@@ -15,13 +17,41 @@ import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpec
 import { useGetMinMargin } from "../../hooks/data/useGetMinMargin";
 import { useGetMarketPrice } from "../../hooks/data/useGetMarketPrice";
 import { useHistoricalPositions } from "../../hooks/data/useHistoricalPositions";
+import { useGetFutureBalance } from "../../hooks/data/useGetFutureBalance";
+import { useGetPerpsBalance } from "../../hooks/data/perps/useGetPerpsBalance";
+import { useFuturesPaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
+import { usePerpsPaymentTokenBalance } from "../../hooks/data/perps/usePerpsPaymentTokenBalance";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
 import type { PositionBookPosition } from "../../hooks/data/usePositionBook";
+import type { ContractMode } from "../../types/types";
 import styled from "@mui/material/styles/styled";
 
-export const Futures: FC = () => {
+interface TradingPageProps {
+  defaultMode?: ContractMode;
+}
+
+export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const { isConnected, address } = useAccount();
+  const location = useLocation();
+  const navigate = useNavigate();
   const previousAddressRef = useRef<string | undefined>(undefined);
+
+  // Infer initial contract mode from URL or use defaultMode prop
+  const getInitialMode = (): ContractMode => {
+    if (location.pathname.includes("/trade/perpetual") || location.pathname.includes("/perpetual")) return "perpetual";
+    if (location.pathname.includes("/trade/futures") || location.pathname.includes("/futures")) return "futures";
+    return defaultMode;
+  };
+
+  // Contract mode state - controls Perpetual vs Expiring Futures
+  const [contractMode, setContractMode] = useState<ContractMode>(getInitialMode);
+
+  // Update URL when contract mode changes
+  const handleContractModeChange = useCallback((mode: ContractMode) => {
+    setContractMode(mode);
+    const newPath = mode === "perpetual" ? "/trade/perpetual" : "/trade/futures";
+    navigate(newPath, { replace: true });
+  }, [navigate]);
 
   // Track account changes and reload page when account switches
   useEffect(() => {
@@ -51,6 +81,30 @@ export const Futures: FC = () => {
   const minMarginQuery = useGetMinMargin(address);
   const minMargin = minMarginQuery.data ?? null;
   const isLoadingMinMargin = minMarginQuery.isLoading;
+
+  // Get balance based on contract mode
+  const futuresBalanceQuery = useGetFutureBalance(address);
+  const perpsBalanceQuery = useGetPerpsBalance(address);
+  const balanceQuery = useMemo(() => {
+    const query = contractMode === "perpetual" ? perpsBalanceQuery : futuresBalanceQuery;
+    return {
+      data: query.data,
+      isLoading: query.isLoading,
+      isSuccess: query.isSuccess,
+      refetch: query.refetch,
+    };
+  }, [contractMode, futuresBalanceQuery, perpsBalanceQuery]);
+
+  // Get account (wallet) payment token balance based on contract mode
+  const futuresAccountBalance = useFuturesPaymentTokenBalance(address);
+  const perpsAccountBalance = usePerpsPaymentTokenBalance(address);
+  const accountBalanceQuery = useMemo(() => {
+    const query = contractMode === "perpetual" ? perpsAccountBalance : futuresAccountBalance;
+    return {
+      data: query.data,
+      isLoading: query.isLoading,
+    };
+  }, [contractMode, futuresAccountBalance, perpsAccountBalance]);
 
   // Get market price from contract - polls every 10 seconds
   const {
@@ -107,6 +161,17 @@ export const Futures: FC = () => {
   const [highlightMode, setHighlightMode] = useState<"inputs" | "buttons" | undefined>();
   const [highlightTrigger, setHighlightTrigger] = useState(0);
 
+  // Reset state when contract mode changes
+  useEffect(() => {
+    setSelectedPrice(undefined);
+    setSelectedAmount(undefined);
+    // Don't reset selectedDeliveryDate here - OrderBookTable will handle it
+    // setSelectedDeliveryDate(undefined);
+    setSelectedIsBuy(undefined);
+    setHighlightMode(undefined);
+    setHighlightTrigger(0);
+  }, [contractMode]);
+
   // Track previous order book state for change detection
   const previousOrderBookStateRef = useRef<Map<number, { bidUnits: number | null; askUnits: number | null }>>(
     new Map(),
@@ -138,6 +203,24 @@ export const Futures: FC = () => {
 
   return (
     <FuturesContainer>
+      {/* Contract Mode Toggle */}
+      <ContractModeToggleArea>
+        <ContractModeToggle>
+          <ModeButton
+            $active={contractMode === "perpetual"}
+            onClick={() => handleContractModeChange("perpetual")}
+          >
+            Perpetuals
+          </ModeButton>
+          <ModeButton
+            $active={contractMode === "futures"}
+            onClick={() => handleContractModeChange("futures")}
+          >
+            Futures
+          </ModeButton>
+        </ContractModeToggle>
+      </ContractModeToggleArea>
+
       {/* Row 1: Balance Widget (60%) and Stats Widget (40%) */}
       <BalanceWidgetArea>
         <FuturesBalanceWidget
@@ -146,11 +229,14 @@ export const Futures: FC = () => {
           unrealizedPnL={totalUnrealizedPnL}
           realizedPnL30D={totalRealizedPnL30D}
           isLoadingRealizedPnL={isHistoricalPositionsLoading}
+          contractMode={contractMode}
+          balanceQuery={balanceQuery}
+          accountBalance={accountBalanceQuery}
         />
       </BalanceWidgetArea>
 
       <StatsWidgetArea>
-        <FuturesMarketWidget contractSpecsQuery={contractSpecsQuery} />
+        <FuturesMarketWidget contractSpecsQuery={contractSpecsQuery} contractMode={contractMode} />
       </StatsWidgetArea>
 
       {/* Row 2: Chart (60%) */}
@@ -183,6 +269,8 @@ export const Futures: FC = () => {
             highlightMode={highlightMode}
             latestPrice={marketPrice ?? null}
             minMargin={minMargin}
+            contractMode={contractMode}
+            accountBalance={accountBalanceQuery}
             onOrderPlaced={async () => {
               await minMarginQuery.refetch();
             }}
@@ -197,22 +285,39 @@ export const Futures: FC = () => {
           onDeliveryDateChange={handleDeliveryDateChange}
           contractSpecsQuery={contractSpecsQuery}
           previousOrderBookStateRef={previousOrderBookStateRef}
+          contractMode={contractMode}
         />
       </OrderBookArea>
 
       {/* Row 4: Orders and Positions List - Full width */}
       {isConnected && (
         <OrdersPositionsArea>
-          <OrdersPositionsTabWidget
-            orders={participantData?.data?.orders || []}
-            positions={positionBookData?.data?.positions || []}
-            ordersLoading={isParticipantLoading}
-            positionsLoading={isPositionBookLoading}
-            participantAddress={address}
-            onClosePosition={closePositionModal.handleClosePosition}
-            participantData={participantData?.data}
-            minMargin={minMargin}
-          />
+          {contractMode === "perpetual" ? (
+            <PerpsOrdersPositionsTabWidget
+              orders={participantData?.data?.orders || []}
+              positions={positionBookData?.data?.positions || []}
+              ordersLoading={isParticipantLoading}
+              positionsLoading={isPositionBookLoading}
+              participantAddress={address}
+              onClosePosition={closePositionModal.handleClosePosition}
+              participantData={participantData?.data}
+              minMargin={minMargin}
+              accountBalance={accountBalanceQuery}
+            />
+          ) : (
+            <OrdersPositionsTabWidget
+              orders={participantData?.data?.orders || []}
+              positions={positionBookData?.data?.positions || []}
+              ordersLoading={isParticipantLoading}
+              positionsLoading={isPositionBookLoading}
+              participantAddress={address}
+              onClosePosition={closePositionModal.handleClosePosition}
+              participantData={participantData?.data}
+              minMargin={minMargin}
+              accountBalance={accountBalanceQuery}
+              contractMode={contractMode}
+            />
+          )}
         </OrdersPositionsArea>
       )}
 
@@ -249,44 +354,49 @@ const FuturesContainer = styled("div")`
   }
 `;
 
-// Balance Widget - Row 1, Column 1 (60% width)
+// Contract Mode Toggle Area - Full width at the top
+const ContractModeToggleArea = styled("div")`
+  grid-column: 1 / -1;
+  grid-row: 1;
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 0.5rem;
+
+  @media (max-width: 1024px) {
+    justify-content: center;
+  }
+`;
+
+const ContractModeToggle = styled("div")`
+  display: flex;
+  gap: 0;
+  border: 1px solid rgba(171, 171, 171, 1);
+  border-radius: 6px;
+  overflow: hidden;
+`;
+
+const ModeButton = styled("button")<{ $active: boolean }>`
+  padding: 0.625rem 1.25rem;
+  background: ${(props) => (props.$active ? "#4c5a5f" : "transparent")};
+  color: #fff;
+  border: none;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  white-space: nowrap;
+
+  &:hover {
+    background: ${(props) => (props.$active ? "#4c5a5f" : "rgba(76, 90, 95, 0.5)")};
+  }
+
+  &:not(:last-child) {
+    border-right: 1px solid rgba(171, 171, 171, 0.5);
+  }
+`;
+
+// Balance Widget - Row 2, Column 1 (60% width)
 const BalanceWidgetArea = styled("div")`
-  grid-column: 1;
-  grid-row: 1;
-  width: 100%;
-  min-width: 0;
-
-  > * {
-    width: 100%;
-    height: 100%;
-  }
-
-  @media (max-width: 1024px) {
-    grid-column: 1;
-    grid-row: auto;
-  }
-`;
-
-// Stats Widget - Row 1, Column 2 (40% width)
-const StatsWidgetArea = styled("div")`
-  grid-column: 2;
-  grid-row: 1;
-  width: 100%;
-  min-width: 0;
-
-  > * {
-    width: 100%;
-    height: 100%;
-  }
-
-  @media (max-width: 1024px) {
-    grid-column: 1;
-    grid-row: auto;
-  }
-`;
-
-// Chart Area - Row 2, Column 1 (60% width)
-const ChartArea = styled("div")`
   grid-column: 1;
   grid-row: 2;
   width: 100%;
@@ -294,6 +404,7 @@ const ChartArea = styled("div")`
 
   > * {
     width: 100%;
+    height: 100%;
   }
 
   @media (max-width: 1024px) {
@@ -302,8 +413,26 @@ const ChartArea = styled("div")`
   }
 `;
 
-// Place Order Area - Row 3, Column 1 (60% width)
-const PlaceOrderArea = styled("div")`
+// Stats Widget - Row 2, Column 2 (40% width)
+const StatsWidgetArea = styled("div")`
+  grid-column: 2;
+  grid-row: 2;
+  width: 100%;
+  min-width: 0;
+
+  > * {
+    width: 100%;
+    height: 100%;
+  }
+
+  @media (max-width: 1024px) {
+    grid-column: 1;
+    grid-row: auto;
+  }
+`;
+
+// Chart Area - Row 3, Column 1 (60% width)
+const ChartArea = styled("div")`
   grid-column: 1;
   grid-row: 3;
   width: 100%;
@@ -319,10 +448,27 @@ const PlaceOrderArea = styled("div")`
   }
 `;
 
-// Order Book Area - Rows 2-3, Column 2 (40% width, spans 2 rows)
+// Place Order Area - Row 4, Column 1 (60% width)
+const PlaceOrderArea = styled("div")`
+  grid-column: 1;
+  grid-row: 4;
+  width: 100%;
+  min-width: 0;
+
+  > * {
+    width: 100%;
+  }
+
+  @media (max-width: 1024px) {
+    grid-column: 1;
+    grid-row: auto;
+  }
+`;
+
+// Order Book Area - Rows 3-4, Column 2 (40% width, spans 2 rows)
 const OrderBookArea = styled("div")<{ $isConnected: boolean }>`
   grid-column: 2;
-  grid-row: ${(props) => (props.$isConnected ? "2 / 4" : "2 / 3")};
+  grid-row: ${(props) => (props.$isConnected ? "3 / 5" : "3 / 4")};
   width: 100%;
   min-width: 0;
   height: 100%;
@@ -339,10 +485,10 @@ const OrderBookArea = styled("div")<{ $isConnected: boolean }>`
   }
 `;
 
-// Orders and Positions Area - Row 4, Full width
+// Orders and Positions Area - Row 5, Full width
 const OrdersPositionsArea = styled("div")`
   grid-column: 1 / -1;
-  grid-row: 4;
+  grid-row: 5;
   width: 100%;
   min-width: 0;
 

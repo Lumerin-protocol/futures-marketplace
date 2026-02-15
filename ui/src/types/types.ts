@@ -1,6 +1,15 @@
 // Exported types here
 // Types local to a file will be in that file
 
+// Contract Mode for Perpetual vs Expiring Futures
+export type ContractMode = "perpetual" | "futures";
+
+// Shared type for account (wallet) payment token balance query result
+export interface AccountBalance {
+  data: bigint | undefined;
+  isLoading: boolean;
+}
+
 // Enums
 export enum WalletText {
   ConnectViaMetaMask = "MetaMask",

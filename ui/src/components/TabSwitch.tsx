@@ -14,11 +14,12 @@ type Value<T> = {
 
 export const TabSwitch = <T extends string>(props: Props<T>) => {
   const { values, value, setValue } = props;
-  const [val1, val2] = values;
+  const numTabs = values.length;
+  const activeIndex = values.findIndex((v) => v.value === value);
 
   return (
-    <TabSwitchStyled>
-      {[val1, val2].map((val) => (
+    <TabSwitchStyled $numTabs={numTabs}>
+      {values.map((val) => (
         <button
           type="button"
           id={val.value}
@@ -30,14 +31,15 @@ export const TabSwitch = <T extends string>(props: Props<T>) => {
         </button>
       ))}
 
-      <span className="glider" />
+      {numTabs === 2 && <span className="glider" />}
+      {numTabs > 2 && <span className="multi-glider" style={{ left: `calc(${activeIndex * (100 / numTabs)}% + 3px)` }} />}
     </TabSwitchStyled>
   );
 };
 
-export const TabSwitchStyled = styled("div")`
+export const TabSwitchStyled = styled("div")<{ $numTabs: number }>`
   display: inline-grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: ${(props) => `repeat(${props.$numTabs}, 1fr)`};
   align-items: center;
   border: rgba(171, 171, 171, 1) 1px solid;
   color: #fff;
@@ -95,6 +97,7 @@ export const TabSwitchStyled = styled("div")`
     background-color: #fff;
   }
 
+  /* Original glider for 2-tab layout */
   .glider {
     position: absolute;
     display: flex;
@@ -106,5 +109,18 @@ export const TabSwitchStyled = styled("div")`
     z-index: 1;
     border-radius: 7px;
     transition: 0.25s ease-out;
+  }
+
+  /* Multi-glider for 3+ tabs */
+  .multi-glider {
+    position: absolute;
+    display: flex;
+    top: 3px;
+    bottom: 3px;
+    width: calc(${(props) => 100 / props.$numTabs}% - 6px);
+    background-color: #4c5a5f;
+    z-index: 1;
+    border-radius: 7px;
+    transition: left 0.25s ease-out;
   }
 `;

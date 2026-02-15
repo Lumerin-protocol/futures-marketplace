@@ -1,4 +1,4 @@
-import { waitForAggregateBlockNumber, AGGREGATE_ORDER_BOOK_QK } from "../../hooks/data/useAggregateOrderBook";
+import { waitForOrderBookBlockNumber, getOrderBookQueryKey } from "../../hooks/data/orderBookHelpers";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCheckCircle } from "@fortawesome/free-solid-svg-icons/faCheckCircle";
 import { colors } from "../../styles/styles.config";
@@ -6,10 +6,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import type { TransactionReceipt } from "viem";
 import { useCreateOrder } from "../../hooks/data/useCreateOrder";
+import { useCreatePerpsOrder } from "../../hooks/data/perps/useCreatePerpsOrder";
 import { useAccount } from "wagmi";
 import { PARTICIPANT_QK } from "../../hooks/data/useParticipant";
 import { POSITION_BOOK_QK } from "../../hooks/data/usePositionBook";
 import type { FC } from "react";
+import type { ContractMode } from "../../types/types";
 
 export interface CloseOrderFormProps {
   isBuy: boolean;
@@ -17,12 +19,17 @@ export interface CloseOrderFormProps {
   deliveryAt: bigint;
   amount: number;
   closeForm: () => void;
+  contractMode?: ContractMode;
 }
 
-export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, deliveryAt, amount, closeForm }) => {
+export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, deliveryAt, amount, closeForm, contractMode = "futures" }) => {
   const qc = useQueryClient();
   const { address } = useAccount();
-  const { createOrderAsync } = useCreateOrder();
+  
+  // Conditionally use futures or perps create order hook
+  const futuresCreateOrder = useCreateOrder();
+  const perpsCreateOrder = useCreatePerpsOrder();
+  const { createOrderAsync } = contractMode === "perpetual" ? perpsCreateOrder : futuresCreateOrder;
 
   // Create an order with opposite sign to close the existing orders
   // If buy orders (isBuy = true), create sell order with negative quantity
@@ -82,21 +89,31 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, de
         {
           label: "Close Order",
           action: async () => {
-            const txhash = await createOrderAsync({
-              price: pricePerDay,
-              deliveryDate: deliveryAt,
-              quantity: oppositeQuantity,
-              destUrl: "",
-            });
+            let txhash;
+            if (contractMode === "perpetual") {
+              // Perps only needs price and quantity
+              txhash = await createOrderAsync({
+                price: pricePerDay,
+                quantity: oppositeQuantity,
+              });
+            } else {
+              // Futures needs price, deliveryDate, quantity, and destUrl
+              txhash = await createOrderAsync({
+                price: pricePerDay,
+                deliveryDate: deliveryAt,
+                quantity: oppositeQuantity,
+                destUrl: "",
+              });
+            }
             return { txhash, isSkipped: false };
           },
           postConfirmation: async (receipt: TransactionReceipt) => {
             // Wait for block number to ensure indexer has updated
-            await waitForAggregateBlockNumber(receipt.blockNumber, qc, Number(deliveryAt));
+            await waitForOrderBookBlockNumber(receipt.blockNumber, qc, contractMode, Number(deliveryAt));
 
             // Refetch order book, positions, and participant data
             await Promise.all([
-              qc.invalidateQueries({ queryKey: [AGGREGATE_ORDER_BOOK_QK] }),
+              qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
               address && qc.invalidateQueries({ queryKey: [POSITION_BOOK_QK] }),
               address && qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
             ]);

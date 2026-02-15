@@ -11,15 +11,18 @@ import Tooltip from "@mui/material/Tooltip";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
+import type { AccountBalance, ContractMode } from "../../../types/types";
 
 interface OrdersListWidgetProps {
   orders: ParticipantOrder[];
   isLoading?: boolean;
   participantData?: any;
   minMargin?: bigint | null;
+  accountBalance?: AccountBalance;
+  contractMode?: ContractMode;
 }
 
-export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin }: OrdersListWidgetProps) => {
+export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin, accountBalance, contractMode = "futures" }: OrdersListWidgetProps) => {
   const modifyModal = useModal();
   const closeModal = useModal();
   const { data: marketPrice } = useGetMarketPrice();
@@ -238,6 +241,8 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
             deliveryDurationDays={deliveryDurationDays}
             minMargin={minMargin}
             newestItemPrice={newestItemPrice}
+            accountBalance={accountBalance}
+            contractMode={contractMode}
             closeForm={() => {
               modifyModal.close();
               setSelectedOrder(null);
@@ -253,6 +258,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
             pricePerDay={selectedCloseOrder.pricePerDay}
             deliveryAt={selectedCloseOrder.deliveryAt}
             amount={selectedCloseOrder.amount}
+            contractMode={contractMode}
             closeForm={() => {
               closeModal.close();
               setSelectedCloseOrder(null);
