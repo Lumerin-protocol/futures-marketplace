@@ -467,6 +467,7 @@ export const PlaceOrderWidget = ({
           contractSpecsQuery={contractSpecsQuery}
           onConfirm={handleConfirmHighPrice}
           onCancel={handleCancelHighPrice}
+          contractMode={contractMode}
         />
       </ModalItem>
 
@@ -477,6 +478,7 @@ export const PlaceOrderWidget = ({
           externalDeliveryDate={externalDeliveryDate}
           onConfirm={handleConfirmConflict}
           onCancel={handleCancelConflict}
+          contractMode={contractMode}
         />
       </ModalItem>
 
@@ -498,6 +500,7 @@ export const PlaceOrderWidget = ({
             latestPrice={latestPrice}
             onOrderPlaced={onOrderPlaced}
             bypassConflictCheck={bypassConflictCheck}
+            contractMode={contractMode}
             closeForm={() => {
               setShowOrderForm(false);
               setPendingOrder(null);
@@ -517,12 +520,14 @@ const ConflictingOrderModal = ({
   externalDeliveryDate,
   onConfirm,
   onCancel,
+  contractMode = "futures",
 }: {
   pendingOrder: { price: number; amount: number; quantity: number } | null;
   conflictingOrderQuantity: number | null;
   externalDeliveryDate?: number;
   onConfirm: () => void;
   onCancel: () => void;
+  contractMode?: ContractMode;
 }) => {
   if (!pendingOrder) return null;
 
@@ -537,7 +542,7 @@ const ConflictingOrderModal = ({
       <div className="bg-orange-900/20 border border-orange-500/30 rounded-lg p-4">
         <p className="text-gray-300 text-sm mb-3">
           You already have an active <strong className="text-white">{oppositeAction}</strong> order at the same price
-          and delivery date.
+          {contractMode === "futures" && " and delivery date"}.
         </p>
 
         <div className="space-y-2 text-sm">
@@ -545,10 +550,12 @@ const ConflictingOrderModal = ({
             <span className="text-gray-300">Price:</span>
             <span className="text-white font-medium">{pendingOrder.price.toFixed(2)} USDC</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-300">Delivery Date:</span>
-            <span className="text-white font-medium">{deliveryDateFormatted}</span>
-          </div>
+          {contractMode === "futures" && (
+            <div className="flex justify-between">
+              <span className="text-gray-300">Delivery Date:</span>
+              <span className="text-white font-medium">{deliveryDateFormatted}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -575,6 +582,7 @@ const HighPriceConfirmationModal = ({
   contractSpecsQuery,
   onConfirm,
   onCancel,
+  contractMode = "futures",
 }: {
   pendingOrder: { price: number; amount: number; quantity: number } | null;
   newestItemPrice: number;
@@ -582,6 +590,7 @@ const HighPriceConfirmationModal = ({
   contractSpecsQuery: UseQueryResult<GetResponse<FuturesContractSpecs>, Error>;
   onConfirm: () => void;
   onCancel: () => void;
+  contractMode?: ContractMode;
 }) => {
   if (!pendingOrder) return null;
 
@@ -634,10 +643,12 @@ const HighPriceConfirmationModal = ({
               {(pendingOrder.price * pendingOrder.amount * deliveryDurationDays).toFixed(2)} USDC
             </span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-300">Expected Hashrate:</span>
-            <span className="text-white">{pendingOrder.amount * 100} Th/s</span>
-          </div>
+          {contractMode === "futures" && (
+            <div className="flex justify-between">
+              <span className="text-gray-300">Expected Hashrate:</span>
+              <span className="text-white">{pendingOrder.amount * 100} Th/s</span>
+            </div>
+          )}
         </div>
       </div>
 

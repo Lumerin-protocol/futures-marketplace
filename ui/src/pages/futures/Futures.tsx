@@ -7,6 +7,7 @@ import { OrderBookTable } from "../../components/Widgets/Futures/OrderBookTable"
 import { HashrateChart } from "../../components/Charts/HashrateChart";
 import { PlaceOrderWidget } from "../../components/Widgets/Futures/PlaceOrderWidget";
 import { OrdersPositionsTabWidget } from "../../components/Widgets/Futures/OrdersPositionsTabWidget";
+import { PerpsOrdersPositionsTabWidget } from "../../components/Widgets/Futures/PerpsOrdersPositionsTabWidget";
 import { ClosePositionModal, useClosePositionModal } from "../../components/Widgets/Futures/ClosePositionModal";
 import { useHashrateIndexData, type TimePeriod } from "../../hooks/data/useHashRateIndexData";
 import { useBtcPriceIndexData } from "../../hooks/data/useBtcPriceIndexData";
@@ -164,7 +165,8 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   useEffect(() => {
     setSelectedPrice(undefined);
     setSelectedAmount(undefined);
-    setSelectedDeliveryDate(undefined);
+    // Don't reset selectedDeliveryDate here - OrderBookTable will handle it
+    // setSelectedDeliveryDate(undefined);
     setSelectedIsBuy(undefined);
     setHighlightMode(undefined);
     setHighlightTrigger(0);
@@ -290,17 +292,32 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       {/* Row 4: Orders and Positions List - Full width */}
       {isConnected && (
         <OrdersPositionsArea>
-          <OrdersPositionsTabWidget
-            orders={participantData?.data?.orders || []}
-            positions={positionBookData?.data?.positions || []}
-            ordersLoading={isParticipantLoading}
-            positionsLoading={isPositionBookLoading}
-            participantAddress={address}
-            onClosePosition={closePositionModal.handleClosePosition}
-            participantData={participantData?.data}
-            minMargin={minMargin}
-            accountBalance={accountBalanceQuery}
-          />
+          {contractMode === "perpetual" ? (
+            <PerpsOrdersPositionsTabWidget
+              orders={participantData?.data?.orders || []}
+              positions={positionBookData?.data?.positions || []}
+              ordersLoading={isParticipantLoading}
+              positionsLoading={isPositionBookLoading}
+              participantAddress={address}
+              onClosePosition={closePositionModal.handleClosePosition}
+              participantData={participantData?.data}
+              minMargin={minMargin}
+              accountBalance={accountBalanceQuery}
+            />
+          ) : (
+            <OrdersPositionsTabWidget
+              orders={participantData?.data?.orders || []}
+              positions={positionBookData?.data?.positions || []}
+              ordersLoading={isParticipantLoading}
+              positionsLoading={isPositionBookLoading}
+              participantAddress={address}
+              onClosePosition={closePositionModal.handleClosePosition}
+              participantData={participantData?.data}
+              minMargin={minMargin}
+              accountBalance={accountBalanceQuery}
+              contractMode={contractMode}
+            />
+          )}
         </OrdersPositionsArea>
       )}
 

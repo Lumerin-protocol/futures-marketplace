@@ -3,6 +3,7 @@ import { SmallWidget } from "../../Cards/Cards.styled";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useGetDeliveryDates } from "../../../hooks/data/useGetDeliveryDates";
 import { useAggregateOrderBook } from "../../../hooks/data/useAggregateOrderBook";
+import { usePerpsOrderBook } from "../../../hooks/data/perps/usePerpsOrderBook";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { createFinalOrderBookData } from "./orderBookHelpers";
 import type { UseQueryResult } from "@tanstack/react-query";
@@ -68,9 +69,50 @@ export const OrderBookTable = ({
     }
   }, [selectedDeliveryDate]);
 
-  // Fetch order book for selected delivery date
-  const orderBookQuery = useAggregateOrderBook(selectedDeliveryDate, { refetch: true, interval: 15000 });
-  const orderBookData = orderBookQuery.data?.data?.orders || [];
+  // Fetch order book based on contract mode
+  const futuresOrderBookQuery = useAggregateOrderBook(
+    contractMode === "futures" ? selectedDeliveryDate : undefined,
+    { refetch: true, interval: 15000 }
+  );
+  const perpsOrderBookQuery = usePerpsOrderBook(
+    contractMode === "perpetual" ? { refetch: true, interval: 15000 } : undefined
+  );
+  
+  const orderBookQuery = contractMode === "perpetual" ? perpsOrderBookQuery : futuresOrderBookQuery;
+  
+  // Transform perps data to match futures structure
+  const orderBookData = useMemo(() => {
+    if (contractMode === "perpetual" && perpsOrderBookQuery.data?.data?.priceLevels) {
+      // Convert perps price levels to aggregate order format
+      const priceLevelMap = new Map<string, { buyOrdersCount: number; sellOrdersCount: number; price: bigint }>();
+      
+      for (const level of perpsOrderBookQuery.data.data.priceLevels) {
+        const key = level.price.toString();
+        const existing = priceLevelMap.get(key) || { buyOrdersCount: 0, sellOrdersCount: 0, price: level.price };
+        
+        // Divide by 10^6 to get actual quantity with 6 decimals
+        const quantity = Number(level.totalQuantity) / 1e6;
+        
+        if (level.isBid) {
+          existing.buyOrdersCount = quantity;
+        } else {
+          existing.sellOrdersCount = quantity;
+        }
+        
+        priceLevelMap.set(key, existing);
+      }
+      
+      return Array.from(priceLevelMap.values()).map((item, index) => ({
+        id: `perps-${index}`,
+        price: item.price,
+        deliveryDate: 0n, // Not used in perpetual
+        buyOrdersCount: item.buyOrdersCount,
+        sellOrdersCount: item.sellOrdersCount,
+      }));
+    }
+    
+    return futuresOrderBookQuery.data?.data?.orders || [];
+  }, [contractMode, perpsOrderBookQuery.data?.data?.priceLevels, futuresOrderBookQuery.data?.data?.orders]);
 
   useEffect(() => {
     previousOrderBookStateRef.current = new Map();
@@ -341,9 +383,13 @@ export const OrderBookTable = ({
                     onRowClick?.(row.price.toFixed(2), amount);
                   }}
                 >
-                  <BidCell $isHighlighted={row.highlightBid}>{row.bidUnits || ""}</BidCell>
+                  <BidCell $isHighlighted={row.highlightBid}>
+                    {row.bidUnits ? (contractMode === "perpetual" ? row.bidUnits.toFixed(6) : row.bidUnits) : ""}
+                  </BidCell>
                   <PriceCell $isLastHashprice={row.isLastHashprice}>{row.price.toFixed(2)}</PriceCell>
-                  <AskCell $isHighlighted={row.highlightAsk}>{row.askUnits || ""}</AskCell>
+                  <AskCell $isHighlighted={row.highlightAsk}>
+                    {row.askUnits ? (contractMode === "perpetual" ? row.askUnits.toFixed(6) : row.askUnits) : ""}
+                  </AskCell>
                 </TableRow>
               );
             })}
