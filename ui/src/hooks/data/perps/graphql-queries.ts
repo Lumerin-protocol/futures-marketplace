@@ -70,7 +70,7 @@ export const UserPerpsTradesQuery = gql`
     query UserPerpsTrades  ($address: ID!){
   trades(
     where: {
-      _or: [
+      or: [
         { buyer: $address }
         { seller: $address }
       ]
