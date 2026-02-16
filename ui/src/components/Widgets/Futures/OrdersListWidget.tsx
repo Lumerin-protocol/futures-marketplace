@@ -13,6 +13,13 @@ import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { AccountBalance, ContractMode } from "../../../types/types";
 
+interface BalanceQueryResult {
+  data: bigint | undefined;
+  isLoading: boolean;
+  isSuccess: boolean;
+  refetch: () => void;
+}
+
 interface OrdersListWidgetProps {
   orders: ParticipantOrder[];
   isLoading?: boolean;
@@ -20,9 +27,10 @@ interface OrdersListWidgetProps {
   minMargin?: bigint | null;
   accountBalance?: AccountBalance;
   contractMode?: ContractMode;
+  balanceQuery: BalanceQueryResult;
 }
 
-export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin, accountBalance, contractMode = "futures" }: OrdersListWidgetProps) => {
+export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin, accountBalance, contractMode = "futures", balanceQuery }: OrdersListWidgetProps) => {
   const modifyModal = useModal();
   const closeModal = useModal();
   const { data: marketPrice } = useGetMarketPrice();
@@ -243,6 +251,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
             newestItemPrice={newestItemPrice}
             accountBalance={accountBalance}
             contractMode={contractMode}
+            balanceQuery={balanceQuery}
             closeForm={() => {
               modifyModal.close();
               setSelectedOrder(null);

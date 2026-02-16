@@ -30,10 +30,16 @@ import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContrac
 import type { Participant } from "../../../hooks/data/useParticipant";
 import type { ContractMode, AccountBalance } from "../../../types/types";
 import { useAccount } from "wagmi";
-import { useGetFutureBalance } from "../../../hooks/data/useGetFutureBalance";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
 import { handleNumericDecimalInput, handleNumericDecimalInput6Decimals } from "../../Forms/Shared/AmountInputForm";
 import { useOrderFee } from "../../../hooks/data/useOrderFee";
+
+interface BalanceQueryResult {
+  data: bigint | undefined;
+  isLoading: boolean;
+  isSuccess: boolean;
+  refetch: () => void;
+}
 
 interface PlaceOrderWidgetProps {
   externalPrice?: string;
@@ -50,6 +56,7 @@ interface PlaceOrderWidgetProps {
   minMargin?: bigint | null;
   contractMode?: ContractMode;
   accountBalance?: AccountBalance;
+  balanceQuery: BalanceQueryResult;
 }
 
 export const PlaceOrderWidget = ({
@@ -66,10 +73,10 @@ export const PlaceOrderWidget = ({
   minMargin,
   contractMode = "futures",
   accountBalance,
+  balanceQuery,
 }: PlaceOrderWidgetProps) => {
   const { data: marketPrice, isLoading: isMarketPriceLoading } = useGetMarketPrice();
   const { address } = useAccount();
-  const balanceQuery = useGetFutureBalance(address);
   const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
   const { data: orderFeeRaw } = useOrderFee(address);
 

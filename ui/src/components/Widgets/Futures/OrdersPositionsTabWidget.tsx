@@ -24,6 +24,13 @@ import type { AccountBalance, ContractMode } from "../../../types/types";
 
 type TimeFilter = "OPEN" | "LAST_30_DAYS";
 
+interface BalanceQueryResult {
+  data: bigint | undefined;
+  isLoading: boolean;
+  isSuccess: boolean;
+  refetch: () => void;
+}
+
 interface OrdersPositionsTabWidgetProps {
   orders: ParticipantOrder[];
   positions: PositionBookPosition[];
@@ -35,6 +42,7 @@ interface OrdersPositionsTabWidgetProps {
   minMargin?: bigint | null;
   accountBalance?: AccountBalance;
   contractMode?: ContractMode;
+  balanceQuery: BalanceQueryResult;
 }
 
 export const OrdersPositionsTabWidget = ({
@@ -48,6 +56,7 @@ export const OrdersPositionsTabWidget = ({
   minMargin,
   accountBalance,
   contractMode = "futures",
+  balanceQuery,
 }: OrdersPositionsTabWidgetProps) => {
   const [activeTab, setActiveTab] = useState<"ORDERS" | "POSITIONS">("ORDERS");
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("OPEN");
@@ -155,6 +164,7 @@ export const OrdersPositionsTabWidget = ({
               minMargin={minMargin}
               accountBalance={accountBalance}
               contractMode={contractMode}
+              balanceQuery={balanceQuery}
             />
           </OrdersWrapper>
         )}
@@ -174,6 +184,7 @@ export const OrdersPositionsTabWidget = ({
               participantAddress={participantAddress}
               onClosePosition={onClosePosition}
               contractMode={contractMode}
+              balanceQuery={balanceQuery}
             />
           </PositionsWrapper>
         )}

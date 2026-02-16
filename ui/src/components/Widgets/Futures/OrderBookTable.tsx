@@ -361,7 +361,7 @@ export const OrderBookTable = ({
         <PerpsInfoHeader>
           <InfoLabel>
             <span className="label">Current Price:</span>
-            <span className="value">${currentBasePrice?.price.toFixed(2) || "—"}</span>
+            <span className="value">{currentBasePrice?.price.toFixed(2) || "—"}</span>
           </InfoLabel>
           <InfoLabel>
             <span className="label">Funding Rate:</span>

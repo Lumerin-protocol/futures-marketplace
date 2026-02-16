@@ -12,9 +12,15 @@ import type { ParticipantOrder, Participant } from "../../hooks/data/useParticip
 import styled from "@mui/material/styles/styled";
 import { handleNumericDecimalInput } from "./Shared/AmountInputForm";
 import { getMinMarginForPositionManual } from "../../hooks/data/getMinMarginForPositionManual";
-import { useGetFutureBalance } from "../../hooks/data/useGetFutureBalance";
 import { useOrderFee } from "../../hooks/data/useOrderFee";
 import type { AccountBalance, ContractMode } from "../../types/types";
+
+interface BalanceQueryResult {
+  data: bigint | undefined;
+  isLoading: boolean;
+  isSuccess: boolean;
+  refetch: () => void;
+}
 
 interface ModifyOrderFormProps {
   order: ParticipantOrder;
@@ -29,6 +35,7 @@ interface ModifyOrderFormProps {
   newestItemPrice: number | null;
   accountBalance?: AccountBalance;
   contractMode?: ContractMode;
+  balanceQuery: BalanceQueryResult;
 }
 
 interface ModifyFormValues {
@@ -50,11 +57,11 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
     newestItemPrice,
     accountBalance,
     contractMode = "futures",
+    balanceQuery,
   }) => {
     const { modifyOrderAsync } = useModifyOrder();
     const qc = useQueryClient();
     const { address } = useAccount();
-    const balanceQuery = useGetFutureBalance(address);
     const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
     const { data: orderFeeRaw } = useOrderFee(address);
 

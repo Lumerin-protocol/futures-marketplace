@@ -14,12 +14,20 @@ import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginF
 import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { ContractMode } from "../../../types/types";
 
+interface BalanceQueryResult {
+  data: bigint | undefined;
+  isLoading: boolean;
+  isSuccess: boolean;
+  refetch: () => void;
+}
+
 interface PositionsListWidgetProps {
   positions: PositionBookPosition[];
   isLoading?: boolean;
   participantAddress?: `0x${string}`;
   onClosePosition?: (price: string, amount: number, isBuy: boolean) => void;
   contractMode?: ContractMode;
+  balanceQuery: BalanceQueryResult;
 }
 
 export const PositionsListWidget = ({
@@ -28,6 +36,7 @@ export const PositionsListWidget = ({
   participantAddress,
   onClosePosition,
   contractMode = "futures",
+  balanceQuery,
 }: PositionsListWidgetProps) => {
   // Conditionally use futures or perps create order hook
   const futuresCreateOrder = useCreateOrder();
@@ -380,6 +389,7 @@ export const PositionsListWidget = ({
               pricePerDay={selectedPricePerDay}
               totalContracts={selectedTotalContracts}
               positions={selectedPositions}
+              balanceQuery={balanceQuery}
             />
           )}
       </ModalItem>

@@ -272,6 +272,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
             minMargin={minMargin}
             contractMode={contractMode}
             accountBalance={accountBalanceQuery}
+            balanceQuery={balanceQuery}
             onOrderPlaced={async () => {
               await minMarginQuery.refetch();
             }}
@@ -317,6 +318,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
               minMargin={minMargin}
               accountBalance={accountBalanceQuery}
               contractMode={contractMode}
+              balanceQuery={balanceQuery}
             />
           )}
         </OrdersPositionsArea>

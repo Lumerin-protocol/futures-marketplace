@@ -69,7 +69,7 @@ export const FuturesBalanceWidget = ({
   const realizedPnL30DFormatted = realizedPnL30D !== null ? (realizedPnL30D / 1e6).toFixed(2) : "-";
 
   // Check if LMR balance meets minimum requirement
-  const requiredLmrAmount = BigInt(process.env.REACT_APP_FUTURES_REQUIRED_LMR || "10000");
+  const requiredLmrAmount = 0n; //BigInt(process.env.REACT_APP_FUTURES_REQUIRED_LMR || "10000");
   const hasMinimumLmrBalance = lmrBalanceValidation.totalBalance >= requiredLmrAmount;
   const isLmrBalanceLoading = lmrBalanceValidation.isLoading;
 
@@ -192,6 +192,7 @@ export const FuturesBalanceWidget = ({
           closeForm={handleWithdrawalSuccess}
           minMargin={minMargin}
           isLoadingMinMargin={isLoadingMinMargin}
+          balanceQuery={balanceQuery}
         />
       </ModalItem>
     </>
