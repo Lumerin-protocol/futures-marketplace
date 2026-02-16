@@ -356,6 +356,19 @@ export const OrderBookTable = ({
           </button>
         </Header>
       )}
+      
+      {contractMode === "perpetual" && (
+        <PerpsInfoHeader>
+          <InfoLabel>
+            <span className="label">Current Price:</span>
+            <span className="value">${currentBasePrice?.price.toFixed(2) || "—"}</span>
+          </InfoLabel>
+          <InfoLabel>
+            <span className="label">Funding Rate:</span>
+            <span className="value">0%</span>
+          </InfoLabel>
+        </PerpsInfoHeader>
+      )}
 
       <TableContainer ref={tableContainerRef}>
         <Table>
@@ -601,4 +614,33 @@ const PriceCell = styled("td")<{ $isLastHashprice?: boolean }>`
     box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
     border: 1px solid rgba(59, 130, 246, 0.6);
   `}
+`;
+
+const PerpsInfoHeader = styled("div")`
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  gap: 1rem;
+`;
+
+const InfoLabel = styled("div")`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  
+  .label {
+    font-size: 0.85rem;
+    color: #a7a9b6;
+    font-weight: 500;
+  }
+  
+  .value {
+    font-size: 1.1rem;
+    color: #fff;
+    font-weight: 600;
+  }
 `;

@@ -207,17 +207,18 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       <ContractModeToggleArea>
         <ContractModeToggle>
           <ModeButton
-            $active={contractMode === "perpetual"}
-            onClick={() => handleContractModeChange("perpetual")}
-          >
-            Perpetuals
-          </ModeButton>
-          <ModeButton
             $active={contractMode === "futures"}
             onClick={() => handleContractModeChange("futures")}
           >
             Futures
           </ModeButton>
+          <ModeButton
+            $active={contractMode === "perpetual"}
+            onClick={() => handleContractModeChange("perpetual")}
+          >
+            Perpetuals
+          </ModeButton>
+
         </ContractModeToggle>
       </ContractModeToggleArea>
 
@@ -375,7 +376,7 @@ const ContractModeToggle = styled("div")`
   overflow: hidden;
 `;
 
-const ModeButton = styled("button")<{ $active: boolean }>`
+const ModeButton = styled("button") <{ $active: boolean }>`
   padding: 0.625rem 1.25rem;
   background: ${(props) => (props.$active ? "#4c5a5f" : "transparent")};
   color: #fff;
@@ -466,7 +467,7 @@ const PlaceOrderArea = styled("div")`
 `;
 
 // Order Book Area - Rows 3-4, Column 2 (40% width, spans 2 rows)
-const OrderBookArea = styled("div")<{ $isConnected: boolean }>`
+const OrderBookArea = styled("div") <{ $isConnected: boolean }>`
   grid-column: 2;
   grid-row: ${(props) => (props.$isConnected ? "3 / 5" : "3 / 4")};
   width: 100%;

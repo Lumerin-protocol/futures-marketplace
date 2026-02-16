@@ -44,29 +44,34 @@ export const FuturesMarketWidget = ({ contractSpecsQuery, contractMode = "future
   return (
     <>
       <SmallWidget className="lg:w-[40%]" style={{ justifyContent: "space-between" }}>
-        <h3>Contract Specification</h3>
+        <h3>{contractMode === "perpetual" ? "Statistics" : "Contract Specification"}</h3>
         <MarketStats>
           {isLoading && <Spinner fontSize="0.3em" />}
           {error && <div>Error loading market data</div>}
-          {contractSpecs?.data && (
+          {contractMode === "perpetual" ? (
             <>
               <div className="stat">
-                <h4>{formatSpeed(contractSpecs.data.speedHps)}</h4>
-                <p>CONTRACT SPEED</p>
+                <h4>1,234,567</h4>
+                <p>VOLUME</p>
               </div>
-              {contractMode === "futures" && (
+              <div className="stat">
+                <h4>8,523</h4>
+                <p>ORDER COUNT</p>
+              </div>
+            </>
+          ) : (
+            contractSpecs?.data && (
+              <>
+                <div className="stat">
+                  <h4>{formatSpeed(contractSpecs.data.speedHps)}</h4>
+                  <p>CONTRACT SPEED</p>
+                </div>
                 <div className="stat">
                   <h4>{formatDuration(contractSpecs.data.deliveryDurationSeconds)}</h4>
                   <p>DELIVERY DURATION</p>
                 </div>
-              )}
-              {contractMode === "perpetual" && (
-                <div className="stat">
-                  <h4>0.01%</h4>
-                  <p>FUNDING RATE</p>
-                </div>
-              )}
-            </>
+              </>
+            )
           )}
         </MarketStats>
         <div className="link">
@@ -83,7 +88,7 @@ export const FuturesMarketWidget = ({ contractSpecsQuery, contractMode = "future
       </SmallWidget>
 
       <ModalItem open={detailedSpecsModal.isOpen} setOpen={detailedSpecsModal.setOpen}>
-        <DetailedSpecsModal closeForm={detailedSpecsModal.close} contractSpecs={contractSpecs?.data} />
+        <DetailedSpecsModal closeForm={detailedSpecsModal.close} contractSpecs={contractSpecs?.data} contractMode={contractMode} />
       </ModalItem>
     </>
   );
