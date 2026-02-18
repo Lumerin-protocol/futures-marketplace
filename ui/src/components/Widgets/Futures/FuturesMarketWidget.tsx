@@ -14,9 +14,16 @@ import type { ContractMode } from "../../../types/types";
 interface FuturesMarketWidgetProps {
   contractSpecsQuery: UseQueryResult<GetResponse<FuturesContractSpecs>, Error>;
   contractMode?: ContractMode;
+  currentPrice?: string | null;
+  fundingRate?: string;
 }
 
-export const FuturesMarketWidget = ({ contractSpecsQuery, contractMode = "futures" }: FuturesMarketWidgetProps) => {
+export const FuturesMarketWidget = ({ 
+  contractSpecsQuery, 
+  contractMode = "futures",
+  currentPrice,
+  fundingRate = "0%"
+}: FuturesMarketWidgetProps) => {
   const { data: contractSpecs, isLoading, error } = contractSpecsQuery;
   const detailedSpecsModal = useModal();
 
@@ -44,19 +51,19 @@ export const FuturesMarketWidget = ({ contractSpecsQuery, contractMode = "future
   return (
     <>
       <SmallWidget className="lg:w-[40%]" style={{ justifyContent: "space-between" }}>
-        <h3>{contractMode === "perpetual" ? "Statistics" : "Contract Specification"}</h3>
+        <h3>{contractMode === "perpetual" ? "Market Info" : "Contract Specification"}</h3>
         <MarketStats>
           {isLoading && <Spinner fontSize="0.3em" />}
           {error && <div>Error loading market data</div>}
           {contractMode === "perpetual" ? (
             <>
               <div className="stat">
-                <h4>1,234,567</h4>
-                <p>VOLUME</p>
+                <h4>{currentPrice || "—"}</h4>
+                <p>CURRENT PRICE</p>
               </div>
               <div className="stat">
-                <h4>8,523</h4>
-                <p>ORDER COUNT</p>
+                <h4>{fundingRate}</h4>
+                <p>FUNDING RATE</p>
               </div>
             </>
           ) : (

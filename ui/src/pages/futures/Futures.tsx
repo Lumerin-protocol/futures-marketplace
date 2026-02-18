@@ -237,7 +237,12 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       </BalanceWidgetArea>
 
       <StatsWidgetArea>
-        <FuturesMarketWidget contractSpecsQuery={contractSpecsQuery} contractMode={contractMode} />
+        <FuturesMarketWidget 
+          contractSpecsQuery={contractSpecsQuery} 
+          contractMode={contractMode}
+          currentPrice={marketPrice ? (Number(marketPrice) / 1e6).toFixed(2) : null}
+          fundingRate="0%"
+        />
       </StatsWidgetArea>
 
       {/* Row 2: Chart (60%) */}

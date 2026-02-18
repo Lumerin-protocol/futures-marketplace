@@ -116,7 +116,7 @@ export const PerpsOrdersPositionsTabWidget = ({
             { text: "Open Orders", value: "OPEN_ORDERS", count: ordersCount },
             { text: "Positions", value: "POSITIONS", count: positionsCount },
             { text: "Trades", value: "TRADES", count: tradesCount },
-            { text: "Orders History", value: "ORDERS_HISTORY", count: ordersHistoryCount },
+            // { text: "Orders History", value: "ORDERS_HISTORY", count: ordersHistoryCount },
           ]}
           value={activeTab}
           setValue={setActiveTab}
@@ -257,8 +257,7 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling }
           <tr>
             <th>Type</th>
             <th>Price (USDC)</th>
-            <th>Quantity</th>
-            <th>Filled</th>
+            <th>Filled/Quantity</th>
             <th>Status</th>
             <th>Created</th>
             <th>Actions</th>
@@ -273,7 +272,6 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling }
                 </TypeBadge>
               </td>
               <td>{formatPrice(order.price)}</td>
-              <td>{formatQuantity(order.quantity)}</td>
               <td>
                 {formatQuantity(order.filledQuantity)} / {formatQuantity(order.originalQuantity)}
               </td>
@@ -377,7 +375,6 @@ const PerpsPositionsTable = ({ positionSnapshots, isLoading }: PerpsPositionsTab
             <th>Type</th>
             <th>Size</th>
             <th>Entry Price (USDC)</th>
-            <th>Current Price (USDC)</th>
             <th>Unrealized PnL</th>
             <th>Last Updated</th>
           </tr>
@@ -391,7 +388,6 @@ const PerpsPositionsTable = ({ positionSnapshots, isLoading }: PerpsPositionsTab
             </td>
             <td>{formatQuantity(latestSnapshot.netQuantityAfter)}</td>
             <td>{formatPrice(latestSnapshot.aggregatedEntryPriceAfter)}</td>
-            <td>-</td>
             <td>
               <PnLText $isPositive={unrealizedPnL >= 0}>
                 {unrealizedPnL >= 0 ? "+" : ""}{unrealizedPnL.toFixed(2)} USDC
@@ -440,7 +436,7 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress }: PerpsTradesTablePr
   };
 
   const formatVolume = (volume: bigint) => {
-    return (Number(volume) / 1e6).toFixed(2);
+    return (Number(volume) / 1e6).toFixed(6);
   };
 
   const formatDate = (dateString: string) => {
@@ -485,12 +481,12 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress }: PerpsTradesTablePr
       <Table>
         <thead>
           <tr>
+            <th>Transaction Id</th>
             <th>Side</th>
             <th>Price (USDC)</th>
             <th>Quantity</th>
-            <th>Volume (USDC)</th>
+            {/* <th>Volume (USDC)</th> */}
             <th>Date</th>
-            <th>Transaction</th>
           </tr>
         </thead>
         <tbody>
@@ -498,15 +494,6 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress }: PerpsTradesTablePr
             const side = getUserSide(trade);
             return (
               <TableRow key={trade.id}>
-                <td>
-                  <TypeBadge $type={side}>
-                    {side}
-                  </TypeBadge>
-                </td>
-                <td>{formatPrice(trade.price)}</td>
-                <td>{formatQuantity(trade.quantity)}</td>
-                <td>{formatVolume(trade.volume)}</td>
-                <td>{formatDate(trade.timestamp)}</td>
                 <td>
                   <TxLink 
                     href={`https://etherscan.io/tx/${trade.transactionHash}`} 
@@ -516,6 +503,15 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress }: PerpsTradesTablePr
                     {trade.transactionHash.slice(0, 6)}...{trade.transactionHash.slice(-4)}
                   </TxLink>
                 </td>
+                <td>
+                  <TypeBadge $type={side}>
+                    {side}
+                  </TypeBadge>
+                </td>
+                <td>{formatPrice(trade.price)}</td>
+                <td>{formatQuantity(trade.quantity)}</td>
+                {/* <td>{formatVolume(trade.volume)}</td> */}
+                <td>{formatDate(trade.timestamp)}</td>
               </TableRow>
             );
           })}
