@@ -5,13 +5,15 @@ import { useGetDeliveryDates } from "../../../hooks/data/useGetDeliveryDates";
 import { useFuturesContractConstants } from "../../../hooks/data/useFuturesContractConstants";
 import { useFuturesTokenInfo } from "../../../hooks/data/useFuturesTokenInfo";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
+import type { ContractMode } from "../../../types/types";
 
 interface DetailedSpecsModalProps {
   closeForm: () => void;
   contractSpecs: FuturesContractSpecs | null | undefined;
+  contractMode?: ContractMode;
 }
 
-export const DetailedSpecsModal = ({ closeForm, contractSpecs }: DetailedSpecsModalProps) => {
+export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "futures" }: DetailedSpecsModalProps) => {
   const { data: deliveryDatesRaw } = useGetDeliveryDates();
   const contractConstants = useFuturesContractConstants();
   const tokenInfo = useFuturesTokenInfo();
@@ -48,6 +50,75 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs }: DetailedSpecsMo
     return thps.toFixed(0);
   };
 
+  if (!contractSpecs && contractMode === "futures") {
+    return (
+      <ModalContainer>
+        <h2>Contract Specifications</h2>
+        <LoadingText>Loading contract specifications...</LoadingText>
+      </ModalContainer>
+    );
+  }
+  if (contractMode === "perpetual") {
+    return (
+      <ModalContainer>
+        <h2>Statistics</h2>
+
+        {/* MARKET STATISTICS */}
+        <SpecSection>
+          <SectionTitle>MARKET STATISTICS</SectionTitle>
+          <SpecItem>
+            <SpecLabel>Total Volume</SpecLabel>
+            <SpecValue>1,234,567 USDC</SpecValue>
+          </SpecItem>
+
+          <SpecItem>
+            <SpecLabel>Total Order Count</SpecLabel>
+            <SpecValue>8,523</SpecValue>
+          </SpecItem>
+
+          <SpecItem>
+            <SpecLabel>24h Volume</SpecLabel>
+            <SpecValue>456,789 USDC</SpecValue>
+          </SpecItem>
+
+          <SpecItem>
+            <SpecLabel>24h Trades</SpecLabel>
+            <SpecValue>3,241</SpecValue>
+          </SpecItem>
+        </SpecSection>
+
+        {/* FUNDING */}
+        <SpecSection>
+          <SectionTitle>FUNDING</SectionTitle>
+          <SpecItem>
+            <SpecLabel>Current Funding Rate</SpecLabel>
+            <SpecValue>0%</SpecValue>
+          </SpecItem>
+
+          <SpecItem>
+            <SpecLabel>Next Funding</SpecLabel>
+            <SpecValue>In 7h 23m</SpecValue>
+          </SpecItem>
+        </SpecSection>
+
+        {/* LIQUIDITY */}
+        <SpecSection>
+          <SectionTitle>LIQUIDITY</SectionTitle>
+          <SpecItem>
+            <SpecLabel>Open Interest</SpecLabel>
+            <SpecValue>2,345,678 USDC</SpecValue>
+          </SpecItem>
+
+          <SpecItem>
+            <SpecLabel>Active Orders</SpecLabel>
+            <SpecValue>1,256</SpecValue>
+          </SpecItem>
+        </SpecSection>
+      </ModalContainer>
+    );
+  }
+
+  // For futures mode, check if contractSpecs exist
   if (!contractSpecs) {
     return (
       <ModalContainer>

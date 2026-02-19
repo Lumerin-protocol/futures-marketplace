@@ -1,9 +1,10 @@
 import { memo, type FC, useCallback, useState, useEffect } from "react";
 import { useForm, useController, useWatch, type Control } from "react-hook-form";
-import { waitForAggregateBlockNumber, AGGREGATE_ORDER_BOOK_QK } from "../../hooks/data/useAggregateOrderBook";
+import { waitForOrderBookBlockNumber, getOrderBookQueryKey } from "../../hooks/data/orderBookHelpers";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import type { TransactionReceipt } from "viem";
 import { useCreateOrder } from "../../hooks/data/useCreateOrder";
+import { useCreatePerpsOrder } from "../../hooks/data/perps/useCreatePerpsOrder";
 import { PARTICIPANT_QK } from "../../hooks/data/useParticipant";
 import { POSITION_BOOK_QK } from "../../hooks/data/usePositionBook";
 import { useQueryClient } from "@tanstack/react-query";
@@ -12,6 +13,7 @@ import { formatStratumUrl } from "../../utils/formatters";
 import { isValidHost, isValidUsername } from "../../utils/validators";
 import styled from "@mui/material/styles/styled";
 import type { Participant } from "../../hooks/data/useParticipant";
+import type { ContractMode } from "../../types/types";
 import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpecs";
 import { calculateMinMargin } from "../../hooks/data/useGetMinMarginForPosition";
 import { getMinMarginForPositionManual } from "../../hooks/data/getMinMarginForPositionManual";
@@ -35,6 +37,7 @@ interface Props {
   onOrderPlaced?: () => void | Promise<void>;
   closeForm: () => void;
   bypassConflictCheck?: boolean; // Allow proceeding despite conflicting orders
+  contractMode?: ContractMode;
 }
 
 export const PlaceOrderForm: FC<Props> = ({
@@ -46,8 +49,13 @@ export const PlaceOrderForm: FC<Props> = ({
   onOrderPlaced,
   closeForm,
   bypassConflictCheck = false,
+  contractMode = "futures",
 }) => {
-  const { createOrderAsync } = useCreateOrder();
+  // Conditionally use futures or perps create order hook
+  const futuresCreateOrder = useCreateOrder();
+  const perpsCreateOrder = useCreatePerpsOrder();
+  const { createOrderAsync } = contractMode === "perpetual" ? perpsCreateOrder : futuresCreateOrder;
+  
   const qc = useQueryClient();
   const { address } = useAccount();
   const publicClient = usePublicClient();
@@ -168,27 +176,33 @@ export const PlaceOrderForm: FC<Props> = ({
           <div className="mb-4">
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-300">Price Per Day:</span>
+                <span className="text-gray-300">{contractMode === "futures" ? "Price Per Day:" : "Price:"}</span>
                 <span className="text-white">{Number(price) / 1e6} USDC</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-300">Quantity:</span>
-                <span className="text-white">{absoluteQuantity} units</span>
+                <span className="text-white">
+                  {contractMode === "perpetual" ? absoluteQuantity.toFixed(6) : absoluteQuantity} units
+                </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">Delivery Date:</span>
-                <span className="text-white">{new Date(Number(deliveryDate) * 1000).toLocaleString()}</span>
-              </div>
+              {contractMode === "futures" && (
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Delivery Date:</span>
+                  <span className="text-white">{new Date(Number(deliveryDate) * 1000).toLocaleString()}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-gray-300">Total Value:</span>
                 <span className="text-white">
                   {((Number(price) / 1e6) * absoluteQuantity * deliveryDurationDays).toFixed(2)} USDC
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">Expected Hashrate:</span>
-                <span className="text-white">{absoluteQuantity * 100} Th/s</span>
-              </div>
+              {contractMode === "futures" && (
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Expected Hashrate:</span>
+                  <span className="text-white">{absoluteQuantity * 100} Th/s</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-gray-300">Required Margin:</span>
                 <span className="text-white">
@@ -207,7 +221,7 @@ export const PlaceOrderForm: FC<Props> = ({
               </div>
             </div>
           </div>
-          {isBuy && (
+          {isBuy && contractMode === "futures" && (
             <div className="mb-4">
               <CheckboxContainer>
                 <CheckboxInput
@@ -247,12 +261,22 @@ export const PlaceOrderForm: FC<Props> = ({
             }
 
             const destUrl = getDestUrl();
-            const txhash = await createOrderAsync({
-              price,
-              deliveryDate,
-              quantity,
-              destUrl,
-            });
+            let txhash;
+            if (contractMode === "perpetual") {
+              // Perps only needs price and quantity
+              txhash = await (createOrderAsync as any)({
+                price,
+                quantity,
+              });
+            } else {
+              // Futures needs price, deliveryDate, quantity, and destUrl
+              txhash = await (createOrderAsync as any)({
+                price,
+                deliveryDate,
+                quantity,
+                destUrl,
+              });
+            }
             return {
               isSkipped: false,
               txhash: txhash,
@@ -260,11 +284,11 @@ export const PlaceOrderForm: FC<Props> = ({
           },
           postConfirmation: async (receipt: TransactionReceipt) => {
             // Wait for block number to ensure indexer has updated
-            await waitForAggregateBlockNumber(receipt.blockNumber, qc, Number(deliveryDate));
+            await waitForOrderBookBlockNumber(receipt.blockNumber, qc, contractMode, Number(deliveryDate));
 
             // Refetch order book, positions, and participant data
             await Promise.all([
-              qc.invalidateQueries({ queryKey: [AGGREGATE_ORDER_BOOK_QK] }),
+              qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
               address && qc.invalidateQueries({ queryKey: [POSITION_BOOK_QK] }),
               address && qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
             ]);

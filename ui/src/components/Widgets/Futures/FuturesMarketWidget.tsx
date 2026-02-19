@@ -9,12 +9,21 @@ import { DetailedSpecsModal } from "./DetailedSpecsModal";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
+import type { ContractMode } from "../../../types/types";
 
 interface FuturesMarketWidgetProps {
   contractSpecsQuery: UseQueryResult<GetResponse<FuturesContractSpecs>, Error>;
+  contractMode?: ContractMode;
+  currentPrice?: string | null;
+  fundingRate?: string;
 }
 
-export const FuturesMarketWidget = ({ contractSpecsQuery }: FuturesMarketWidgetProps) => {
+export const FuturesMarketWidget = ({ 
+  contractSpecsQuery, 
+  contractMode = "futures",
+  currentPrice,
+  fundingRate = "0%"
+}: FuturesMarketWidgetProps) => {
   const { data: contractSpecs, isLoading, error } = contractSpecsQuery;
   const detailedSpecsModal = useModal();
 
@@ -42,21 +51,34 @@ export const FuturesMarketWidget = ({ contractSpecsQuery }: FuturesMarketWidgetP
   return (
     <>
       <SmallWidget className="lg:w-[40%]" style={{ justifyContent: "space-between" }}>
-        <h3>Contract Specification</h3>
+        <h3>{contractMode === "perpetual" ? "Market Info" : "Contract Specification"}</h3>
         <MarketStats>
           {isLoading && <Spinner fontSize="0.3em" />}
           {error && <div>Error loading market data</div>}
-          {contractSpecs?.data && (
+          {contractMode === "perpetual" ? (
             <>
               <div className="stat">
-                <h4>{formatSpeed(contractSpecs.data.speedHps)}</h4>
-                <p>CONTRACT SPEED</p>
+                <h4>{currentPrice || "—"}</h4>
+                <p>CURRENT PRICE</p>
               </div>
               <div className="stat">
-                <h4>{formatDuration(contractSpecs.data.deliveryDurationSeconds)}</h4>
-                <p>DELIVERY DURATION</p>
+                <h4>{fundingRate}</h4>
+                <p>FUNDING RATE</p>
               </div>
             </>
+          ) : (
+            contractSpecs?.data && (
+              <>
+                <div className="stat">
+                  <h4>{formatSpeed(contractSpecs.data.speedHps)}</h4>
+                  <p>CONTRACT SPEED</p>
+                </div>
+                <div className="stat">
+                  <h4>{formatDuration(contractSpecs.data.deliveryDurationSeconds)}</h4>
+                  <p>DELIVERY DURATION</p>
+                </div>
+              </>
+            )
           )}
         </MarketStats>
         <div className="link">
@@ -73,7 +95,7 @@ export const FuturesMarketWidget = ({ contractSpecsQuery }: FuturesMarketWidgetP
       </SmallWidget>
 
       <ModalItem open={detailedSpecsModal.isOpen} setOpen={detailedSpecsModal.setOpen}>
-        <DetailedSpecsModal closeForm={detailedSpecsModal.close} contractSpecs={contractSpecs?.data} />
+        <DetailedSpecsModal closeForm={detailedSpecsModal.close} contractSpecs={contractSpecs?.data} contractMode={contractMode} />
       </ModalItem>
     </>
   );

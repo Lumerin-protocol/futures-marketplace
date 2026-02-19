@@ -2,7 +2,7 @@ import styled from "@mui/material/styles/styled";
 import EastIcon from "@mui/icons-material/East";
 import { useAccount } from "wagmi";
 import { useFeeTokenBalance } from "../../hooks/data/useFeeTokenBalance";
-import { usePaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
+import { useFuturesPaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
 import { useRates } from "../../hooks/data/useRates";
 import { EtherIcon, LumerinIcon, UsdcIcon } from "../../images";
 import { SmallWidget } from "../Cards/Cards.styled";
@@ -14,7 +14,7 @@ import { feeToken, formatCurrency, formatValue, gasToken, paymentToken } from ".
 
 export const WalletBalanceWidget = () => {
   const { address } = useAccount();
-  const paymentTokenBalance = usePaymentTokenBalance(address);
+  const paymentTokenBalance = useFuturesPaymentTokenBalance(address);
   const feeTokenBalance = useFeeTokenBalance(address);
   const ethBalance = useEthBalance({ address });
   const ratesQuery = useRates();

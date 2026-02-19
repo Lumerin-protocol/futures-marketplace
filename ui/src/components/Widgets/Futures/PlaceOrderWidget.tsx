@@ -1,7 +1,8 @@
 import styled from "@mui/material/styles/styled";
 import { keyframes, css } from "@emotion/react";
 import { SmallWidget } from "../../Cards/Cards.styled";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import Slider from "@mui/material/Slider";
 
 // Pulsing background animation - single blue color for all inputs
 const pulseYellow = keyframes`
@@ -28,12 +29,18 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { Participant } from "../../../hooks/data/useParticipant";
+import type { ContractMode, AccountBalance } from "../../../types/types";
 import { useAccount } from "wagmi";
-import { useGetFutureBalance } from "../../../hooks/data/useGetFutureBalance";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
-import { handleNumericDecimalInput } from "../../Forms/Shared/AmountInputForm";
-import { usePaymentTokenBalance } from "../../../hooks/data/usePaymentTokenBalance";
+import { handleNumericDecimalInput, handleNumericDecimalInput6Decimals } from "../../Forms/Shared/AmountInputForm";
 import { useOrderFee } from "../../../hooks/data/useOrderFee";
+
+interface BalanceQueryResult {
+  data: bigint | undefined;
+  isLoading: boolean;
+  isSuccess: boolean;
+  refetch: () => void;
+}
 
 interface PlaceOrderWidgetProps {
   externalPrice?: string;
@@ -48,6 +55,9 @@ interface PlaceOrderWidgetProps {
   highlightMode: "inputs" | "buttons" | undefined;
   onOrderPlaced?: () => void | Promise<void>;
   minMargin?: bigint | null;
+  contractMode?: ContractMode;
+  accountBalance?: AccountBalance;
+  balanceQuery: BalanceQueryResult;
 }
 
 export const PlaceOrderWidget = ({
@@ -62,11 +72,13 @@ export const PlaceOrderWidget = ({
   highlightMode,
   onOrderPlaced,
   minMargin,
+  contractMode = "futures",
+  accountBalance,
+  balanceQuery,
 }: PlaceOrderWidgetProps) => {
   const { data: marketPrice, isLoading: isMarketPriceLoading } = useGetMarketPrice();
   const { address } = useAccount();
-  const balanceQuery = useGetFutureBalance(address);
-  const accountBalanceQuery = usePaymentTokenBalance(address);
+  const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
   const { data: orderFeeRaw } = useOrderFee(address);
 
   // Calculate price step from contract specs
@@ -83,7 +95,8 @@ export const PlaceOrderWidget = ({
 
   const [price, setPrice] = useState("5.00"); // Will be updated when hashrate data loads
   const [priceInitialized, setPriceInitialized] = useState(false); // Track if price has been initialized from hashrate
-  const [amount, setAmount] = useState(1);
+  const [amount, setAmount] = useState<number | string>(1); // Can be number or string to support decimals in perpetuals
+  const [sliderValue, setSliderValue] = useState(0); // Slider value 0-100
   const [highlightedButton, setHighlightedButton] = useState<"buy" | "sell" | "inputs" | null>(null);
   const [showHighPriceModal, setShowHighPriceModal] = useState(false);
   const [showConflictModal, setShowConflictModal] = useState(false);
@@ -124,6 +137,69 @@ export const PlaceOrderWidget = ({
     }
   }, [externalAmount]);
 
+  // Update slider when price or balance changes
+  useEffect(() => {
+    const maxQty = calculateMaxQuantity();
+    if (maxQty > 0) {
+      const numericAmount = getNumericAmount();
+      const percentage = Math.min(100, Math.max(0, (numericAmount / maxQty) * 100));
+      setSliderValue(Math.round(percentage));
+    } else {
+      setSliderValue(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [price, balanceQuery.data, minMargin, latestPrice, amount]);
+
+  // Helper to get numeric amount value for calculations
+  const getNumericAmount = (): number => {
+    const parsed = typeof amount === "string" ? parseFloat(amount) : amount;
+    return isNaN(parsed) || parsed <= 0 ? 0 : parsed;
+  };
+
+  // Calculate maximum available quantity based on current price
+  const calculateMaxQuantity = (): number => {
+    const currentPrice = parseFloat(price) || 0;
+    if (currentPrice <= 0 || !latestPrice) return 0;
+
+    const priceInWei = BigInt(Math.round(currentPrice * 1e6));
+    const totalBalance = balanceQuery.data ?? 0n;
+    const lockedBalance = minMargin ?? 0n;
+    const availableBalance = totalBalance - lockedBalance;
+    const orderFee = orderFeeRaw ?? 0n;
+
+    if (availableBalance <= orderFee) return 0;
+
+    const balanceForMargin = availableBalance - orderFee;
+
+    // Binary search to find maximum quantity
+    let low = 0;
+    let high = contractMode === "perpetual" ? 1000000 : 50; // High upper bound for search
+    let maxQty = 0;
+
+    // Use higher precision for perpetual markets
+    const precision = contractMode === "perpetual" ? 0.000001 : 1;
+
+    while (high - low > precision) {
+      const mid = (low + high) / 2;
+      const requiredMargin = getMinMarginForPositionManual(
+        priceInWei,
+        mid,
+        latestPrice,
+        marginPercent,
+        deliveryDurationDays,
+      );
+
+      if (requiredMargin <= balanceForMargin) {
+        maxQty = mid;
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+
+    return maxQty;
+  };
+
   // Highlight button when position is closed and values are substituted
   useEffect(() => {
     if (
@@ -158,7 +234,7 @@ export const PlaceOrderWidget = ({
   if (contractSpecsQuery.isLoading || !priceStep || isMarketPriceLoading || !newestItemPrice) {
     return (
       <PlaceOrderContainer>
-        <h3>Place Order</h3>
+        <h3>Place Order{contractMode === "perpetual" ? " - PERP" : ""}</h3>
         <div style={{ textAlign: "center", padding: "2rem", color: "#6b7280" }}>
           <Spinner fontSize="0.3em" />
           <p style={{ marginTop: "1rem", margin: 0 }}>Loading contract specifications...</p>
@@ -184,9 +260,27 @@ export const PlaceOrderWidget = ({
     setPrice(newPrice.toFixed(2));
   };
 
+  const handleAmountChange = (newAmount: number | string) => {
+    setAmount(newAmount);
+    
+    // Update slider to reflect the amount as a percentage of max
+    const maxQty = calculateMaxQuantity();
+    if (maxQty > 0) {
+      const numericAmount = typeof newAmount === "string" ? parseFloat(newAmount) : newAmount;
+      const percentage = Math.min(100, Math.max(0, (numericAmount / maxQty) * 100));
+      setSliderValue(Math.round(percentage));
+    }
+  };
+
   const handleBuy = async () => {
-    if (!externalDeliveryDate) {
+    if (!externalDeliveryDate && contractMode === "futures") {
       alert("Please select a price from the order book to set delivery date");
+      return;
+    }
+
+    const numericAmount = getNumericAmount();
+    if (numericAmount <= 0) {
+      alert("Quantity must be greater than 0");
       return;
     }
 
@@ -204,7 +298,7 @@ export const PlaceOrderWidget = ({
 
     const requiredMargin = getMinMarginForPositionManual(
       priceInWei,
-      amount, // Positive quantity for Buy
+      numericAmount, // Positive quantity for Buy
       latestPrice,
       marginPercent,
       deliveryDurationDays,
@@ -230,15 +324,15 @@ export const PlaceOrderWidget = ({
     }
 
     // Check for conflicting orders (opposite action, same price, same delivery date)
-    if (participantData?.orders) {
+    if (participantData?.orders && (contractMode === "perpetual" || externalDeliveryDate !== undefined)) {
       const priceInWei = BigInt(Math.round(currentPrice * 1e6));
-      const deliveryDateValue = BigInt(externalDeliveryDate);
+      const deliveryDateValue = externalDeliveryDate ? BigInt(externalDeliveryDate) : 0n;
       const conflictingOrder = participantData.orders.find(
         (order) =>
           order.isActive &&
           !order.isBuy && // Opposite action (Sell)
           order.pricePerDay === priceInWei &&
-          order.deliveryAt === deliveryDateValue,
+          (contractMode === "perpetual" || order.deliveryAt === deliveryDateValue),
       );
 
       if (conflictingOrder) {
@@ -246,8 +340,8 @@ export const PlaceOrderWidget = ({
         setConflictingOrderQuantity(null);
         setPendingOrder({
           price: currentPrice,
-          amount: amount,
-          quantity: amount, // Positive for Buy
+          amount: numericAmount,
+          quantity: numericAmount, // Positive for Buy
         });
         setShowConflictModal(true);
         return;
@@ -260,19 +354,25 @@ export const PlaceOrderWidget = ({
     if (currentPrice > maxAllowedPrice) {
       setPendingOrder({
         price: currentPrice,
-        amount: amount,
-        quantity: amount, // Positive for Buy
+        amount: numericAmount,
+        quantity: numericAmount, // Positive for Buy
       });
       setShowHighPriceModal(true);
       return;
     }
 
-    openOrderForm(currentPrice, amount, amount); // Positive quantity for Buy
+    openOrderForm(currentPrice, numericAmount, numericAmount); // Positive quantity for Buy
   };
 
   const handleSell = async () => {
-    if (!externalDeliveryDate) {
+    if (!externalDeliveryDate && contractMode === "futures") {
       alert("Please select a price from the order book to set delivery date");
+      return;
+    }
+
+    const numericAmount = getNumericAmount();
+    if (numericAmount <= 0) {
+      alert("Quantity must be greater than 0");
       return;
     }
 
@@ -290,7 +390,7 @@ export const PlaceOrderWidget = ({
 
     const requiredMargin = getMinMarginForPositionManual(
       priceInWei,
-      -amount, // Negative quantity for Sell
+      -numericAmount, // Negative quantity for Sell
       latestPrice,
       marginPercent,
       deliveryDurationDays,
@@ -316,15 +416,15 @@ export const PlaceOrderWidget = ({
     }
 
     // Check for conflicting orders (opposite action, same price, same delivery date)
-    if (participantData?.orders) {
+    if (participantData?.orders && (contractMode === "perpetual" || externalDeliveryDate !== undefined)) {
       const priceInWei = BigInt(Math.round(currentPrice * 1e6));
-      const deliveryDateValue = BigInt(externalDeliveryDate);
+      const deliveryDateValue = externalDeliveryDate ? BigInt(externalDeliveryDate) : 0n;
       const conflictingOrder = participantData.orders.find(
         (order) =>
           order.isActive &&
           order.isBuy && // Opposite action (Buy)
           order.pricePerDay === priceInWei &&
-          order.deliveryAt === deliveryDateValue,
+          (contractMode === "perpetual" || order.deliveryAt === deliveryDateValue),
       );
 
       if (conflictingOrder) {
@@ -332,8 +432,8 @@ export const PlaceOrderWidget = ({
         setConflictingOrderQuantity(null);
         setPendingOrder({
           price: currentPrice,
-          amount: amount,
-          quantity: -amount, // Negative for Sell
+          amount: numericAmount,
+          quantity: -numericAmount, // Negative for Sell
         });
         setShowConflictModal(true);
         return;
@@ -346,14 +446,14 @@ export const PlaceOrderWidget = ({
     if (currentPrice > maxAllowedPrice) {
       setPendingOrder({
         price: currentPrice,
-        amount: amount,
-        quantity: -amount, // Negative for Sell
+        amount: numericAmount,
+        quantity: -numericAmount, // Negative for Sell
       });
       setShowHighPriceModal(true);
       return;
     }
 
-    openOrderForm(currentPrice, amount, -amount); // Negative quantity for Sell
+    openOrderForm(currentPrice, numericAmount, -numericAmount); // Negative quantity for Sell
   };
 
   const openOrderForm = (orderPrice: number, orderAmount: number, quantity: number) => {
@@ -396,12 +496,12 @@ export const PlaceOrderWidget = ({
   return (
     <>
       <PlaceOrderContainer>
-        <h3>Place Order</h3>
+        <h2>Place Order</h2>
 
         <MainSection>
           <InputSection>
             <InputGroup $isHighlighted={highlightedButton !== null}>
-              <label>Price per day (USDC)</label>
+              <label>{contractMode === "futures" ? "Price per day (USDC)" : "Price (USDC)"}</label>
               <PriceInputContainer $isHighlighted={highlightedButton !== null}>
                 <PriceButton
                   onClick={decrementPrice}
@@ -430,17 +530,67 @@ export const PlaceOrderWidget = ({
                   +
                 </PriceButton>
               </PriceInputContainer>
+              <MinMarginLabel>Min Margin: {marginPercent}%</MinMarginLabel>
             </InputGroup>
 
             <InputGroup $isHighlighted={highlightedButton !== null}>
               <label>Quantity</label>
-              <input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(Number(e.target.value.replace("-", "")))}
-                min="1"
-                max="50"
-              />
+              {contractMode === "perpetual" ? (
+                <input
+                  type="text"
+                  value={amount}
+                  onChange={(e) => handleAmountChange(e.target.value.replace("-", ""))}
+                  onBeforeInput={handleNumericDecimalInput6Decimals}
+                  inputMode="decimal"
+                  placeholder="0.000001"
+                  style={{ minWidth: "70px" }}
+                />
+              ) : (
+                <input
+                  type="number"
+                  value={amount}
+                  onChange={(e) => handleAmountChange(Number(e.target.value.replace("-", "")))}
+                  min="1"
+                  max="50"
+                />
+              )}
+              <SliderContainer>
+                <StyledSlider
+                  value={sliderValue}
+                  onChange={(_, value) => {
+                    const numValue = Array.isArray(value) ? value[0] : value;
+                    setSliderValue(numValue);
+                    
+                    const maxQty = calculateMaxQuantity();
+                    const newAmount = (maxQty * numValue) / 100;
+                    
+                    if (contractMode === "perpetual") {
+                      // Format with up to 6 decimal places
+                      setAmount(newAmount.toFixed(6));
+                    } else {
+                      // Round to nearest integer for futures
+                      setAmount(Math.floor(newAmount));
+                    }
+                  }}
+                  disabled={showOrderForm}
+                  min={0}
+                  max={100}
+                  marks={[
+                    { value: 0, label: '0%' },
+                    { value: 25, label: '25%' },
+                    { value: 50, label: '50%' },
+                    { value: 75, label: '75%' },
+                    { value: 100, label: '100%' },
+                  ]}
+                  valueLabelDisplay="auto"
+                  valueLabelFormat={(value) => `${value}%`}
+                />
+                {/* <SliderInfoContainer>
+                  <SliderInfo>
+                    Max: {calculateMaxQuantity().toFixed(contractMode === "perpetual" ? 6 : 0)}
+                  </SliderInfo>
+                </SliderInfoContainer> */}
+              </SliderContainer>
             </InputGroup>
           </InputSection>
 
@@ -463,6 +613,7 @@ export const PlaceOrderWidget = ({
           contractSpecsQuery={contractSpecsQuery}
           onConfirm={handleConfirmHighPrice}
           onCancel={handleCancelHighPrice}
+          contractMode={contractMode}
         />
       </ModalItem>
 
@@ -473,6 +624,7 @@ export const PlaceOrderWidget = ({
           externalDeliveryDate={externalDeliveryDate}
           onConfirm={handleConfirmConflict}
           onCancel={handleCancelConflict}
+          contractMode={contractMode}
         />
       </ModalItem>
 
@@ -494,6 +646,7 @@ export const PlaceOrderWidget = ({
             latestPrice={latestPrice}
             onOrderPlaced={onOrderPlaced}
             bypassConflictCheck={bypassConflictCheck}
+            contractMode={contractMode}
             closeForm={() => {
               setShowOrderForm(false);
               setPendingOrder(null);
@@ -513,12 +666,14 @@ const ConflictingOrderModal = ({
   externalDeliveryDate,
   onConfirm,
   onCancel,
+  contractMode = "futures",
 }: {
   pendingOrder: { price: number; amount: number; quantity: number } | null;
   conflictingOrderQuantity: number | null;
   externalDeliveryDate?: number;
   onConfirm: () => void;
   onCancel: () => void;
+  contractMode?: ContractMode;
 }) => {
   if (!pendingOrder) return null;
 
@@ -533,7 +688,7 @@ const ConflictingOrderModal = ({
       <div className="bg-orange-900/20 border border-orange-500/30 rounded-lg p-4">
         <p className="text-gray-300 text-sm mb-3">
           You already have an active <strong className="text-white">{oppositeAction}</strong> order at the same price
-          and delivery date.
+          {contractMode === "futures" && " and delivery date"}.
         </p>
 
         <div className="space-y-2 text-sm">
@@ -541,18 +696,23 @@ const ConflictingOrderModal = ({
             <span className="text-gray-300">Price:</span>
             <span className="text-white font-medium">{pendingOrder.price.toFixed(2)} USDC</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-300">Delivery Date:</span>
-            <span className="text-white font-medium">{deliveryDateFormatted}</span>
-          </div>
+          {contractMode === "futures" && (
+            <div className="flex justify-between">
+              <span className="text-gray-300">Delivery Date:</span>
+              <span className="text-white font-medium">{deliveryDateFormatted}</span>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="bg-white-900/20 border border-white-500/30 rounded-lg p-4">
         <p className="text-white-300 text-sm leading-relaxed">
-          <strong>Important:</strong> Your order of <strong>{pendingOrder.amount} units</strong> will be placed as
-          specified. However, it will be matched against your existing {oppositeAction} order and offset orders will be
-          closed.
+          <strong>Important:</strong> Your order of{" "}
+          <strong>
+            {contractMode === "perpetual" ? pendingOrder.amount.toFixed(6) : pendingOrder.amount} units
+          </strong>{" "}
+          will be placed as specified. However, it will be matched against your existing {oppositeAction} order and
+          offset orders will be closed.
         </p>
       </div>
 
@@ -571,6 +731,7 @@ const HighPriceConfirmationModal = ({
   contractSpecsQuery,
   onConfirm,
   onCancel,
+  contractMode = "futures",
 }: {
   pendingOrder: { price: number; amount: number; quantity: number } | null;
   newestItemPrice: number;
@@ -578,6 +739,7 @@ const HighPriceConfirmationModal = ({
   contractSpecsQuery: UseQueryResult<GetResponse<FuturesContractSpecs>, Error>;
   onConfirm: () => void;
   onCancel: () => void;
+  contractMode?: ContractMode;
 }) => {
   if (!pendingOrder) return null;
 
@@ -622,7 +784,9 @@ const HighPriceConfirmationModal = ({
           </div>
           <div className="flex justify-between">
             <span className="text-gray-300">Amount:</span>
-            <span className="text-white">{pendingOrder.amount} units</span>
+            <span className="text-white">
+              {contractMode === "perpetual" ? pendingOrder.amount.toFixed(6) : pendingOrder.amount} units
+            </span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-300">Total Value:</span>
@@ -630,10 +794,12 @@ const HighPriceConfirmationModal = ({
               {(pendingOrder.price * pendingOrder.amount * deliveryDurationDays).toFixed(2)} USDC
             </span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-300">Expected Hashrate:</span>
-            <span className="text-white">{pendingOrder.amount * 100} Th/s</span>
-          </div>
+          {contractMode === "futures" && (
+            <div className="flex justify-between">
+              <span className="text-gray-300">Expected Hashrate:</span>
+              <span className="text-white">{pendingOrder.amount * 100} Th/s</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -657,23 +823,25 @@ const HighPriceConfirmationModal = ({
 const PlaceOrderContainer = styled(SmallWidget)`
   width: 100%;
   padding: 1.5rem;
+  padding-top: 0.5rem;
   margin-bottom: 0px;
   display: flex;
   flex-direction: column;
   gap: 1rem;
   
-  h3 {
+  h2 {
     margin: 0;
-    font-size: 1.3rem;
-    font-weight: 600;
+    font-size: 0.75rem;
     color: #fff;
+    text-align: center;
+    margin-bottom: 1rem;
   }
 `;
 
 const MainSection = styled("div")`
   display: flex;
   width: 100%;
-  flex-direction: row;
+  flex-direction: column;
   gap: 1.5rem;
   align-items: center;
   
@@ -688,6 +856,7 @@ const InputSection = styled("div")`
   flex-direction: row;
   gap: 1rem;
   flex: 1;
+  width: 100%;
   
   @media (max-width: 640px) {
     flex-direction: column;
@@ -727,6 +896,13 @@ const InputGroup = styled("div")<{ $isHighlighted?: boolean }>`
       color: #6b7280;
     }
   }
+`;
+
+const MinMarginLabel = styled("div")`
+  font-size: 0.75rem;
+  color: #a7a9b6;
+  margin-top: 0.25rem;
+  text-align: center;
 `;
 
 const PriceInputContainer = styled("div")<{ $isHighlighted?: boolean }>`
@@ -801,6 +977,7 @@ const ButtonSection = styled("div")`
   align-self: end;
   display: flex;
   flex-direction: row;
+  width: 100%;
   
   @media (max-width: 1400px) {
     flex-direction: row;
@@ -815,6 +992,7 @@ const ButtonSection = styled("div")`
 `;
 
 const BuyButton = styled("button")<{ $isHighlighted?: boolean }>`
+  width: 100%;
   padding: 0.875rem 1rem;
   background: #22c55e;
   color: #fff;
@@ -845,6 +1023,7 @@ const BuyButton = styled("button")<{ $isHighlighted?: boolean }>`
 `;
 
 const SellButton = styled("button")<{ $isHighlighted?: boolean }>`
+  width: 100%;
   padding: 0.875rem 1rem;
   background: #ef4444;
   color: #fff;
@@ -872,4 +1051,102 @@ const SellButton = styled("button")<{ $isHighlighted?: boolean }>`
     opacity: 0.6;
     animation: none;
   }
+`;
+
+const SliderContainer = styled("div")`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0 1rem;
+`;
+
+const StyledSlider = styled(Slider)`
+  color: #ffffff;
+  height: 6px;
+  padding: 13px 0;
+  
+  & .MuiSlider-thumb {
+    width: 18px;
+    height: 18px;
+    background-color: #ffffff;
+    transition: all 0.2s ease;
+    
+    &:hover,
+    &.Mui-focusVisible {
+      box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.16);
+      background-color: #f0f0f0;
+    }
+    
+    &.Mui-active {
+      box-shadow: 0 0 0 14px rgba(255, 255, 255, 0.16);
+    }
+  }
+  
+  & .MuiSlider-track {
+    height: 6px;
+    border: none;
+    background-color: #ffffff;
+  }
+  
+  & .MuiSlider-rail {
+    height: 6px;
+    background-color: rgba(255, 255, 255, 0.2);
+    opacity: 1;
+  }
+  
+  & .MuiSlider-mark {
+    width: 2px;
+    height: 6px;
+    background-color: rgba(255, 255, 255, 0.5);
+    opacity: 1;
+  }
+  
+  & .MuiSlider-markActive {
+    background-color: rgba(0, 0, 0, 0.3);
+  }
+  
+  & .MuiSlider-markLabel {
+    color: #a7a9b6;
+    font-size: 0.75rem;
+    top: 26px;
+  }
+  
+  & .MuiSlider-valueLabel {
+    background-color: #ffffff;
+    color: #000000;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 0.75rem;
+  }
+  
+  &.Mui-disabled {
+    color: #6b7280;
+    
+    & .MuiSlider-thumb {
+      background-color: #6b7280;
+    }
+    
+    & .MuiSlider-track {
+      background-color: #6b7280;
+    }
+    
+    & .MuiSlider-mark {
+      background-color: rgba(107, 114, 128, 0.5);
+    }
+  }
+`;
+
+const SliderInfoContainer = styled("div")`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 0.25rem;
+`;
+
+const SliderInfo = styled("span")`
+  color: #ffffff;
+  font-weight: 500;
+  text-align: center;
+  font-size: 0.875rem;
 `;

@@ -26,7 +26,7 @@ import { formatFeePrice, formatHashrateTHPS, formatPaymentPrice } from "../../li
 import { formatDuration } from "../../lib/duration";
 import { getPredefinedPoolByAddress, getPredefinedPoolByIndex, predefinedPools } from "./BuyerForms/predefinedPools";
 import { useFeeTokenBalance } from "../../hooks/data/useFeeTokenBalance";
-import { usePaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
+import { useFuturesPaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
 
 interface BuyFormProps {
   contractId: string;
@@ -57,7 +57,7 @@ export const BuyForm: FC<BuyFormProps> = memo(
 
     const { address } = useAccount();
     const feeTokenBalance = useFeeTokenBalance(address);
-    const paymentTokenBalance = usePaymentTokenBalance(address);
+    const paymentTokenBalance = useFuturesPaymentTokenBalance(address);
 
     useEffect(() => {
       validateBalance(feeTokenBalance, paymentTokenBalance, feeWSlippage, priceWSlippage, form);

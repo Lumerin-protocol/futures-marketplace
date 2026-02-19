@@ -50,6 +50,44 @@ export const handleNumericDecimalInput = (e: React.FormEvent<HTMLInputElement | 
   }
 };
 
+/**
+ * Validates numeric input for decimal numbers with up to 6 decimal places.
+ * Used for perpetuals quantity input which supports higher precision.
+ * @param e - The beforeinput event
+ */
+export const handleNumericDecimalInput6Decimals = (e: React.FormEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const inputChar = e.data;
+
+  // Allow deletion or navigation
+  if (!inputChar) return;
+
+  // Reject anything not digit or "."
+  if (!/^[0-9.]$/.test(inputChar)) {
+    e.preventDefault();
+    return;
+  }
+
+  const current = e.target.value;
+  const selectionStart = e.target.selectionStart;
+  const selectionEnd = e.target.selectionEnd;
+
+  // Predict the new value if input is allowed
+  const newValue = current.slice(0, selectionStart ?? 0) + inputChar + current.slice(selectionEnd ?? 0);
+
+  // Only one dot allowed
+  if ((newValue.match(/\./g) || []).length > 1) {
+    e.preventDefault();
+    return;
+  }
+
+  // Max 6 digits after decimal
+  const parts = newValue.split(".");
+  if (parts[1] && parts[1].length > 6) {
+    e.preventDefault();
+    return;
+  }
+};
+
 export const AmountInputForm: FC<Props> = ({
   control,
   label = "Amount",

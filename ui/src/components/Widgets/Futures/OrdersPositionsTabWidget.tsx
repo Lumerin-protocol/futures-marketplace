@@ -20,7 +20,16 @@ import { useHistoricalPositions } from "../../../hooks/data/useHistoricalPositio
 // import { waitForBlockNumberPositionBook } from "../../../hooks/data/usePositionBook";
 // import type { TransactionReceipt } from "viem";
 
+import type { AccountBalance, ContractMode } from "../../../types/types";
+
 type TimeFilter = "OPEN" | "LAST_30_DAYS";
+
+interface BalanceQueryResult {
+  data: bigint | undefined;
+  isLoading: boolean;
+  isSuccess: boolean;
+  refetch: () => void;
+}
 
 interface OrdersPositionsTabWidgetProps {
   orders: ParticipantOrder[];
@@ -31,6 +40,9 @@ interface OrdersPositionsTabWidgetProps {
   onClosePosition?: (price: string, amount: number, isBuy: boolean) => void;
   participantData?: any;
   minMargin?: bigint | null;
+  accountBalance?: AccountBalance;
+  contractMode?: ContractMode;
+  balanceQuery: BalanceQueryResult;
 }
 
 export const OrdersPositionsTabWidget = ({
@@ -42,6 +54,9 @@ export const OrdersPositionsTabWidget = ({
   onClosePosition,
   participantData,
   minMargin,
+  accountBalance,
+  contractMode = "futures",
+  balanceQuery,
 }: OrdersPositionsTabWidgetProps) => {
   const [activeTab, setActiveTab] = useState<"ORDERS" | "POSITIONS">("ORDERS");
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("OPEN");
@@ -147,6 +162,9 @@ export const OrdersPositionsTabWidget = ({
               isLoading={ordersLoading}
               participantData={participantData}
               minMargin={minMargin}
+              accountBalance={accountBalance}
+              contractMode={contractMode}
+              balanceQuery={balanceQuery}
             />
           </OrdersWrapper>
         )}
@@ -165,6 +183,8 @@ export const OrdersPositionsTabWidget = ({
               isLoading={positionsLoading}
               participantAddress={participantAddress}
               onClosePosition={onClosePosition}
+              contractMode={contractMode}
+              balanceQuery={balanceQuery}
             />
           </PositionsWrapper>
         )}

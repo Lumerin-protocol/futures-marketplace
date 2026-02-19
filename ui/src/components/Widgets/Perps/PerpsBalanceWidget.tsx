@@ -9,10 +9,9 @@ import { formatValue, paymentToken } from "../../../lib/units";
 import { UsdcIcon } from "../../../images";
 import { PrimaryButton } from "../../Forms/FormButtons/Buttons.styled";
 import { ModalItem } from "../../Modal";
-import { DepositForm } from "../../Forms/DepositForm";
 import { WithdrawalForm } from "../../Forms/WithdrawalForm";
 import EastIcon from "@mui/icons-material/East";
-import type { ContractMode, AccountBalance } from "../../../types/types";
+import type { AccountBalance } from "../../../types/types";
 import { DepositFormPerps } from "../../Forms/DepositFormPerps";
 
 interface BalanceQueryResult {
@@ -22,27 +21,25 @@ interface BalanceQueryResult {
   refetch: () => void;
 }
 
-interface FuturesBalanceWidgetProps {
+interface PerpsBalanceWidgetProps {
   minMargin: bigint | null;
   isLoadingMinMargin: boolean;
   unrealizedPnL: bigint | null;
   realizedPnL30D: number | null;
   isLoadingRealizedPnL?: boolean;
-  contractMode?: ContractMode;
   balanceQuery: BalanceQueryResult;
   accountBalance?: AccountBalance;
 }
 
-export const FuturesBalanceWidget = ({
+export const PerpsBalanceWidget = ({
   minMargin,
   isLoadingMinMargin,
   unrealizedPnL,
   realizedPnL30D,
   isLoadingRealizedPnL,
-  contractMode = "futures",
   balanceQuery,
   accountBalance,
-}: FuturesBalanceWidgetProps) => {
+}: PerpsBalanceWidgetProps) => {
   const { address } = useAccount();
   const lmrBalanceValidation = useLmrBalanceValidation(address);
   const depositModal = useModal();
@@ -77,11 +74,6 @@ export const FuturesBalanceWidget = ({
       : "#fff";
   const realizedPnL30DFormatted = realizedPnL30D !== null ? (realizedPnL30D / 1e6).toFixed(2) : "-";
 
-  // Check if LMR balance meets minimum requirement
-  const requiredLmrAmount = 0n; //BigInt(process.env.REACT_APP_FUTURES_REQUIRED_LMR || "10000");
-  const hasMinimumLmrBalance = lmrBalanceValidation.totalBalance >= requiredLmrAmount;
-  const isLmrBalanceLoading = lmrBalanceValidation.isLoading;
-
   // Check if locked amount is at or above threshold percentage of balance
   const lockedBalanceThreshold = Number(
     process.env.REACT_APP_MARGIN_UTILIZATION_WARNING_PERCENT || "80",
@@ -103,15 +95,13 @@ export const FuturesBalanceWidget = ({
         {address && (
           <div className="flex items-center justify-center" style={{ fontSize: "0.75rem" }}>
             <UsdcIcon style={{ width: "18px", marginRight: "6px" }} />
-            <span>
-              {contractMode === "perpetual" ? "Perpetual" : "Futures"} Portfolio Overview (USDC)
-            </span>
+            <span>Perpetuals Portfolio Overview (USDC)</span>
           </div>
         )}
         <BalanceContainer $shouldHighlight={shouldHighlight}>
           {!address && <div>Connect wallet to view balance and use marketplace</div>}
           {isLoading && address && <Spinner fontSize="0.3em" />}
-          {isSuccess && address && hasMinimumLmrBalance && (
+          {isSuccess && address && (
             <BalanceRow>
               <MetricsGrid>
                 {/* Row 1: Balance | Unrealized PnL */}
@@ -146,44 +136,13 @@ export const FuturesBalanceWidget = ({
                 </MetricCell>
               </MetricsGrid>
               <ActionButtons>
-                <PrimaryButton
-                  onClick={depositModal.open}
-                  disabled={!hasMinimumLmrBalance || isLmrBalanceLoading}
-                  title={
-                    !hasMinimumLmrBalance
-                      ? `Insufficient LMR balance. Required: ${requiredLmrAmount} LMR`
-                      : undefined
-                  }
-                >
-                  Deposit
-                </PrimaryButton>
-                <PrimaryButton
-                  onClick={withdrawalModal.open}
-                  disabled={!hasMinimumLmrBalance || isLmrBalanceLoading}
-                  title={
-                    !hasMinimumLmrBalance
-                      ? `Insufficient LMR balance. Required: ${requiredLmrAmount} LMR`
-                      : undefined
-                  }
-                >
-                  Withdraw
-                </PrimaryButton>
+                <PrimaryButton onClick={depositModal.open}>Deposit</PrimaryButton>
+                <PrimaryButton onClick={withdrawalModal.open}>Withdraw</PrimaryButton>
               </ActionButtons>
             </BalanceRow>
           )}
-          {isSuccess && address && !hasMinimumLmrBalance && (
-            <p onClick={(e) => e.preventDefault()}>
-              {isLmrBalanceLoading
-                ? "Checking LMR balance..."
-                : hasMinimumLmrBalance
-                ? `✓ LMR balance sufficient (${lmrBalanceValidation.totalBalance.toString()} LMR)`
-                : `⚠ Insufficient LMR balance (${lmrBalanceValidation.totalBalance.toString()} LMR). Required: ${
-                    process.env.REACT_APP_FUTURES_REQUIRED_LMR
-                  } LMR (Arbitrum or Ethereum)`}
-            </p>
-          )}
         </BalanceContainer>
-        {isSuccess && address && !hasMinimumLmrBalance && (
+        {isSuccess && address && (
           <div className="link">
             <a href={process.env.REACT_APP_BUY_LMR_URL} target="_blank" rel="noreferrer">
               Buy LMR tokens on Uniswap <EastIcon style={{ fontSize: "0.75rem" }} />
@@ -198,29 +157,20 @@ export const FuturesBalanceWidget = ({
         )}
 
         {/* Bottom footer */}
-        {!shouldHighlight && hasMinimumLmrBalance && (
+        {!shouldHighlight && (
           <div className="link">
             <a
               href="#"
               onClick={(e) => {
                 e.preventDefault();
               }}
-            ></a>
+            />
           </div>
         )}
       </BalanceWidgetContainer>
 
       <ModalItem open={depositModal.isOpen} setOpen={depositModal.setOpen}>
-        {contractMode === "futures" && (
-          <DepositForm
-            closeForm={handleDepositSuccess}
-            accountBalance={accountBalance}
-            contractMode={contractMode}
-          />
-        )}
-        {contractMode === "perpetual" && (
-          <DepositFormPerps closeForm={handleDepositSuccess} accountBalance={accountBalance} />
-        )}
+        <DepositFormPerps closeForm={handleDepositSuccess} accountBalance={accountBalance} />
       </ModalItem>
 
       <ModalItem open={withdrawalModal.isOpen} setOpen={withdrawalModal.setOpen}>
@@ -228,7 +178,6 @@ export const FuturesBalanceWidget = ({
           closeForm={handleWithdrawalSuccess}
           minMargin={minMargin}
           isLoadingMinMargin={isLoadingMinMargin}
-          balanceQuery={balanceQuery}
         />
       </ModalItem>
     </>

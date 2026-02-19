@@ -1,39 +1,32 @@
 import { type FC, useCallback, useState } from "react";
 import { useForm } from "react-hook-form";
-import { useAccount } from "wagmi";
-import { useAddMargin, useApproveAddMargin } from "../../hooks/data/useAddMargin";
-import { usePerpsAddCollateral, useApprovePerpsAddCollateral } from "../../hooks/data/perps/usePerpsAddCollateral";
-import { useApproveERC20 } from "../../hooks/data/useApproveERC20";
-import type { AccountBalance, ContractMode } from "../../types/types";
+import type { AccountBalance } from "../../types/types";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import { AmountInputForm } from "./Shared/AmountInputForm";
 import { formatValue, paymentToken } from "../../lib/units";
 import { parseUnits } from "viem";
+import {
+  usePermitPerps,
+  usePerpsAddCollateralWithPermit,
+} from "../../hooks/data/perps/usePerpsAddCollateralPermit";
+import type { PermitSignature } from "../../hooks/data/perps/usePermit";
+import { TxState } from "../../hooks/useTxForm";
 
 interface DepositFormProps {
   closeForm: () => void;
   accountBalance?: AccountBalance;
-  contractMode?: ContractMode;
 }
 
 interface InputValues {
   amount: string;
 }
 
-export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance, contractMode = "futures" }) => {
-  const { address } = useAccount();
-  
-  // Conditionally use futures or perps hooks based on mode
-  const { addMarginAsync } = useAddMargin();
-  const { approveAsync: futuresApproveAsync } = useApproveAddMargin();
-  const { addCollateralAsync } = usePerpsAddCollateral();
-  const { approveAsync: perpsApproveAsync } = useApprovePerpsAddCollateral();
-  
-  const approveAsync = contractMode === "perpetual" ? perpsApproveAsync : futuresApproveAsync;
-  const depositAsync = contractMode === "perpetual" ? addCollateralAsync : addMarginAsync;
-  const contractAddress = contractMode === "perpetual" 
-    ? (process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`)
-    : (process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`);
+export const DepositFormPerps: FC<DepositFormProps> = ({ closeForm, accountBalance }) => {
+  const { signPermit } = usePermitPerps();
+  const { addCollateralAsync } = usePerpsAddCollateralWithPermit();
+  const [signature, setSignature] = useState<
+    { signature: PermitSignature; deadline: bigint } | undefined
+  >();
 
   const paymentTokenBalance = accountBalance ?? { data: undefined, isLoading: false };
 
@@ -84,7 +77,7 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance, c
 
   const validateInput = useCallback(async () => {
     const amountValue = form.getValues("amount");
-    if (!amountValue || parseFloat(amountValue) <= 0) {
+    if (!amountValue || Number.parseFloat(amountValue) <= 0) {
       form.setError("amount", {
         type: "validation",
         message: "Deposit Amount must be a positive number",
@@ -144,7 +137,7 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance, c
         </div>
       </>
     ),
-    [paymentTokenBalance.data],
+    [paymentTokenBalance.data, paymentTokenBalance.isLoading],
   );
 
   const transactionSteps = [
@@ -154,35 +147,37 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance, c
         const amount = form.getValues("amount");
         if (!amount) throw new Error("Amount not set");
         const amountBigInt = parseUnits(amount, paymentToken.decimals);
-        const result = await approveAsync({
-          spender: contractAddress,
-          amount: amountBigInt,
+        const result = await signPermit?.({
+          value: amountBigInt,
         });
-        return result ? { isSkipped: false, txhash: result } : { isSkipped: true };
+        console.log("result", result);
+        setSignature(result);
+        return result ? { isSkipped: false, state: result } : { isSkipped: false };
       },
     },
     {
-      label: contractMode === "perpetual" ? "Deposit Collateral" : "Deposit Margin",
-      async action() {
+      label: "Deposit Collateral",
+      async action(steps: Record<number, TxState>) {
         const amount = form.getValues("amount");
         if (!amount) throw new Error("Amount not set");
         const amountBigInt = parseUnits(amount, paymentToken.decimals);
-        const result = await depositAsync({ amount: amountBigInt });
+        console.log("steps", steps);
+        const sig = steps[0].customState as { signature: PermitSignature; deadline: bigint };
+        const result = await addCollateralAsync({
+          amount: amountBigInt,
+          deadline: sig.deadline,
+          signature: sig.signature,
+        });
         return result ? { isSkipped: false, txhash: result } : { isSkipped: false };
       },
     },
   ];
 
-  const title = contractMode === "perpetual" ? "Deposit Collateral" : "Deposit Margin";
-  const description = contractMode === "perpetual" 
-    ? "Add collateral to your perpetual account" 
-    : "Add margin to your futures account";
-
   return (
     <TransactionForm
       onClose={closeForm}
-      title={title}
-      description={description}
+      title={"Deposit Collateral"}
+      description={"Add collateral to your perpetual account"}
       reviewForm={reviewForm}
       validateInput={validateInput}
       transactionSteps={transactionSteps}
