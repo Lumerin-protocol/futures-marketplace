@@ -7,6 +7,9 @@ import { useCreateOrder } from "../../hooks/data/useCreateOrder";
 import { useCreatePerpsOrder } from "../../hooks/data/perps/useCreatePerpsOrder";
 import { PARTICIPANT_QK } from "../../hooks/data/useParticipant";
 import { POSITION_BOOK_QK } from "../../hooks/data/usePositionBook";
+import { USER_PERPS_ORDERS_QK } from "../../hooks/data/perps/useUserPerpsOrders";
+import { USER_POSITION_SESSIONS_QK } from "../../hooks/data/perps/useUserPositionSessions";
+import { USER_PERPS_TRADES_QK } from "../../hooks/data/perps/useUserPerpsTrades";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { formatStratumUrl } from "../../utils/formatters";
@@ -54,7 +57,7 @@ export const PlaceOrderForm: FC<Props> = ({
   // Conditionally use futures or perps create order hook
   const futuresCreateOrder = useCreateOrder();
   const perpsCreateOrder = useCreatePerpsOrder();
-  const { createOrderAsync } = contractMode === "perpetual" ? perpsCreateOrder : futuresCreateOrder;
+  const { createOrderAsync } = contractMode == "perpetual" ? perpsCreateOrder : futuresCreateOrder;
   
   const qc = useQueryClient();
   const { address } = useAccount();
@@ -286,12 +289,24 @@ export const PlaceOrderForm: FC<Props> = ({
             // Wait for block number to ensure indexer has updated
             await waitForOrderBookBlockNumber(receipt.blockNumber, qc, contractMode, Number(deliveryDate));
 
-            // Refetch order book, positions, and participant data
-            await Promise.all([
-              qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
-              address && qc.invalidateQueries({ queryKey: [POSITION_BOOK_QK] }),
-              address && qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
-            ]);
+            // Invalidate queries based on contract mode
+            if (contractMode === "perpetual") {
+              // For perps, invalidate perps-specific queries
+              await Promise.all([
+                qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
+                address && qc.invalidateQueries({ queryKey: [USER_PERPS_ORDERS_QK, address] }),
+                address && qc.invalidateQueries({ queryKey: [USER_POSITION_SESSIONS_QK, address] }),
+                address && qc.invalidateQueries({ queryKey: [USER_PERPS_TRADES_QK, address] }),
+                // address && qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
+              ]);
+            } else {
+              // For futures, invalidate futures-specific queries
+              await Promise.all([
+                qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
+                address && qc.invalidateQueries({ queryKey: [POSITION_BOOK_QK] }),
+                address && qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
+              ]);
+            }
 
             if (onOrderPlaced) {
               await onOrderPlaced();

@@ -407,7 +407,7 @@ const OrderBookWidget = styled(SmallWidget)`
   justify-content: space-between;
 
   @media (max-width: 1400px) {
-    justify-content: start;
+    // justify-content: start;
   }
 `;
 
@@ -448,7 +448,7 @@ const Header = styled("div")`
 const TableContainer = styled("div")`
   overflow-y: auto;
   width: 100%;
-  max-height: 607px; /* Approximately 10 rows * 40px per row */
+  max-height: 760px; /* Approximately 10 rows * 40px per row */
   
   &::-webkit-scrollbar {
     width: 6px;
