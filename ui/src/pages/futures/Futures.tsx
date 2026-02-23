@@ -21,6 +21,7 @@ import { useGetFutureBalance } from "../../hooks/data/useGetFutureBalance";
 import { useGetPerpsBalance } from "../../hooks/data/perps/useGetPerpsBalance";
 import { useFuturesPaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
 import { usePerpsPaymentTokenBalance } from "../../hooks/data/perps/usePerpsPaymentTokenBalance";
+import { useFundingRate } from "../../hooks/data/perps/useFundingRate";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
 import type { PositionBookPosition } from "../../hooks/data/usePositionBook";
 import type { ContractMode } from "../../types/types";
@@ -112,6 +113,9 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     isLoading: isMarketPriceLoading,
     dataFetchedAt: marketPriceFetchedAt,
   } = useGetMarketPrice();
+
+  // Get funding rate for perpetual contracts
+  const fundingRateQuery = useFundingRate({ refetch: true });
 
   // Calculate total unrealized PnL from all active positions
   const totalUnrealizedPnL = useMemo(() => {
@@ -241,7 +245,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
           contractSpecsQuery={contractSpecsQuery} 
           contractMode={contractMode}
           currentPrice={marketPrice ? (Number(marketPrice) / 1e6).toFixed(2) : null}
-          fundingRate="0%"
+          fundingRate={fundingRateQuery.data?.formattedRate ?? "0%"}
         />
       </StatsWidgetArea>
 

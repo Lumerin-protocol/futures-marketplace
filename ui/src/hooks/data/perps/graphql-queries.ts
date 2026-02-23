@@ -92,3 +92,20 @@ export const UserPerpsTradesQuery = gql`
     }
   }
 }`
+
+export const FundingUpdatesQuery = gql`
+  query FundingUpdates {
+    fundingUpdates(
+      first: 1
+      orderBy: timestamp
+      orderDirection: desc
+    ) {
+      blockNumber
+      cumulativeFundingPerUnit
+      fundingRate
+      id
+      timestamp
+      transactionHash
+    }
+  }
+`
