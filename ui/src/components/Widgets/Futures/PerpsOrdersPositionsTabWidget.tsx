@@ -13,7 +13,7 @@ import { USER_PERPS_ORDERS_QK } from "../../../hooks/data/perps/useUserPerpsOrde
 import { useUserPositionSnapshots } from "../../../hooks/data/perps/useUserPositionSnapshots";
 import { useUserPerpsTrades } from "../../../hooks/data/perps/useUserPerpsTrades";
 
-type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "ORDERS_HISTORY";
+type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "ORDER_HISTORY";
 
 interface PerpsOrdersPositionsTabWidgetProps {
   orders: ParticipantOrder[];
@@ -50,7 +50,7 @@ export const PerpsOrdersPositionsTabWidget = ({
   // Fetch historical orders for Orders History tab
   const historicalOrdersQuery = useHistoricalOrders(
     participantAddress,
-    activeTab === "ORDERS_HISTORY"
+    activeTab === "ORDER_HISTORY"
   );
 
   // Fetch position snapshots for Positions tab
@@ -97,16 +97,11 @@ export const PerpsOrdersPositionsTabWidget = ({
     return trades.length;
   }, [tradesQuery.data?.trades]);
 
-  // Count historical orders
-  const ordersHistoryCount = useMemo(() => {
-    if (activeTab !== "ORDERS_HISTORY") return 0;
-    const historicalOrders = historicalOrdersQuery.data?.data || [];
-    const unique = new Set<string>();
-    historicalOrders.forEach((order) => {
-      unique.add(`${order.pricePerDay.toString()}`);
-    });
-    return unique.size;
-  }, [activeTab, historicalOrdersQuery.data?.data]);
+  // Count historical orders (all non-active orders)
+  const orderHistoryCount = useMemo(() => {
+    const allOrders = perpsOrdersQuery.data?.data?.orders || [];
+    return allOrders.filter((order) => order.status !== "ACTIVE").length;
+  }, [perpsOrdersQuery.data?.data?.orders]);
 
   return (
     <TabContainer>
@@ -116,7 +111,7 @@ export const PerpsOrdersPositionsTabWidget = ({
             { text: "Open Orders", value: "OPEN_ORDERS", count: ordersCount },
             { text: "Positions", value: "POSITIONS", count: positionsCount },
             { text: "Trades", value: "TRADES", count: tradesCount },
-            // { text: "Orders History", value: "ORDERS_HISTORY", count: ordersHistoryCount },
+            { text: "Order History", value: "ORDER_HISTORY", count: orderHistoryCount },
           ]}
           value={activeTab}
           setValue={setActiveTab}
@@ -151,10 +146,12 @@ export const PerpsOrdersPositionsTabWidget = ({
             />
           </TradesWrapper>
         )}
-        {activeTab === "ORDERS_HISTORY" && (
+        {activeTab === "ORDER_HISTORY" && (
           <OrdersWrapper>
-            {/* HistoricalOrdersListWidget will be added here */}
-            <PlaceholderText>Orders History content</PlaceholderText>
+            <PerpsOrderHistoryTable
+              orders={perpsOrdersQuery.data?.data?.orders || []}
+              isLoading={perpsOrdersQuery.isLoading}
+            />
           </OrdersWrapper>
         )}
       </Content>
@@ -231,7 +228,7 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling }
 
   // Filter to show only active orders
   const activeOrders = orders.filter(
-    (order) => order.status === "ACTIVE"
+    (order) => order.status === "ACTIVE" || order.status === "FILLED"
   );
 
   if (isLoading) {
@@ -291,6 +288,138 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling }
                   </CancelButton>
                 </ActionButtons>
               </td>
+            </TableRow>
+          ))}
+        </tbody>
+      </Table>
+    </TableContainer>
+  );
+};
+
+// Perps Order History Table Component
+interface PerpsOrderHistoryTableProps {
+  orders: Array<{
+    id: string;
+    price: bigint;
+    quantity: bigint;
+    originalQuantity: bigint;
+    filledQuantity: bigint;
+    isBuy: boolean;
+    status: string;
+    createdAt: string;
+    updatedAt: string;
+    closedAt: string | null;
+  }>;
+  isLoading?: boolean;
+}
+
+const PerpsOrderHistoryTable = ({ orders, isLoading }: PerpsOrderHistoryTableProps) => {
+  const formatPrice = (price: bigint) => {
+    return (Number(price) / 1e6).toFixed(2); // Convert from wei to USDC
+  };
+
+  const formatQuantity = (quantity: bigint) => {
+    if(quantity === 0n) {
+      return "0";
+    }
+    return (Number(quantity) / 1e6).toFixed(6);
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return "-";
+    const date = new Date(Number(dateString) * 1000);
+    return date.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const formatStatus = (status: string) => {
+    switch (status) {
+      case "ACTIVE":
+        return "Active";
+      case "FILLED":
+        return "Filled";
+      case "CANCELLED":
+        return "Cancelled";
+      default:
+        return status;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "ACTIVE":
+        return "#22c55e";
+      case "FILLED":
+        return "#6b7280";
+      case "CANCELLED":
+        return "#ef4444";
+      default:
+        return "#6b7280";
+    }
+  };
+
+  const historyOrders = orders.filter(
+    (order) => order.status !== "ACTIVE"
+  );
+
+  // Sort orders by updatedAt (most recent first)
+  const sortedOrders = historyOrders.sort((a, b) => 
+    Number(b.updatedAt) - Number(a.updatedAt)
+  );
+
+  if (isLoading) {
+    return (
+      <div style={{ textAlign: "center", padding: "2rem", color: "#6b7280" }}>
+        <p>Loading order history...</p>
+      </div>
+    );
+  }
+
+  if (sortedOrders.length === 0) {
+    return (
+      <EmptyState>
+        <p>No order history found</p>
+      </EmptyState>
+    );
+  }
+
+  return (
+    <TableContainer>
+      <Table>
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Price (USDC)</th>
+            <th>Filled/Original Qty</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sortedOrders.map((order) => (
+            <TableRow key={order.id}>
+              <td>
+                <TypeBadge $type={order.isBuy ? "Long" : "Short"}>
+                  {order.isBuy ? "Long" : "Short"}
+                </TypeBadge>
+              </td>
+              <td>{formatPrice(order.price)}</td>
+              <td>
+                {formatQuantity(order.filledQuantity)} / {formatQuantity(order.originalQuantity)}
+              </td>
+              <td>
+                <StatusBadge $status={order.status} $color={getStatusColor(order.status)}>
+                  {formatStatus(order.status)}
+                </StatusBadge>
+              </td>
+              <td>{formatDate(order.createdAt)}</td>
+              <td>{formatDate(order.updatedAt)}</td>
             </TableRow>
           ))}
         </tbody>
