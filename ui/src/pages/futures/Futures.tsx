@@ -314,6 +314,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
               participantData={participantData?.data}
               minMargin={minMargin}
               accountBalance={accountBalanceQuery}
+              marketPrice={marketPrice}
             />
           ) : (
             <OrdersPositionsTabWidget

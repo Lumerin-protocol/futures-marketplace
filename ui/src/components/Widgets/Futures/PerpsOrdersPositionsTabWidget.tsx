@@ -19,7 +19,7 @@ import { useUserPerpsTrades } from "../../../hooks/data/perps/useUserPerpsTrades
 import { useUserPositionSessions } from "../../../hooks/data/perps/useUserPositionSessions";
 import type { PositionSession } from "../../../hooks/data/perps/useUserPositionSessions";
 
-type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "ORDER_HISTORY";
+type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "POSITION_HISTORY" | "ORDER_HISTORY";
 
 interface PerpsOrdersPositionsTabWidgetProps {
   orders: ParticipantOrder[];
@@ -31,6 +31,7 @@ interface PerpsOrdersPositionsTabWidgetProps {
   participantData?: any;
   minMargin?: bigint | null;
   accountBalance?: AccountBalance;
+  marketPrice?: bigint;
 }
 
 export const PerpsOrdersPositionsTabWidget = ({
@@ -43,6 +44,7 @@ export const PerpsOrdersPositionsTabWidget = ({
   participantData,
   minMargin,
   accountBalance,
+  marketPrice,
 }: PerpsOrdersPositionsTabWidgetProps) => {
   const [activeTab, setActiveTab] = useState<TabType>("OPEN_ORDERS");
   const queryClient = useQueryClient();
@@ -62,7 +64,7 @@ export const PerpsOrdersPositionsTabWidget = ({
   // Fetch position snapshots for Positions tab
   const positionSessionsQuery = useUserPositionSessions(
     participantAddress,
-    { refetch: activeTab === "POSITIONS" }
+    { refetch: activeTab === "POSITIONS" || activeTab === "POSITION_HISTORY" }
   );
 
   // Fetch trades for Trades tab
@@ -87,12 +89,19 @@ export const PerpsOrdersPositionsTabWidget = ({
     const perpsOrders = perpsOrdersQuery.data?.data?.orders || [];
     return perpsOrders.filter((order) => order.status === "ACTIVE").length;
   }, [perpsOrdersQuery.data?.data?.orders]);
-
+  
   // Count unique positions
   const positionsCount = useMemo(() => {
     const sessions = positionSessionsQuery.data?.positionSessions || [];
     // Count open positions (status === "OPEN")
     return sessions.filter((session) => session.status === "OPEN").length;
+  }, [positionSessionsQuery.data?.positionSessions]);
+
+  // Count closed positions
+  const positionHistoryCount = useMemo(() => {
+    const sessions = positionSessionsQuery.data?.positionSessions || [];
+    // Count closed positions (status === "CLOSED")
+    return sessions.filter((session) => session.status === "CLOSE").length;
   }, [positionSessionsQuery.data?.positionSessions]);
 
   // Count trades
@@ -115,6 +124,7 @@ export const PerpsOrdersPositionsTabWidget = ({
             { text: "Open Orders", value: "OPEN_ORDERS", count: ordersCount },
             { text: "Positions", value: "POSITIONS", count: positionsCount },
             { text: "Trades", value: "TRADES", count: tradesCount },
+            { text: "Position History", value: "POSITION_HISTORY", count: positionHistoryCount },
             { text: "Order History", value: "ORDER_HISTORY", count: orderHistoryCount },
           ]}
           value={activeTab}
@@ -138,6 +148,7 @@ export const PerpsOrdersPositionsTabWidget = ({
             <PerpsPositionsTable
               positionSessions={positionSessionsQuery.data?.positionSessions || []}
               isLoading={positionSessionsQuery.isLoading}
+              marketPrice={marketPrice}
             />
           </PositionsWrapper>
         )}
@@ -149,6 +160,14 @@ export const PerpsOrdersPositionsTabWidget = ({
               userAddress={participantAddress}
             />
           </TradesWrapper>
+        )}
+        {activeTab === "POSITION_HISTORY" && (
+          <PositionsWrapper>
+            <PerpsPositionHistoryTable
+              positionSessions={positionSessionsQuery.data?.positionSessions || []}
+              isLoading={positionSessionsQuery.isLoading}
+            />
+          </PositionsWrapper>
         )}
         {activeTab === "ORDER_HISTORY" && (
           <OrdersWrapper>
@@ -230,9 +249,9 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling }
     }
   };
 
-  // Filter to show only active orders
+  // Filter to show only active orders and exclude fully filled orders
   const activeOrders = orders.filter(
-    (order) => order.status === "ACTIVE" || order.status === "FILLED"
+    (order) => (order.status === "ACTIVE" || order.status === "FILLED") && order.filledQuantity !== order.originalQuantity
   );
 
   if (isLoading) {
@@ -436,9 +455,146 @@ const PerpsOrderHistoryTable = ({ orders, isLoading }: PerpsOrderHistoryTablePro
 interface PerpsPositionsTableProps {
   positionSessions: PositionSession[];
   isLoading?: boolean;
+  marketPrice?: bigint;
 }
 
-const PerpsPositionsTable = ({ positionSessions, isLoading }: PerpsPositionsTableProps) => {
+const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice }: PerpsPositionsTableProps) => {
+  const [selectedSession, setSelectedSession] = useState<PositionSession | null>(null);
+
+  const formatPrice = (price: bigint) => {
+    return (Number(price) / 1e6).toFixed(2); // Convert from wei to USDC
+  };
+
+  const formatQuantity = (quantity: bigint) => {
+    if(quantity === 0n) {
+      return "0";
+    }
+    const absQuantity = quantity < 0n ? -quantity : quantity;
+    return (Number(absQuantity) / 1e6).toFixed(6);
+  };
+
+  const formatFees = (fundingFees: bigint, tradingFees: bigint) => {
+    const funding = (Number(fundingFees) / 1e6).toFixed(2);
+    const trading = (Number(tradingFees) / 1e6).toFixed(2);
+    return `${funding} / ${trading}`;
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(Number(dateString) * 1000);
+    return date.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  // Calculate unrealized PnL: (currentMarketPrice - entryPrice) * netQuantity
+  const calculateUnrealizedPnL = (entryPrice: bigint, netQuantity: bigint): bigint => {
+    if (!marketPrice || netQuantity === 0n) return 0n;
+    const priceDiff = marketPrice - entryPrice;
+    return priceDiff * netQuantity / 1_000_000n; // Adjust for precision
+  };
+
+  // Filter to show only OPEN positions
+  const openPositions = positionSessions.filter((session) => session.status === "OPEN");
+
+  if (isLoading) {
+    return (
+      <div style={{ textAlign: "center", padding: "2rem", color: "#6b7280" }}>
+        <p>Loading positions...</p>
+      </div>
+    );
+  }
+
+  if (openPositions.length === 0) {
+    return (
+      <EmptyState>
+        <p>No open positions found</p>
+      </EmptyState>
+    );
+  }
+
+  return (
+    <>
+      <TableContainer>
+        <Table>
+          <thead>
+            <tr>
+              <th>Opened At</th>
+              <th>Type</th>
+              <th>Entry Price (USDC)</th>
+              <th>Net Qty</th>
+              <th>Max Qty</th>
+              <th>Fees (F/T)</th>
+              <th>Unrealized PnL</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {openPositions.map((session) => {
+              // For status OPEN, use netQuantity from user object
+              const displayQuantity = session.user.netQuantity;
+              const isLong = displayQuantity > 0n || (displayQuantity === 0n && session.maxQuantity > 0n);
+              const realizedPnlValue = Number(session.realizedPnl) / 1e6;
+              const unrealizedPnl = calculateUnrealizedPnL(session.entryPrice, displayQuantity);
+              const unrealizedPnlValue = Number(unrealizedPnl) / 1e6;
+
+              return (
+                <TableRow key={session.id}>
+                  <td>{formatDate(session.openedAt)}</td>
+                  <td>
+                    <TypeBadge $type={isLong ? "Long" : "Short"}>
+                      {isLong ? "Long" : "Short"}
+                    </TypeBadge>
+                  </td>
+                  <td>{formatPrice(session.entryPrice)}</td>
+                  <td>{formatQuantity(displayQuantity)}</td>
+                  <td>{formatQuantity(session.maxQuantity)}</td>
+                  <td>{formatFees(session.fundingFees, session.tradingFees)}</td>
+                  <td>
+                    <PnLText $isPositive={unrealizedPnlValue >= 0}>
+                      {unrealizedPnlValue >= 0 ? "+" : ""}{unrealizedPnlValue.toFixed(2)} USDC
+                    </PnLText>
+                  </td>
+                  {/* <td>
+                    <PnLText $isPositive={realizedPnlValue >= 0}>
+                      {realizedPnlValue >= 0 ? "+" : ""}{realizedPnlValue.toFixed(2)} USDC
+                    </PnLText>
+                  </td> */}
+                  <td>
+                    <ActionButtons>
+                      <DetailsButton onClick={() => setSelectedSession(session)}>
+                        Details
+                      </DetailsButton>
+                    </ActionButtons>
+                  </td>
+                </TableRow>
+              );
+            })}
+          </tbody>
+        </Table>
+      </TableContainer>
+
+      {/* Details Modal */}
+      {selectedSession && (
+        <TradeDetailsModal
+          session={selectedSession}
+          onClose={() => setSelectedSession(null)}
+        />
+      )}
+    </>
+  );
+};
+
+// Perps Position History Table Component
+interface PerpsPositionHistoryTableProps {
+  positionSessions: PositionSession[];
+  isLoading?: boolean;
+}
+
+const PerpsPositionHistoryTable = ({ positionSessions, isLoading }: PerpsPositionHistoryTableProps) => {
   const [selectedSession, setSelectedSession] = useState<PositionSession | null>(null);
 
   const formatPrice = (price: bigint) => {
@@ -478,25 +634,28 @@ const PerpsPositionsTable = ({ positionSessions, isLoading }: PerpsPositionsTabl
     switch (status) {
       case "OPEN":
         return "#22c55e";
-      case "CLOSED":
+      case "CLOSE":
         return "#6b7280";
       default:
         return "#6b7280";
     }
   };
 
+  // Filter to show only CLOSED positions
+  const closedPositions = positionSessions.filter((session) => session.status === "CLOSE");
+
   if (isLoading) {
     return (
       <div style={{ textAlign: "center", padding: "2rem", color: "#6b7280" }}>
-        <p>Loading positions...</p>
+        <p>Loading position history...</p>
       </div>
     );
   }
 
-  if (positionSessions.length === 0) {
+  if (closedPositions.length === 0) {
     return (
       <EmptyState>
-        <p>No positions found</p>
+        <p>No closed positions found</p>
       </EmptyState>
     );
   }
@@ -508,11 +667,10 @@ const PerpsPositionsTable = ({ positionSessions, isLoading }: PerpsPositionsTabl
           <thead>
             <tr>
               <th>Opened At</th>
-              <th>Status</th>
+              {/* <th>Status</th> */}
               <th>Type</th>
               <th>Entry Price (USDC)</th>
               <th>Close Price (USDC)</th>
-              <th>Net Qty</th>
               <th>Closed Qty</th>
               <th>Max Qty</th>
               <th>Fees (F/T)</th>
@@ -521,20 +679,18 @@ const PerpsPositionsTable = ({ positionSessions, isLoading }: PerpsPositionsTabl
             </tr>
           </thead>
           <tbody>
-            {positionSessions.map((session) => {
-              // For status OPEN, use netQuantity from user object, otherwise display empty cell
-              const displayQuantity = session.status === "OPEN" ? session.user.netQuantity : 0n;
-              const isLong = displayQuantity > 0n || (displayQuantity === 0n && session.maxQuantity > 0n);
+            {closedPositions.map((session) => {
+              const isLong = session.maxQuantity > 0n;
               const realizedPnlValue = Number(session.realizedPnl) / 1e6;
 
               return (
                 <TableRow key={session.id}>
                   <td>{formatDate(session.openedAt)}</td>
-                  <td>
+                  {/* <td>
                     <StatusBadge $status={session.status} $color={getStatusColor(session.status)}>
                       {formatStatus(session.status)}
                     </StatusBadge>
-                  </td>
+                  </td> */}
                   <td>
                     <TypeBadge $type={isLong ? "Long" : "Short"}>
                       {isLong ? "Long" : "Short"}
@@ -542,7 +698,6 @@ const PerpsPositionsTable = ({ positionSessions, isLoading }: PerpsPositionsTabl
                   </td>
                   <td>{formatPrice(session.entryPrice)}</td>
                   <td>{session.closePrice ? formatPrice(session.closePrice) : "-"}</td>
-                  <td>{session.status === "OPEN" ? formatQuantity(displayQuantity) : ""}</td>
                   <td>{formatQuantity(session.closedQuantity)}</td>
                   <td>{formatQuantity(session.maxQuantity)}</td>
                   <td>{formatFees(session.fundingFees, session.tradingFees)}</td>
