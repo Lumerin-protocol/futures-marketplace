@@ -1,6 +1,10 @@
 import { useState, useMemo } from "react";
 import styled from "@mui/material/styles/styled";
+import Modal from "@mui/material/Modal";
+import CloseIcon from "@mui/icons-material/Close";
+import IconButton from "@mui/material/IconButton";
 import { SmallWidget } from "../../Cards/Cards.styled";
+import { ModalCard } from "../../Modal.styled";
 import { TabSwitch } from "../../TabSwitch";
 import type { ParticipantOrder } from "../../../hooks/data/useParticipant";
 import type { PositionBookPosition } from "../../../hooks/data/usePositionBook";
@@ -12,6 +16,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { USER_PERPS_ORDERS_QK } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { useUserPositionSnapshots } from "../../../hooks/data/perps/useUserPositionSnapshots";
 import { useUserPerpsTrades } from "../../../hooks/data/perps/useUserPerpsTrades";
+import { useUserPositionSessions } from "../../../hooks/data/perps/useUserPositionSessions";
+import type { PositionSession } from "../../../hooks/data/perps/useUserPositionSessions";
 
 type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "ORDER_HISTORY";
 
@@ -54,7 +60,7 @@ export const PerpsOrdersPositionsTabWidget = ({
   );
 
   // Fetch position snapshots for Positions tab
-  const positionSnapshotsQuery = useUserPositionSnapshots(
+  const positionSessionsQuery = useUserPositionSessions(
     participantAddress,
     { refetch: activeTab === "POSITIONS" }
   );
@@ -84,12 +90,10 @@ export const PerpsOrdersPositionsTabWidget = ({
 
   // Count unique positions
   const positionsCount = useMemo(() => {
-    const snapshots = positionSnapshotsQuery.data?.positionSnapshots || [];
-    // Count positions that have non-zero net quantity (open positions)
-    const openPositions = snapshots.filter((snapshot) => snapshot.netQuantityAfter !== 0n);
-    // Get latest snapshot for count
-    return openPositions.length > 0 ? 1 : 0;
-  }, [positionSnapshotsQuery.data?.positionSnapshots]);
+    const sessions = positionSessionsQuery.data?.positionSessions || [];
+    // Count open positions (status === "OPEN")
+    return sessions.filter((session) => session.status === "OPEN").length;
+  }, [positionSessionsQuery.data?.positionSessions]);
 
   // Count trades
   const tradesCount = useMemo(() => {
@@ -132,8 +136,8 @@ export const PerpsOrdersPositionsTabWidget = ({
         {activeTab === "POSITIONS" && (
           <PositionsWrapper>
             <PerpsPositionsTable
-              positionSnapshots={positionSnapshotsQuery.data?.positionSnapshots || []}
-              isLoading={positionSnapshotsQuery.isLoading}
+              positionSessions={positionSessionsQuery.data?.positionSessions || []}
+              isLoading={positionSessionsQuery.isLoading}
             />
           </PositionsWrapper>
         )}
@@ -430,23 +434,13 @@ const PerpsOrderHistoryTable = ({ orders, isLoading }: PerpsOrderHistoryTablePro
 
 // Perps Positions Table Component
 interface PerpsPositionsTableProps {
-  positionSnapshots: Array<{
-    id: string;
-    aggregatedEntryPriceAfter: bigint;
-    blockNumber: number;
-    netQuantityAfter: bigint;
-    timestamp: string;
-    tradePrice: bigint;
-    tradeQuantity: bigint;
-    transactionHash: string;
-    user: {
-      id: string;
-    };
-  }>;
+  positionSessions: PositionSession[];
   isLoading?: boolean;
 }
 
-const PerpsPositionsTable = ({ positionSnapshots, isLoading }: PerpsPositionsTableProps) => {
+const PerpsPositionsTable = ({ positionSessions, isLoading }: PerpsPositionsTableProps) => {
+  const [selectedSession, setSelectedSession] = useState<PositionSession | null>(null);
+
   const formatPrice = (price: bigint) => {
     return (Number(price) / 1e6).toFixed(2); // Convert from wei to USDC
   };
@@ -457,6 +451,12 @@ const PerpsPositionsTable = ({ positionSnapshots, isLoading }: PerpsPositionsTab
     }
     const absQuantity = quantity < 0n ? -quantity : quantity;
     return (Number(absQuantity) / 1e6).toFixed(6);
+  };
+
+  const formatFees = (fundingFees: bigint, tradingFees: bigint) => {
+    const funding = (Number(fundingFees) / 1e6).toFixed(2);
+    const trading = (Number(tradingFees) / 1e6).toFixed(2);
+    return `${funding} / ${trading}`;
   };
 
   const formatDate = (dateString: string) => {
@@ -470,12 +470,20 @@ const PerpsPositionsTable = ({ positionSnapshots, isLoading }: PerpsPositionsTab
     });
   };
 
-  // Get the latest snapshot (most recent position state)
-  const latestSnapshot = positionSnapshots.length > 0 
-    ? positionSnapshots.reduce((latest, current) => 
-        Number(current.timestamp) > Number(latest.timestamp) ? current : latest
-      )
-    : null;
+  const formatStatus = (status: string) => {
+    return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "OPEN":
+        return "#22c55e";
+      case "CLOSED":
+        return "#6b7280";
+      default:
+        return "#6b7280";
+    }
+  };
 
   if (isLoading) {
     return (
@@ -485,48 +493,86 @@ const PerpsPositionsTable = ({ positionSnapshots, isLoading }: PerpsPositionsTab
     );
   }
 
-  if (!latestSnapshot || latestSnapshot.netQuantityAfter === 0n) {
+  if (positionSessions.length === 0) {
     return (
       <EmptyState>
-        <p>No open positions found</p>
+        <p>No positions found</p>
       </EmptyState>
     );
   }
 
-  const isLong = latestSnapshot.netQuantityAfter > 0n;
-  const unrealizedPnL = 0; // Would need current market price to calculate this
-
   return (
-    <TableContainer>
-      <Table>
-        <thead>
-          <tr>
-            <th>Type</th>
-            <th>Size</th>
-            <th>Entry Price (USDC)</th>
-            <th>Unrealized PnL</th>
-            <th>Last Updated</th>
-          </tr>
-        </thead>
-        <tbody>
-          <TableRow>
-            <td>
-              <TypeBadge $type={isLong ? "Long" : "Short"}>
-                {isLong ? "Long" : "Short"}
-              </TypeBadge>
-            </td>
-            <td>{formatQuantity(latestSnapshot.netQuantityAfter)}</td>
-            <td>{formatPrice(latestSnapshot.aggregatedEntryPriceAfter)}</td>
-            <td>
-              <PnLText $isPositive={unrealizedPnL >= 0}>
-                {unrealizedPnL >= 0 ? "+" : ""}{unrealizedPnL.toFixed(2)} USDC
-              </PnLText>
-            </td>
-            <td>{formatDate(latestSnapshot.timestamp)}</td>
-          </TableRow>
-        </tbody>
-      </Table>
-    </TableContainer>
+    <>
+      <TableContainer>
+        <Table>
+          <thead>
+            <tr>
+              <th>Opened At</th>
+              <th>Status</th>
+              <th>Type</th>
+              <th>Entry Price (USDC)</th>
+              <th>Close Price (USDC)</th>
+              <th>Net Qty</th>
+              <th>Closed Qty</th>
+              <th>Max Qty</th>
+              <th>Fees (F/T)</th>
+              <th>Realized PnL</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {positionSessions.map((session) => {
+              // For status OPEN, use netQuantity from user object, otherwise display empty cell
+              const displayQuantity = session.status === "OPEN" ? session.user.netQuantity : 0n;
+              const isLong = displayQuantity > 0n || (displayQuantity === 0n && session.maxQuantity > 0n);
+              const realizedPnlValue = Number(session.realizedPnl) / 1e6;
+
+              return (
+                <TableRow key={session.id}>
+                  <td>{formatDate(session.openedAt)}</td>
+                  <td>
+                    <StatusBadge $status={session.status} $color={getStatusColor(session.status)}>
+                      {formatStatus(session.status)}
+                    </StatusBadge>
+                  </td>
+                  <td>
+                    <TypeBadge $type={isLong ? "Long" : "Short"}>
+                      {isLong ? "Long" : "Short"}
+                    </TypeBadge>
+                  </td>
+                  <td>{formatPrice(session.entryPrice)}</td>
+                  <td>{session.closePrice ? formatPrice(session.closePrice) : "-"}</td>
+                  <td>{session.status === "OPEN" ? formatQuantity(displayQuantity) : ""}</td>
+                  <td>{formatQuantity(session.closedQuantity)}</td>
+                  <td>{formatQuantity(session.maxQuantity)}</td>
+                  <td>{formatFees(session.fundingFees, session.tradingFees)}</td>
+                  <td>
+                    <PnLText $isPositive={realizedPnlValue >= 0}>
+                      {realizedPnlValue >= 0 ? "+" : ""}{realizedPnlValue.toFixed(2)} USDC
+                    </PnLText>
+                  </td>
+                  <td>
+                    <ActionButtons>
+                      <DetailsButton onClick={() => setSelectedSession(session)}>
+                        Details
+                      </DetailsButton>
+                    </ActionButtons>
+                  </td>
+                </TableRow>
+              );
+            })}
+          </tbody>
+        </Table>
+      </TableContainer>
+
+      {/* Details Modal */}
+      {selectedSession && (
+        <TradeDetailsModal
+          session={selectedSession}
+          onClose={() => setSelectedSession(null)}
+        />
+      )}
+    </>
   );
 };
 
@@ -647,6 +693,110 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress }: PerpsTradesTablePr
         </tbody>
       </Table>
     </TableContainer>
+  );
+};
+
+
+// Trade Details Modal Component
+interface TradeDetailsModalProps {
+  session: PositionSession;
+  onClose: () => void;
+}
+
+const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
+  const formatPrice = (price: bigint) => {
+    return (Number(price) / 1e6).toFixed(2);
+  };
+
+  const formatQuantity = (quantity: bigint) => {
+    if(quantity === 0n) {
+      return "0";
+    }
+    const absQuantity = quantity < 0n ? -quantity : quantity;
+    return (Number(absQuantity) / 1e6).toFixed(6);
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(Number(dateString) * 1000);
+    return date.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  };
+
+  const formatPnL = (pnl: bigint) => {
+    const value = Number(pnl) / 1e6;
+    return `${value >= 0 ? "+" : ""}${value.toFixed(2)} USDC`;
+  };
+
+  const sortedTrades = [...session.trades].sort((a, b) => 
+    Number(b.timestamp) - Number(a.timestamp)
+  );
+
+  return (
+    <Modal
+      open={true}
+      onClose={onClose}
+    >
+      <TradesModalCard>
+        <IconButton 
+          className="close" 
+          sx={{ color: "white" }} 
+          onClick={onClose}
+        >
+          <CloseIcon />
+        </IconButton>
+        
+        <h2>Trades ({sortedTrades.length})</h2>
+        
+        <TradesTableContainer>
+          <TradesTable>
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Trade Price</th>
+                <th>Trade Quantity</th>
+                <th>Net Qty After</th>
+                <th>Entry Price After</th>
+                <th>Trading Fee</th>
+                <th>Realized PnL</th>
+                <th>Tx Hash</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedTrades.map((trade) => (
+                <TableRow key={trade.id}>
+                  <td>{formatDate(trade.timestamp)}</td>
+                  <td>{formatPrice(trade.tradePrice)}</td>
+                  <td>{formatQuantity(trade.tradeQuantity)}</td>
+                  <td>{formatQuantity(trade.netQuantityAfter)}</td>
+                  <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
+                  <td>{formatPrice(trade.tradingFee)}</td>
+                  <td>
+                    <PnLText $isPositive={Number(trade.realizedPnl) >= 0}>
+                      {formatPnL(trade.realizedPnl)}
+                    </PnLText>
+                  </td>
+                  <td>
+                    <TxLink 
+                      href={`https://etherscan.io/tx/${trade.transactionHash}`} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                    >
+                      {trade.transactionHash.slice(0, 6)}...{trade.transactionHash.slice(-4)}
+                    </TxLink>
+                  </td>
+                </TableRow>
+              ))}
+            </tbody>
+          </TradesTable>
+        </TradesTableContainer>
+      </TradesModalCard>
+    </Modal>
   );
 };
 
@@ -837,5 +987,98 @@ const TxLink = styled("a")`
   
   &:hover {
     text-decoration: underline;
+  }
+`;
+
+const DetailsButton = styled("button")`
+  padding: 0.5rem 0.875rem;
+  background: #4c5a5f;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  
+  &:hover:not(:disabled) {
+    background: #5a6b70;
+    transform: translateY(-1px);
+  }
+  
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    background: #6b7280;
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+`;
+
+const TradesModalCard = styled(ModalCard)`
+  max-width: 1000px;
+  
+  h2 {
+    font-size: 2rem;
+    font-weight: 500;
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+    
+    @media (max-width: 600px) {
+      font-size: 1.5rem;
+    }
+  }
+`;
+
+const TradesTableContainer = styled("div")`
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 1rem;
+  
+  &::-webkit-scrollbar {
+    height: 8px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+  }
+`;
+
+const TradesTable = styled("table")`
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 800px;
+  
+  th {
+    text-align: left;
+    padding: 0.75rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #a7a9b6;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    white-space: nowrap;
+  }
+  
+  td {
+    padding: 0.75rem 0.5rem;
+    font-size: 0.875rem;
+    color: #fff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+  
+  tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.05);
   }
 `;

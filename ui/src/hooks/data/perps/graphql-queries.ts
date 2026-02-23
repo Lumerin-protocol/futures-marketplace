@@ -109,3 +109,37 @@ export const FundingUpdatesQuery = gql`
     }
   }
 `
+
+export const UserPositionSessionsQuery = gql`
+  query UserPositionSessions($address: ID!) {
+    positionSessions(where: { user: $address }) {
+      closePrice
+      entryPrice
+      closedQuantity
+      fundingFees
+      id
+      lastTradeAt
+      maxQuantity
+      openedAt
+      realizedPnl
+      status
+      tradingFees
+      user {
+        id
+        netQuantity
+      }
+      trades {
+        aggregatedEntryPriceAfter
+        blockNumber
+        id
+        netQuantityAfter
+        realizedPnl
+        timestamp
+        tradePrice
+        tradeQuantity
+        tradingFee
+        transactionHash
+      }
+    }
+  }
+`
