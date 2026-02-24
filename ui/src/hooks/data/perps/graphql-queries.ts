@@ -143,3 +143,23 @@ export const UserPositionSessionsQuery = gql`
     }
   }
 `
+
+export const UserTradesQuery = gql`
+  query UserTrades($address: ID!) {
+    trades(where: { user: $address }, orderBy: timestamp, orderDirection: desc) {
+      user {
+        id
+      }
+      transactionHash
+      aggregatedEntryPriceAfter
+      blockNumber
+      id
+      netQuantityAfter
+      realizedPnl
+      timestamp
+      tradePrice
+      tradeQuantity
+      tradingFee
+    }
+  }
+`

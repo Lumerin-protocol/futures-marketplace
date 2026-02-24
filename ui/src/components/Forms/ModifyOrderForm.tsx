@@ -165,8 +165,8 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
         }
       }
 
-      // Check if price exceeds the configured percentage of newest item price
-      if (newestItemPrice) {
+      // Check if price exceeds the configured percentage of newest item price (skip for perpetual)
+      if (contractMode !== "perpetual" && newestItemPrice) {
         const maxAllowedPrice = newestItemPrice * maxPriceMultiplier;
         if (newPrice > maxAllowedPrice) {
           const percentageOver = ((newPrice / newestItemPrice) * 100).toFixed(1);

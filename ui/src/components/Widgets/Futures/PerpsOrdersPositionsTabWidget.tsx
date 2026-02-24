@@ -18,6 +18,8 @@ import { useUserPositionSnapshots } from "../../../hooks/data/perps/useUserPosit
 import { useUserPerpsTrades } from "../../../hooks/data/perps/useUserPerpsTrades";
 import { useUserPositionSessions } from "../../../hooks/data/perps/useUserPositionSessions";
 import type { PositionSession } from "../../../hooks/data/perps/useUserPositionSessions";
+import { useUserTrades } from "../../../hooks/data/perps/useUserTrades";
+import type { UserTrade } from "../../../hooks/data/perps/useUserTrades";
 
 type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "POSITION_HISTORY" | "ORDER_HISTORY";
 
@@ -67,8 +69,8 @@ export const PerpsOrdersPositionsTabWidget = ({
     { refetch: activeTab === "POSITIONS" || activeTab === "POSITION_HISTORY" }
   );
 
-  // Fetch trades for Trades tab
-  const tradesQuery = useUserPerpsTrades(
+  // Fetch trades for Trades tab (new query with detailed trade info)
+  const tradesQuery = useUserTrades(
     participantAddress,
     { refetch: activeTab === "TRADES" }
   );
@@ -529,6 +531,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice }: Perps
               <th>Max Qty</th>
               <th>Fees (F/T)</th>
               <th>Unrealized PnL</th>
+              <th>Realized PnL</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -558,11 +561,11 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice }: Perps
                       {unrealizedPnlValue >= 0 ? "+" : ""}{unrealizedPnlValue.toFixed(2)} USDC
                     </PnLText>
                   </td>
-                  {/* <td>
+                  <td>
                     <PnLText $isPositive={realizedPnlValue >= 0}>
                       {realizedPnlValue >= 0 ? "+" : ""}{realizedPnlValue.toFixed(2)} USDC
                     </PnLText>
-                  </td> */}
+                  </td>
                   <td>
                     <ActionButtons>
                       <DetailsButton onClick={() => setSelectedSession(session)}>
@@ -733,40 +736,22 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading }: PerpsPositio
 
 // Perps Trades Table Component
 interface PerpsTradesTableProps {
-  trades: Array<{
-    id: string;
-    blockNumber: number;
-    makerOrderId: string;
-    price: bigint;
-    quantity: bigint;
-    timestamp: string;
-    transactionHash: string;
-    volume: bigint;
-    seller: {
-      id: string;
-    };
-    buyer: {
-      id: string;
-    };
-  }>;
+  trades: UserTrade[];
   isLoading?: boolean;
   userAddress?: `0x${string}`;
 }
 
 const PerpsTradesTable = ({ trades, isLoading, userAddress }: PerpsTradesTableProps) => {
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2); // Convert from wei to USDC
+    return (Number(price) / 1e6).toFixed(2);
   };
 
   const formatQuantity = (quantity: bigint) => {
     if(quantity === 0n) {
       return "0";
     }
-    return (Number(quantity) / 1e6).toFixed(6);
-  };
-
-  const formatVolume = (volume: bigint) => {
-    return (Number(volume) / 1e6).toFixed(6);
+    const absQuantity = quantity < 0n ? -quantity : quantity;
+    return (Number(absQuantity) / 1e6).toFixed(6);
   };
 
   const formatDate = (dateString: string) => {
@@ -777,13 +762,13 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress }: PerpsTradesTablePr
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      second: "2-digit",
     });
   };
 
-  const getUserSide = (trade: PerpsTradesTableProps['trades'][0]) => {
-    if (!userAddress) return "-";
-    const isBuyer = trade.buyer.id.toLowerCase() === userAddress.toLowerCase();
-    return isBuyer ? "Long" : "Short";
+  const formatPnL = (pnl: bigint) => {
+    const value = Number(pnl) / 1e6;
+    return `${value >= 0 ? "+" : ""}${value.toFixed(2)} USDC`;
   };
 
   const sortedTrades = [...trades].sort((a, b) => 
@@ -811,40 +796,41 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress }: PerpsTradesTablePr
       <Table>
         <thead>
           <tr>
-            <th>Transaction Id</th>
-            <th>Side</th>
-            <th>Price (USDC)</th>
-            <th>Quantity</th>
-            {/* <th>Volume (USDC)</th> */}
-            <th>Date</th>
+            <th>Timestamp</th>
+            <th>Trade Price</th>
+            <th>Trade Quantity</th>
+            <th>Net Qty After</th>
+            <th>Entry Price After</th>
+            <th>Trading Fee</th>
+            <th>Realized PnL</th>
+            <th>Tx Hash</th>
           </tr>
         </thead>
         <tbody>
-          {sortedTrades.map((trade) => {
-            const side = getUserSide(trade);
-            return (
-              <TableRow key={trade.id}>
-                <td>
-                  <TxLink 
-                    href={`https://etherscan.io/tx/${trade.transactionHash}`} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                  >
-                    {trade.transactionHash.slice(0, 6)}...{trade.transactionHash.slice(-4)}
-                  </TxLink>
-                </td>
-                <td>
-                  <TypeBadge $type={side}>
-                    {side}
-                  </TypeBadge>
-                </td>
-                <td>{formatPrice(trade.price)}</td>
-                <td>{formatQuantity(trade.quantity)}</td>
-                {/* <td>{formatVolume(trade.volume)}</td> */}
-                <td>{formatDate(trade.timestamp)}</td>
-              </TableRow>
-            );
-          })}
+          {sortedTrades.map((trade) => (
+            <TableRow key={trade.id}>
+              <td>{formatDate(trade.timestamp)}</td>
+              <td>{formatPrice(trade.tradePrice)}</td>
+              <td>{formatQuantity(trade.tradeQuantity)}</td>
+              <td>{formatQuantity(trade.netQuantityAfter)}</td>
+              <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
+              <td>{formatPrice(trade.tradingFee)}</td>
+              <td>
+                <PnLText $isPositive={Number(trade.realizedPnl) >= 0}>
+                  {formatPnL(trade.realizedPnl)}
+                </PnLText>
+              </td>
+              <td>
+                <TxLink 
+                  href={`https://etherscan.io/tx/${trade.transactionHash}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                >
+                  {trade.transactionHash.slice(0, 6)}...{trade.transactionHash.slice(-4)}
+                </TxLink>
+              </td>
+            </TableRow>
+          ))}
         </tbody>
       </Table>
     </TableContainer>

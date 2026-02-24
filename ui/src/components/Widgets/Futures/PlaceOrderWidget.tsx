@@ -348,17 +348,19 @@ export const PlaceOrderWidget = ({
       }
     }
 
-    // Check if price exceeds the configured percentage of newest item price
-    const maxAllowedPrice = newestItemPrice * maxPriceMultiplier;
+    // Check if price exceeds the configured percentage of newest item price (skip for perpetual)
+    if (contractMode !== "perpetual") {
+      const maxAllowedPrice = newestItemPrice * maxPriceMultiplier;
 
-    if (currentPrice > maxAllowedPrice) {
-      setPendingOrder({
-        price: currentPrice,
-        amount: numericAmount,
-        quantity: numericAmount, // Positive for Buy
-      });
-      setShowHighPriceModal(true);
-      return;
+      if (currentPrice > maxAllowedPrice) {
+        setPendingOrder({
+          price: currentPrice,
+          amount: numericAmount,
+          quantity: numericAmount, // Positive for Buy
+        });
+        setShowHighPriceModal(true);
+        return;
+      }
     }
 
     openOrderForm(currentPrice, numericAmount, numericAmount); // Positive quantity for Buy
@@ -440,17 +442,19 @@ export const PlaceOrderWidget = ({
       }
     }
 
-    // Check if price exceeds the configured percentage of newest item price
-    const maxAllowedPrice = newestItemPrice * maxPriceMultiplier;
+    // Check if price exceeds the configured percentage of newest item price (skip for perpetual)
+    if (contractMode !== "perpetual") {
+      const maxAllowedPrice = newestItemPrice * maxPriceMultiplier;
 
-    if (currentPrice > maxAllowedPrice) {
-      setPendingOrder({
-        price: currentPrice,
-        amount: numericAmount,
-        quantity: -numericAmount, // Negative for Sell
-      });
-      setShowHighPriceModal(true);
-      return;
+      if (currentPrice > maxAllowedPrice) {
+        setPendingOrder({
+          price: currentPrice,
+          amount: numericAmount,
+          quantity: -numericAmount, // Negative for Sell
+        });
+        setShowHighPriceModal(true);
+        return;
+      }
     }
 
     openOrderForm(currentPrice, numericAmount, -numericAmount); // Negative quantity for Sell
