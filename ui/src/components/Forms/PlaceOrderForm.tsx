@@ -43,6 +43,7 @@ interface Props {
   bypassConflictCheck?: boolean; // Allow proceeding despite conflicting orders
   contractMode?: ContractMode;
   perpsCollection?: PerpsCollection;
+  leverage?: number; // Leverage value for perps mode (e.g., 10 for 10x)
 }
 
 export const PlaceOrderForm: FC<Props> = ({
@@ -56,6 +57,7 @@ export const PlaceOrderForm: FC<Props> = ({
   bypassConflictCheck = false,
   contractMode = "futures",
   perpsCollection,
+  leverage = 10,
 }) => {
   // Conditionally use futures or perps create order hook
   const futuresCreateOrder = useCreateOrder();
@@ -85,10 +87,12 @@ export const PlaceOrderForm: FC<Props> = ({
     
     let margin: bigint;
     if (contractMode === "perpetual") {
-      // For perps: use fixed 10% of position value
-      // Formula: (price * quantity) * 0.10
+      // For perps: calculate margin based on leverage
+      // Formula: (price * quantity) * (1 / leverage)
+      // Example: 10x leverage = 10% margin, 5x leverage = 20% margin
       const positionValue = price * BigInt(Math.round(absoluteQuantity * 1e6)) / 1000000n;
-      margin = positionValue / 10n; // 10% margin
+      const marginPercent = BigInt(Math.round((1 / leverage) * 100)); // Convert leverage to margin %
+      margin = (positionValue * marginPercent) / 100n;
     } else {
       // For futures: use the existing calculation with PnL
       margin = getMinMarginForPositionManual(price, quantity, latestPrice, marginPersent, deliveryDurationDays);
@@ -96,7 +100,7 @@ export const PlaceOrderForm: FC<Props> = ({
     
     setRequiredMargin(margin);
     setIsLoadingMargin(false);
-  }, [latestPrice, price, quantity, contractMode, absoluteQuantity, marginPersent, deliveryDurationDays]);
+  }, [latestPrice, price, quantity, contractMode, absoluteQuantity, marginPersent, deliveryDurationDays, leverage]);
 
   // Check for conflicting orders (opposite action, same price, same delivery date)
   const hasConflictingOrder = () => {

@@ -94,7 +94,6 @@ export const PlaceOrderWidget = ({
   const marginPercent = contractSpecsQuery.data?.data?.liquidationMarginPercent ?? 20;
 
   // Constants for perps margin calculation
-  const PERPS_MIN_MARGIN_PERCENT = 10; // 10% margin requirement
   const PERPS_MIN_MARGIN_USDC = 5; // 5 USDC minimum margin (5 * 10**6 in wei)
 
   // Get market price for validation and default price
@@ -770,7 +769,7 @@ export const PlaceOrderWidget = ({
             <InputGroup $isHighlighted={highlightedButton !== null}>
               <label>
                 {contractMode === "perpetual" ? "Amount (USDC)" : "Quantity"}
-                {contractMode === "perpetual" && <span style={{ fontSize: "0.7rem", color: "#a7a9b6", marginLeft: "0.5rem" }}>(min: 5)</span>}
+                {/* {contractMode === "perpetual" && <span style={{ fontSize: "0.7rem", color: "#a7a9b6", marginLeft: "0.5rem" }}>(min: 5)</span>} */}
               </label>
               {contractMode === "perpetual" ? (
                 <input
@@ -812,8 +811,8 @@ export const PlaceOrderWidget = ({
                       if (newAmount > 0 && newAmount < PERPS_MIN_MARGIN_USDC) {
                         newAmount = PERPS_MIN_MARGIN_USDC;
                       }
-                      // Format with up to 6 decimal places
-                      setAmount(newAmount > 0 ? newAmount.toFixed(6) : "0");
+                      // Format with up to 2 decimal places
+                      setAmount(newAmount > 0 ? newAmount.toFixed(2) : "0");
                     } else {
                       // Round to nearest integer for futures
                       setAmount(Math.floor(newAmount));
@@ -895,6 +894,7 @@ export const PlaceOrderWidget = ({
             bypassConflictCheck={bypassConflictCheck}
             contractMode={contractMode}
             perpsCollection={perpsCollection}
+            leverage={leverage}
             closeForm={() => {
               setShowOrderForm(false);
               setPendingOrder(null);
