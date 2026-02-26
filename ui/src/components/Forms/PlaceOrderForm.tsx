@@ -24,6 +24,7 @@ import { predefinedPools } from "./BuyerForms/predefinedPools";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
 import { useOrderFee } from "../../hooks/data/useOrderFee";
+import type { PerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
 
 interface PoolFormValues {
   predefinedPoolIndex: number | "";
@@ -41,6 +42,7 @@ interface Props {
   closeForm: () => void;
   bypassConflictCheck?: boolean; // Allow proceeding despite conflicting orders
   contractMode?: ContractMode;
+  perpsCollection?: PerpsCollection;
 }
 
 export const PlaceOrderForm: FC<Props> = ({
@@ -53,6 +55,7 @@ export const PlaceOrderForm: FC<Props> = ({
   closeForm,
   bypassConflictCheck = false,
   contractMode = "futures",
+  perpsCollection,
 }) => {
   // Conditionally use futures or perps create order hook
   const futuresCreateOrder = useCreateOrder();
@@ -79,10 +82,21 @@ export const PlaceOrderForm: FC<Props> = ({
   useEffect(() => {
     if (!latestPrice) return;
     setIsLoadingMargin(true);
-    const margin = getMinMarginForPositionManual(price, quantity, latestPrice, marginPersent, deliveryDurationDays);
+    
+    let margin: bigint;
+    if (contractMode === "perpetual") {
+      // For perps: use fixed 10% of position value
+      // Formula: (price * quantity) * 0.10
+      const positionValue = price * BigInt(Math.round(absoluteQuantity * 1e6)) / 1000000n;
+      margin = positionValue / 10n; // 10% margin
+    } else {
+      // For futures: use the existing calculation with PnL
+      margin = getMinMarginForPositionManual(price, quantity, latestPrice, marginPersent, deliveryDurationDays);
+    }
+    
     setRequiredMargin(margin);
     setIsLoadingMargin(false);
-  }, [latestPrice, price, quantity]);
+  }, [latestPrice, price, quantity, contractMode, absoluteQuantity, marginPersent, deliveryDurationDays]);
 
   // Check for conflicting orders (opposite action, same price, same delivery date)
   const hasConflictingOrder = () => {
@@ -216,12 +230,33 @@ export const PlaceOrderForm: FC<Props> = ({
                       : "N/A"}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">Order Creation Fee:</span>
-                <span className="text-white">
-                  {orderFeeUSDC !== null ? `${orderFeeUSDC.toFixed(2)} USDC` : isOrderFeeLoading ? "Loading..." : "N/A"}
-                </span>
-              </div>
+              {contractMode === "perpetual" ? (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Maker Fee:</span>
+                    <span className="text-white">
+                      {perpsCollection?.makerFeeBps !== undefined 
+                        ? `${(perpsCollection.makerFeeBps / 100).toFixed(2)}%` 
+                        : "N/A"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Taker Fee:</span>
+                    <span className="text-white">
+                      {perpsCollection?.takerFeeBps !== undefined 
+                        ? `${(perpsCollection.takerFeeBps / 100).toFixed(2)}%` 
+                        : "N/A"}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Order Creation Fee:</span>
+                  <span className="text-white">
+                    {orderFeeUSDC !== null ? `${orderFeeUSDC.toFixed(2)} USDC` : isOrderFeeLoading ? "Loading..." : "N/A"}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
           {isBuy && contractMode === "futures" && (

@@ -14,9 +14,6 @@ import { useUserPerpsOrders } from "../../../hooks/data/perps/useUserPerpsOrders
 import { useCancelPerpsOrder } from "../../../hooks/data/perps/useCancelPerpsOrder";
 import { useQueryClient } from "@tanstack/react-query";
 import { USER_PERPS_ORDERS_QK } from "../../../hooks/data/perps/useUserPerpsOrders";
-import { useUserPositionSnapshots } from "../../../hooks/data/perps/useUserPositionSnapshots";
-import { useUserPerpsTrades } from "../../../hooks/data/perps/useUserPerpsTrades";
-import { useUserPositionSessions } from "../../../hooks/data/perps/useUserPositionSessions";
 import type { PositionSession } from "../../../hooks/data/perps/useUserPositionSessions";
 import { useUserTrades } from "../../../hooks/data/perps/useUserTrades";
 import type { UserTrade } from "../../../hooks/data/perps/useUserTrades";
@@ -34,6 +31,8 @@ interface PerpsOrdersPositionsTabWidgetProps {
   minMargin?: bigint | null;
   accountBalance?: AccountBalance;
   marketPrice?: bigint;
+  positionSessions: PositionSession[];
+  positionSessionsLoading?: boolean;
 }
 
 export const PerpsOrdersPositionsTabWidget = ({
@@ -47,6 +46,8 @@ export const PerpsOrdersPositionsTabWidget = ({
   minMargin,
   accountBalance,
   marketPrice,
+  positionSessions,
+  positionSessionsLoading,
 }: PerpsOrdersPositionsTabWidgetProps) => {
   const [activeTab, setActiveTab] = useState<TabType>("OPEN_ORDERS");
   const queryClient = useQueryClient();
@@ -61,12 +62,6 @@ export const PerpsOrdersPositionsTabWidget = ({
   const historicalOrdersQuery = useHistoricalOrders(
     participantAddress,
     activeTab === "ORDER_HISTORY"
-  );
-
-  // Fetch position snapshots for Positions tab
-  const positionSessionsQuery = useUserPositionSessions(
-    participantAddress,
-    { refetch: activeTab === "POSITIONS" || activeTab === "POSITION_HISTORY" }
   );
 
   // Fetch trades for Trades tab (new query with detailed trade info)
@@ -94,17 +89,15 @@ export const PerpsOrdersPositionsTabWidget = ({
   
   // Count unique positions
   const positionsCount = useMemo(() => {
-    const sessions = positionSessionsQuery.data?.positionSessions || [];
     // Count open positions (status === "OPEN")
-    return sessions.filter((session) => session.status === "OPEN").length;
-  }, [positionSessionsQuery.data?.positionSessions]);
+    return positionSessions.filter((session) => session.status === "OPEN").length;
+  }, [positionSessions]);
 
   // Count closed positions
   const positionHistoryCount = useMemo(() => {
-    const sessions = positionSessionsQuery.data?.positionSessions || [];
     // Count closed positions (status === "CLOSED")
-    return sessions.filter((session) => session.status === "CLOSE").length;
-  }, [positionSessionsQuery.data?.positionSessions]);
+    return positionSessions.filter((session) => session.status === "CLOSE").length;
+  }, [positionSessions]);
 
   // Count trades
   const tradesCount = useMemo(() => {
@@ -148,8 +141,8 @@ export const PerpsOrdersPositionsTabWidget = ({
         {activeTab === "POSITIONS" && (
           <PositionsWrapper>
             <PerpsPositionsTable
-              positionSessions={positionSessionsQuery.data?.positionSessions || []}
-              isLoading={positionSessionsQuery.isLoading}
+              positionSessions={positionSessions}
+              isLoading={positionSessionsLoading}
               marketPrice={marketPrice}
             />
           </PositionsWrapper>
@@ -166,8 +159,8 @@ export const PerpsOrdersPositionsTabWidget = ({
         {activeTab === "POSITION_HISTORY" && (
           <PositionsWrapper>
             <PerpsPositionHistoryTable
-              positionSessions={positionSessionsQuery.data?.positionSessions || []}
-              isLoading={positionSessionsQuery.isLoading}
+              positionSessions={positionSessions}
+              isLoading={positionSessionsLoading}
             />
           </PositionsWrapper>
         )}
