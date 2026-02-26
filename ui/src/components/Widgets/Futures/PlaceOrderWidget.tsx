@@ -30,6 +30,7 @@ import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { Participant } from "../../../hooks/data/useParticipant";
 import type { ContractMode, AccountBalance } from "../../../types/types";
+import type { PerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
 import { useAccount } from "wagmi";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
 import { handleNumericDecimalInput, handleNumericDecimalInput6Decimals } from "../../Forms/Shared/AmountInputForm";
@@ -58,6 +59,7 @@ interface PlaceOrderWidgetProps {
   contractMode?: ContractMode;
   accountBalance?: AccountBalance;
   balanceQuery: BalanceQueryResult;
+  perpsCollection?: PerpsCollection;
 }
 
 export const PlaceOrderWidget = ({
@@ -75,6 +77,7 @@ export const PlaceOrderWidget = ({
   contractMode = "futures",
   accountBalance,
   balanceQuery,
+  perpsCollection,
 }: PlaceOrderWidgetProps) => {
   const { data: marketPrice, isLoading: isMarketPriceLoading } = useGetMarketPrice();
   const { address } = useAccount();
@@ -90,17 +93,23 @@ export const PlaceOrderWidget = ({
   const deliveryDurationDays = contractSpecsQuery.data?.data?.deliveryDurationDays ?? 7;
   const marginPercent = contractSpecsQuery.data?.data?.liquidationMarginPercent ?? 20;
 
+  // Constants for perps margin calculation
+  const PERPS_MIN_MARGIN_PERCENT = 10; // 10% margin requirement
+  const PERPS_MIN_MARGIN_USDC = 5; // 5 USDC minimum margin (5 * 10**6 in wei)
+
   // Get market price for validation and default price
   const newestItemPrice = marketPrice ? Number(marketPrice) / 1e6 : null;
 
   const [price, setPrice] = useState("5.00"); // Will be updated when hashrate data loads
   const [priceInitialized, setPriceInitialized] = useState(false); // Track if price has been initialized from hashrate
-  const [amount, setAmount] = useState<number | string>(1); // Can be number or string to support decimals in perpetuals
+  const [amount, setAmount] = useState<number | string>(5); // Can be number or string to support decimals in perpetuals
   const [sliderValue, setSliderValue] = useState(0); // Slider value 0-100
+  const [leverage, setLeverage] = useState(10); // Leverage multiplier (1x to 10x), default 10x
   const [highlightedButton, setHighlightedButton] = useState<"buy" | "sell" | "inputs" | null>(null);
   const [showHighPriceModal, setShowHighPriceModal] = useState(false);
   const [showConflictModal, setShowConflictModal] = useState(false);
   const [showOrderForm, setShowOrderForm] = useState(false);
+  const [showLeverageModal, setShowLeverageModal] = useState(false);
   const [bypassConflictCheck, setBypassConflictCheck] = useState(false);
   const [conflictingOrderQuantity, setConflictingOrderQuantity] = useState<number | null>(null);
   const [pendingOrder, setPendingOrder] = useState<{
@@ -156,6 +165,49 @@ export const PlaceOrderWidget = ({
     return isNaN(parsed) || parsed <= 0 ? 0 : parsed;
   };
 
+  // Calculate margin percentage from leverage
+  // Formula: marginPercent = (1 / leverage) * 100
+  // Example: 10x leverage = (1/10) * 100 = 10%
+  const getMarginPercentFromLeverage = (): number => {
+    return (1 / leverage) * 100;
+  };
+
+  // Calculate quantity from amount (margin) for perps mode
+  // Formula: quantity = (amount / marginPercent) / price
+  // Example: amount=10, price=2, leverage=10x (10% margin) => quantity = (10/0.1)/2 = 50
+  const calculateQuantityFromAmount = (amountValue: number, priceValue: number): number => {
+    if (contractMode !== "perpetual" || priceValue <= 0) return amountValue;
+    
+    const marginDecimal = getMarginPercentFromLeverage() / 100; // Convert to decimal
+    const fullValue = amountValue / marginDecimal; // Convert margin to full position value
+    const quantity = fullValue / priceValue; // Divide by price to get quantity
+    
+    return quantity;
+  };
+
+  // Calculate amount (margin) from quantity for perps mode (reverse operation)
+  const calculateAmountFromQuantity = (quantityValue: number, priceValue: number): number => {
+    if (contractMode !== "perpetual" || priceValue <= 0) return quantityValue;
+    
+    const marginDecimal = getMarginPercentFromLeverage() / 100; // Convert to decimal
+    const fullValue = quantityValue * priceValue; // Calculate full position value
+    const amount = fullValue * marginDecimal; // Calculate required margin
+    
+    return amount;
+  };
+
+  // Get expected quantity for display
+  const getExpectedQuantity = (): number => {
+    const numericAmount = getNumericAmount();
+    const currentPrice = parseFloat(price) || 0;
+    
+    if (contractMode === "perpetual") {
+      return calculateQuantityFromAmount(numericAmount, currentPrice);
+    }
+    
+    return numericAmount;
+  };
+
   // Calculate maximum available quantity based on current price
   const calculateMaxQuantity = (): number => {
     const currentPrice = parseFloat(price) || 0;
@@ -171,13 +223,24 @@ export const PlaceOrderWidget = ({
 
     const balanceForMargin = availableBalance - orderFee;
 
-    // Binary search to find maximum quantity
+    // For perpetual mode, return max available amount (margin) not quantity
+    if (contractMode === "perpetual") {
+      // Available balance IS the max amount (margin) for perps
+      // But we need to ensure it meets minimum requirements
+      const maxAmountInUsdc = Number(balanceForMargin) / 1e6;
+      const minMarginUsdc = PERPS_MIN_MARGIN_USDC;
+      
+      if (maxAmountInUsdc < minMarginUsdc) return 0;
+      
+      return maxAmountInUsdc;
+    }
+
+    // Binary search to find maximum quantity for futures mode
     let low = 0;
-    let high = contractMode === "perpetual" ? 1000000 : 50; // High upper bound for search
+    let high = 50; // High upper bound for search
     let maxQty = 0;
 
-    // Use higher precision for perpetual markets
-    const precision = contractMode === "perpetual" ? 0.000001 : 1;
+    const precision = 1;
 
     while (high - low > precision) {
       const mid = (low + high) / 2;
@@ -262,6 +325,14 @@ export const PlaceOrderWidget = ({
 
   const handleAmountChange = (newAmount: number | string) => {
     setAmount(newAmount);
+
+        if (contractMode === "perpetual") {
+      const numericValue = typeof newAmount === "string" ? parseFloat(newAmount) : newAmount;
+      if (!isNaN(numericValue) && numericValue > 0 && numericValue < PERPS_MIN_MARGIN_USDC) {
+        // Don't allow setting amount below minimum
+        return;
+      }
+    }
     
     // Update slider to reflect the amount as a percentage of max
     const maxQty = calculateMaxQuantity();
@@ -273,6 +344,161 @@ export const PlaceOrderWidget = ({
   };
 
   const handleBuy = async () => {
+    if (contractMode === "perpetual") {
+      await handleBuyPerps();
+    } else {
+      await handleBuyFutures();
+    }
+  };
+
+  const handleSell = async () => {
+    if (contractMode === "perpetual") {
+      await handleSellPerps();
+    } else {
+      await handleSellFutures();
+    }
+  };
+
+  // Perps mode buy handler - uses amount as margin
+  const handleBuyPerps = async () => {
+    const numericAmount = getNumericAmount();
+    if (numericAmount <= 0) {
+      alert("Amount must be greater than 0");
+      return;
+    }
+
+    // Validate minimum margin
+    if (numericAmount < PERPS_MIN_MARGIN_USDC) {
+      alert(`Minimum margin is ${PERPS_MIN_MARGIN_USDC} USDC`);
+      return;
+    }
+
+    const currentPrice = parseFloat(price);
+    const priceInWei = BigInt(Math.round(currentPrice * 1e6));
+    const totalBalance = balanceQuery.data ?? 0n;
+    const lockedBalance = minMargin ?? 0n;
+    const availableBalance = totalBalance - lockedBalance;
+
+    // Calculate required margin in wei
+    const amountInWei = BigInt(Math.round(numericAmount * 1e6));
+    
+    // Include order fee in the balance check
+    const orderFee = orderFeeRaw ?? 0n;
+    const totalRequired = amountInWei + orderFee;
+
+    if (totalRequired > availableBalance) {
+      const amountFormatted = (Number(amountInWei) / 1e6).toFixed(2);
+      const orderFeeFormatted = (Number(orderFee) / 1e6).toFixed(2);
+      const totalRequiredFormatted = (Number(totalRequired) / 1e6).toFixed(2);
+      const totalBalanceFormatted = (Number(totalBalance) / 1e6).toFixed(2);
+      const lockedBalanceFormatted = (Number(lockedBalance) / 1e6).toFixed(2);
+      const availableBalanceFormatted = (Number(availableBalance) / 1e6).toFixed(2);
+      const accountBalance = accountBalanceQuery.data ?? 0n;
+      const accountBalanceFormatted = (Number(accountBalance) / 1e6).toFixed(2);
+      alert(
+        `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${amountFormatted} USDC\nOrder fee: ${orderFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
+      );
+      return;
+    }
+
+    // Calculate quantity from amount
+    const quantity = calculateQuantityFromAmount(numericAmount, currentPrice);
+
+    // Check for conflicting orders (opposite action, same price)
+    if (participantData?.orders) {
+      const conflictingOrder = participantData.orders.find(
+        (order) =>
+          order.isActive &&
+          !order.isBuy && // Opposite action (Sell)
+          order.pricePerDay === priceInWei,
+      );
+
+      if (conflictingOrder) {
+        setConflictingOrderQuantity(null);
+        setPendingOrder({
+          price: currentPrice,
+          amount: numericAmount,
+          quantity: quantity, // Positive for Buy
+        });
+        setShowConflictModal(true);
+        return;
+      }
+    }
+
+    openOrderForm(currentPrice, numericAmount, quantity); // Positive quantity for Buy
+  };
+
+  // Perps mode sell handler - uses amount as margin
+  const handleSellPerps = async () => {
+    const numericAmount = getNumericAmount();
+    if (numericAmount <= 0) {
+      alert("Amount must be greater than 0");
+      return;
+    }
+
+    // Validate minimum margin
+    if (numericAmount < PERPS_MIN_MARGIN_USDC) {
+      alert(`Minimum margin is ${PERPS_MIN_MARGIN_USDC} USDC`);
+      return;
+    }
+
+    const currentPrice = parseFloat(price);
+    const priceInWei = BigInt(Math.round(currentPrice * 1e6));
+    const totalBalance = balanceQuery.data ?? 0n;
+    const lockedBalance = minMargin ?? 0n;
+    const availableBalance = totalBalance - lockedBalance;
+
+    // Calculate required margin in wei
+    const amountInWei = BigInt(Math.round(numericAmount * 1e6));
+    
+    // Include order fee in the balance check
+    const orderFee = orderFeeRaw ?? 0n;
+    const totalRequired = amountInWei + orderFee;
+
+    if (totalRequired > availableBalance) {
+      const amountFormatted = (Number(amountInWei) / 1e6).toFixed(2);
+      const orderFeeFormatted = (Number(orderFee) / 1e6).toFixed(2);
+      const totalRequiredFormatted = (Number(totalRequired) / 1e6).toFixed(2);
+      const totalBalanceFormatted = (Number(totalBalance) / 1e6).toFixed(2);
+      const lockedBalanceFormatted = (Number(lockedBalance) / 1e6).toFixed(2);
+      const availableBalanceFormatted = (Number(availableBalance) / 1e6).toFixed(2);
+      const accountBalance = accountBalanceQuery.data ?? 0n;
+      const accountBalanceFormatted = (Number(accountBalance) / 1e6).toFixed(2);
+      alert(
+        `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${amountFormatted} USDC\nOrder fee: ${orderFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
+      );
+      return;
+    }
+
+    // Calculate quantity from amount
+    const quantity = calculateQuantityFromAmount(numericAmount, currentPrice);
+
+    // Check for conflicting orders (opposite action, same price)
+    if (participantData?.orders) {
+      const conflictingOrder = participantData.orders.find(
+        (order) =>
+          order.isActive &&
+          order.isBuy && // Opposite action (Buy)
+          order.pricePerDay === priceInWei,
+      );
+
+      if (conflictingOrder) {
+        setConflictingOrderQuantity(null);
+        setPendingOrder({
+          price: currentPrice,
+          amount: numericAmount,
+          quantity: -quantity, // Negative for Sell
+        });
+        setShowConflictModal(true);
+        return;
+      }
+    }
+
+    openOrderForm(currentPrice, numericAmount, -quantity); // Negative quantity for Sell
+  };
+
+  // Futures mode buy handler - uses quantity directly
+  const handleBuyFutures = async () => {
     if (!externalDeliveryDate && contractMode === "futures") {
       alert("Please select a price from the order book to set delivery date");
       return;
@@ -324,15 +550,14 @@ export const PlaceOrderWidget = ({
     }
 
     // Check for conflicting orders (opposite action, same price, same delivery date)
-    if (participantData?.orders && (contractMode === "perpetual" || externalDeliveryDate !== undefined)) {
-      const priceInWei = BigInt(Math.round(currentPrice * 1e6));
+    if (participantData?.orders && externalDeliveryDate !== undefined) {
       const deliveryDateValue = externalDeliveryDate ? BigInt(externalDeliveryDate) : 0n;
       const conflictingOrder = participantData.orders.find(
         (order) =>
           order.isActive &&
           !order.isBuy && // Opposite action (Sell)
           order.pricePerDay === priceInWei &&
-          (contractMode === "perpetual" || order.deliveryAt === deliveryDateValue),
+          order.deliveryAt === deliveryDateValue,
       );
 
       if (conflictingOrder) {
@@ -348,25 +573,24 @@ export const PlaceOrderWidget = ({
       }
     }
 
-    // Check if price exceeds the configured percentage of newest item price (skip for perpetual)
-    if (contractMode !== "perpetual") {
-      const maxAllowedPrice = newestItemPrice * maxPriceMultiplier;
+    // Check if price exceeds the configured percentage of newest item price
+    const maxAllowedPrice = newestItemPrice * maxPriceMultiplier;
 
-      if (currentPrice > maxAllowedPrice) {
-        setPendingOrder({
-          price: currentPrice,
-          amount: numericAmount,
-          quantity: numericAmount, // Positive for Buy
-        });
-        setShowHighPriceModal(true);
-        return;
-      }
+    if (currentPrice > maxAllowedPrice) {
+      setPendingOrder({
+        price: currentPrice,
+        amount: numericAmount,
+        quantity: numericAmount, // Positive for Buy
+      });
+      setShowHighPriceModal(true);
+      return;
     }
 
     openOrderForm(currentPrice, numericAmount, numericAmount); // Positive quantity for Buy
   };
 
-  const handleSell = async () => {
+  // Futures mode sell handler - uses quantity directly
+  const handleSellFutures = async () => {
     if (!externalDeliveryDate && contractMode === "futures") {
       alert("Please select a price from the order book to set delivery date");
       return;
@@ -418,15 +642,14 @@ export const PlaceOrderWidget = ({
     }
 
     // Check for conflicting orders (opposite action, same price, same delivery date)
-    if (participantData?.orders && (contractMode === "perpetual" || externalDeliveryDate !== undefined)) {
-      const priceInWei = BigInt(Math.round(currentPrice * 1e6));
+    if (participantData?.orders && externalDeliveryDate !== undefined) {
       const deliveryDateValue = externalDeliveryDate ? BigInt(externalDeliveryDate) : 0n;
       const conflictingOrder = participantData.orders.find(
         (order) =>
           order.isActive &&
           order.isBuy && // Opposite action (Buy)
           order.pricePerDay === priceInWei &&
-          (contractMode === "perpetual" || order.deliveryAt === deliveryDateValue),
+          order.deliveryAt === deliveryDateValue,
       );
 
       if (conflictingOrder) {
@@ -442,23 +665,22 @@ export const PlaceOrderWidget = ({
       }
     }
 
-    // Check if price exceeds the configured percentage of newest item price (skip for perpetual)
-    if (contractMode !== "perpetual") {
-      const maxAllowedPrice = newestItemPrice * maxPriceMultiplier;
+    // Check if price exceeds the configured percentage of newest item price
+    const maxAllowedPrice = newestItemPrice * maxPriceMultiplier;
 
-      if (currentPrice > maxAllowedPrice) {
-        setPendingOrder({
-          price: currentPrice,
-          amount: numericAmount,
-          quantity: -numericAmount, // Negative for Sell
-        });
-        setShowHighPriceModal(true);
-        return;
-      }
+    if (currentPrice > maxAllowedPrice) {
+      setPendingOrder({
+        price: currentPrice,
+        amount: numericAmount,
+        quantity: -numericAmount, // Negative for Sell
+      });
+      setShowHighPriceModal(true);
+      return;
     }
 
     openOrderForm(currentPrice, numericAmount, -numericAmount); // Negative quantity for Sell
   };
+
 
   const openOrderForm = (orderPrice: number, orderAmount: number, quantity: number) => {
     setPendingOrder({
@@ -534,11 +756,22 @@ export const PlaceOrderWidget = ({
                   +
                 </PriceButton>
               </PriceInputContainer>
-              <MinMarginLabel>Min Margin: {marginPercent}%</MinMarginLabel>
+              {/* <MinMarginLabel>Min Margin: 10%</MinMarginLabel> */}
+              {contractMode === "perpetual" && (
+                <LeverageButtonContainer>
+                  <LeverageButton onClick={() => setShowLeverageModal(true)} disabled={showOrderForm}>
+                    <LeverageButtonLabel>Leverage</LeverageButtonLabel>
+                    <LeverageButtonValue>{leverage}x</LeverageButtonValue>
+                  </LeverageButton>
+                </LeverageButtonContainer>
+              )}
             </InputGroup>
 
             <InputGroup $isHighlighted={highlightedButton !== null}>
-              <label>Quantity</label>
+              <label>
+                {contractMode === "perpetual" ? "Amount (USDC)" : "Quantity"}
+                {contractMode === "perpetual" && <span style={{ fontSize: "0.7rem", color: "#a7a9b6", marginLeft: "0.5rem" }}>(min: 5)</span>}
+              </label>
               {contractMode === "perpetual" ? (
                 <input
                   type="text"
@@ -546,7 +779,8 @@ export const PlaceOrderWidget = ({
                   onChange={(e) => handleAmountChange(e.target.value.replace("-", ""))}
                   onBeforeInput={handleNumericDecimalInput6Decimals}
                   inputMode="decimal"
-                  placeholder="0.000001"
+                  placeholder="5.00"
+                  min="5"
                   style={{ minWidth: "70px" }}
                 />
               ) : (
@@ -558,6 +792,11 @@ export const PlaceOrderWidget = ({
                   max="50"
                 />
               )}
+              {/* {contractMode === "perpetual" && getNumericAmount() > 0 && (
+                <ExpectedQuantityLabel>
+                  Expected Quantity: {getExpectedQuantity().toFixed(6)}
+                </ExpectedQuantityLabel>
+              )} */}
               <SliderContainer>
                 <StyledSlider
                   value={sliderValue}
@@ -566,11 +805,15 @@ export const PlaceOrderWidget = ({
                     setSliderValue(numValue);
                     
                     const maxQty = calculateMaxQuantity();
-                    const newAmount = (maxQty * numValue) / 100;
+                    let newAmount = (maxQty * numValue) / 100;
                     
+                    // For perps mode, ensure amount is at least 5 USDC or 0
                     if (contractMode === "perpetual") {
+                      if (newAmount > 0 && newAmount < PERPS_MIN_MARGIN_USDC) {
+                        newAmount = PERPS_MIN_MARGIN_USDC;
+                      }
                       // Format with up to 6 decimal places
-                      setAmount(newAmount.toFixed(6));
+                      setAmount(newAmount > 0 ? newAmount.toFixed(6) : "0");
                     } else {
                       // Round to nearest integer for futures
                       setAmount(Math.floor(newAmount));
@@ -651,6 +894,7 @@ export const PlaceOrderWidget = ({
             onOrderPlaced={onOrderPlaced}
             bypassConflictCheck={bypassConflictCheck}
             contractMode={contractMode}
+            perpsCollection={perpsCollection}
             closeForm={() => {
               setShowOrderForm(false);
               setPendingOrder(null);
@@ -660,7 +904,76 @@ export const PlaceOrderWidget = ({
           />
         </ModalItem>
       )}
+
+      <ModalItem open={showLeverageModal} setOpen={setShowLeverageModal}>
+        <LeverageModal
+          currentLeverage={leverage}
+          onConfirm={(newLeverage) => {
+            setLeverage(newLeverage);
+            setShowLeverageModal(false);
+          }}
+          onCancel={() => setShowLeverageModal(false)}
+        />
+      </ModalItem>
     </>
+  );
+};
+
+const LeverageModal = ({
+  currentLeverage,
+  onConfirm,
+  onCancel,
+}: {
+  currentLeverage: number;
+  onConfirm: (leverage: number) => void;
+  onCancel: () => void;
+}) => {
+  const [tempLeverage, setTempLeverage] = useState(currentLeverage);
+
+  const getMarginPercent = (lev: number): number => {
+    return (1 / lev) * 100;
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-semibold text-white mb-6">Adjust Leverage</h2>
+
+      <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4">
+        <div className="flex justify-between items-center mb-4">
+          <span className="text-gray-300 text-sm">Current Leverage:</span>
+          <span className="text-white font-semibold text-lg">{tempLeverage}x</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-gray-300 text-sm">Margin Required:</span>
+          <span className="text-blue-400 font-semibold">{getMarginPercent(tempLeverage).toFixed(2)}%</span>
+        </div>
+      </div>
+
+      <div className="px-2">
+        <StyledSlider
+          value={tempLeverage}
+          onChange={(_, value) => {
+            const numValue = Array.isArray(value) ? value[0] : value;
+            setTempLeverage(numValue);
+          }}
+          min={1}
+          max={10}
+          marks={[
+            { value: 1, label: '1x' },
+            { value: 3, label: '3x' },
+            { value: 5, label: '5x' },
+            { value: 10, label: '10x' },
+          ]}
+          valueLabelDisplay="auto"
+          valueLabelFormat={(value) => `${value}x`}
+        />
+      </div>
+
+      <div className="flex gap-3 justify-end">
+        <SecondaryButton onClick={onCancel}>Cancel</SecondaryButton>
+        <PrimaryButton onClick={() => onConfirm(tempLeverage)}>Apply {tempLeverage}x Leverage</PrimaryButton>
+      </div>
+    </div>
   );
 };
 
@@ -907,6 +1220,96 @@ const MinMarginLabel = styled("div")`
   color: #a7a9b6;
   margin-top: 0.25rem;
   text-align: center;
+`;
+
+const ExpectedQuantityLabel = styled("div")`
+  font-size: 0.75rem;
+  color: #509EBA;
+  margin-top: 0.25rem;
+  text-align: center;
+  font-weight: 500;
+`;
+
+const LeverageButtonContainer = styled("div")`
+  margin-top: 0.75rem;
+`;
+
+const LeverageButton = styled("button")`
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover:not(:disabled) {
+    border-color: #509EBA;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: #509EBA;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+const LeverageButtonLabel = styled("span")`
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #fff;
+`;
+
+const LeverageButtonValue = styled("span")`
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+`;
+
+const LeverageHeader = styled("div")`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.75rem;
+  margin-bottom: 0.25rem;
+  
+  label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #a7a9b6;
+  }
+`;
+
+const LeverageValue = styled("span")`
+  font-size: 1rem;
+  font-weight: 600;
+  color: #509EBA;
+`;
+
+const LeverageSliderContainer = styled("div")`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0 0.5rem;
+  margin-top: 0.5rem;
+`;
+
+const MarginInfo = styled("div")`
+  font-size: 0.75rem;
+  color: #a7a9b6;
+  text-align: center;
+  margin-top: 0.25rem;
 `;
 
 const PriceInputContainer = styled("div")<{ $isHighlighted?: boolean }>`

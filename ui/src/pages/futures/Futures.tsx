@@ -19,9 +19,12 @@ import { useGetMarketPrice } from "../../hooks/data/useGetMarketPrice";
 import { useHistoricalPositions } from "../../hooks/data/useHistoricalPositions";
 import { useGetFutureBalance } from "../../hooks/data/useGetFutureBalance";
 import { useGetPerpsBalance } from "../../hooks/data/perps/useGetPerpsBalance";
+import { useGetPerpsRequiredMargin } from "../../hooks/data/perps/useGetPerpsRequiredMargin";
 import { useFuturesPaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
 import { usePerpsPaymentTokenBalance } from "../../hooks/data/perps/usePerpsPaymentTokenBalance";
 import { useFundingRate } from "../../hooks/data/perps/useFundingRate";
+import { usePerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
+import { useUserPositionSessions } from "../../hooks/data/perps/useUserPositionSessions";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
 import type { PositionBookPosition } from "../../hooks/data/usePositionBook";
 import type { ContractMode } from "../../types/types";
@@ -78,9 +81,29 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     true,
   );
 
-  // Get min margin for address using hook (used for withdrawal form)
-  const minMarginQuery = useGetMinMargin(address);
-  const minMargin = minMarginQuery.data ?? null;
+  // Get min margin for address using hook (used for withdrawal form and locked balance)
+  const futuresMinMarginQuery = useGetMinMargin(address);
+  const perpsMinMarginQuery = useGetPerpsRequiredMargin(address);
+  
+  // Use appropriate min margin based on contract mode
+  const minMarginQuery = useMemo(() => {
+    const query = contractMode === "perpetual" ? perpsMinMarginQuery : futuresMinMarginQuery;
+    return {
+      data: query.data,
+      isLoading: query.isLoading,
+      refetch: query.refetch,
+    };
+  }, [contractMode, futuresMinMarginQuery, perpsMinMarginQuery]);
+  
+  // Convert minMargin data to bigint | null
+  // For perps: getRequiredMargin returns uint256
+  // For futures: getMinMargin returns int256
+  const minMargin = useMemo(() => {
+    if (!minMarginQuery.data) return null;
+    // Convert to bigint (both uint256 and int256 are already bigint from wagmi)
+    return minMarginQuery.data as bigint;
+  }, [minMarginQuery.data]);
+  
   const isLoadingMinMargin = minMarginQuery.isLoading;
 
   // Get balance based on contract mode
@@ -117,45 +140,94 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // Get funding rate for perpetual contracts
   const fundingRateQuery = useFundingRate({ refetch: true });
 
-  // Calculate total unrealized PnL from all active positions
+  // Get perps collection data (fees, margin requirements, etc)
+  const perpsCollectionQuery = usePerpsCollection();
+
+  // Fetch user position sessions for perpetual contracts
+  const positionSessionsQuery = useUserPositionSessions(
+    address,
+    { refetch: contractMode === "perpetual" }
+  );
+
+  // Calculate total unrealized PnL based on contract mode
   const totalUnrealizedPnL = useMemo(() => {
-    if (!marketPrice || !positionBookData?.data?.positions || !address || !contractSpecsQuery?.data) return null;
+    if (!marketPrice || !address) return null;
 
-    const activePositions = positionBookData.data.positions.filter((p) => p.isActive && !p.closedAt);
-    let totalPnL = 0n;
+    if (contractMode === "perpetual") {
+      // For perpetual: use position sessions
+      const sessions = positionSessionsQuery.data?.positionSessions || [];
+      const openSessions = sessions.filter((session) => session.status === "OPEN");
+      
+      let totalPnL = 0n;
+      openSessions.forEach((session) => {
+        const netQuantity = session.user.netQuantity;
+        if (netQuantity === 0n) return;
+        
+        // Unrealized PnL = (currentPrice - entryPrice) * netQuantity
+        const priceDiff = marketPrice - session.entryPrice;
+        const unrealizedPnL = (priceDiff * netQuantity) / 1_000_000n; // Adjust for precision
+        totalPnL += unrealizedPnL;
+      });
 
-    activePositions.forEach((position: PositionBookPosition) => {
-      const isLong = position.buyer.address.toLowerCase() === address.toLowerCase();
-      const entryPrice = isLong ? position.buyPricePerDay : position.sellPricePerDay;
-      const entryPriceNum = entryPrice;
-      const priceDiff = marketPrice - entryPriceNum;
+      return totalPnL;
+    } else {
+      // For futures: use position book data
+      if (!positionBookData?.data?.positions || !contractSpecsQuery?.data) return null;
 
-      const positionPnL = isLong ? priceDiff : -priceDiff;
-      totalPnL += positionPnL;
-    });
+      const activePositions = positionBookData.data.positions.filter((p) => p.isActive && !p.closedAt);
+      let totalPnL = 0n;
 
-    totalPnL = totalPnL * BigInt(contractSpecsQuery?.data?.data?.deliveryDurationDays ?? 1);
+      activePositions.forEach((position: PositionBookPosition) => {
+        const isLong = position.buyer.address.toLowerCase() === address.toLowerCase();
+        const entryPrice = isLong ? position.buyPricePerDay : position.sellPricePerDay;
+        const entryPriceNum = entryPrice;
+        const priceDiff = marketPrice - entryPriceNum;
 
-    if (Math.abs(Number(totalPnL)) < 1000) {
-      return 0n;
+        const positionPnL = isLong ? priceDiff : -priceDiff;
+        totalPnL += positionPnL;
+      });
+
+      totalPnL = totalPnL * BigInt(contractSpecsQuery?.data?.data?.deliveryDurationDays ?? 1);
+
+      if (Math.abs(Number(totalPnL)) < 1000) {
+        return 0n;
+      }
+
+      return totalPnL;
     }
+  }, [marketPrice, positionBookData?.data?.positions, address, contractMode, positionSessionsQuery.data?.positionSessions, contractSpecsQuery?.data]);
 
-    return totalPnL;
-  }, [marketPrice, positionBookData?.data?.positions, address]);
-
-  // Calculate total realized PnL (30D) from historical positions
+  // Calculate total realized PnL (30D) based on contract mode
   const totalRealizedPnL30D = useMemo(() => {
-    if (!historicalPositionsData?.data || !address) return null;
+    if (!address) return null;
 
-    let totalPnL = 0;
-    historicalPositionsData.data.forEach((position) => {
-      const isLong = position.buyer.address.toLowerCase() === address.toLowerCase();
-      const pnl = isLong ? position.buyerPnl : position.sellerPnl;
-      totalPnL += pnl;
-    });
+    if (contractMode === "perpetual") {
+      // For perpetual: use position sessions
+      const sessions = positionSessionsQuery.data?.positionSessions || [];
+      
+      // Calculate sum of realized PnL from all sessions (both OPEN and CLOSED)
+      // For OPEN sessions, this includes partial realized PnL from reducing positions
+      let totalPnL = 0n;
+      sessions.forEach((session) => {
+        totalPnL += session.realizedPnl;
+      });
 
-    return totalPnL;
-  }, [historicalPositionsData?.data, address]);
+      // Convert to number (already in USDC units from contract)
+      return Number(totalPnL);
+    } else {
+      // For futures: use historical positions
+      if (!historicalPositionsData?.data) return null;
+
+      let totalPnL = 0;
+      historicalPositionsData.data.forEach((position) => {
+        const isLong = position.buyer.address.toLowerCase() === address.toLowerCase();
+        const pnl = isLong ? position.buyerPnl : position.sellerPnl;
+        totalPnL += pnl;
+      });
+
+      return totalPnL;
+    }
+  }, [historicalPositionsData?.data, address, contractMode, positionSessionsQuery.data?.positionSessions]);
 
   // State for order book selection
   const [selectedPrice, setSelectedPrice] = useState<string | undefined>();
@@ -282,6 +354,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
             contractMode={contractMode}
             accountBalance={accountBalanceQuery}
             balanceQuery={balanceQuery}
+            perpsCollection={perpsCollectionQuery.data?.data}
             onOrderPlaced={async () => {
               await minMarginQuery.refetch();
             }}
@@ -315,6 +388,8 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
               minMargin={minMargin}
               accountBalance={accountBalanceQuery}
               marketPrice={marketPrice}
+              positionSessions={positionSessionsQuery.data?.positionSessions || []}
+              positionSessionsLoading={positionSessionsQuery.isLoading}
             />
           ) : (
             <OrdersPositionsTabWidget

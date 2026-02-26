@@ -163,3 +163,16 @@ export const UserTradesQuery = gql`
     }
   }
 `
+
+export const PerpsCollectionQuery = gql`
+  query PerpsCollection {
+    perps_collection {
+      makerFeeBps
+      takerFeeBps
+      minimumMarginPerOrder
+      minimumPriceIncrement
+      marginPercent
+      maintenanceMarginPercent
+    }
+  }
+`
