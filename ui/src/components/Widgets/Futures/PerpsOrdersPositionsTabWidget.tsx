@@ -562,7 +562,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice }: Perps
                   <td>
                     <ActionButtons>
                       <DetailsButton onClick={() => setSelectedSession(session)}>
-                        Details
+                        Trades
                       </DetailsButton>
                     </ActionButtons>
                   </td>
@@ -705,7 +705,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading }: PerpsPositio
                   <td>
                     <ActionButtons>
                       <DetailsButton onClick={() => setSelectedSession(session)}>
-                        Details
+                        Trades
                       </DetailsButton>
                     </ActionButtons>
                   </td>
