@@ -742,7 +742,7 @@ export const PlaceOrderWidget = ({
 
             <InputGroup $isHighlighted={highlightedButton !== null}>
               <label>
-                {contractMode === "perpetual" ? "Amount (USDC)" : "Quantity"}
+                {contractMode === "perpetual" ? "Size (USDC)" : "Quantity"}
                 {/* {contractMode === "perpetual" && <span style={{ fontSize: "0.7rem", color: "#a7a9b6", marginLeft: "0.5rem" }}>(min: 5)</span>} */}
               </label>
               {contractMode === "perpetual" ? (
