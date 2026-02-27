@@ -93,8 +93,6 @@ export const PlaceOrderWidget = ({
   const deliveryDurationDays = contractSpecsQuery.data?.data?.deliveryDurationDays ?? 7;
   const marginPercent = contractSpecsQuery.data?.data?.liquidationMarginPercent ?? 20;
 
-  // Constants for perps margin calculation
-  const PERPS_MIN_MARGIN_USDC = 5; // 5 USDC minimum margin (5 * 10**6 in wei)
 
   // Get market price for validation and default price
   const newestItemPrice = marketPrice ? Number(marketPrice) / 1e6 : null;
@@ -215,7 +213,7 @@ export const PlaceOrderWidget = ({
     const priceInWei = BigInt(Math.round(currentPrice * 1e6));
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance = minMargin ?? 0n;
-    const availableBalance = totalBalance - lockedBalance;
+    const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
     const orderFee = orderFeeRaw ?? 0n;
 
     if (availableBalance <= orderFee) return 0;
@@ -223,15 +221,9 @@ export const PlaceOrderWidget = ({
     const balanceForMargin = availableBalance - orderFee;
 
     // For perpetual mode, return max available amount (margin) not quantity
+    // 100% on slider = totalBalance - lockedBalance (available balance)
     if (contractMode === "perpetual") {
-      // Available balance IS the max amount (margin) for perps
-      // But we need to ensure it meets minimum requirements
-      const maxAmountInUsdc = Number(balanceForMargin) / 1e6;
-      const minMarginUsdc = PERPS_MIN_MARGIN_USDC;
-      
-      if (maxAmountInUsdc < minMarginUsdc) return 0;
-      
-      return maxAmountInUsdc;
+      return Number(balanceForMargin) / 1e6;
     }
 
     // Binary search to find maximum quantity for futures mode
@@ -325,13 +317,6 @@ export const PlaceOrderWidget = ({
   const handleAmountChange = (newAmount: number | string) => {
     setAmount(newAmount);
 
-        if (contractMode === "perpetual") {
-      const numericValue = typeof newAmount === "string" ? parseFloat(newAmount) : newAmount;
-      if (!isNaN(numericValue) && numericValue > 0 && numericValue < PERPS_MIN_MARGIN_USDC) {
-        // Don't allow setting amount below minimum
-        return;
-      }
-    }
     
     // Update slider to reflect the amount as a percentage of max
     const maxQty = calculateMaxQuantity();
@@ -367,16 +352,11 @@ export const PlaceOrderWidget = ({
     }
 
     // Validate minimum margin
-    if (numericAmount < PERPS_MIN_MARGIN_USDC) {
-      alert(`Minimum margin is ${PERPS_MIN_MARGIN_USDC} USDC`);
-      return;
-    }
-
     const currentPrice = parseFloat(price);
     const priceInWei = BigInt(Math.round(currentPrice * 1e6));
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance = minMargin ?? 0n;
-    const availableBalance = totalBalance - lockedBalance;
+    const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
     // Calculate required margin in wei
     const amountInWei = BigInt(Math.round(numericAmount * 1e6));
@@ -435,17 +415,11 @@ export const PlaceOrderWidget = ({
       return;
     }
 
-    // Validate minimum margin
-    if (numericAmount < PERPS_MIN_MARGIN_USDC) {
-      alert(`Minimum margin is ${PERPS_MIN_MARGIN_USDC} USDC`);
-      return;
-    }
-
     const currentPrice = parseFloat(price);
     const priceInWei = BigInt(Math.round(currentPrice * 1e6));
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance = minMargin ?? 0n;
-    const availableBalance = totalBalance - lockedBalance;
+    const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
     // Calculate required margin in wei
     const amountInWei = BigInt(Math.round(numericAmount * 1e6));
@@ -514,7 +488,7 @@ export const PlaceOrderWidget = ({
     const priceInWei = BigInt(Math.round(currentPrice * 1e6));
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance = minMargin ?? 0n;
-    const availableBalance = totalBalance - lockedBalance;
+    const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
     if (!latestPrice) {
       alert("Unable to fetch market price. Please try again.");
@@ -606,7 +580,7 @@ export const PlaceOrderWidget = ({
     const priceInWei = BigInt(Math.round(currentPrice * 1e6));
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance = minMargin ?? 0n;
-    const availableBalance = totalBalance - lockedBalance;
+    const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
     if (!latestPrice) {
       alert("Unable to fetch market price. Please try again.");
@@ -778,8 +752,8 @@ export const PlaceOrderWidget = ({
                   onChange={(e) => handleAmountChange(e.target.value.replace("-", ""))}
                   onBeforeInput={handleNumericDecimalInput6Decimals}
                   inputMode="decimal"
-                  placeholder="5.00"
-                  min="5"
+                  placeholder="0.00"
+                  min="0"
                   style={{ minWidth: "70px" }}
                 />
               ) : (
@@ -804,14 +778,9 @@ export const PlaceOrderWidget = ({
                     setSliderValue(numValue);
                     
                     const maxQty = calculateMaxQuantity();
-                    let newAmount = (maxQty * numValue) / 100;
+                    const newAmount = (maxQty * numValue) / 100;
                     
-                    // For perps mode, ensure amount is at least 5 USDC or 0
                     if (contractMode === "perpetual") {
-                      if (newAmount > 0 && newAmount < PERPS_MIN_MARGIN_USDC) {
-                        newAmount = PERPS_MIN_MARGIN_USDC;
-                      }
-                      // Format with up to 2 decimal places
                       setAmount(newAmount > 0 ? newAmount.toFixed(2) : "0");
                     } else {
                       // Round to nearest integer for futures
