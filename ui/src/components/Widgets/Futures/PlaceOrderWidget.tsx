@@ -288,7 +288,7 @@ export const PlaceOrderWidget = ({
   if (contractSpecsQuery.isLoading || !priceStep || isMarketPriceLoading || !newestItemPrice) {
     return (
       <PlaceOrderContainer>
-        <h3>Place Order{contractMode === "perpetual" ? " - PERP" : ""}</h3>
+        {/* <h3>Place Order{contractMode === "perpetual" ? " - PERP" : ""}</h3> */}
         <div style={{ textAlign: "center", padding: "2rem", color: "#6b7280" }}>
           <Spinner fontSize="0.3em" />
           <p style={{ marginTop: "1rem", margin: 0 }}>Loading contract specifications...</p>
@@ -695,10 +695,18 @@ export const PlaceOrderWidget = ({
   return (
     <>
       <PlaceOrderContainer>
-        <h2>Place Order</h2>
+        {/* <h2>Place Order</h2> */}
 
         <MainSection>
           <InputSection>
+            {contractMode === "perpetual" && (
+              <LeverageButtonContainer>
+                <LeverageButton onClick={() => setShowLeverageModal(true)} disabled={showOrderForm}>
+                  <LeverageButtonLabel>Leverage</LeverageButtonLabel>
+                  <LeverageButtonValue>{leverage}x</LeverageButtonValue>
+                </LeverageButton>
+              </LeverageButtonContainer>
+            )}
             <InputGroup $isHighlighted={highlightedButton !== null}>
               <label>{contractMode === "futures" ? "Price per day (USDC)" : "Price (USDC)"}</label>
               <PriceInputContainer $isHighlighted={highlightedButton !== null}>
@@ -730,14 +738,6 @@ export const PlaceOrderWidget = ({
                 </PriceButton>
               </PriceInputContainer>
               {/* <MinMarginLabel>Min Margin: 10%</MinMarginLabel> */}
-              {contractMode === "perpetual" && (
-                <LeverageButtonContainer>
-                  <LeverageButton onClick={() => setShowLeverageModal(true)} disabled={showOrderForm}>
-                    <LeverageButtonLabel>Leverage</LeverageButtonLabel>
-                    <LeverageButtonValue>{leverage}x</LeverageButtonValue>
-                  </LeverageButton>
-                </LeverageButtonContainer>
-              )}
             </InputGroup>
 
             <InputGroup $isHighlighted={highlightedButton !== null}>
@@ -1069,15 +1069,9 @@ const HighPriceConfirmationModal = ({
             <span className="text-white">{isBuy ? "Bid" : "Ask"}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-300">Amount:</span>
+            <span className="text-gray-300">Size:</span>
             <span className="text-white">
-              {contractMode === "perpetual" ? pendingOrder.amount.toFixed(6) : pendingOrder.amount} units
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-300">Total Value:</span>
-            <span className="text-white">
-              {(pendingOrder.price * pendingOrder.amount * deliveryDurationDays).toFixed(2)} USDC
+              {(pendingOrder.price * pendingOrder.amount).toFixed(2)} USDC
             </span>
           </div>
           {contractMode === "futures" && (
@@ -1108,19 +1102,23 @@ const HighPriceConfirmationModal = ({
 
 const PlaceOrderContainer = styled(SmallWidget)`
   width: 100%;
-  padding: 1.5rem;
+  height: 100%;
+  padding: 1.5rem 1rem;
   padding-top: 0.5rem;
   margin-bottom: 0px;
   display: flex;
   flex-direction: column;
+  justify-content: flex-start;
   gap: 1rem;
-  
-  h2 {
+
+  h2, h3 {
     margin: 0;
+    margin-bottom: 0.3rem;
     font-size: 0.75rem;
-    color: #fff;
-    text-align: center;
-    margin-bottom: 1rem;
+    font-weight: 600;
+    color: #a7a9b6;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 `;
 
@@ -1139,14 +1137,10 @@ const MainSection = styled("div")`
 
 const InputSection = styled("div")`
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   gap: 1rem;
   flex: 1;
   width: 100%;
-  
-  @media (max-width: 640px) {
-    flex-direction: column;
-  }
 `;
 
 const InputGroup = styled("div")<{ $isHighlighted?: boolean }>`

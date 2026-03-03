@@ -267,11 +267,11 @@ export const OrderBookTable = ({
   const scrollToOrder = (orderIndex: number) => {
     setTimeout(() => {
       if (orderIndex !== -1 && tableContainerRef.current) {
-        const rowHeight = 51.4; // Fixed row height from styles
+        const rowHeight = 26; // Fixed row height from styles
 
         // Calculate scroll position to center the row in the viewport
         // (row index * row height) - (container height / 2) + (row height / 2)
-        const scrollPosition = orderIndex * rowHeight - 5 * rowHeight;
+        const scrollPosition = orderIndex * rowHeight - 9 * rowHeight;
 
         // Smooth scroll to center the row
         tableContainerRef.current.scrollTo({
@@ -340,7 +340,7 @@ export const OrderBookTable = ({
 
   return (
     <OrderBookWidget>
-      <h3>Order Book{contractMode === "perpetual" ? " - PERP" : ""}</h3>
+      <OrderBookTitle>Order Book{contractMode === "perpetual" ? " — PERP" : ""}</OrderBookTitle>
       {contractMode === "futures" && (
         <Header>
           <button onClick={goToPreviousDate} className="nav-arrow" disabled={selectedDateIndex === 0 || isLoading}>
@@ -402,41 +402,37 @@ export const OrderBookTable = ({
 
 const OrderBookWidget = styled(SmallWidget)`
   width: 100%;
-  padding: 1.5rem;
-  padding-top: 0.5rem;
+  padding: 0.875rem 1rem;
+  padding-top: 0.4rem;
   justify-content: space-between;
-
-  @media (max-width: 1400px) {
-    // justify-content: start;
-  }
 `;
 
 const Header = styled("div")`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
-  
+  margin-bottom: 0.4rem;
+
   h3 {
     margin: 0;
-    font-size: 1.3rem;
+    font-size: 0.85rem;
     font-weight: 600;
   }
-  
+
   .nav-arrow {
     background: none;
     border: none;
     color: #fff;
-    font-size: 1.5rem;
+    font-size: 0.9rem;
     cursor: pointer;
-    padding: 0.5rem 0.75rem;
+    padding: 0.2rem 0.4rem;
     border-radius: 4px;
     transition: all 0.2s ease;
-    
+
     &:hover:not(:disabled) {
       background-color: rgba(255, 255, 255, 0.1);
     }
-    
+
     &:disabled {
       color: #666;
       cursor: not-allowed;
@@ -448,51 +444,59 @@ const Header = styled("div")`
 const TableContainer = styled("div")`
   overflow-y: auto;
   width: 100%;
-  max-height: 760px; /* Approximately 10 rows * 40px per row */
-  
+  max-height: 520px; /* ~20 rows * 26px per row */
+
   &::-webkit-scrollbar {
-    width: 6px;
+    width: 4px;
   }
-  
+
   &::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 2px;
   }
-  
+
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
   }
-  
+
   &::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.4);
   }
 `;
 
 const Table = styled("table")`
   width: 100%;
   border-collapse: collapse;
-  
+  table-layout: fixed;
+
   th {
     text-align: center;
-    padding: 1rem 0.75rem;
-    font-size: 1rem;
+    padding: 0.3rem 0.4rem;
+    font-size: 0.65rem;
     font-weight: 600;
     color: #a7a9b6;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     position: sticky;
     top: 0;
-    background-color: #1a1a1a; /* Match the widget background */
+    background-color: #1a1a1a;
     z-index: 1;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    width: 33.33%;
   }
-  
+
   td {
     text-align: center;
-    padding: 0.75rem 0.75rem;
-    font-size: 1.1rem;
+    padding: 0.15rem 0.4rem;
+    font-size: 0.75rem;
     color: #fff;
-    width: 130px;
-    height: 40px; /* Fixed row height for consistent scrolling */
+    height: 20px;
+    line-height: 20px;
+    width: 33.33%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 `;
 
@@ -601,6 +605,15 @@ const PriceCell = styled("td")<{ $isLastHashprice?: boolean }>`
     box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
     border: 1px solid rgba(59, 130, 246, 0.6);
   `}
+`;
+
+const OrderBookTitle = styled("div")`
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #a7a9b6;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.3rem;
 `;
 
 const PerpsInfoHeader = styled("div")`

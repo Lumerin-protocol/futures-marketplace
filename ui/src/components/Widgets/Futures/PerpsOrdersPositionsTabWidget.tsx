@@ -272,7 +272,7 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling }
           <tr>
             <th>Type</th>
             <th>Price (USDC)</th>
-            <th>Filled/Quantity</th>
+            <th>Size (USDC)</th>
             <th>Status</th>
             <th>Created</th>
             <th>Actions</th>
@@ -288,7 +288,7 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling }
               </td>
               <td>{formatPrice(order.price)}</td>
               <td>
-                {formatQuantity(order.filledQuantity)} / {formatQuantity(order.originalQuantity)}
+                {((Number(order.price) / 1e6) * (Number(order.originalQuantity) / 1e6)).toFixed(2)}
               </td>
               <td>
                 <StatusBadge $status={order.status} $color={getStatusColor(order.status)}>
@@ -413,7 +413,7 @@ const PerpsOrderHistoryTable = ({ orders, isLoading }: PerpsOrderHistoryTablePro
           <tr>
             <th>Type</th>
             <th>Price (USDC)</th>
-            <th>Filled/Original Qty</th>
+            <th>Size (USDC)</th>
             <th>Status</th>
             <th>Created</th>
             <th>Updated</th>
@@ -429,7 +429,7 @@ const PerpsOrderHistoryTable = ({ orders, isLoading }: PerpsOrderHistoryTablePro
               </td>
               <td>{formatPrice(order.price)}</td>
               <td>
-                {formatQuantity(order.filledQuantity)} / {formatQuantity(order.originalQuantity)}
+                {((Number(order.price) / 1e6) * (Number(order.originalQuantity) / 1e6)).toFixed(2)}
               </td>
               <td>
                 <StatusBadge $status={order.status} $color={getStatusColor(order.status)}>
@@ -520,8 +520,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice }: Perps
               <th>Opened At</th>
               <th>Type</th>
               <th>Entry Price (USDC)</th>
-              <th>Net Qty</th>
-              <th>Max Qty</th>
+              <th>Size (USDC)</th>
               <th>Fees (F/T)</th>
               <th>Unrealized PnL</th>
               <th>Realized PnL</th>
@@ -546,8 +545,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice }: Perps
                     </TypeBadge>
                   </td>
                   <td>{formatPrice(session.entryPrice)}</td>
-                  <td>{formatQuantity(displayQuantity)}</td>
-                  <td>{formatQuantity(session.maxQuantity)}</td>
+                  <td>{((Number(session.entryPrice) / 1e6) * (Number(displayQuantity < 0n ? -displayQuantity : displayQuantity) / 1e6)).toFixed(2)}</td>
                   <td>{formatFees(session.fundingFees, session.tradingFees)}</td>
                   <td>
                     <PnLText $isPositive={unrealizedPnlValue >= 0}>
@@ -667,8 +665,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading }: PerpsPositio
               <th>Type</th>
               <th>Entry Price (USDC)</th>
               <th>Close Price (USDC)</th>
-              <th>Closed Qty</th>
-              <th>Max Qty</th>
+              <th>Size (USDC)</th>
               <th>Fees (F/T)</th>
               <th>Realized PnL</th>
               <th>Actions</th>
@@ -694,8 +691,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading }: PerpsPositio
                   </td>
                   <td>{formatPrice(session.entryPrice)}</td>
                   <td>{session.closePrice ? formatPrice(session.closePrice) : "-"}</td>
-                  <td>{formatQuantity(session.closedQuantity)}</td>
-                  <td>{formatQuantity(session.maxQuantity)}</td>
+                  <td>{((Number(session.closePrice ?? session.entryPrice) / 1e6) * (Number(session.closedQuantity < 0n ? -session.closedQuantity : session.closedQuantity) / 1e6)).toFixed(2)}</td>
                   <td>{formatFees(session.fundingFees, session.tradingFees)}</td>
                   <td>
                     <PnLText $isPositive={realizedPnlValue >= 0}>
@@ -791,8 +787,8 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress }: PerpsTradesTablePr
           <tr>
             <th>Timestamp</th>
             <th>Trade Price</th>
-            <th>Trade Quantity</th>
-            <th>Net Qty After</th>
+            <th>Size (USDC)</th>
+            <th>Size After (USDC)</th>
             <th>Entry Price After</th>
             <th>Trading Fee</th>
             <th>Realized PnL</th>
@@ -804,8 +800,8 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress }: PerpsTradesTablePr
             <TableRow key={trade.id}>
               <td>{formatDate(trade.timestamp)}</td>
               <td>{formatPrice(trade.tradePrice)}</td>
-              <td>{formatQuantity(trade.tradeQuantity)}</td>
-              <td>{formatQuantity(trade.netQuantityAfter)}</td>
+              <td>{((Number(trade.tradePrice) / 1e6) * (Number(trade.tradeQuantity < 0n ? -trade.tradeQuantity : trade.tradeQuantity) / 1e6)).toFixed(2)}</td>
+              <td>{((Number(trade.aggregatedEntryPriceAfter) / 1e6) * (Number(trade.netQuantityAfter < 0n ? -trade.netQuantityAfter : trade.netQuantityAfter) / 1e6)).toFixed(2)}</td>
               <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
               <td>{formatPrice(trade.tradingFee)}</td>
               <td>
@@ -893,8 +889,8 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
               <tr>
                 <th>Timestamp</th>
                 <th>Trade Price</th>
-                <th>Trade Quantity</th>
-                <th>Net Qty After</th>
+                <th>Size (USDC)</th>
+                <th>Size After (USDC)</th>
                 <th>Entry Price After</th>
                 <th>Trading Fee</th>
                 <th>Realized PnL</th>
@@ -906,8 +902,8 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
                 <TableRow key={trade.id}>
                   <td>{formatDate(trade.timestamp)}</td>
                   <td>{formatPrice(trade.tradePrice)}</td>
-                  <td>{formatQuantity(trade.tradeQuantity)}</td>
-                  <td>{formatQuantity(trade.netQuantityAfter)}</td>
+                  <td>{((Number(trade.tradePrice) / 1e6) * (Number(trade.tradeQuantity < 0n ? -trade.tradeQuantity : trade.tradeQuantity) / 1e6)).toFixed(2)}</td>
+                  <td>{((Number(trade.aggregatedEntryPriceAfter) / 1e6) * (Number(trade.netQuantityAfter < 0n ? -trade.netQuantityAfter : trade.netQuantityAfter) / 1e6)).toFixed(2)}</td>
                   <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
                   <td>{formatPrice(trade.tradingFee)}</td>
                   <td>
