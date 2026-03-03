@@ -36,6 +36,14 @@ const PeriodButton = styled("button")<{ $active: boolean }>`
   }
 `;
 
+const ChartTitle = styled("div")`
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #a7a9b6;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+`;
+
 const ChartControls = styled("div")`
   display: flex;
   align-items: center;
@@ -375,7 +383,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
 
   return (
     <>
-      <h3>Hashprice Index</h3>
+      <ChartTitle>Hashprice Index</ChartTitle>
       <ChartControls>
         <PeriodSwitch>
           <PeriodButton $active={timePeriod === "day"} onClick={() => onTimePeriodChange("day")}>

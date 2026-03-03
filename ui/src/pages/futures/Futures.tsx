@@ -267,7 +267,9 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
       {/* Row 2, Col 1: Chart */}
       <ChartArea>
-        <SmallWidget className="w-full" style={{ marginBottom: 0, paddingLeft: 5, paddingRight: 10, height: "100%" }}>
+        <SmallWidget className="w-full justify-start" style={{ 
+          marginBottom: 0, paddingLeft: 5, paddingTop: "0.875rem", paddingRight: 10, height: "100%",
+          justifyContent: "start" }}>
           <HashrateChart
             data={hashrateQuery.data || []}
             btcPriceData={btcPriceQuery.data || []}
@@ -323,9 +325,9 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
             await minMarginQuery.refetch();
           }}
         />
-        <OrderInfoSection>
+        {/* <OrderInfoSection>
           <OrderInfoTitle>Order Information</OrderInfoTitle>
-        </OrderInfoSection>
+        </OrderInfoSection> */}
       </RightPanelArea>
 
       {/* Row 3, Col 1+2: Orders and Positions — does NOT span right panel column */}
@@ -414,6 +416,7 @@ const ChartArea = styled("div")`
   grid-row: 2;
   min-width: 0;
   min-height: 380px;
+  height: 100%;
 
   > * {
     width: 100%;

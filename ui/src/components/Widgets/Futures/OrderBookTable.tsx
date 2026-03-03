@@ -384,11 +384,11 @@ export const OrderBookTable = ({
                   }}
                 >
                   <BidCell $isHighlighted={row.highlightBid}>
-                    {row.bidUnits ? (contractMode === "perpetual" ? row.bidUnits.toFixed(6) : row.bidUnits) : ""}
+                    {row.bidUnits ? (row.bidUnits * row.price).toFixed(2) : ""}
                   </BidCell>
                   <PriceCell $isLastHashprice={row.isLastHashprice}>{row.price.toFixed(2)}</PriceCell>
                   <AskCell $isHighlighted={row.highlightAsk}>
-                    {row.askUnits ? (contractMode === "perpetual" ? row.askUnits.toFixed(6) : row.askUnits) : ""}
+                    {row.askUnits ? (row.askUnits * row.price).toFixed(2) : ""}
                   </AskCell>
                 </TableRow>
               );
@@ -403,8 +403,8 @@ export const OrderBookTable = ({
 const OrderBookWidget = styled(SmallWidget)`
   width: 100%;
   padding: 0.875rem 1rem;
-  padding-top: 0.4rem;
   justify-content: space-between;
+  margin-bottom: 0;
 `;
 
 const Header = styled("div")`
@@ -444,7 +444,7 @@ const Header = styled("div")`
 const TableContainer = styled("div")`
   overflow-y: auto;
   width: 100%;
-  max-height: 520px; /* ~20 rows * 26px per row */
+  max-height: 510px; /* ~20 rows * 26px per row */
 
   &::-webkit-scrollbar {
     width: 4px;
@@ -608,11 +608,11 @@ const PriceCell = styled("td")<{ $isLastHashprice?: boolean }>`
 `;
 
 const OrderBookTitle = styled("div")`
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.7rem;
+  font-weight: 500;
   color: #a7a9b6;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   margin-bottom: 0.3rem;
 `;
 
