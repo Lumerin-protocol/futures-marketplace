@@ -169,28 +169,18 @@ export const PlaceOrderWidget = ({
     return (1 / leverage) * 100;
   };
 
-  // Calculate quantity from amount (margin) for perps mode
-  // Formula: quantity = (amount / marginPercent) / price
-  // Example: amount=10, price=2, leverage=10x (10% margin) => quantity = (10/0.1)/2 = 50
-  const calculateQuantityFromAmount = (amountValue: number, priceValue: number): number => {
-    if (contractMode !== "perpetual" || priceValue <= 0) return amountValue;
-    
-    const marginDecimal = getMarginPercentFromLeverage() / 100; // Convert to decimal
-    const fullValue = amountValue / marginDecimal; // Convert margin to full position value
-    const quantity = fullValue / priceValue; // Divide by price to get quantity
-    
-    return quantity;
+  // Calculate quantity from size (notional) for perps mode
+  // Formula: quantity = size / price
+  // Example: size=100, price=2, leverage=10x => quantity = 100/2 = 50, required margin = 100/10 = 10 USDC
+  const calculateQuantityFromAmount = (sizeValue: number, priceValue: number): number => {
+    if (contractMode !== "perpetual" || priceValue <= 0) return sizeValue;
+    return sizeValue / priceValue;
   };
 
-  // Calculate amount (margin) from quantity for perps mode (reverse operation)
+  // Calculate size (notional) from quantity for perps mode (reverse operation)
   const calculateAmountFromQuantity = (quantityValue: number, priceValue: number): number => {
     if (contractMode !== "perpetual" || priceValue <= 0) return quantityValue;
-    
-    const marginDecimal = getMarginPercentFromLeverage() / 100; // Convert to decimal
-    const fullValue = quantityValue * priceValue; // Calculate full position value
-    const amount = fullValue * marginDecimal; // Calculate required margin
-    
-    return amount;
+    return quantityValue * priceValue;
   };
 
   // Get expected quantity for display
@@ -220,10 +210,10 @@ export const PlaceOrderWidget = ({
 
     const balanceForMargin = availableBalance - orderFee;
 
-    // For perpetual mode, return max available amount (margin) not quantity
-    // 100% on slider = totalBalance - lockedBalance (available balance)
+    // For perpetual mode, return max size (notional) = available margin × leverage
+    // 100% on slider = availableBalance × leverage
     if (contractMode === "perpetual") {
-      return Number(balanceForMargin) / 1e6;
+      return (Number(balanceForMargin) / 1e6) * leverage;
     }
 
     // Binary search to find maximum quantity for futures mode
@@ -288,7 +278,7 @@ export const PlaceOrderWidget = ({
   if (contractSpecsQuery.isLoading || !priceStep || isMarketPriceLoading || !newestItemPrice) {
     return (
       <PlaceOrderContainer>
-        <h3>Place Order{contractMode === "perpetual" ? " - PERP" : ""}</h3>
+        {/* <h3>Place Order{contractMode === "perpetual" ? " - PERP" : ""}</h3> */}
         <div style={{ textAlign: "center", padding: "2rem", color: "#6b7280" }}>
           <Spinner fontSize="0.3em" />
           <p style={{ marginTop: "1rem", margin: 0 }}>Loading contract specifications...</p>
@@ -358,15 +348,16 @@ export const PlaceOrderWidget = ({
     const lockedBalance = minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
-    // Calculate required margin in wei
-    const amountInWei = BigInt(Math.round(numericAmount * 1e6));
+    // Required margin = size / leverage
+    const requiredMargin = numericAmount / leverage;
+    const marginInWei = BigInt(Math.round(requiredMargin * 1e6));
     
     // Include order fee in the balance check
     const orderFee = orderFeeRaw ?? 0n;
-    const totalRequired = amountInWei + orderFee;
+    const totalRequired = marginInWei + orderFee;
 
     if (totalRequired > availableBalance) {
-      const amountFormatted = (Number(amountInWei) / 1e6).toFixed(2);
+      const marginFormatted = requiredMargin.toFixed(2);
       const orderFeeFormatted = (Number(orderFee) / 1e6).toFixed(2);
       const totalRequiredFormatted = (Number(totalRequired) / 1e6).toFixed(2);
       const totalBalanceFormatted = (Number(totalBalance) / 1e6).toFixed(2);
@@ -375,12 +366,12 @@ export const PlaceOrderWidget = ({
       const accountBalance = accountBalanceQuery.data ?? 0n;
       const accountBalanceFormatted = (Number(accountBalance) / 1e6).toFixed(2);
       alert(
-        `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${amountFormatted} USDC\nOrder fee: ${orderFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
+        `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${marginFormatted} USDC\nOrder fee: ${orderFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
       );
       return;
     }
 
-    // Calculate quantity from amount
+    // Calculate quantity from size
     const quantity = calculateQuantityFromAmount(numericAmount, currentPrice);
 
     // Check for conflicting orders (opposite action, same price)
@@ -421,15 +412,16 @@ export const PlaceOrderWidget = ({
     const lockedBalance = minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
-    // Calculate required margin in wei
-    const amountInWei = BigInt(Math.round(numericAmount * 1e6));
+    // Required margin = size / leverage
+    const requiredMargin = numericAmount / leverage;
+    const marginInWei = BigInt(Math.round(requiredMargin * 1e6));
     
     // Include order fee in the balance check
     const orderFee = orderFeeRaw ?? 0n;
-    const totalRequired = amountInWei + orderFee;
+    const totalRequired = marginInWei + orderFee;
 
     if (totalRequired > availableBalance) {
-      const amountFormatted = (Number(amountInWei) / 1e6).toFixed(2);
+      const marginFormatted = requiredMargin.toFixed(2);
       const orderFeeFormatted = (Number(orderFee) / 1e6).toFixed(2);
       const totalRequiredFormatted = (Number(totalRequired) / 1e6).toFixed(2);
       const totalBalanceFormatted = (Number(totalBalance) / 1e6).toFixed(2);
@@ -438,12 +430,12 @@ export const PlaceOrderWidget = ({
       const accountBalance = accountBalanceQuery.data ?? 0n;
       const accountBalanceFormatted = (Number(accountBalance) / 1e6).toFixed(2);
       alert(
-        `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${amountFormatted} USDC\nOrder fee: ${orderFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
+        `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${marginFormatted} USDC\nOrder fee: ${orderFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
       );
       return;
     }
 
-    // Calculate quantity from amount
+    // Calculate quantity from size
     const quantity = calculateQuantityFromAmount(numericAmount, currentPrice);
 
     // Check for conflicting orders (opposite action, same price)
@@ -695,10 +687,18 @@ export const PlaceOrderWidget = ({
   return (
     <>
       <PlaceOrderContainer>
-        <h2>Place Order</h2>
+        {/* <h2>Place Order</h2> */}
 
         <MainSection>
           <InputSection>
+            {contractMode === "perpetual" && (
+              <LeverageButtonContainer>
+                <LeverageButton onClick={() => setShowLeverageModal(true)} disabled={showOrderForm}>
+                  <LeverageButtonLabel>Leverage</LeverageButtonLabel>
+                  <LeverageButtonValue>{leverage}x</LeverageButtonValue>
+                </LeverageButton>
+              </LeverageButtonContainer>
+            )}
             <InputGroup $isHighlighted={highlightedButton !== null}>
               <label>{contractMode === "futures" ? "Price per day (USDC)" : "Price (USDC)"}</label>
               <PriceInputContainer $isHighlighted={highlightedButton !== null}>
@@ -730,14 +730,6 @@ export const PlaceOrderWidget = ({
                 </PriceButton>
               </PriceInputContainer>
               {/* <MinMarginLabel>Min Margin: 10%</MinMarginLabel> */}
-              {contractMode === "perpetual" && (
-                <LeverageButtonContainer>
-                  <LeverageButton onClick={() => setShowLeverageModal(true)} disabled={showOrderForm}>
-                    <LeverageButtonLabel>Leverage</LeverageButtonLabel>
-                    <LeverageButtonValue>{leverage}x</LeverageButtonValue>
-                  </LeverageButton>
-                </LeverageButtonContainer>
-              )}
             </InputGroup>
 
             <InputGroup $isHighlighted={highlightedButton !== null}>
@@ -817,6 +809,19 @@ export const PlaceOrderWidget = ({
               Ask
             </SellButton>
           </ButtonSection>
+
+          {contractMode === "perpetual" && getNumericAmount() > 0 && (
+            <OrderSummary>
+              <OrderSummaryRow>
+                <span>Required Margin</span>
+                <span>{(getNumericAmount() / leverage).toFixed(2)} USDC</span>
+              </OrderSummaryRow>
+              <OrderSummaryRow>
+                <span>Quantity</span>
+                <span>{getExpectedQuantity().toFixed(6)}</span>
+              </OrderSummaryRow>
+            </OrderSummary>
+          )}
         </MainSection>
       </PlaceOrderContainer>
 
@@ -1069,15 +1074,9 @@ const HighPriceConfirmationModal = ({
             <span className="text-white">{isBuy ? "Bid" : "Ask"}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-300">Amount:</span>
+            <span className="text-gray-300">Size:</span>
             <span className="text-white">
-              {contractMode === "perpetual" ? pendingOrder.amount.toFixed(6) : pendingOrder.amount} units
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-300">Total Value:</span>
-            <span className="text-white">
-              {(pendingOrder.price * pendingOrder.amount * deliveryDurationDays).toFixed(2)} USDC
+              {(pendingOrder.price * pendingOrder.amount).toFixed(2)} USDC
             </span>
           </div>
           {contractMode === "futures" && (
@@ -1108,19 +1107,23 @@ const HighPriceConfirmationModal = ({
 
 const PlaceOrderContainer = styled(SmallWidget)`
   width: 100%;
-  padding: 1.5rem;
+  height: 100%;
+  padding: 1.5rem 1rem;
   padding-top: 0.5rem;
   margin-bottom: 0px;
   display: flex;
   flex-direction: column;
+  justify-content: flex-start;
   gap: 1rem;
-  
-  h2 {
+
+  h2, h3 {
     margin: 0;
+    margin-bottom: 0.3rem;
     font-size: 0.75rem;
-    color: #fff;
-    text-align: center;
-    margin-bottom: 1rem;
+    font-weight: 600;
+    color: #a7a9b6;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 `;
 
@@ -1139,14 +1142,10 @@ const MainSection = styled("div")`
 
 const InputSection = styled("div")`
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   gap: 1rem;
   flex: 1;
   width: 100%;
-  
-  @media (max-width: 640px) {
-    flex-direction: column;
-  }
 `;
 
 const InputGroup = styled("div")<{ $isHighlighted?: boolean }>`
@@ -1426,6 +1425,33 @@ const SellButton = styled("button")<{ $isHighlighted?: boolean }>`
     cursor: not-allowed;
     opacity: 0.6;
     animation: none;
+  }
+`;
+
+const OrderSummary = styled("div")`
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 0.625rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  background: rgba(255, 255, 255, 0.03);
+`;
+
+const OrderSummaryRow = styled("div")`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+
+  span:first-child {
+    color: #a7a9b6;
+  }
+
+  span:last-child {
+    color: #fff;
+    font-weight: 500;
   }
 `;
 

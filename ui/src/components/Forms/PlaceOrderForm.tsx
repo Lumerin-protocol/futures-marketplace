@@ -202,8 +202,12 @@ export const PlaceOrderForm: FC<Props> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-300">Quantity:</span>
+                <span className="text-white">{absoluteQuantity.toFixed(6)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-300">Size:</span>
                 <span className="text-white">
-                  {contractMode === "perpetual" ? absoluteQuantity.toFixed(6) : absoluteQuantity} units
+                  {((Number(price) / 1e6) * absoluteQuantity).toFixed(2)} USDC
                 </span>
               </div>
               {contractMode === "futures" && (
@@ -212,12 +216,6 @@ export const PlaceOrderForm: FC<Props> = ({
                   <span className="text-white">{new Date(Number(deliveryDate) * 1000).toLocaleString()}</span>
                 </div>
               )}
-              <div className="flex justify-between">
-                <span className="text-gray-300">Total Value:</span>
-                <span className="text-white">
-                  {((Number(price) / 1e6) * absoluteQuantity * deliveryDurationDays).toFixed(2)} USDC
-                </span>
-              </div>
               {contractMode === "futures" && (
                 <div className="flex justify-between">
                   <span className="text-gray-300">Expected Hashrate:</span>

@@ -232,15 +232,11 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
                   <span className="text-white">{parseFloat(form.watch("price")).toFixed(2)} USDC</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-300">Quantity:</span>
-                  <span className="text-white">{form.watch("quantity")} units</span>
-                </div>
-                <div className="flex justify-between">
                   <span className="text-gray-300">Delivery Date:</span>
                   <span className="text-white">{new Date(Number(order.deliveryAt) * 1000).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-300">Total Value:</span>
+                  <span className="text-gray-300">Size:</span>
                   <span className="text-white">
                     {(parseFloat(form.watch("price")) * form.watch("quantity")).toFixed(2)} USDC
                   </span>

@@ -2,7 +2,7 @@ import { type FC, useState, useRef, useMemo, useEffect, useCallback } from "reac
 import { useAccount } from "wagmi";
 import { useLocation, useNavigate } from "react-router";
 import { FuturesBalanceWidget } from "../../components/Widgets/Futures/FuturesBalanceWidget";
-import { FuturesMarketWidget } from "../../components/Widgets/Futures/FuturesMarketWidget";
+import { TradingHeader } from "../../components/Widgets/Futures/TradingHeader";
 import { OrderBookTable } from "../../components/Widgets/Futures/OrderBookTable";
 import { HashrateChart } from "../../components/Charts/HashrateChart";
 import { PlaceOrderWidget } from "../../components/Widgets/Futures/PlaceOrderWidget";
@@ -59,17 +59,15 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
   // Track account changes and reload page when account switches
   useEffect(() => {
-    // On first render, just store the current address
     if (previousAddressRef.current === undefined) {
       previousAddressRef.current = address;
       return;
     }
-
-    // If address changed (including connecting/disconnecting), reload the page
     if (previousAddressRef.current !== address) {
       window.location.reload();
     }
   }, [address]);
+
   const [chartTimePeriod, setChartTimePeriod] = useState<TimePeriod>("week");
   const hashrateQuery = useHashrateIndexData({ timePeriod: chartTimePeriod });
   const btcPriceQuery = useBtcPriceIndexData({ timePeriod: chartTimePeriod });
@@ -84,8 +82,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // Get min margin for address using hook (used for withdrawal form and locked balance)
   const futuresMinMarginQuery = useGetMinMargin(address);
   const perpsMinMarginQuery = useGetPerpsRequiredMargin(address);
-  
-  // Use appropriate min margin based on contract mode
+
   const minMarginQuery = useMemo(() => {
     const query = contractMode === "perpetual" ? perpsMinMarginQuery : futuresMinMarginQuery;
     return {
@@ -94,16 +91,12 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       refetch: query.refetch,
     };
   }, [contractMode, futuresMinMarginQuery, perpsMinMarginQuery]);
-  
-  // Convert minMargin data to bigint | null
-  // For perps: getRequiredMargin returns uint256
-  // For futures: getMinMargin returns int256
+
   const minMargin = useMemo(() => {
     if (!minMarginQuery.data) return null;
-    // Convert to bigint (both uint256 and int256 are already bigint from wagmi)
     return minMarginQuery.data as bigint;
   }, [minMarginQuery.data]);
-  
+
   const isLoadingMinMargin = minMarginQuery.isLoading;
 
   // Get balance based on contract mode
@@ -133,7 +126,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // Get market price from contract - polls every 10 seconds
   const {
     data: marketPrice,
-    isLoading: isMarketPriceLoading,
     dataFetchedAt: marketPriceFetchedAt,
   } = useGetMarketPrice();
 
@@ -154,24 +146,20 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     if (!marketPrice || !address) return null;
 
     if (contractMode === "perpetual") {
-      // For perpetual: use position sessions
       const sessions = positionSessionsQuery.data?.positionSessions || [];
       const openSessions = sessions.filter((session) => session.status === "OPEN");
-      
+
       let totalPnL = 0n;
       openSessions.forEach((session) => {
         const netQuantity = session.user.netQuantity;
         if (netQuantity === 0n) return;
-        
-        // Unrealized PnL = (currentPrice - entryPrice) * netQuantity
         const priceDiff = marketPrice - session.entryPrice;
-        const unrealizedPnL = (priceDiff * netQuantity) / 1_000_000n; // Adjust for precision
+        const unrealizedPnL = (priceDiff * netQuantity) / 1_000_000n;
         totalPnL += unrealizedPnL;
       });
 
       return totalPnL;
     } else {
-      // For futures: use position book data
       if (!positionBookData?.data?.positions || !contractSpecsQuery?.data) return null;
 
       const activePositions = positionBookData.data.positions.filter((p) => p.isActive && !p.closedAt);
@@ -180,9 +168,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       activePositions.forEach((position: PositionBookPosition) => {
         const isLong = position.buyer.address.toLowerCase() === address.toLowerCase();
         const entryPrice = isLong ? position.buyPricePerDay : position.sellPricePerDay;
-        const entryPriceNum = entryPrice;
-        const priceDiff = marketPrice - entryPriceNum;
-
+        const priceDiff = marketPrice - entryPrice;
         const positionPnL = isLong ? priceDiff : -priceDiff;
         totalPnL += positionPnL;
       });
@@ -202,20 +188,13 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     if (!address) return null;
 
     if (contractMode === "perpetual") {
-      // For perpetual: use position sessions
       const sessions = positionSessionsQuery.data?.positionSessions || [];
-      
-      // Calculate sum of realized PnL from all sessions (both OPEN and CLOSED)
-      // For OPEN sessions, this includes partial realized PnL from reducing positions
       let totalPnL = 0n;
       sessions.forEach((session) => {
         totalPnL += session.realizedPnl;
       });
-
-      // Convert to number (already in USDC units from contract)
       return Number(totalPnL);
     } else {
-      // For futures: use historical positions
       if (!historicalPositionsData?.data) return null;
 
       let totalPnL = 0;
@@ -241,29 +220,23 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   useEffect(() => {
     setSelectedPrice(undefined);
     setSelectedAmount(undefined);
-    // Don't reset selectedDeliveryDate here - OrderBookTable will handle it
-    // setSelectedDeliveryDate(undefined);
     setSelectedIsBuy(undefined);
     setHighlightMode(undefined);
     setHighlightTrigger(0);
   }, [contractMode]);
 
-  // Track previous order book state for change detection
   const previousOrderBookStateRef = useRef<Map<number, { bidUnits: number | null; askUnits: number | null }>>(
     new Map(),
   );
 
-  // Function to proceed with close position (highlighting)
   const proceedWithClosePosition = useCallback((price: string, amount: number, isBuy: boolean) => {
     setSelectedPrice(price);
     setSelectedAmount(amount);
     setSelectedIsBuy(isBuy);
     setHighlightMode("buttons");
-    // Increment trigger to force highlight update
     setHighlightTrigger((prev) => prev + 1);
   }, []);
 
-  // Close position modal hook
   const closePositionModal = useClosePositionModal(proceedWithClosePosition);
 
   const handleOrderBookClick = (price: string, amount: number | null) => {
@@ -277,53 +250,26 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     setSelectedDeliveryDate(deliveryDate);
   };
 
+  const currentPriceFormatted = marketPrice ? (Number(marketPrice) / 1e6).toFixed(2) : null;
+
   return (
     <FuturesContainer>
-      {/* Contract Mode Toggle */}
-      <ContractModeToggleArea>
-        <ContractModeToggle>
-          <ModeButton
-            $active={contractMode === "futures"}
-            onClick={() => handleContractModeChange("futures")}
-          >
-            Futures
-          </ModeButton>
-          <ModeButton
-            $active={contractMode === "perpetual"}
-            onClick={() => handleContractModeChange("perpetual")}
-          >
-            Perpetuals
-          </ModeButton>
-
-        </ContractModeToggle>
-      </ContractModeToggleArea>
-
-      {/* Row 1: Balance Widget (60%) and Stats Widget (40%) */}
-      <BalanceWidgetArea>
-        <FuturesBalanceWidget
-          minMargin={minMargin}
-          isLoadingMinMargin={isLoadingMinMargin}
-          unrealizedPnL={totalUnrealizedPnL}
-          realizedPnL30D={totalRealizedPnL30D}
-          isLoadingRealizedPnL={isHistoricalPositionsLoading}
+      {/* Row 1: Compact Trading Header — full width */}
+      <TradingHeaderArea>
+        <TradingHeader
           contractMode={contractMode}
-          balanceQuery={balanceQuery}
-          accountBalance={accountBalanceQuery}
-        />
-      </BalanceWidgetArea>
-
-      <StatsWidgetArea>
-        <FuturesMarketWidget 
-          contractSpecsQuery={contractSpecsQuery} 
-          contractMode={contractMode}
-          currentPrice={marketPrice ? (Number(marketPrice) / 1e6).toFixed(2) : null}
+          onContractModeChange={handleContractModeChange}
+          contractSpecsQuery={contractSpecsQuery}
+          currentPrice={currentPriceFormatted}
           fundingRate={fundingRateQuery.data?.formattedRate ?? "0%"}
         />
-      </StatsWidgetArea>
+      </TradingHeaderArea>
 
-      {/* Row 2: Chart (60%) */}
+      {/* Row 2, Col 1: Chart */}
       <ChartArea>
-        <SmallWidget className="w-full" style={{ marginBottom: 0, paddingLeft: 5, paddingRight: 10 }}>
+        <SmallWidget className="w-full justify-start" style={{ 
+          marginBottom: 0, paddingLeft: 5, paddingTop: "0.875rem", paddingRight: 10, height: "100%",
+          justifyContent: "start" }}>
           <HashrateChart
             data={hashrateQuery.data || []}
             btcPriceData={btcPriceQuery.data || []}
@@ -337,33 +283,8 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
         </SmallWidget>
       </ChartArea>
 
-      {/* Row 3: Place Order (60%) - only shown when connected */}
-      {isConnected && (
-        <PlaceOrderArea>
-          <PlaceOrderWidget
-            externalPrice={selectedPrice}
-            externalAmount={selectedAmount}
-            externalDeliveryDate={selectedDeliveryDate}
-            externalIsBuy={selectedIsBuy}
-            highlightTrigger={highlightTrigger}
-            contractSpecsQuery={contractSpecsQuery}
-            participantData={participantData?.data}
-            highlightMode={highlightMode}
-            latestPrice={marketPrice ?? null}
-            minMargin={minMargin}
-            contractMode={contractMode}
-            accountBalance={accountBalanceQuery}
-            balanceQuery={balanceQuery}
-            perpsCollection={perpsCollectionQuery.data?.data}
-            onOrderPlaced={async () => {
-              await minMarginQuery.refetch();
-            }}
-          />
-        </PlaceOrderArea>
-      )}
-
-      {/* Order Book (40%) - spans rows 2 and 3 */}
-      <OrderBookArea $isConnected={isConnected}>
+      {/* Row 2, Col 2: Order Book */}
+      <OrderBookArea>
         <OrderBookTable
           onRowClick={handleOrderBookClick}
           onDeliveryDateChange={handleDeliveryDateChange}
@@ -373,7 +294,43 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
         />
       </OrderBookArea>
 
-      {/* Row 4: Orders and Positions List - Full width */}
+      {/* Col 3 (full height): Account Balance + Place Order + Order Information */}
+      <RightPanelArea>
+        <FuturesBalanceWidget
+          minMargin={minMargin}
+          isLoadingMinMargin={isLoadingMinMargin}
+          unrealizedPnL={totalUnrealizedPnL}
+          realizedPnL30D={totalRealizedPnL30D}
+          isLoadingRealizedPnL={isHistoricalPositionsLoading}
+          contractMode={contractMode}
+          balanceQuery={balanceQuery}
+          accountBalance={accountBalanceQuery}
+        />
+        <PlaceOrderWidget
+          externalPrice={selectedPrice}
+          externalAmount={selectedAmount}
+          externalDeliveryDate={selectedDeliveryDate}
+          externalIsBuy={selectedIsBuy}
+          highlightTrigger={highlightTrigger}
+          contractSpecsQuery={contractSpecsQuery}
+          participantData={participantData?.data}
+          highlightMode={highlightMode}
+          latestPrice={marketPrice ?? null}
+          minMargin={minMargin}
+          contractMode={contractMode}
+          accountBalance={accountBalanceQuery}
+          balanceQuery={balanceQuery}
+          perpsCollection={perpsCollectionQuery.data?.data}
+          onOrderPlaced={async () => {
+            await minMarginQuery.refetch();
+          }}
+        />
+        {/* <OrderInfoSection>
+          <OrderInfoTitle>Order Information</OrderInfoTitle>
+        </OrderInfoSection> */}
+      </RightPanelArea>
+
+      {/* Row 3, Col 1+2: Orders and Positions — does NOT span right panel column */}
       {isConnected && (
         <OrdersPositionsArea>
           {contractMode === "perpetual" ? (
@@ -422,143 +379,43 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   );
 };
 
-// Grid Container with explicit grid structure
+// 3-column grid: Chart (65%) | Order Book (35%) | Right Panel (fixed 300px)
 const FuturesContainer = styled("div")`
   display: grid;
-  grid-template-columns: 3fr 2fr;
-  grid-auto-rows: auto;
-  gap: 1.5rem;
+  grid-template-columns: minmax(0, 13fr) minmax(0, 7fr) 300px;
+  grid-template-rows: auto auto auto;
+  gap: 1rem;
   width: 100%;
   margin-top: 10px;
+  align-items: start;
 
-  /* Medium screens: Adjust column ratio for better fit */
   @media (max-width: 1400px) {
-    grid-template-columns: 3fr 2fr;
+    grid-template-columns: minmax(0, 13fr) minmax(0, 7fr) 280px;
   }
 
-  /* Tablet: Stack in single column */
+  @media (max-width: 1100px) {
+    grid-template-columns: minmax(0, 13fr) minmax(0, 7fr) 260px;
+  }
+
+  /* Tablet: collapse to single column */
   @media (max-width: 1024px) {
     grid-template-columns: 1fr;
+    grid-template-rows: auto;
   }
 `;
 
-// Contract Mode Toggle Area - Full width at the top
-const ContractModeToggleArea = styled("div")`
+// Row 1, all 3 columns
+const TradingHeaderArea = styled("div")`
   grid-column: 1 / -1;
   grid-row: 1;
-  display: flex;
-  justify-content: flex-start;
-  margin-bottom: 0.5rem;
-
-  @media (max-width: 1024px) {
-    justify-content: center;
-  }
 `;
 
-const ContractModeToggle = styled("div")`
-  display: flex;
-  gap: 0;
-  border: 1px solid rgba(171, 171, 171, 1);
-  border-radius: 6px;
-  overflow: hidden;
-`;
-
-const ModeButton = styled("button") <{ $active: boolean }>`
-  padding: 0.625rem 1.25rem;
-  background: ${(props) => (props.$active ? "#4c5a5f" : "transparent")};
-  color: #fff;
-  border: none;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  white-space: nowrap;
-
-  &:hover {
-    background: ${(props) => (props.$active ? "#4c5a5f" : "rgba(76, 90, 95, 0.5)")};
-  }
-
-  &:not(:last-child) {
-    border-right: 1px solid rgba(171, 171, 171, 0.5);
-  }
-`;
-
-// Balance Widget - Row 2, Column 1 (60% width)
-const BalanceWidgetArea = styled("div")`
-  grid-column: 1;
-  grid-row: 2;
-  width: 100%;
-  min-width: 0;
-
-  > * {
-    width: 100%;
-    height: 100%;
-  }
-
-  @media (max-width: 1024px) {
-    grid-column: 1;
-    grid-row: auto;
-  }
-`;
-
-// Stats Widget - Row 2, Column 2 (40% width)
-const StatsWidgetArea = styled("div")`
-  grid-column: 2;
-  grid-row: 2;
-  width: 100%;
-  min-width: 0;
-
-  > * {
-    width: 100%;
-    height: 100%;
-  }
-
-  @media (max-width: 1024px) {
-    grid-column: 1;
-    grid-row: auto;
-  }
-`;
-
-// Chart Area - Row 3, Column 1 (60% width)
+// Row 2, Col 1: Chart — sets the row height
 const ChartArea = styled("div")`
   grid-column: 1;
-  grid-row: 3;
-  width: 100%;
+  grid-row: 2;
   min-width: 0;
-
-  > * {
-    width: 100%;
-  }
-
-  @media (max-width: 1024px) {
-    grid-column: 1;
-    grid-row: auto;
-  }
-`;
-
-// Place Order Area - Row 4, Column 1 (60% width)
-const PlaceOrderArea = styled("div")`
-  grid-column: 1;
-  grid-row: 4;
-  width: 100%;
-  min-width: 0;
-
-  > * {
-    width: 100%;
-  }
-
-  @media (max-width: 1024px) {
-    grid-column: 1;
-    grid-row: auto;
-  }
-`;
-
-// Order Book Area - Rows 3-4, Column 2 (40% width, spans 2 rows)
-const OrderBookArea = styled("div") <{ $isConnected: boolean }>`
-  grid-column: 2;
-  grid-row: ${(props) => (props.$isConnected ? "3 / 5" : "3 / 4")};
-  width: 100%;
-  min-width: 0;
+  min-height: 380px;
   height: 100%;
 
   > * {
@@ -569,15 +426,100 @@ const OrderBookArea = styled("div") <{ $isConnected: boolean }>`
   @media (max-width: 1024px) {
     grid-column: 1;
     grid-row: auto;
-    height: auto;
+    min-height: 300px;
   }
 `;
 
-// Orders and Positions Area - Row 5, Full width
+// Row 2, Col 2: Order Book
+const OrderBookArea = styled("div")`
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+
+  > * {
+    width: 100%;
+    height: 100%;
+  }
+
+  @media (max-width: 1024px) {
+    grid-column: 1;
+    grid-row: auto;
+  }
+`;
+
+// Col 3, spans rows 2 and 3 — stretches to fill full combined height
+const RightPanelArea = styled("div")`
+  grid-column: 3;
+  grid-row: 2 / 4;
+  align-self: stretch;
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  overflow-y: auto;
+  border: 1px solid rgba(171, 171, 171, 0.4);
+  border-radius: 8px;
+
+  /* All children: strip individual borders and blend into panel */
+  > * {
+    border: none !important;
+    border-radius: 0 !important;
+    border-bottom: 1px solid rgba(171, 171, 171, 0.2) !important;
+
+    &:last-child {
+      border-bottom: none !important;
+    }
+  }
+
+  /* Balance widget: fixed, does not grow */
+  > *:first-child {
+    flex-shrink: 0;
+  }
+
+  /* PlaceOrderWidget: grows to fill remaining space */
+  > *:nth-child(2) {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* Order Information: fixed, does not grow */
+  > *:last-child {
+    flex-shrink: 0;
+  }
+
+  @media (max-width: 1024px) {
+    grid-column: 1;
+    grid-row: auto;
+    overflow-y: visible;
+    align-self: auto;
+
+    > *:nth-child(2) {
+      flex: none;
+    }
+  }
+`;
+
+// Order Information block — blank placeholder at bottom of right panel
+const OrderInfoSection = styled("div")`
+  padding: 0.875rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+`;
+
+const OrderInfoTitle = styled("div")`
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #a7a9b6;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+`;
+
+// Row 3, Col 1+2 only (right panel column continues alongside)
 const OrdersPositionsArea = styled("div")`
-  grid-column: 1 / -1;
-  grid-row: 5;
-  width: 100%;
+  grid-column: 1 / 3;
+  grid-row: 3;
   min-width: 0;
 
   > * {
