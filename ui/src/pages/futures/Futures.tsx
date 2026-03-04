@@ -269,7 +269,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       <ChartArea>
         <SmallWidget className="w-full justify-start" style={{ 
           marginBottom: 0, paddingLeft: 5, paddingTop: "0.875rem", paddingRight: 10, height: "100%",
-          justifyContent: "start" }}>
+          justifyContent: "start", border: "1px solid rgba(171, 171, 171, 0.4)" }}>
           <HashrateChart
             data={hashrateQuery.data || []}
             btcPriceData={btcPriceQuery.data || []}

@@ -204,17 +204,19 @@ export const PlaceOrderWidget = ({
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance = minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
+
+    // For perpetual mode, return max size (notional) = (availableBalance - 0.1 USDC) × leverage
+    if (contractMode === "perpetual") {
+      const buffer = 100_000n; // 0.1 USDC in base units (6 decimals)
+      const effectiveBalance = availableBalance > buffer ? availableBalance - buffer : 0n;
+      return (Number(effectiveBalance) / 1e6) * leverage;
+    }
+
     const orderFee = orderFeeRaw ?? 0n;
 
     if (availableBalance <= orderFee) return 0;
 
     const balanceForMargin = availableBalance - orderFee;
-
-    // For perpetual mode, return max size (notional) = available margin × leverage
-    // 100% on slider = availableBalance × leverage
-    if (contractMode === "perpetual") {
-      return (Number(balanceForMargin) / 1e6) * leverage;
-    }
 
     // Binary search to find maximum quantity for futures mode
     let low = 0;
@@ -351,22 +353,16 @@ export const PlaceOrderWidget = ({
     // Required margin = size / leverage
     const requiredMargin = numericAmount / leverage;
     const marginInWei = BigInt(Math.round(requiredMargin * 1e6));
-    
-    // Include order fee in the balance check
-    const orderFee = orderFeeRaw ?? 0n;
-    const totalRequired = marginInWei + orderFee;
 
-    if (totalRequired > availableBalance) {
+    if (marginInWei > availableBalance) {
       const marginFormatted = requiredMargin.toFixed(2);
-      const orderFeeFormatted = (Number(orderFee) / 1e6).toFixed(2);
-      const totalRequiredFormatted = (Number(totalRequired) / 1e6).toFixed(2);
       const totalBalanceFormatted = (Number(totalBalance) / 1e6).toFixed(2);
       const lockedBalanceFormatted = (Number(lockedBalance) / 1e6).toFixed(2);
       const availableBalanceFormatted = (Number(availableBalance) / 1e6).toFixed(2);
       const accountBalance = accountBalanceQuery.data ?? 0n;
       const accountBalanceFormatted = (Number(accountBalance) / 1e6).toFixed(2);
       alert(
-        `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${marginFormatted} USDC\nOrder fee: ${orderFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
+        `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${marginFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
       );
       return;
     }
@@ -415,22 +411,16 @@ export const PlaceOrderWidget = ({
     // Required margin = size / leverage
     const requiredMargin = numericAmount / leverage;
     const marginInWei = BigInt(Math.round(requiredMargin * 1e6));
-    
-    // Include order fee in the balance check
-    const orderFee = orderFeeRaw ?? 0n;
-    const totalRequired = marginInWei + orderFee;
 
-    if (totalRequired > availableBalance) {
+    if (marginInWei > availableBalance) {
       const marginFormatted = requiredMargin.toFixed(2);
-      const orderFeeFormatted = (Number(orderFee) / 1e6).toFixed(2);
-      const totalRequiredFormatted = (Number(totalRequired) / 1e6).toFixed(2);
       const totalBalanceFormatted = (Number(totalBalance) / 1e6).toFixed(2);
       const lockedBalanceFormatted = (Number(lockedBalance) / 1e6).toFixed(2);
       const availableBalanceFormatted = (Number(availableBalance) / 1e6).toFixed(2);
       const accountBalance = accountBalanceQuery.data ?? 0n;
       const accountBalanceFormatted = (Number(accountBalance) / 1e6).toFixed(2);
       alert(
-        `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${marginFormatted} USDC\nOrder fee: ${orderFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
+        `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${marginFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
       );
       return;
     }

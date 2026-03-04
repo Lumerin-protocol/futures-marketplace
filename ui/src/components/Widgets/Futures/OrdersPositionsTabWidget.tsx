@@ -267,6 +267,7 @@ const TabContainer = styled(SmallWidget)`
   display: flex;
   flex-direction: column;
   align-items: start;
+  border: 1px solid rgba(171, 171, 171, 0.4);
   
   h3 {
     margin: 0;
