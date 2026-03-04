@@ -405,6 +405,7 @@ const OrderBookWidget = styled(SmallWidget)`
   padding: 0.875rem 1rem;
   justify-content: space-between;
   margin-bottom: 0;
+  border: 1px solid rgba(171, 171, 171, 0.4);
 `;
 
 const Header = styled("div")`

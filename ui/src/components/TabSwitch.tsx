@@ -51,7 +51,7 @@ export const TabSwitchStyled = styled("div")<{ $numTabs: number }>`
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.2rem;
+    font-size: 1rem;
     font-weight: 500;
     border-radius: 99px;
     cursor: pointer;

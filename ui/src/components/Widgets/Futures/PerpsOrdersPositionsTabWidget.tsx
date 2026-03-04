@@ -114,17 +114,19 @@ export const PerpsOrdersPositionsTabWidget = ({
   return (
     <TabContainer>
       <Header>
-        <TabSwitch
-          values={[
-            { text: "Open Orders", value: "OPEN_ORDERS", count: ordersCount },
-            { text: "Positions", value: "POSITIONS", count: positionsCount },
-            { text: "Trades", value: "TRADES", count: tradesCount },
-            { text: "Position History", value: "POSITION_HISTORY", count: positionHistoryCount },
-            { text: "Order History", value: "ORDER_HISTORY", count: orderHistoryCount },
-          ]}
-          value={activeTab}
-          setValue={setActiveTab}
-        />
+        <TabSwitchWrapper>
+          <TabSwitch
+            values={[
+              { text: "Open Orders", value: "OPEN_ORDERS", count: ordersCount },
+              { text: "Positions", value: "POSITIONS", count: positionsCount },
+              { text: "Trades", value: "TRADES", count: tradesCount },
+              { text: "Position History", value: "POSITION_HISTORY", count: positionHistoryCount },
+              { text: "Order History", value: "ORDER_HISTORY", count: orderHistoryCount },
+            ]}
+            value={activeTab}
+            setValue={setActiveTab}
+          />
+        </TabSwitchWrapper>
       </Header>
 
       <Content>
@@ -937,6 +939,7 @@ const TabContainer = styled(SmallWidget)`
   display: flex;
   flex-direction: column;
   align-items: start;
+  border: 1px solid rgba(171, 171, 171, 0.4);
   
   h3 {
     margin: 0;
@@ -952,6 +955,13 @@ const Header = styled("div")`
   justify-content: space-between;
   align-items: center;
   width: 100%;
+`;
+
+const TabSwitchWrapper = styled("div")`
+  button {
+    font-size: 0.875rem;
+    padding: 0.1em 0.5em;
+  }
 `;
 
 const Content = styled("div")`
