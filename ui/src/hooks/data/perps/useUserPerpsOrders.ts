@@ -1,7 +1,11 @@
 import { backgroundRefetchOpts } from "../config";
 import { graphqlRequest } from "../graphql";
 import { QueryClient, useQuery } from "@tanstack/react-query";
-import { UserPerpsOrdersQuery } from "./graphql-queries";
+import {
+  UserPerpsOrdersQuery,
+  UserPerpsOrdersByStatusQuery,
+  UserPerpsOrdersExcludeStatusQuery,
+} from "./graphql-queries";
 
 export const USER_PERPS_ORDERS_QK = "UserPerpsOrders";
 
@@ -9,13 +13,17 @@ export const useUserPerpsOrders = (
   address: `0x${string}` | undefined,
   props?: {
     refetch?: boolean;
+    statuses?: string[];
+    excludeStatuses?: string[];
   },
 ) => {
+  const { refetch, statuses, excludeStatuses } = props ?? {};
+
   const query = useQuery({
-    queryKey: [USER_PERPS_ORDERS_QK, address],
-    queryFn: () => fetchUserPerpsOrdersAsync(address!),
+    queryKey: [USER_PERPS_ORDERS_QK, address, statuses, excludeStatuses],
+    queryFn: () => fetchUserPerpsOrdersAsync(address!, { statuses, excludeStatuses }),
     enabled: !!address,
-    ...(props?.refetch ? backgroundRefetchOpts : {}),
+    ...(refetch ? backgroundRefetchOpts : {}),
   });
 
   return query;
@@ -23,13 +31,21 @@ export const useUserPerpsOrders = (
 
 const fetchUserPerpsOrdersAsync = async (
   address: `0x${string}`,
+  filter?: { statuses?: string[]; excludeStatuses?: string[] },
 ) => {
-  const variables = {
-    address,
-  };
+  let query = UserPerpsOrdersQuery;
+  const variables: Record<string, unknown> = { address };
+
+  if (filter?.statuses?.length) {
+    query = UserPerpsOrdersByStatusQuery;
+    variables.statuses = filter.statuses;
+  } else if (filter?.excludeStatuses?.length) {
+    query = UserPerpsOrdersExcludeStatusQuery;
+    variables.statuses = filter.excludeStatuses;
+  }
 
   const response = await graphqlRequest<UserPerpsOrdersResponse>(
-    UserPerpsOrdersQuery,
+    query,
     variables,
     process.env.REACT_APP_SUBGRAPH_PERPS_URL
   );
@@ -71,7 +87,7 @@ export const waitForBlockNumber = async (
   let attempts = 0;
   while (attempts < maxAttempts) {
     await new Promise((resolve) => setTimeout(resolve, delay));
-    const data = await fetchUserPerpsOrdersAsync(address);
+    const data = await fetchUserPerpsOrdersAsync(address, {});
     const currentBlock = data?.blockNumber;
 
     if (currentBlock !== undefined && currentBlock >= Number(blockNumber)) {

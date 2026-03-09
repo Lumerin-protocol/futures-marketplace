@@ -46,6 +46,62 @@ query UserPerpsOrders ($address: ID!)  {
 }
     `
 
+export const UserPerpsOrdersByStatusQuery = gql`
+query UserPerpsOrdersByStatus ($address: ID!, $statuses: [String!]!)  {
+  orders(where: { user: $address, status_in: $statuses }) {
+    blockNumber
+    closedAt
+    createdAt
+    filledQuantity
+    id
+    originalQuantity
+    isBuy
+    price
+    quantity
+    status
+    transactionHash
+    updatedAt
+    user {
+      id
+    }
+  }
+  _meta {
+      block {
+        number
+        timestamp
+      }
+    }
+}
+    `
+
+export const UserPerpsOrdersExcludeStatusQuery = gql`
+query UserPerpsOrdersExcludeStatus ($address: ID!, $statuses: [String!]!)  {
+  orders(where: { user: $address, status_not_in: $statuses }) {
+    blockNumber
+    closedAt
+    createdAt
+    filledQuantity
+    id
+    originalQuantity
+    isBuy
+    price
+    quantity
+    status
+    transactionHash
+    updatedAt
+    user {
+      id
+    }
+  }
+  _meta {
+      block {
+        number
+        timestamp
+      }
+    }
+}
+    `
+
 
 export const UserPositionSnapshotsQuery = gql`
  query UserPositionSnapshots ($address: ID!) {

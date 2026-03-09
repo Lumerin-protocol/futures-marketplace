@@ -53,10 +53,14 @@ export const PerpsOrdersPositionsTabWidget = ({
   const queryClient = useQueryClient();
   const { cancelOrderAsync, isPending: isCancelling } = useCancelPerpsOrder();
 
-  // Fetch perps orders for Open Orders tab
-  const perpsOrdersQuery = useUserPerpsOrders(
-    participantAddress
-  );
+  // Fetch perps orders for Open Orders tab (ACTIVE + FILLED)
+  const openOrdersQuery = useUserPerpsOrders(participantAddress, {
+    statuses: ["ACTIVE", "FILLED"],
+  });
+  // Fetch perps orders for Order History tab (all non-ACTIVE)
+  const orderHistoryQuery = useUserPerpsOrders(participantAddress, {
+    excludeStatuses: ["ACTIVE"],
+  });
 
   // Fetch historical orders for Orders History tab
   const historicalOrdersQuery = useHistoricalOrders(
@@ -74,18 +78,22 @@ export const PerpsOrdersPositionsTabWidget = ({
   const handleCancelOrder = async (orderId: string) => {
     try {
       await cancelOrderAsync({ orderId: orderId as `0x${string}` });
-      // Invalidate queries to refetch data
+      // Invalidate both open orders and history queries
       queryClient.invalidateQueries({ queryKey: [USER_PERPS_ORDERS_QK, participantAddress] });
     } catch (error) {
       console.error("Failed to cancel order:", error);
     }
   };
 
-  // Count perps orders (only open/active orders)
+  // Count perps orders (ACTIVE + FILLED, excluding fully filled)
   const ordersCount = useMemo(() => {
-    const perpsOrders = perpsOrdersQuery.data?.data?.orders || [];
-    return perpsOrders.filter((order) => order.status === "ACTIVE").length;
-  }, [perpsOrdersQuery.data?.data?.orders]);
+    const orders = openOrdersQuery.data?.data?.orders ?? [];
+    return orders.filter(
+      (order) =>
+        (order.status === "ACTIVE" || order.status === "FILLED") &&
+        order.filledQuantity !== order.originalQuantity
+    ).length;
+  }, [openOrdersQuery.data?.data?.orders]);
   
   // Count unique positions
   const positionsCount = useMemo(() => {
@@ -105,11 +113,10 @@ export const PerpsOrdersPositionsTabWidget = ({
     return trades.length;
   }, [tradesQuery.data?.trades]);
 
-  // Count historical orders (all non-active orders)
+  // Count historical orders (all non-ACTIVE orders)
   const orderHistoryCount = useMemo(() => {
-    const allOrders = perpsOrdersQuery.data?.data?.orders || [];
-    return allOrders.filter((order) => order.status !== "ACTIVE").length;
-  }, [perpsOrdersQuery.data?.data?.orders]);
+    return orderHistoryQuery.data?.data?.orders.length ?? 0;
+  }, [orderHistoryQuery.data?.data?.orders]);
 
   return (
     <TabContainer>
@@ -133,8 +140,8 @@ export const PerpsOrdersPositionsTabWidget = ({
         {activeTab === "OPEN_ORDERS" && (
           <OrdersWrapper>
             <PerpsOpenOrdersTable
-              orders={perpsOrdersQuery.data?.data?.orders || []}
-              isLoading={perpsOrdersQuery.isLoading}
+              orders={openOrdersQuery.data?.data?.orders || []}
+              isLoading={openOrdersQuery.isLoading}
               onCancelOrder={handleCancelOrder}
               isCancelling={isCancelling}
             />
@@ -169,8 +176,8 @@ export const PerpsOrdersPositionsTabWidget = ({
         {activeTab === "ORDER_HISTORY" && (
           <OrdersWrapper>
             <PerpsOrderHistoryTable
-              orders={perpsOrdersQuery.data?.data?.orders || []}
-              isLoading={perpsOrdersQuery.isLoading}
+              orders={orderHistoryQuery.data?.data?.orders || []}
+              isLoading={orderHistoryQuery.isLoading}
             />
           </OrdersWrapper>
         )}
@@ -274,7 +281,7 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling }
           <tr>
             <th>Type</th>
             <th>Price (USDC)</th>
-            <th>Size (USDC)</th>
+            <th>Filled / Size (USDC)</th>
             <th>Status</th>
             <th>Created</th>
             <th>Actions</th>
@@ -290,6 +297,8 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling }
               </td>
               <td>{formatPrice(order.price)}</td>
               <td>
+                {((Number(order.price) / 1e6) * (Number(order.filledQuantity) / 1e6)).toFixed(2)}
+                {" / "}
                 {((Number(order.price) / 1e6) * (Number(order.originalQuantity) / 1e6)).toFixed(2)}
               </td>
               <td>
@@ -415,7 +424,7 @@ const PerpsOrderHistoryTable = ({ orders, isLoading }: PerpsOrderHistoryTablePro
           <tr>
             <th>Type</th>
             <th>Price (USDC)</th>
-            <th>Size (USDC)</th>
+            <th>Filled / Size (USDC)</th>
             <th>Status</th>
             <th>Created</th>
             <th>Updated</th>
@@ -431,6 +440,8 @@ const PerpsOrderHistoryTable = ({ orders, isLoading }: PerpsOrderHistoryTablePro
               </td>
               <td>{formatPrice(order.price)}</td>
               <td>
+                {((Number(order.price) / 1e6) * (Number(order.filledQuantity) / 1e6)).toFixed(2)}
+                {" / "}
                 {((Number(order.price) / 1e6) * (Number(order.originalQuantity) / 1e6)).toFixed(2)}
               </td>
               <td>
@@ -523,6 +534,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice }: Perps
               <th>Type</th>
               <th>Entry Price (USDC)</th>
               <th>Size (USDC)</th>
+              <th>Max Size (USDC)</th>
               <th>Fees (F/T)</th>
               <th>Unrealized PnL</th>
               <th>Realized PnL</th>
@@ -548,6 +560,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice }: Perps
                   </td>
                   <td>{formatPrice(session.entryPrice)}</td>
                   <td>{((Number(session.entryPrice) / 1e6) * (Number(displayQuantity < 0n ? -displayQuantity : displayQuantity) / 1e6)).toFixed(2)}</td>
+                  <td>{((Number(session.entryPrice) / 1e6) * (Number(session.maxQuantity) / 1e6)).toFixed(2)}</td>
                   <td>{formatFees(session.fundingFees, session.tradingFees)}</td>
                   <td>
                     <PnLText $isPositive={unrealizedPnlValue >= 0}>
