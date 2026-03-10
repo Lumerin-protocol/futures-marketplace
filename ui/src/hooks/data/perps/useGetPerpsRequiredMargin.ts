@@ -10,7 +10,7 @@ export function useGetPerpsRequiredMargin(address: `0x${string}` | undefined) {
   return useReadContract({
     address: process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`,
     abi: PerpsABI,
-    functionName: "getRequiredMargin",
+    functionName: "getMaintenanceMargin",
     args: address ? [address] : undefined,
     query: {
       enabled: !!address,

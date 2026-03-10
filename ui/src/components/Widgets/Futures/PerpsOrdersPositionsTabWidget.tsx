@@ -591,7 +591,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
               <th>Fees (F/T)</th>
               <th>Unrealized PnL</th>
               <th>Realized PnL</th>
-              {/* <th>Liquidation Price (USDC)</th> */}
+              <th>Liquidation Price (USDC)</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -603,7 +603,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
               const realizedPnlValue = Number(session.realizedPnl) / 1e6;
               const unrealizedPnl = calculateUnrealizedPnL(session.entryPrice, displayQuantity);
               const unrealizedPnlValue = Number(unrealizedPnl) / 1e6;
-              // const liquidationPrice = calculateLiquidationPrice(session.entryPrice, displayQuantity);
+              const liquidationPrice = calculateLiquidationPrice(session.entryPrice, displayQuantity);
 
               return (
                 <TableRow key={session.id}>
@@ -627,11 +627,11 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
                       {realizedPnlValue >= 0 ? "+" : ""}{realizedPnlValue.toFixed(2)} USDC
                     </PnLText>
                   </td>
-                  {/* <td>
+                  <td>
                     {liquidationPrice !== null
                       ? formatPrice(liquidationPrice)
                       : "-"}
-                  </td> */}
+                  </td>
                   <td>
                     <ActionButtons>
                       <DetailsButton onClick={() => setSelectedSession(session)}>
