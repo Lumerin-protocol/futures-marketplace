@@ -97,7 +97,7 @@ export const PerpsOrdersPositionsTabWidget = ({
     const orders = openOrdersQuery.data?.data?.orders ?? [];
     return orders.filter(
       (order) =>
-        (order.status === "ACTIVE" || order.status === "FILLED") &&
+        (order.status === "ACTIVE" || order.status === "PARTIAL") &&
         order.filledQuantity !== order.originalQuantity
     ).length;
   }, [openOrdersQuery.data?.data?.orders]);
@@ -273,7 +273,7 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling, 
   };
 
   const activeOrders = [...orders]
-    .filter((order) => (order.status === "ACTIVE" || order.status === "FILLED") && order.filledQuantity !== order.originalQuantity)
+    .filter((order) => (order.status === "ACTIVE" || order.status === "PARTIAL") && order.filledQuantity !== order.originalQuantity)
     .sort((a, b) => Number(b.createdAt) - Number(a.createdAt));
 
   const displayedOrders = activeOrders.slice(0, visibleCount);
