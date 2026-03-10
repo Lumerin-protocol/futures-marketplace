@@ -9,7 +9,7 @@ import { formatValue, paymentToken } from "../../../lib/units";
 import { UsdcIcon } from "../../../images";
 import { PrimaryButton } from "../../Forms/FormButtons/Buttons.styled";
 import { ModalItem } from "../../Modal";
-import { WithdrawalForm } from "../../Forms/WithdrawalForm";
+import { WithdrawalFormPerps } from "../../Forms/WithdrawalFormPerps";
 import EastIcon from "@mui/icons-material/East";
 import type { AccountBalance } from "../../../types/types";
 import { DepositFormPerps } from "../../Forms/DepositFormPerps";
@@ -174,10 +174,11 @@ export const PerpsBalanceWidget = ({
       </ModalItem>
 
       <ModalItem open={withdrawalModal.isOpen} setOpen={withdrawalModal.setOpen}>
-        <WithdrawalForm
+        <WithdrawalFormPerps
           closeForm={handleWithdrawalSuccess}
           minMargin={minMargin}
           isLoadingMinMargin={isLoadingMinMargin}
+          balanceQuery={balanceQuery}
         />
       </ModalItem>
     </>

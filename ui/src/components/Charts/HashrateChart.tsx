@@ -69,6 +69,7 @@ interface HashrateChartProps {
   isBtcPriceLoading?: boolean;
   marketPrice?: bigint | null;
   marketPriceFetchedAt?: Date;
+  entryPrice?: number | null;
   timePeriod: TimePeriod;
   onTimePeriodChange: (period: TimePeriod) => void;
 }
@@ -80,6 +81,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   isBtcPriceLoading = false,
   marketPrice,
   marketPriceFetchedAt,
+  entryPrice,
   timePeriod,
   onTimePeriodChange,
 }) => {
@@ -198,6 +200,22 @@ export const HashrateChart: FC<HashrateChartProps> = ({
           },
         },
         gridLineColor: "#333333",
+        plotLines: entryPrice
+          ? [
+              {
+                value: entryPrice,
+                color: "white",
+                dashStyle: "Dash",
+                width: 2,
+                zIndex: 5,
+                label: {
+                  text: `Entry: ${entryPrice.toFixed(2)}`,
+                  align: "right",
+                  style: { color: "white" },
+                },
+              },
+            ]
+          : [],
       },
       {
         // Secondary Y-axis for BTC Price (USD)
