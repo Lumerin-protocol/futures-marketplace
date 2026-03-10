@@ -62,7 +62,7 @@ export const PerpsOrdersPositionsTabWidget = ({
 
   // Fetch perps orders for Open Orders tab (ACTIVE + FILLED)
   const openOrdersQuery = useUserPerpsOrders(participantAddress, {
-    statuses: ["ACTIVE", "FILLED"],
+    statuses: ["ACTIVE", "PARTIAL"],
   });
   // Fetch perps orders for Order History tab (all non-ACTIVE)
   const orderHistoryQuery = useUserPerpsOrders(participantAddress, {
@@ -874,9 +874,9 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoad
         <thead>
           <tr>
             <th>Timestamp</th>
+            <th>Side</th>
             <th>Trade Price</th>
             <th>Size (USDC)</th>
-            <th>Size After (USDC)</th>
             <th>Entry Price After</th>
             <th>Trading Fee</th>
             <th>Realized PnL</th>
@@ -887,9 +887,13 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoad
           {displayedTrades.map((trade) => (
             <TableRow key={trade.id}>
               <td>{formatDate(trade.timestamp)}</td>
+              <td>
+                <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
+                  {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
+                </TypeBadge>
+              </td>
               <td>{formatPrice(trade.tradePrice)}</td>
               <td>{((Number(trade.tradePrice) / 1e6) * (Number(trade.tradeQuantity < 0n ? -trade.tradeQuantity : trade.tradeQuantity) / 1e6)).toFixed(2)}</td>
-              <td>{((Number(trade.aggregatedEntryPriceAfter) / 1e6) * (Number(trade.netQuantityAfter < 0n ? -trade.netQuantityAfter : trade.netQuantityAfter) / 1e6)).toFixed(2)}</td>
               <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
               <td>{formatPrice(trade.tradingFee)}</td>
               <td>
@@ -981,9 +985,9 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
             <thead>
               <tr>
                 <th>Timestamp</th>
+                <th>Side</th>
                 <th>Trade Price</th>
                 <th>Size (USDC)</th>
-                <th>Size After (USDC)</th>
                 <th>Entry Price After</th>
                 <th>Trading Fee</th>
                 <th>Realized PnL</th>
@@ -994,9 +998,13 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
               {sortedTrades.map((trade) => (
                 <TableRow key={trade.id}>
                   <td>{formatDate(trade.timestamp)}</td>
+                  <td>
+                    <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
+                      {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
+                    </TypeBadge>
+                  </td>
                   <td>{formatPrice(trade.tradePrice)}</td>
                   <td>{((Number(trade.tradePrice) / 1e6) * (Number(trade.tradeQuantity < 0n ? -trade.tradeQuantity : trade.tradeQuantity) / 1e6)).toFixed(2)}</td>
-                  <td>{((Number(trade.aggregatedEntryPriceAfter) / 1e6) * (Number(trade.netQuantityAfter < 0n ? -trade.netQuantityAfter : trade.netQuantityAfter) / 1e6)).toFixed(2)}</td>
                   <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
                   <td>{formatPrice(trade.tradingFee)}</td>
                   <td>
