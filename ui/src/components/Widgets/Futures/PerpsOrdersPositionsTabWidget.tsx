@@ -250,6 +250,8 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling, 
     switch (status) {
       case "ACTIVE":
         return "Active";
+      case "PARTIAL":
+        return "Partial";
       case "FILLED":
         return "Filled";
       case "CANCELLED":
@@ -263,6 +265,8 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling, 
     switch (status) {
       case "ACTIVE":
         return "#22c55e";
+      case "PARTIAL":
+        return "#f59e0b";
       case "FILLED":
         return "#6b7280";
       case "CANCELLED":
@@ -299,17 +303,18 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling, 
       <Table>
         <thead>
           <tr>
+            <th>Created</th>
             <th>Type</th>
             <th>Price (USDC)</th>
             <th>Filled / Size (USDC)</th>
             <th>Status</th>
-            <th>Created</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {displayedOrders.map((order) => (
             <TableRow key={order.id}>
+              <td>{formatDate(order.createdAt)}</td>
               <td>
                 <TypeBadge $type={order.isBuy ? "Long" : "Short"}>
                   {order.isBuy ? "Long" : "Short"}
@@ -326,7 +331,6 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling, 
                   {formatStatus(order.status)}
                 </StatusBadge>
               </td>
-              <td>{formatDate(order.createdAt)}</td>
               <td>
                 <ActionButtons>
                   <CancelButton 
@@ -397,6 +401,8 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }:
     switch (status) {
       case "ACTIVE":
         return "Active";
+      case "PARTIAL":
+        return "Partial";
       case "FILLED":
         return "Filled";
       case "CANCELLED":
@@ -410,6 +416,8 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }:
     switch (status) {
       case "ACTIVE":
         return "#22c55e";
+      case "PARTIAL":
+        return "#f59e0b";
       case "FILLED":
         return "#6b7280";
       case "CANCELLED":
@@ -450,17 +458,18 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }:
       <Table>
         <thead>
           <tr>
+            <th>Created</th>
             <th>Type</th>
             <th>Price (USDC)</th>
             <th>Filled / Size (USDC)</th>
             <th>Status</th>
-            <th>Created</th>
             <th>Updated</th>
           </tr>
         </thead>
         <tbody>
           {displayedOrders.map((order) => (
             <TableRow key={order.id}>
+              <td>{formatDate(order.createdAt)}</td>
               <td>
                 <TypeBadge $type={order.isBuy ? "Long" : "Short"}>
                   {order.isBuy ? "Long" : "Short"}
@@ -477,7 +486,6 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }:
                   {formatStatus(order.status)}
                 </StatusBadge>
               </td>
-              <td>{formatDate(order.createdAt)}</td>
               <td>{formatDate(order.updatedAt)}</td>
             </TableRow>
           ))}

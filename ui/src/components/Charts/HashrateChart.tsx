@@ -206,7 +206,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
                 value: entryPrice,
                 color: "white",
                 dashStyle: "Dash",
-                width: 2,
+                width: 1,
                 zIndex: 5,
                 label: {
                   text: `Entry: ${entryPrice.toFixed(2)}`,
