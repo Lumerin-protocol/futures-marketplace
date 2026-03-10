@@ -17,6 +17,7 @@ import { USER_PERPS_ORDERS_QK } from "../../../hooks/data/perps/useUserPerpsOrde
 import type { PositionSession } from "../../../hooks/data/perps/useUserPositionSessions";
 import { useUserTrades } from "../../../hooks/data/perps/useUserTrades";
 import type { UserTrade } from "../../../hooks/data/perps/useUserTrades";
+import { computeLiquidationState } from "../../../hooks/data/perps/positionHelper";
 
 type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "POSITION_HISTORY" | "ORDER_HISTORY";
 
@@ -33,6 +34,7 @@ interface PerpsOrdersPositionsTabWidgetProps {
   marketPrice?: bigint;
   positionSessions: PositionSession[];
   positionSessionsLoading?: boolean;
+  perpsBalance?: bigint;
 }
 
 export const PerpsOrdersPositionsTabWidget = ({
@@ -48,6 +50,7 @@ export const PerpsOrdersPositionsTabWidget = ({
   marketPrice,
   positionSessions,
   positionSessionsLoading,
+  perpsBalance,
 }: PerpsOrdersPositionsTabWidgetProps) => {
   const [activeTab, setActiveTab] = useState<TabType>("OPEN_ORDERS");
   const [openOrdersVisibleCount, setOpenOrdersVisibleCount] = useState(10);
@@ -159,6 +162,8 @@ export const PerpsOrdersPositionsTabWidget = ({
               positionSessions={positionSessions}
               isLoading={positionSessionsLoading}
               marketPrice={marketPrice}
+              collateral={perpsBalance}
+              totalMaintenanceMargin={minMargin ?? undefined}
             />
           </PositionsWrapper>
         )}
@@ -492,9 +497,14 @@ interface PerpsPositionsTableProps {
   positionSessions: PositionSession[];
   isLoading?: boolean;
   marketPrice?: bigint;
+  collateral?: bigint;
+  totalMaintenanceMargin?: bigint;
 }
 
-const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice }: PerpsPositionsTableProps) => {
+const MAINTENANCE_MARGIN_PERCENT = 10n;
+const QUANTITY_DECIMALS = 6n;
+
+const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collateral, totalMaintenanceMargin }: PerpsPositionsTableProps) => {
   const [selectedSession, setSelectedSession] = useState<PositionSession | null>(null);
 
   const formatPrice = (price: bigint) => {
@@ -533,6 +543,20 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice }: Perps
     return priceDiff * netQuantity / 1_000_000n; // Adjust for precision
   };
 
+  const calculateLiquidationPrice = (entryPrice: bigint, netQuantity: bigint): bigint | null => {
+    if (!marketPrice || !collateral || !totalMaintenanceMargin || netQuantity === 0n) return null;
+    const { liquidationPrice } = computeLiquidationState(
+      netQuantity,
+      entryPrice,
+      collateral,
+      totalMaintenanceMargin,
+      marketPrice,
+      MAINTENANCE_MARGIN_PERCENT,
+      QUANTITY_DECIMALS,
+    );
+    return liquidationPrice;
+  };
+
   const openPositions = [...positionSessions]
     .filter((session) => session.status === "OPEN")
     .sort((a, b) => Number(b.openedAt) - Number(a.openedAt));
@@ -567,6 +591,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice }: Perps
               <th>Fees (F/T)</th>
               <th>Unrealized PnL</th>
               <th>Realized PnL</th>
+              {/* <th>Liquidation Price (USDC)</th> */}
               <th>Actions</th>
             </tr>
           </thead>
@@ -578,6 +603,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice }: Perps
               const realizedPnlValue = Number(session.realizedPnl) / 1e6;
               const unrealizedPnl = calculateUnrealizedPnL(session.entryPrice, displayQuantity);
               const unrealizedPnlValue = Number(unrealizedPnl) / 1e6;
+              // const liquidationPrice = calculateLiquidationPrice(session.entryPrice, displayQuantity);
 
               return (
                 <TableRow key={session.id}>
@@ -601,6 +627,11 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice }: Perps
                       {realizedPnlValue >= 0 ? "+" : ""}{realizedPnlValue.toFixed(2)} USDC
                     </PnLText>
                   </td>
+                  {/* <td>
+                    {liquidationPrice !== null
+                      ? formatPrice(liquidationPrice)
+                      : "-"}
+                  </td> */}
                   <td>
                     <ActionButtons>
                       <DetailsButton onClick={() => setSelectedSession(session)}>

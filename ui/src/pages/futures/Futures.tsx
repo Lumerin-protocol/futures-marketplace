@@ -141,6 +141,14 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     { refetch: contractMode === "perpetual" }
   );
 
+  const openPositionEntryPrice = useMemo(() => {
+    if (contractMode !== "perpetual") return null;
+    const sessions = positionSessionsQuery.data?.positionSessions || [];
+    const openSession = sessions.find((s) => s.status === "OPEN");
+    if (!openSession) return null;
+    return Number(openSession.entryPrice) / 1e6;
+  }, [contractMode, positionSessionsQuery.data?.positionSessions]);
+
   // Calculate total unrealized PnL based on contract mode
   const totalUnrealizedPnL = useMemo(() => {
     if (!marketPrice || !address) return null;
@@ -277,6 +285,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
             isBtcPriceLoading={btcPriceQuery.isLoading}
             marketPrice={marketPrice}
             marketPriceFetchedAt={marketPriceFetchedAt}
+            entryPrice={openPositionEntryPrice}
             timePeriod={chartTimePeriod}
             onTimePeriodChange={setChartTimePeriod}
           />
@@ -347,6 +356,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
               marketPrice={marketPrice}
               positionSessions={positionSessionsQuery.data?.positionSessions || []}
               positionSessionsLoading={positionSessionsQuery.isLoading}
+              perpsBalance={balanceQuery.data as bigint | undefined}
             />
           ) : (
             <OrdersPositionsTabWidget

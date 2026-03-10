@@ -10,6 +10,7 @@ import { PrimaryButton } from "../../Forms/FormButtons/Buttons.styled";
 import { ModalItem } from "../../Modal";
 import { DepositForm } from "../../Forms/DepositForm";
 import { WithdrawalForm } from "../../Forms/WithdrawalForm";
+import { WithdrawalFormPerps } from "../../Forms/WithdrawalFormPerps";
 import EastIcon from "@mui/icons-material/East";
 import type { ContractMode, AccountBalance } from "../../../types/types";
 import { DepositFormPerps } from "../../Forms/DepositFormPerps";
@@ -194,12 +195,21 @@ export const FuturesBalanceWidget = ({
       </ModalItem>
 
       <ModalItem open={withdrawalModal.isOpen} setOpen={withdrawalModal.setOpen}>
-        <WithdrawalForm
-          closeForm={handleWithdrawalSuccess}
-          minMargin={minMargin}
-          isLoadingMinMargin={isLoadingMinMargin}
-          balanceQuery={balanceQuery}
-        />
+        {contractMode === "perpetual" ? (
+          <WithdrawalFormPerps
+            closeForm={handleWithdrawalSuccess}
+            minMargin={minMargin}
+            isLoadingMinMargin={isLoadingMinMargin}
+            balanceQuery={balanceQuery}
+          />
+        ) : (
+          <WithdrawalForm
+            closeForm={handleWithdrawalSuccess}
+            minMargin={minMargin}
+            isLoadingMinMargin={isLoadingMinMargin}
+            balanceQuery={balanceQuery}
+          />
+        )}
       </ModalItem>
     </>
   );
