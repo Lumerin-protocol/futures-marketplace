@@ -367,50 +367,67 @@ export const PerpsABI = [
     anonymous: false,
     inputs: [
       {
-        name: 'orderId',
-        internalType: 'bytes32',
-        type: 'bytes32',
-        indexed: true,
-      },
-      {
-        name: 'participant',
-        internalType: 'address',
-        type: 'address',
-        indexed: true,
-      },
-    ],
-    name: 'OrderFilled',
-  },
-  {
-    type: 'event',
-    anonymous: false,
-    inputs: [
-      {
         name: 'makerOrderId',
         internalType: 'bytes32',
         type: 'bytes32',
         indexed: true,
       },
       {
-        name: 'buyer',
+        name: 'maker',
         internalType: 'address',
         type: 'address',
         indexed: true,
       },
       {
-        name: 'seller',
+        name: 'taker',
         internalType: 'address',
         type: 'address',
         indexed: true,
       },
       {
-        name: 'price',
+        name: 'tradePrice',
         internalType: 'uint256',
         type: 'uint256',
         indexed: false,
       },
       {
-        name: 'quantity',
+        name: 'takerQuantity',
+        internalType: 'int256',
+        type: 'int256',
+        indexed: false,
+      },
+      {
+        name: 'makerFee',
+        internalType: 'int256',
+        type: 'int256',
+        indexed: false,
+      },
+      {
+        name: 'takerFee',
+        internalType: 'int256',
+        type: 'int256',
+        indexed: false,
+      },
+      {
+        name: 'makerNetQtyAfter',
+        internalType: 'int256',
+        type: 'int256',
+        indexed: false,
+      },
+      {
+        name: 'takerNetQtyAfter',
+        internalType: 'int256',
+        type: 'int256',
+        indexed: false,
+      },
+      {
+        name: 'makerEntryPriceAfter',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+      {
+        name: 'takerEntryPriceAfter',
         internalType: 'uint256',
         type: 'uint256',
         indexed: false,
@@ -468,21 +485,6 @@ export const PerpsABI = [
     inputs: [
       { name: 'user', internalType: 'address', type: 'address', indexed: true },
       {
-        name: 'quantityClosed',
-        internalType: 'int256',
-        type: 'int256',
-        indexed: false,
-      },
-      { name: 'pnl', internalType: 'int256', type: 'int256', indexed: false },
-    ],
-    name: 'PositionClosed',
-  },
-  {
-    type: 'event',
-    anonymous: false,
-    inputs: [
-      { name: 'user', internalType: 'address', type: 'address', indexed: true },
-      {
         name: 'liquidator',
         internalType: 'address',
         type: 'address',
@@ -503,38 +505,6 @@ export const PerpsABI = [
       },
     ],
     name: 'PositionLiquidated',
-  },
-  {
-    type: 'event',
-    anonymous: false,
-    inputs: [
-      { name: 'user', internalType: 'address', type: 'address', indexed: true },
-      {
-        name: 'tradePrice',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: false,
-      },
-      {
-        name: 'quantity',
-        internalType: 'int256',
-        type: 'int256',
-        indexed: false,
-      },
-      {
-        name: 'netQuantityAfter',
-        internalType: 'int256',
-        type: 'int256',
-        indexed: false,
-      },
-      {
-        name: 'aggregatedEntryPriceAfter',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: false,
-      },
-    ],
-    name: 'PositionTrade',
   },
   {
     type: 'event',
@@ -722,6 +692,13 @@ export const PerpsABI = [
   {
     type: 'function',
     inputs: [{ name: '_user', internalType: 'address', type: 'address' }],
+    name: 'getInitialMargin',
+    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: '_user', internalType: 'address', type: 'address' }],
     name: 'getMaintenanceMargin',
     outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
     stateMutability: 'view',
@@ -746,7 +723,6 @@ export const PerpsABI = [
           { name: 'participant', internalType: 'address', type: 'address' },
           { name: 'price', internalType: 'uint256', type: 'uint256' },
           { name: 'quantity', internalType: 'int256', type: 'int256' },
-          { name: 'createdAt', internalType: 'uint256', type: 'uint256' },
         ],
       },
     ],
@@ -870,8 +846,8 @@ export const PerpsABI = [
   },
   {
     type: 'function',
-    inputs: [{ name: '_user', internalType: 'address', type: 'address' }],
-    name: 'liquidate',
+    inputs: [{ name: '_users', internalType: 'address[]', type: 'address[]' }],
+    name: 'liquidateBatch',
     outputs: [],
     stateMutability: 'nonpayable',
   },
@@ -919,6 +895,13 @@ export const PerpsABI = [
   },
   {
     type: 'function',
+    inputs: [{ name: 'data', internalType: 'bytes[]', type: 'bytes[]' }],
+    name: 'multicall',
+    outputs: [{ name: 'results', internalType: 'bytes[]', type: 'bytes[]' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     inputs: [],
     name: 'name',
     outputs: [{ name: '', internalType: 'string', type: 'string' }],
@@ -962,6 +945,13 @@ export const PerpsABI = [
     type: 'function',
     inputs: [],
     name: 'renounceOwnership',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'resetState',
     outputs: [],
     stateMutability: 'nonpayable',
   },
@@ -1039,6 +1029,20 @@ export const PerpsABI = [
     name: 'setOracle',
     outputs: [],
     stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: '_price', internalType: 'uint256', type: 'uint256' },
+      { name: '_quantity', internalType: 'int256', type: 'int256' },
+    ],
+    name: 'simulateOrder',
+    outputs: [
+      { name: 'filledQuantity', internalType: 'int256', type: 'int256' },
+      { name: 'averageFillPrice', internalType: 'uint256', type: 'uint256' },
+      { name: 'remainingQuantity', internalType: 'int256', type: 'int256' },
+    ],
+    stateMutability: 'view',
   },
   {
     type: 'function',

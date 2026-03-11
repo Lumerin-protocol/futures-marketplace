@@ -304,7 +304,7 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling, 
         <thead>
           <tr>
             <th>Created</th>
-            <th>Type</th>
+            <th>Side</th>
             <th>Price (USDC)</th>
             <th>Filled / Size (USDC)</th>
             <th>Status</th>
@@ -459,7 +459,7 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }:
         <thead>
           <tr>
             <th>Created</th>
-            <th>Type</th>
+            <th>Side</th>
             <th>Price (USDC)</th>
             <th>Filled / Size (USDC)</th>
             <th>Status</th>
@@ -552,12 +552,13 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
   };
 
   const calculateLiquidationPrice = (entryPrice: bigint, netQuantity: bigint): bigint | null => {
-    if (!marketPrice || !collateral || !totalMaintenanceMargin || netQuantity === 0n) return null;
+    if (!marketPrice || !collateral || netQuantity === 0n) return null;
+
     const { liquidationPrice } = computeLiquidationState(
       netQuantity,
       entryPrice,
       collateral,
-      totalMaintenanceMargin,
+      totalMaintenanceMargin ?? 0n,
       marketPrice,
       MAINTENANCE_MARGIN_PERCENT,
       QUANTITY_DECIMALS,
@@ -592,7 +593,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
           <thead>
             <tr>
               <th>Opened At</th>
-              <th>Type</th>
+              <th>Side</th>
               <th>Entry Price (USDC)</th>
               <th>Size (USDC)</th>
               <th>Max Size (USDC)</th>
@@ -749,7 +750,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, 
             <tr>
               <th>Opened At</th>
               {/* <th>Status</th> */}
-              <th>Type</th>
+              <th>Side</th>
               <th>Entry Price (USDC)</th>
               <th>Close Price (USDC)</th>
               <th>Size (USDC)</th>
