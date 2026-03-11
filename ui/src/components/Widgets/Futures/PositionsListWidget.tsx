@@ -268,7 +268,7 @@ export const PositionsListWidget = ({
           <thead>
             <tr>
               <th>Contract Expiration</th>
-              <th>Type</th>
+              <th>Side</th>
               <th>Price (USDC)</th>
               <th>Size (USDC)</th>
               <th>Margin</th>

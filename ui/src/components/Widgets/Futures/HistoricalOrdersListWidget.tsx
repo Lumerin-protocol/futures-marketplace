@@ -89,7 +89,7 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
           <thead>
             <tr>
               <th>Contract Expiration</th>
-              <th>Type</th>
+              <th>Side</th>
               <th>Price (USDC)</th>
               <th>Quantity</th>
               <th>Created</th>

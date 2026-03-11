@@ -109,7 +109,7 @@ export const HistoricalPositionsListWidget = ({
           <thead>
             <tr>
               <th>Contract Expiration</th>
-              <th>Type</th>
+              <th>Side</th>
               <th>Price (USDC)</th>
               <th>Quantity</th>
               <th>Realized PnL (USDC)</th>

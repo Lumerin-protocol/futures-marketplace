@@ -178,7 +178,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
           <thead>
             <tr>
               <th>Contract Expiration</th>
-              <th>Type</th>
+              <th>Side</th>
               <th>Price (USDC)</th>
               <th>Size (USDC)</th>
               <th>Margin</th>
