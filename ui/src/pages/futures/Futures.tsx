@@ -25,6 +25,8 @@ import { usePerpsPaymentTokenBalance } from "../../hooks/data/perps/usePerpsPaym
 import { useFundingRate } from "../../hooks/data/perps/useFundingRate";
 import { usePerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
 import { useUserPositionSessions } from "../../hooks/data/perps/useUserPositionSessions";
+import { useMaintenanceMarginPercent } from "../../hooks/data/perps/useMaintenanceMarginPercent";
+import { computeLiquidationState } from "../../hooks/data/perps/positionHelper";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
 import type { PositionBookPosition } from "../../hooks/data/usePositionBook";
 import type { ContractMode } from "../../types/types";
@@ -130,16 +132,17 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   } = useGetMarketPrice();
 
   // Get funding rate for perpetual contracts
-  const fundingRateQuery = useFundingRate({ refetch: true });
+  const fundingRateQuery = useFundingRate();
 
   // Get perps collection data (fees, margin requirements, etc)
   const perpsCollectionQuery = usePerpsCollection();
 
   // Fetch user position sessions for perpetual contracts
-  const positionSessionsQuery = useUserPositionSessions(
-    address,
-    { refetch: contractMode === "perpetual" }
-  );
+  const positionSessionsQuery = useUserPositionSessions(address);
+
+  // Read maintenanceMarginPercent from contract once (cached indefinitely)
+  const { data: maintenanceMarginPercentRaw } = useMaintenanceMarginPercent();
+  const maintenanceMarginPercent = maintenanceMarginPercentRaw !== undefined ? BigInt(maintenanceMarginPercentRaw) : undefined;
 
   const openPositionEntryPrice = useMemo(() => {
     if (contractMode !== "perpetual") return null;
@@ -148,6 +151,26 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     if (!openSession) return null;
     return Number(openSession.entryPrice) / 1e6;
   }, [contractMode, positionSessionsQuery.data?.positionSessions]);
+
+  const openPositionLiquidationPrice = useMemo(() => {
+    if (contractMode !== "perpetual") return null;
+    if (maintenanceMarginPercent === undefined) return null;
+    const sessions = positionSessionsQuery.data?.positionSessions || [];
+    const openSession = sessions.find((s) => s.status === "OPEN");
+    if (!openSession || !marketPrice || openSession.user.netQuantity === 0n) return null;
+    const collateral = balanceQuery.data as bigint | undefined;
+    if (!collateral) return null;
+    const { liquidationPrice } = computeLiquidationState(
+      openSession.user.netQuantity,
+      openSession.entryPrice,
+      collateral,
+      minMargin ?? 0n,
+      marketPrice,
+      maintenanceMarginPercent,
+      6n,
+    );
+    return Number(liquidationPrice) / 1e6;
+  }, [contractMode, positionSessionsQuery.data?.positionSessions, marketPrice, balanceQuery.data, minMargin, maintenanceMarginPercent]);
 
   // Calculate total unrealized PnL based on contract mode
   const totalUnrealizedPnL = useMemo(() => {
@@ -286,6 +309,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
             marketPrice={marketPrice}
             marketPriceFetchedAt={marketPriceFetchedAt}
             entryPrice={openPositionEntryPrice}
+            liquidationPrice={openPositionLiquidationPrice}
             timePeriod={chartTimePeriod}
             onTimePeriodChange={setChartTimePeriod}
           />
@@ -357,6 +381,10 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
               positionSessions={positionSessionsQuery.data?.positionSessions || []}
               positionSessionsLoading={positionSessionsQuery.isLoading}
               perpsBalance={balanceQuery.data as bigint | undefined}
+              maintenanceMarginPercent={maintenanceMarginPercent}
+              onPositionClosed={async () => {
+                await minMarginQuery.refetch();
+              }}
             />
           ) : (
             <OrdersPositionsTabWidget
