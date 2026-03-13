@@ -70,6 +70,7 @@ interface HashrateChartProps {
   marketPrice?: bigint | null;
   marketPriceFetchedAt?: Date;
   entryPrice?: number | null;
+  liquidationPrice?: number | null;
   timePeriod: TimePeriod;
   onTimePeriodChange: (period: TimePeriod) => void;
 }
@@ -82,6 +83,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   marketPrice,
   marketPriceFetchedAt,
   entryPrice,
+  liquidationPrice,
   timePeriod,
   onTimePeriodChange,
 }) => {
@@ -200,22 +202,53 @@ export const HashrateChart: FC<HashrateChartProps> = ({
           },
         },
         gridLineColor: "#333333",
-        plotLines: entryPrice
-          ? [
-              {
-                value: entryPrice,
-                color: "white",
-                dashStyle: "Dash",
-                width: 1,
-                zIndex: 5,
-                label: {
-                  text: `Entry: ${entryPrice.toFixed(2)}`,
-                  align: "right",
-                  style: { color: "white" },
-                },
+        plotLines: (() => {
+          const lines: Highcharts.YAxisPlotLinesOptions[] = [];
+
+          if (entryPrice) {
+            lines.push({
+              value: entryPrice,
+              color: "white",
+              dashStyle: "Dash",
+              width: 1,
+              zIndex: 5,
+              label: {
+                text: `Entry: ${entryPrice.toFixed(2)}`,
+                align: "right",
+                style: { color: "white" },
               },
-            ]
-          : [],
+            });
+          }
+
+          if (liquidationPrice != null && chartData.length > 0) {
+            const yValues = chartData.map((p) => (p as [number, number])[1]);
+            const dataMin = Math.min(...yValues);
+            const dataMax = Math.max(...yValues);
+            const padding = (dataMax - dataMin) * 0.1;
+            const visibleMin = dataMin - padding;
+            const visibleMax = dataMax + padding;
+
+            const isAbove = liquidationPrice > visibleMax;
+            const isBelow = liquidationPrice < visibleMin;
+            const clampedValue = isAbove ? visibleMax : isBelow ? visibleMin : liquidationPrice;
+            const arrow = isAbove ? " ↑" : isBelow ? " ↓" : "";
+
+            lines.push({
+              value: clampedValue,
+              color: "#ef4444",
+              dashStyle: "Dash",
+              width: 1,
+              zIndex: 5,
+              label: {
+                text: `Liq${arrow}: ${liquidationPrice.toFixed(2)}`,
+                align: "right",
+                style: { color: "#ef4444" },
+              },
+            });
+          }
+
+          return lines;
+        })(),
       },
       {
         // Secondary Y-axis for BTC Price (USD)

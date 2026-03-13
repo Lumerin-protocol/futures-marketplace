@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import styled from "@mui/material/styles/styled";
 import Modal from "@mui/material/Modal";
 import CloseIcon from "@mui/icons-material/Close";
@@ -18,6 +18,7 @@ import type { PositionSession } from "../../../hooks/data/perps/useUserPositionS
 import { useUserTrades } from "../../../hooks/data/perps/useUserTrades";
 import type { UserTrade } from "../../../hooks/data/perps/useUserTrades";
 import { computeLiquidationState } from "../../../hooks/data/perps/positionHelper";
+import { ClosePerpsPositionModal } from "./ClosePerpsPositionModal";
 
 type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "POSITION_HISTORY" | "ORDER_HISTORY";
 
@@ -35,6 +36,8 @@ interface PerpsOrdersPositionsTabWidgetProps {
   positionSessions: PositionSession[];
   positionSessionsLoading?: boolean;
   perpsBalance?: bigint;
+  maintenanceMarginPercent?: bigint;
+  onPositionClosed?: () => void | Promise<void>;
 }
 
 export const PerpsOrdersPositionsTabWidget = ({
@@ -51,12 +54,15 @@ export const PerpsOrdersPositionsTabWidget = ({
   positionSessions,
   positionSessionsLoading,
   perpsBalance,
+  maintenanceMarginPercent,
+  onPositionClosed,
 }: PerpsOrdersPositionsTabWidgetProps) => {
   const [activeTab, setActiveTab] = useState<TabType>("OPEN_ORDERS");
   const [openOrdersVisibleCount, setOpenOrdersVisibleCount] = useState(10);
   const [tradesVisibleCount, setTradesVisibleCount] = useState(10);
   const [positionHistoryVisibleCount, setPositionHistoryVisibleCount] = useState(10);
   const [orderHistoryVisibleCount, setOrderHistoryVisibleCount] = useState(10);
+  const [closePositionSession, setClosePositionSession] = useState<PositionSession | null>(null);
   const queryClient = useQueryClient();
   const { cancelOrderAsync, isPending: isCancelling } = useCancelPerpsOrder();
 
@@ -164,6 +170,8 @@ export const PerpsOrdersPositionsTabWidget = ({
               marketPrice={marketPrice}
               collateral={perpsBalance}
               totalMaintenanceMargin={minMargin ?? undefined}
+              maintenanceMarginPercent={maintenanceMarginPercent}
+              onClosePosition={setClosePositionSession}
             />
           </PositionsWrapper>
         )}
@@ -199,6 +207,15 @@ export const PerpsOrdersPositionsTabWidget = ({
           </OrdersWrapper>
         )}
       </Content>
+
+      <ClosePerpsPositionModal
+        open={closePositionSession !== null}
+        onClose={() => setClosePositionSession(null)}
+        session={closePositionSession}
+        marketPrice={marketPrice}
+        participantAddress={participantAddress}
+        onConfirmed={onPositionClosed}
+      />
     </TabContainer>
   );
 };
@@ -223,7 +240,11 @@ interface PerpsOpenOrdersTableProps {
   onLoadMore: () => void;
 }
 
+type OpenOrder = PerpsOpenOrdersTableProps["orders"][number];
+
 const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling, visibleCount, onLoadMore }: PerpsOpenOrdersTableProps) => {
+  const [pendingCancelOrder, setPendingCancelOrder] = useState<OpenOrder | null>(null);
+
   const formatPrice = (price: bigint) => {
     return (Number(price) / 1e6).toFixed(2); // Convert from wei to USDC
   };
@@ -334,10 +355,10 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling, 
               <td>
                 <ActionButtons>
                   <CancelButton 
-                    onClick={() => onCancelOrder(order.id)}
+                    onClick={() => setPendingCancelOrder(order)}
                     disabled={isCancelling}
                   >
-                    {isCancelling ? "Cancelling..." : "Cancel"}
+                    Cancel
                   </CancelButton>
                 </ActionButtons>
               </td>
@@ -350,7 +371,80 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling, 
           Load next 10 items
         </LoadMoreButton>
       )}
+
+      {pendingCancelOrder && (
+        <CancelOrderConfirmModal
+          open={true}
+          order={pendingCancelOrder}
+          onClose={() => setPendingCancelOrder(null)}
+          onConfirm={async () => {
+            await onCancelOrder(pendingCancelOrder.id);
+            setPendingCancelOrder(null);
+          }}
+          isCancelling={isCancelling}
+        />
+      )}
     </TableContainer>
+  );
+};
+
+// Cancel Order Confirmation Modal
+interface CancelOrderConfirmModalProps {
+  open: boolean;
+  order: OpenOrder;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+  isCancelling: boolean;
+}
+
+const CancelOrderConfirmModal = ({ open, order, onClose, onConfirm, isCancelling }: CancelOrderConfirmModalProps) => {
+  const formatPrice = (price: bigint) => (Number(price) / 1e6).toFixed(2);
+
+  const filledValue = ((Number(order.price) / 1e6) * (Number(order.filledQuantity) / 1e6)).toFixed(2);
+  const totalValue = ((Number(order.price) / 1e6) * (Number(order.originalQuantity) / 1e6)).toFixed(2);
+
+  return (
+    <Modal open={open} onClose={onClose}>
+      <CloseAllModalCard>
+        <IconButton className="close" sx={{ color: "white" }} onClick={onClose}>
+          <CloseIcon />
+        </IconButton>
+
+        <h2>Cancel Order</h2>
+
+        <CloseAllDescription>
+          Are you sure you want to cancel this order?
+        </CloseAllDescription>
+
+        <CloseAllSummary>
+          <SummaryRow>
+            <SummaryLabel>Side</SummaryLabel>
+            <SummaryValue>
+              <TypeBadge $type={order.isBuy ? "Long" : "Short"}>{order.isBuy ? "Long" : "Short"}</TypeBadge>
+            </SummaryValue>
+          </SummaryRow>
+          <SummaryRow>
+            <SummaryLabel>Price</SummaryLabel>
+            <SummaryValue>{formatPrice(order.price)} USDC</SummaryValue>
+          </SummaryRow>
+          <SummaryRow>
+            <SummaryLabel>Filled / Size (USDC)</SummaryLabel>
+            <SummaryValue>{filledValue} / {totalValue}</SummaryValue>
+          </SummaryRow>
+          <SummaryRow>
+            <SummaryLabel>Status</SummaryLabel>
+            <SummaryValue>{order.status === "PARTIAL" ? "Partial" : "Active"}</SummaryValue>
+          </SummaryRow>
+        </CloseAllSummary>
+
+        <CloseAllActions>
+          <ModalCancelButton onClick={onClose}>Go Back</ModalCancelButton>
+          <ModalConfirmButton onClick={onConfirm} disabled={isCancelling}>
+            {isCancelling ? "Cancelling..." : "Confirm Cancel"}
+          </ModalConfirmButton>
+        </CloseAllActions>
+      </CloseAllModalCard>
+    </Modal>
   );
 };
 
@@ -507,12 +601,13 @@ interface PerpsPositionsTableProps {
   marketPrice?: bigint;
   collateral?: bigint;
   totalMaintenanceMargin?: bigint;
+  maintenanceMarginPercent?: bigint;
+  onClosePosition?: (session: PositionSession) => void;
 }
 
-const MAINTENANCE_MARGIN_PERCENT = 10n;
 const QUANTITY_DECIMALS = 6n;
 
-const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collateral, totalMaintenanceMargin }: PerpsPositionsTableProps) => {
+const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collateral, totalMaintenanceMargin, maintenanceMarginPercent, onClosePosition }: PerpsPositionsTableProps) => {
   const [selectedSession, setSelectedSession] = useState<PositionSession | null>(null);
 
   const formatPrice = (price: bigint) => {
@@ -552,7 +647,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
   };
 
   const calculateLiquidationPrice = (entryPrice: bigint, netQuantity: bigint): bigint | null => {
-    if (!marketPrice || !collateral || netQuantity === 0n) return null;
+    if (!marketPrice || !collateral || netQuantity === 0n || maintenanceMarginPercent === undefined) return null;
 
     const { liquidationPrice } = computeLiquidationState(
       netQuantity,
@@ -560,7 +655,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
       collateral,
       totalMaintenanceMargin ?? 0n,
       marketPrice,
-      MAINTENANCE_MARGIN_PERCENT,
+      maintenanceMarginPercent,
       QUANTITY_DECIMALS,
     );
     return liquidationPrice;
@@ -594,13 +689,13 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
             <tr>
               <th>Opened At</th>
               <th>Side</th>
-              <th>Entry Price (USDC)</th>
-              <th>Size (USDC)</th>
-              <th>Max Size (USDC)</th>
+              <th>Entry Price</th>
+              <th>Size / Max Size</th>
+              <th>Net Quantity</th>
               <th>Fees (F/T)</th>
               <th>Unrealized PnL</th>
               <th>Realized PnL</th>
-              <th>Liquidation Price (USDC)</th>
+              <th>Liquidation Price</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -623,8 +718,12 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
                     </TypeBadge>
                   </td>
                   <td>{formatPrice(session.entryPrice)}</td>
-                  <td>{((Number(session.entryPrice) / 1e6) * (Number(displayQuantity < 0n ? -displayQuantity : displayQuantity) / 1e6)).toFixed(2)}</td>
-                  <td>{((Number(session.entryPrice) / 1e6) * (Number(session.maxQuantity) / 1e6)).toFixed(2)}</td>
+                  <td>
+                    {((Number(session.entryPrice) / 1e6) * (Number(displayQuantity < 0n ? -displayQuantity : displayQuantity) / 1e6)).toFixed(2)}
+                    {" / "}
+                    {((Number(session.entryPrice) / 1e6) * (Number(session.maxQuantity) / 1e6)).toFixed(2)}
+                  </td>
+                  <td>{(Number(displayQuantity < 0n ? -displayQuantity : displayQuantity) / 1e6).toFixed(6)}</td>
                   <td>{formatFees(session.fundingFees, session.tradingFees)}</td>
                   <td>
                     <PnLText $isPositive={unrealizedPnlValue >= 0}>
@@ -643,6 +742,9 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
                   </td>
                   <td>
                     <ActionButtons>
+                      <DetailsButton onClick={() => onClosePosition?.(session)}>
+                        Close
+                      </DetailsButton>
                       <DetailsButton onClick={() => setSelectedSession(session)}>
                         Trades
                       </DetailsButton>
@@ -1346,5 +1448,127 @@ const TradesTable = styled("table")`
   
   tbody tr:hover {
     background-color: rgba(255, 255, 255, 0.05);
+  }
+`;
+
+const CloseAllModalCard = styled(ModalCard)`
+  max-width: 700px;
+
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 500;
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+`;
+
+const CloseAllDescription = styled("p")`
+  color: #a7a9b6;
+  font-size: 0.875rem;
+  margin: 0 0 1.25rem 0;
+`;
+
+const CloseAllSummary = styled("div")`
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  margin-bottom: 1.25rem;
+`;
+
+const SummaryRow = styled("div")`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+`;
+
+const SummaryLabel = styled("span")`
+  color: #a7a9b6;
+  font-size: 0.875rem;
+`;
+
+const SummaryValue = styled("span")`
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+`;
+
+const ErrorText = styled("p")`
+  color: #ef4444;
+  font-size: 0.8125rem;
+  margin: 0 0 1rem 0;
+`;
+
+const CloseAllActions = styled("div")`
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+`;
+
+const ModalCancelButton = styled("button")`
+  padding: 0.5rem 1rem;
+  background: #4c5a5f;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background: #5a6b70;
+  }
+`;
+
+const ModalConfirmButton = styled("button")`
+  padding: 0.5rem 1rem;
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+
+  &:hover:not(:disabled) {
+    background: #dc2626;
+  }
+
+  &:disabled {
+    background: #6b7280;
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+`;
+
+const SimulatingText = styled("p")`
+  color: #a7a9b6;
+  font-size: 0.875rem;
+  margin: 0;
+  text-align: center;
+`;
+
+const SimResultsContainer = styled("div")`
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 0.5rem;
+
+  &::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
   }
 `;

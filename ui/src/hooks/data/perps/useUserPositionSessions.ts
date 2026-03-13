@@ -1,4 +1,3 @@
-import { backgroundRefetchOpts } from "../config";
 import { graphqlRequest } from "../graphql";
 import { useQuery } from "@tanstack/react-query";
 import { UserPositionSessionsQuery } from "./graphql-queries";
@@ -7,15 +6,13 @@ export const USER_POSITION_SESSIONS_QK = "UserPositionSessions";
 
 export const useUserPositionSessions = (
   address: `0x${string}` | undefined,
-  props?: {
-    refetch?: boolean;
-  },
 ) => {
   const query = useQuery({
     queryKey: [USER_POSITION_SESSIONS_QK, address],
     queryFn: () => fetchUserPositionSessionsAsync(address!),
     enabled: !!address,
-    ...(props?.refetch ? backgroundRefetchOpts : {}),
+    refetchInterval: 60_000,
+    refetchOnMount: false,
   });
 
   return query;

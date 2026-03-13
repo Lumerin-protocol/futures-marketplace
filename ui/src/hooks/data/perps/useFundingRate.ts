@@ -1,15 +1,14 @@
-import { backgroundRefetchOpts } from "../config";
 import { graphqlRequest } from "../graphql";
-import { QueryClient, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { FundingUpdatesQuery } from "./graphql-queries";
 
 export const FUNDING_RATE_QK = "FundingRate";
 
-export const useFundingRate = (props?: { refetch?: boolean }) => {
+export const useFundingRate = () => {
   const query = useQuery({
     queryKey: [FUNDING_RATE_QK],
     queryFn: () => fetchFundingRateAsync(),
-    ...(props?.refetch ? backgroundRefetchOpts : {}),
+    staleTime: Infinity,
   });
 
   return query;
