@@ -19,6 +19,8 @@ import { useUserTrades } from "../../../hooks/data/perps/useUserTrades";
 import type { UserTrade } from "../../../hooks/data/perps/useUserTrades";
 import { computeLiquidationState } from "../../../hooks/data/perps/positionHelper";
 import { ClosePerpsPositionModal } from "./ClosePerpsPositionModal";
+import { ModifyPerpsOrderModal } from "./ModifyPerpsOrderModal";
+import type { PerpsOrder } from "../../../hooks/data/perps/useUserPerpsOrders";
 
 type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "POSITION_HISTORY" | "ORDER_HISTORY";
 
@@ -63,6 +65,7 @@ export const PerpsOrdersPositionsTabWidget = ({
   const [positionHistoryVisibleCount, setPositionHistoryVisibleCount] = useState(10);
   const [orderHistoryVisibleCount, setOrderHistoryVisibleCount] = useState(10);
   const [closePositionSession, setClosePositionSession] = useState<PositionSession | null>(null);
+  const [modifyOrder, setModifyOrder] = useState<PerpsOrder | null>(null);
   const queryClient = useQueryClient();
   const { cancelOrderAsync, isPending: isCancelling } = useCancelPerpsOrder();
 
@@ -156,6 +159,7 @@ export const PerpsOrdersPositionsTabWidget = ({
               orders={openOrdersQuery.data?.data?.orders || []}
               isLoading={openOrdersQuery.isLoading}
               onCancelOrder={handleCancelOrder}
+              onModifyOrder={setModifyOrder}
               isCancelling={isCancelling}
               visibleCount={openOrdersVisibleCount}
               onLoadMore={() => setOpenOrdersVisibleCount(c => c + 10)}
@@ -216,6 +220,14 @@ export const PerpsOrdersPositionsTabWidget = ({
         participantAddress={participantAddress}
         onConfirmed={onPositionClosed}
       />
+
+      <ModifyPerpsOrderModal
+        open={modifyOrder !== null}
+        onClose={() => setModifyOrder(null)}
+        order={modifyOrder}
+        marketPrice={marketPrice}
+        participantAddress={participantAddress}
+      />
     </TabContainer>
   );
 };
@@ -235,6 +247,7 @@ interface PerpsOpenOrdersTableProps {
   }>;
   isLoading?: boolean;
   onCancelOrder: (orderId: string) => Promise<void>;
+  onModifyOrder: (order: PerpsOrder) => void;
   isCancelling: boolean;
   visibleCount: number;
   onLoadMore: () => void;
@@ -242,7 +255,7 @@ interface PerpsOpenOrdersTableProps {
 
 type OpenOrder = PerpsOpenOrdersTableProps["orders"][number];
 
-const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling, visibleCount, onLoadMore }: PerpsOpenOrdersTableProps) => {
+const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder, isCancelling, visibleCount, onLoadMore }: PerpsOpenOrdersTableProps) => {
   const [pendingCancelOrder, setPendingCancelOrder] = useState<OpenOrder | null>(null);
 
   const formatPrice = (price: bigint) => {
@@ -354,6 +367,12 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, isCancelling, 
               </td>
               <td>
                 <ActionButtons>
+                  <ModifyButton
+                    onClick={() => onModifyOrder(order as PerpsOrder)}
+                    disabled={isCancelling}
+                  >
+                    Modify
+                  </ModifyButton>
                   <CancelButton 
                     onClick={() => setPendingCancelOrder(order)}
                     disabled={isCancelling}
@@ -440,7 +459,7 @@ const CancelOrderConfirmModal = ({ open, order, onClose, onConfirm, isCancelling
         <CloseAllActions>
           <ModalCancelButton onClick={onClose}>Go Back</ModalCancelButton>
           <ModalConfirmButton onClick={onConfirm} disabled={isCancelling}>
-            {isCancelling ? "Cancelling..." : "Confirm Cancel"}
+            {isCancelling ? "Cancelling..." : "Confirms"}
           </ModalConfirmButton>
         </CloseAllActions>
       </CloseAllModalCard>
@@ -1284,6 +1303,33 @@ const ActionButtons = styled("div")`
   display: flex;
   gap: 0.5rem;
   align-items: center;
+`;
+
+const ModifyButton = styled("button")`
+  padding: 0.5rem 0.875rem;
+  background: #4c5a5f;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+
+  &:hover:not(:disabled) {
+    background: #5a6b70;
+    transform: translateY(-1px);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    background: #6b7280;
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
 `;
 
 const CancelButton = styled("button")`

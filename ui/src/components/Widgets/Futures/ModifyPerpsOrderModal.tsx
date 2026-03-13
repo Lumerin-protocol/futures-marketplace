@@ -1,9 +1,10 @@
-import { useEffect, useCallback, useMemo } from "react";
+import { useEffect, useCallback, useState } from "react";
 import Modal from "@mui/material/Modal";
 import CloseIcon from "@mui/icons-material/Close";
 import IconButton from "@mui/material/IconButton";
-import type { PositionSession } from "../../../hooks/data/perps/useUserPositionSessions";
+import type { PerpsOrder } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { useCreatePerpsOrder } from "../../../hooks/data/perps/useCreatePerpsOrder";
+import { useCancelPerpsOrder } from "../../../hooks/data/perps/useCancelPerpsOrder";
 import { useQueryClient } from "@tanstack/react-query";
 import { USER_PERPS_ORDERS_QK } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { USER_POSITION_SESSIONS_QK } from "../../../hooks/data/perps/useUserPositionSessions";
@@ -18,83 +19,76 @@ import {
   InfoLabel,
   InfoValue,
   TypeBadge,
-  PnLText,
   ErrorText,
   ModalActions,
   ModalCancelButton,
 } from "./PerpsOrderFormFields";
-import { useState } from "react";
 
-interface ClosePerpsPositionModalProps {
+interface ModifyPerpsOrderModalProps {
   open: boolean;
   onClose: () => void;
-  session: PositionSession | null;
+  order: PerpsOrder | null;
   marketPrice?: bigint;
   participantAddress?: `0x${string}`;
   priceStep?: number;
   onConfirmed?: () => void | Promise<void>;
 }
 
-export const ClosePerpsPositionModal = ({
+export const ModifyPerpsOrderModal = ({
   open,
   onClose,
-  session,
+  order,
   marketPrice,
   participantAddress,
   priceStep = 0.01,
   onConfirmed,
-}: ClosePerpsPositionModalProps) => {
-  const [isClosing, setIsClosing] = useState(false);
-  const [closeError, setCloseError] = useState<string | null>(null);
+}: ModifyPerpsOrderModalProps) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const { createOrderAsync } = useCreatePerpsOrder();
+  const { cancelOrderAsync } = useCancelPerpsOrder();
   const queryClient = useQueryClient();
 
-  const netQty = session?.user.netQuantity ?? 0n;
-  const isLong = netQty > 0n;
-  const absNetQty = netQty < 0n ? -netQty : netQty;
-  const maxQuantity = Number(absNetQty) / 1e6;
-  const closeSide = isLong ? "Short" : "Long";
+  // Remaining (unfilled) quantity: works for both ACTIVE (filled=0) and PARTIAL.
+  const remainingQtyBig = order
+    ? order.originalQuantity - order.filledQuantity
+    : 0n;
+  const maxQuantity = Number(remainingQtyBig) / 1e6;
 
   const form = usePerpsOrderForm({ maxQuantity, priceStep });
 
   useEffect(() => {
-    if (!open || !session) return;
-    const initPrice = marketPrice
-      ? (Number(marketPrice) / 1e6).toFixed(2)
-      : (Number(session.entryPrice) / 1e6).toFixed(2);
+    if (!open || !order) return;
+    const initPrice = (Number(order.price) / 1e6).toFixed(2);
     form.reset(initPrice, 100);
-    setCloseError(null);
+    setSubmitError(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, session]);
-
-  const unrealizedPnl = useMemo(() => {
-    if (!session || !marketPrice || netQty === 0n) return 0n;
-    const priceDiff = marketPrice - session.entryPrice;
-    return (priceDiff * netQty) / 1_000_000n;
-  }, [session, marketPrice, netQty]);
-
-  const unrealizedPnlValue = Number(unrealizedPnl) / 1e6;
+  }, [open, order]);
 
   const handleClose = useCallback(() => {
-    setCloseError(null);
-    setIsClosing(false);
+    setSubmitError(null);
+    setIsSubmitting(false);
     onClose();
   }, [onClose]);
 
   const handleConfirm = useCallback(async () => {
-    if (!session || netQty === 0n) return;
-    const closeQty = form.getCurrentQuantity();
-    if (closeQty <= 0) return;
+    if (!order) return;
+    const newQty = form.getCurrentQuantity();
+    if (newQty <= 0 || form.currentPrice <= 0) return;
 
-    setIsClosing(true);
-    setCloseError(null);
+    setIsSubmitting(true);
+    setSubmitError(null);
 
     try {
-      const closePriceBig = BigInt(Math.round(form.currentPrice * 1e6));
-      const signedQty = isLong ? -closeQty : closeQty;
+      // 1. Cancel the existing order
+      await cancelOrderAsync({ orderId: order.id as `0x${string}` });
 
-      await createOrderAsync({ price: closePriceBig, quantity: signedQty });
+      // 2. Place a new order with the updated price & quantity (same side)
+      const newPriceBig = BigInt(Math.round(form.currentPrice * 1e6));
+      // Positive quantity = Buy (Long), negative = Sell (Short)
+      const signedQty = order.isBuy ? newQty : -newQty;
+      await createOrderAsync({ price: newPriceBig, quantity: signedQty });
 
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: [getOrderBookQueryKey("perpetual")] }),
@@ -106,18 +100,19 @@ export const ClosePerpsPositionModal = ({
       if (onConfirmed) await onConfirmed();
       handleClose();
     } catch (err) {
-      setCloseError(err instanceof Error ? err.message : "Failed to close position");
+      setSubmitError(err instanceof Error ? err.message : "Failed to modify order");
     } finally {
-      setIsClosing(false);
+      setIsSubmitting(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, netQty, form.currentPrice, isLong, createOrderAsync, queryClient, participantAddress, handleClose, form.amount, form.amountMode, onConfirmed]);
+  }, [order, form.currentPrice, form.amount, form.amountMode, createOrderAsync, cancelOrderAsync, queryClient, participantAddress, handleClose, onConfirmed]);
 
-  if (!session) return null;
+  if (!order) return null;
 
+  const side = order.isBuy ? "Long" : "Short";
   const formatPrice = (p: bigint) => (Number(p) / 1e6).toFixed(2);
-  const closeQtyDisplay = form.getCurrentQuantity();
-  const closeSizeDisplay = form.getCurrentSize();
+  const newQtyDisplay = form.getCurrentQuantity();
+  const newSizeDisplay = form.getCurrentSize();
 
   return (
     <Modal open={open} onClose={handleClose}>
@@ -126,18 +121,26 @@ export const ClosePerpsPositionModal = ({
           <CloseIcon />
         </IconButton>
 
-        <h2>Close Position</h2>
+        <h2>Modify Order</h2>
 
         <PositionInfoSection>
           <InfoRow>
-            <InfoLabel>Close Order Side</InfoLabel>
+            <InfoLabel>Side</InfoLabel>
             <InfoValue>
-              <TypeBadge $type={closeSide}>{closeSide}</TypeBadge>
+              <TypeBadge $type={side}>{side}</TypeBadge>
             </InfoValue>
           </InfoRow>
           <InfoRow>
-            <InfoLabel>Entry Price</InfoLabel>
-            <InfoValue>{formatPrice(session.entryPrice)} USDC</InfoValue>
+            <InfoLabel>Original Price</InfoLabel>
+            <InfoValue>{formatPrice(order.price)} USDC</InfoValue>
+          </InfoRow>
+          <InfoRow>
+            <InfoLabel>Filled / Original Qty</InfoLabel>
+            <InfoValue>
+              {(Number(order.filledQuantity) / 1e6).toFixed(6)}
+              {" / "}
+              {(Number(order.originalQuantity) / 1e6).toFixed(6)}
+            </InfoValue>
           </InfoRow>
           {marketPrice !== undefined && (
             <InfoRow>
@@ -145,14 +148,6 @@ export const ClosePerpsPositionModal = ({
               <InfoValue>{formatPrice(marketPrice)} USDC</InfoValue>
             </InfoRow>
           )}
-          <InfoRow>
-            <InfoLabel>Unrealized PnL</InfoLabel>
-            <InfoValue>
-              <PnLText $isPositive={unrealizedPnlValue >= 0}>
-                {unrealizedPnlValue >= 0 ? "+" : ""}{unrealizedPnlValue.toFixed(2)} USDC
-              </PnLText>
-            </InfoValue>
-          </InfoRow>
         </PositionInfoSection>
 
         <PerpsOrderFormFields
@@ -160,12 +155,12 @@ export const ClosePerpsPositionModal = ({
           amount={form.amount}
           amountMode={form.amountMode}
           sliderValue={form.sliderValue}
-          disabled={isClosing}
-          priceLabel="Close Price (USDC)"
-          quantityLabel="Close Quantity"
-          sizeLabel="Close Size (USDC)"
-          currentQuantity={closeQtyDisplay}
-          currentSize={closeSizeDisplay}
+          disabled={isSubmitting}
+          priceLabel="New Price (USDC)"
+          quantityLabel="New Quantity"
+          sizeLabel="New Size (USDC)"
+          currentQuantity={newQtyDisplay}
+          currentSize={newSizeDisplay}
           onPriceChange={form.handlePriceChange}
           onAmountChange={form.handleAmountChange}
           onAmountModeChange={form.handleAmountModeChange}
@@ -174,14 +169,14 @@ export const ClosePerpsPositionModal = ({
           onDecrementPrice={form.decrementPrice}
         />
 
-        {closeError && <ErrorText>{closeError}</ErrorText>}
+        {submitError && <ErrorText>{submitError}</ErrorText>}
 
         <ModalActions>
           <ModalCancelButton
             onClick={handleConfirm}
-            disabled={isClosing || closeQtyDisplay <= 0 || form.currentPrice <= 0}
+            disabled={isSubmitting || newQtyDisplay <= 0 || form.currentPrice <= 0}
           >
-            {isClosing ? "Closing..." : "Confirm Close"}
+            {isSubmitting ? "Modifying..." : "Confirm"}
           </ModalCancelButton>
         </ModalActions>
       </PerpsModalCard>
