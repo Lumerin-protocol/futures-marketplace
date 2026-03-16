@@ -4,6 +4,7 @@ import Modal from "@mui/material/Modal";
 import CloseIcon from "@mui/icons-material/Close";
 import IconButton from "@mui/material/IconButton";
 import { ModalCard } from "../../Modal.styled";
+import { ModalActions, ModalCancelButton, ModalConfirmButton } from "./PerpsOrderFormFields";
 import type { PositionSession } from "../../../hooks/data/perps/useUserPositionSessions";
 import { readContract } from "@wagmi/core";
 import { PerpsABI } from "../../../abi/Perps";
@@ -139,12 +140,12 @@ export const CloseAllModal = ({ open, onClose, positionSessions, marketPrice, on
 
             {simError && <ErrorText>{simError}</ErrorText>}
 
-            <Actions>
-              <CancelButton onClick={handleClose}>Cancel</CancelButton>
-              <ConfirmButton onClick={handleConfirm} disabled={isSimulating || openPositions.length === 0}>
+            <ModalActions>
+              <ModalCancelButton onClick={handleClose}>Cancel</ModalCancelButton>
+              <ModalConfirmButton onClick={handleConfirm} disabled={isSimulating || openPositions.length === 0}>
                 {isSimulating ? "Simulating..." : "Confirm"}
-              </ConfirmButton>
-            </Actions>
+              </ModalConfirmButton>
+            </ModalActions>
           </>
         ) : (
           <>
@@ -181,9 +182,9 @@ export const CloseAllModal = ({ open, onClose, positionSessions, marketPrice, on
               </Table>
             </SimResultsContainer>
 
-            <Actions>
-              <CancelButton onClick={handleClose}>Close</CancelButton>
-            </Actions>
+            <ModalActions>
+              <ModalCancelButton onClick={handleClose}>Close</ModalCancelButton>
+            </ModalActions>
           </>
         )}
       </CloseAllModalCard>
@@ -241,50 +242,6 @@ const ErrorText = styled("p")`
   margin: 0 0 1rem 0;
 `;
 
-const Actions = styled("div")`
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  margin-top: 1.25rem;
-`;
-
-const CancelButton = styled("button")`
-  padding: 0.5rem 1rem;
-  background: #4c5a5f;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-
-  &:hover {
-    background: #5a6b70;
-  }
-`;
-
-const ConfirmButton = styled("button")`
-  padding: 0.5rem 1rem;
-  background: #ef4444;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-
-  &:hover:not(:disabled) {
-    background: #dc2626;
-  }
-
-  &:disabled {
-    background: #6b7280;
-    cursor: not-allowed;
-    opacity: 0.6;
-  }
-`;
 
 const SimResultsContainer = styled("div")`
   width: 100%;

@@ -169,7 +169,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       maintenanceMarginPercent,
       6n,
     );
-    return Number(liquidationPrice) / 1e6;
+    return liquidationPrice > 0n ? Number(liquidationPrice) / 1e6 : null;
   }, [contractMode, positionSessionsQuery.data?.positionSessions, marketPrice, balanceQuery.data, minMargin, maintenanceMarginPercent]);
 
   // Calculate total unrealized PnL based on contract mode

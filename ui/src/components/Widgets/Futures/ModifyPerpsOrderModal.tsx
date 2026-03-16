@@ -9,7 +9,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { USER_PERPS_ORDERS_QK } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { USER_POSITION_SESSIONS_QK } from "../../../hooks/data/perps/useUserPositionSessions";
 import { USER_PERPS_TRADES_QK } from "../../../hooks/data/perps/useUserPerpsTrades";
-import { getOrderBookQueryKey } from "../../../hooks/data/orderBookHelpers";
+import { getOrderBookQueryKey, waitForOrderBookBlockNumber } from "../../../hooks/data/orderBookHelpers";
+import { usePublicClient } from "wagmi";
 import {
   usePerpsOrderForm,
   PerpsOrderFormFields,
@@ -22,6 +23,7 @@ import {
   ErrorText,
   ModalActions,
   ModalCancelButton,
+  ModalConfirmButton,
 } from "./PerpsOrderFormFields";
 
 interface ModifyPerpsOrderModalProps {
@@ -49,6 +51,7 @@ export const ModifyPerpsOrderModal = ({
   const { createOrderAsync } = useCreatePerpsOrder();
   const { cancelOrderAsync } = useCancelPerpsOrder();
   const queryClient = useQueryClient();
+  const publicClient = usePublicClient();
 
   // Remaining (unfilled) quantity: works for both ACTIVE (filled=0) and PARTIAL.
   const remainingQtyBig = order
@@ -82,13 +85,21 @@ export const ModifyPerpsOrderModal = ({
 
     try {
       // 1. Cancel the existing order
-      await cancelOrderAsync({ orderId: order.id as `0x${string}` });
+      const cancelHash = await cancelOrderAsync({ orderId: order.id as `0x${string}` });
+      if (cancelHash && publicClient) {
+        const cancelReceipt = await publicClient.waitForTransactionReceipt({ hash: cancelHash });
+        await waitForOrderBookBlockNumber(cancelReceipt.blockNumber, queryClient, "perpetual");
+      }
 
       // 2. Place a new order with the updated price & quantity (same side)
       const newPriceBig = BigInt(Math.round(form.currentPrice * 1e6));
       // Positive quantity = Buy (Long), negative = Sell (Short)
       const signedQty = order.isBuy ? newQty : -newQty;
-      await createOrderAsync({ price: newPriceBig, quantity: signedQty });
+      const createHash = await createOrderAsync({ price: newPriceBig, quantity: signedQty });
+      if (createHash && publicClient) {
+        const createReceipt = await publicClient.waitForTransactionReceipt({ hash: createHash });
+        await waitForOrderBookBlockNumber(createReceipt.blockNumber, queryClient, "perpetual");
+      }
 
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: [getOrderBookQueryKey("perpetual")] }),
@@ -105,7 +116,7 @@ export const ModifyPerpsOrderModal = ({
       setIsSubmitting(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order, form.currentPrice, form.amount, form.amountMode, createOrderAsync, cancelOrderAsync, queryClient, participantAddress, handleClose, onConfirmed]);
+  }, [order, form.currentPrice, form.amount, form.amountMode, createOrderAsync, cancelOrderAsync, queryClient, publicClient, participantAddress, handleClose, onConfirmed]);
 
   if (!order) return null;
 
@@ -172,12 +183,15 @@ export const ModifyPerpsOrderModal = ({
         {submitError && <ErrorText>{submitError}</ErrorText>}
 
         <ModalActions>
-          <ModalCancelButton
+          <ModalCancelButton onClick={handleClose} disabled={isSubmitting}>
+            Cancel
+          </ModalCancelButton>
+          <ModalConfirmButton
             onClick={handleConfirm}
             disabled={isSubmitting || newQtyDisplay <= 0 || form.currentPrice <= 0}
           >
             {isSubmitting ? "Modifying..." : "Confirm"}
-          </ModalCancelButton>
+          </ModalConfirmButton>
         </ModalActions>
       </PerpsModalCard>
     </Modal>
