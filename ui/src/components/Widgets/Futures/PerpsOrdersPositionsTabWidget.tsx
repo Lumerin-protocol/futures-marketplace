@@ -459,7 +459,7 @@ const CancelOrderConfirmModal = ({ open, order, onClose, onConfirm, isCancelling
         <CloseAllActions>
           <ModalCancelButton onClick={onClose}>Go Back</ModalCancelButton>
           <ModalConfirmButton onClick={onConfirm} disabled={isCancelling}>
-            {isCancelling ? "Cancelling..." : "Confirms"}
+            {isCancelling ? "Cancelling..." : "Confirm"}
           </ModalConfirmButton>
         </CloseAllActions>
       </CloseAllModalCard>
@@ -755,9 +755,9 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
                     </PnLText>
                   </td>
                   <td>
-                    {liquidationPrice !== null
+                    {liquidationPrice !== null && liquidationPrice > 0n
                       ? formatPrice(liquidationPrice)
-                      : "-"}
+                      : "N/A"}
                   </td>
                   <td>
                     <ActionButtons>

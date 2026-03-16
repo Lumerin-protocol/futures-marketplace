@@ -8,7 +8,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { USER_PERPS_ORDERS_QK } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { USER_POSITION_SESSIONS_QK } from "../../../hooks/data/perps/useUserPositionSessions";
 import { USER_PERPS_TRADES_QK } from "../../../hooks/data/perps/useUserPerpsTrades";
-import { getOrderBookQueryKey } from "../../../hooks/data/orderBookHelpers";
+import { getOrderBookQueryKey, waitForOrderBookBlockNumber } from "../../../hooks/data/orderBookHelpers";
+import { usePublicClient } from "wagmi";
 import {
   usePerpsOrderForm,
   PerpsOrderFormFields,
@@ -22,6 +23,7 @@ import {
   ErrorText,
   ModalActions,
   ModalCancelButton,
+  ModalConfirmButton,
 } from "./PerpsOrderFormFields";
 import { useState } from "react";
 
@@ -49,6 +51,7 @@ export const ClosePerpsPositionModal = ({
 
   const { createOrderAsync } = useCreatePerpsOrder();
   const queryClient = useQueryClient();
+  const publicClient = usePublicClient();
 
   const netQty = session?.user.netQuantity ?? 0n;
   const isLong = netQty > 0n;
@@ -94,7 +97,12 @@ export const ClosePerpsPositionModal = ({
       const closePriceBig = BigInt(Math.round(form.currentPrice * 1e6));
       const signedQty = isLong ? -closeQty : closeQty;
 
-      await createOrderAsync({ price: closePriceBig, quantity: signedQty });
+      const txHash = await createOrderAsync({ price: closePriceBig, quantity: signedQty });
+
+      if (txHash && publicClient) {
+        const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+        await waitForOrderBookBlockNumber(receipt.blockNumber, queryClient, "perpetual");
+      }
 
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: [getOrderBookQueryKey("perpetual")] }),
@@ -111,13 +119,19 @@ export const ClosePerpsPositionModal = ({
       setIsClosing(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, netQty, form.currentPrice, isLong, createOrderAsync, queryClient, participantAddress, handleClose, form.amount, form.amountMode, onConfirmed]);
+  }, [session, netQty, form.currentPrice, isLong, createOrderAsync, queryClient, publicClient, participantAddress, handleClose, form.amount, form.amountMode, onConfirmed]);
 
   if (!session) return null;
 
   const formatPrice = (p: bigint) => (Number(p) / 1e6).toFixed(2);
   const closeQtyDisplay = form.getCurrentQuantity();
   const closeSizeDisplay = form.getCurrentSize();
+
+  const entryPriceValue = Number(session.entryPrice) / 1e6;
+  const realizedPnl =
+    form.currentPrice > 0 && closeQtyDisplay > 0
+      ? (form.currentPrice - entryPriceValue) * closeQtyDisplay * (isLong ? 1 : -1)
+      : null;
 
   return (
     <Modal open={open} onClose={handleClose}>
@@ -166,6 +180,7 @@ export const ClosePerpsPositionModal = ({
           sizeLabel="Close Size (USDC)"
           currentQuantity={closeQtyDisplay}
           currentSize={closeSizeDisplay}
+          realizedPnl={realizedPnl}
           onPriceChange={form.handlePriceChange}
           onAmountChange={form.handleAmountChange}
           onAmountModeChange={form.handleAmountModeChange}
@@ -177,12 +192,15 @@ export const ClosePerpsPositionModal = ({
         {closeError && <ErrorText>{closeError}</ErrorText>}
 
         <ModalActions>
-          <ModalCancelButton
+          <ModalCancelButton onClick={handleClose} disabled={isClosing}>
+            Cancel
+          </ModalCancelButton>
+          <ModalConfirmButton
             onClick={handleConfirm}
             disabled={isClosing || closeQtyDisplay <= 0 || form.currentPrice <= 0}
           >
-            {isClosing ? "Closing..." : "Confirm Close"}
-          </ModalCancelButton>
+            {isClosing ? "Closing..." : "Confirm"}
+          </ModalConfirmButton>
         </ModalActions>
       </PerpsModalCard>
     </Modal>

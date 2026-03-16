@@ -23,12 +23,8 @@ export function usePerpsOrderForm({
   const currentPrice = parseFloat(price) || 0;
   const maxSize = maxQuantity * currentPrice;
 
-  // When slider is at 100% in size mode the amount field holds the net quantity
-  // directly to avoid float precision loss on qty = amount / price.
-  const isNetQuantityInField = amountMode === "size" && sliderValue === 100;
-
   const getCurrentQuantity = (): number => {
-    if (isNetQuantityInField) return maxQuantity;
+    if (sliderValue === 100) return maxQuantity;
     const parsed = parseFloat(amount);
     if (isNaN(parsed) || parsed <= 0) return 0;
     if (amountMode === "size") return currentPrice > 0 ? parsed / currentPrice : 0;
@@ -36,7 +32,7 @@ export function usePerpsOrderForm({
   };
 
   const getCurrentSize = (): number => {
-    if (isNetQuantityInField) return maxQuantity * currentPrice;
+    if (sliderValue === 100) return maxQuantity * currentPrice;
     const parsed = parseFloat(amount);
     if (isNaN(parsed) || parsed <= 0) return 0;
     if (amountMode === "quantity") return parsed * currentPrice;
@@ -69,14 +65,18 @@ export function usePerpsOrderForm({
     setSliderValue(pct);
     if (amountMode === "size") {
       if (pct === 100) {
-        setAmount(maxQuantity > 0 ? maxQuantity.toFixed(6) : "0");
+        setAmount(maxSize > 0 ? maxSize.toFixed(2) : "0");
       } else {
         const newSize = (maxSize * pct) / 100;
         setAmount(newSize > 0 ? newSize.toFixed(2) : "0");
       }
     } else {
-      const newQty = (maxQuantity * pct) / 100;
-      setAmount(newQty > 0 ? newQty.toFixed(6) : "0");
+      if (pct === 100) {
+        setAmount(maxQuantity > 0 ? maxQuantity.toFixed(6) : "0");
+      } else {
+        const newQty = (maxQuantity * pct) / 100;
+        setAmount(newQty > 0 ? newQty.toFixed(6) : "0");
+      }
     }
   };
 
@@ -106,14 +106,19 @@ export function usePerpsOrderForm({
     const initPriceNum = parseFloat(initialPriceStr) || 0;
     if (amountMode === "size") {
       if (initialSlider === 100) {
-        setAmount(maxQuantity > 0 ? maxQuantity.toFixed(6) : "0");
+        const initMaxSize = maxQuantity * initPriceNum;
+        setAmount(initMaxSize > 0 ? initMaxSize.toFixed(2) : "0");
       } else {
         const initSize = (maxQuantity * initPriceNum * initialSlider) / 100;
         setAmount(initSize > 0 ? initSize.toFixed(2) : "0");
       }
     } else {
-      const initQty = (maxQuantity * initialSlider) / 100;
-      setAmount(initQty > 0 ? initQty.toFixed(6) : "0");
+      if (initialSlider === 100) {
+        setAmount(maxQuantity > 0 ? maxQuantity.toFixed(6) : "0");
+      } else {
+        const initQty = (maxQuantity * initialSlider) / 100;
+        setAmount(initQty > 0 ? initQty.toFixed(6) : "0");
+      }
     }
   };
 
@@ -124,7 +129,6 @@ export function usePerpsOrderForm({
     sliderValue,
     currentPrice,
     maxSize,
-    isNetQuantityInField,
     getCurrentQuantity,
     getCurrentSize,
     handlePriceChange,
@@ -150,6 +154,7 @@ interface PerpsOrderFormFieldsProps {
   sizeLabel?: string;
   currentQuantity: number;
   currentSize: number;
+  realizedPnl?: number | null;
   onPriceChange: (price: string) => void;
   onAmountChange: (amount: string) => void;
   onAmountModeChange: (mode: AmountMode) => void;
@@ -169,6 +174,7 @@ export const PerpsOrderFormFields = ({
   sizeLabel = "Size (USDC)",
   currentQuantity,
   currentSize,
+  realizedPnl,
   onPriceChange,
   onAmountChange,
   onAmountModeChange,
@@ -254,6 +260,14 @@ export const PerpsOrderFormFields = ({
         <SummaryLabel>{sizeLabel}</SummaryLabel>
         <SummaryValue>{currentSize.toFixed(2)}</SummaryValue>
       </SummaryRow>
+      {realizedPnl != null && (
+        <SummaryRow>
+          <SummaryLabel>Expected Realized PnL</SummaryLabel>
+          <SummaryPnLValue $isPositive={realizedPnl >= 0}>
+            {realizedPnl >= 0 ? "+" : ""}{realizedPnl.toFixed(2)} USDC
+          </SummaryPnLValue>
+        </SummaryRow>
+      )}
     </OrderSummary>
   </>
 );
@@ -354,11 +368,11 @@ export const ModeButton = styled("button")<{ $active: boolean }>`
   cursor: pointer;
   border: none;
   transition: background 0.15s ease, color 0.15s ease;
-  background: ${(props) => (props.$active ? "#509EBA" : "transparent")};
+  background: ${(props) => (props.$active ? "rgba(255,255,255,0.15)" : "transparent")};
   color: ${(props) => (props.$active ? "#fff" : "#a7a9b6")};
 
   &:hover:not(:disabled) {
-    background: ${(props) => (props.$active ? "#509EBA" : "rgba(255,255,255,0.08)")};
+    background: ${(props) => (props.$active ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.08)")};
     color: #fff;
   }
 
@@ -552,6 +566,12 @@ export const SummaryValue = styled("span")`
   font-weight: 500;
 `;
 
+export const SummaryPnLValue = styled("span")<{ $isPositive: boolean }>`
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: ${(props) => (props.$isPositive ? "#22c55e" : "#ef4444")};
+`;
+
 export const ErrorText = styled("p")`
   color: #ef4444;
   font-size: 0.8125rem;
@@ -584,3 +604,5 @@ export const ModalCancelButton = styled("button")`
     cursor: not-allowed;
   }
 `;
+
+export const ModalConfirmButton = styled(ModalCancelButton)``;
