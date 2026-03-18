@@ -44,6 +44,7 @@ interface Props {
   contractMode?: ContractMode;
   perpsCollection?: PerpsCollection;
   leverage?: number; // Leverage value for perps mode (e.g., 10 for 10x)
+  isMarketOrder?: boolean;
 }
 
 export const PlaceOrderForm: FC<Props> = ({
@@ -58,6 +59,7 @@ export const PlaceOrderForm: FC<Props> = ({
   contractMode = "futures",
   perpsCollection,
   leverage = 10,
+  isMarketOrder = false,
 }) => {
   // Conditionally use futures or perps create order hook
   const futuresCreateOrder = useCreateOrder();
@@ -198,7 +200,9 @@ export const PlaceOrderForm: FC<Props> = ({
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-300">{contractMode === "futures" ? "Price Per Day:" : "Price:"}</span>
-                <span className="text-white">{Number(price) / 1e6} USDC</span>
+                <span className="text-white">
+                  {isMarketOrder ? "Market" : `${Number(price) / 1e6} USDC`}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-300">Quantity:</span>

@@ -35,6 +35,8 @@ import { useAccount } from "wagmi";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
 import { handleNumericDecimalInput, handleNumericDecimalInput6Decimals } from "../../Forms/Shared/AmountInputForm";
 import { useOrderFee } from "../../../hooks/data/useOrderFee";
+import { ModeToggle, ModeButton, type AmountMode } from "./PerpsOrderFormFields";
+import { useSimulatePerpsOrder } from "../../../hooks/data/perps/useSimulatePerpsOrder";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -60,7 +62,12 @@ interface PlaceOrderWidgetProps {
   accountBalance?: AccountBalance;
   balanceQuery: BalanceQueryResult;
   perpsCollection?: PerpsCollection;
+  quantityUnit?: string;
 }
+
+// Slippage applied to market orders in perpetual mode so the order crosses the spread.
+// Buy orders are priced this much above market; sell orders this much below.
+const MARKET_SLIPPAGE = 0.05;
 
 export const PlaceOrderWidget = ({
   externalPrice,
@@ -78,6 +85,7 @@ export const PlaceOrderWidget = ({
   accountBalance,
   balanceQuery,
   perpsCollection,
+  quantityUnit = "BTC",
 }: PlaceOrderWidgetProps) => {
   const { data: marketPrice, isLoading: isMarketPriceLoading } = useGetMarketPrice();
   const { address } = useAccount();
@@ -97,9 +105,11 @@ export const PlaceOrderWidget = ({
   // Get market price for validation and default price
   const newestItemPrice = marketPrice ? Number(marketPrice) / 1e6 : null;
 
+  const [orderType, setOrderType] = useState<"limit" | "market">("limit");
   const [price, setPrice] = useState("5.00"); // Will be updated when hashrate data loads
   const [priceInitialized, setPriceInitialized] = useState(false); // Track if price has been initialized from hashrate
   const [amount, setAmount] = useState<number | string>(5); // Can be number or string to support decimals in perpetuals
+  const [amountMode, setAmountMode] = useState<AmountMode>("size"); // "size" = USDC notional, "quantity" = raw contracts
   const [sliderValue, setSliderValue] = useState(0); // Slider value 0-100
   const [leverage, setLeverage] = useState(10); // Leverage multiplier (1x to 10x), default 10x
   const [highlightedButton, setHighlightedButton] = useState<"buy" | "sell" | "inputs" | null>(null);
@@ -162,6 +172,28 @@ export const PlaceOrderWidget = ({
     return isNaN(parsed) || parsed <= 0 ? 0 : parsed;
   };
 
+  // Returns the USDC notional size regardless of amountMode
+  const getEffectiveSize = (): number => {
+    const numAmt = getNumericAmount();
+    if (amountMode === "quantity" && contractMode === "perpetual") {
+      return numAmt * (parseFloat(price) || 0);
+    }
+    return numAmt;
+  };
+
+  // Switch between Size (USDC) and Quantity (raw contracts), converting the current amount
+  const handleAmountModeChange = (mode: AmountMode) => {
+    if (mode === amountMode) return;
+    const numAmt = getNumericAmount();
+    const priceNum = parseFloat(price) || 0;
+    setAmountMode(mode);
+    if (mode === "size") {
+      setAmount((numAmt * priceNum).toFixed(2));
+    } else {
+      setAmount(priceNum > 0 ? (numAmt / priceNum).toFixed(6) : "0");
+    }
+  };
+
   // Calculate margin percentage from leverage
   // Formula: marginPercent = (1 / leverage) * 100
   // Example: 10x leverage = (1/10) * 100 = 10%
@@ -169,12 +201,13 @@ export const PlaceOrderWidget = ({
     return (1 / leverage) * 100;
   };
 
-  // Calculate quantity from size (notional) for perps mode
-  // Formula: quantity = size / price
-  // Example: size=100, price=2, leverage=10x => quantity = 100/2 = 50, required margin = 100/10 = 10 USDC
-  const calculateQuantityFromAmount = (sizeValue: number, priceValue: number): number => {
-    if (contractMode !== "perpetual" || priceValue <= 0) return sizeValue;
-    return sizeValue / priceValue;
+  // Calculate quantity from the current amount, respecting amountMode.
+  // Size mode:     quantity = size / price
+  // Quantity mode: quantity = value directly (no conversion needed)
+  const calculateQuantityFromAmount = (value: number, priceValue: number): number => {
+    if (contractMode !== "perpetual" || priceValue <= 0) return value;
+    if (amountMode === "quantity") return value;
+    return value / priceValue;
   };
 
   // Calculate size (notional) from quantity for perps mode (reverse operation)
@@ -187,11 +220,9 @@ export const PlaceOrderWidget = ({
   const getExpectedQuantity = (): number => {
     const numericAmount = getNumericAmount();
     const currentPrice = parseFloat(price) || 0;
-    
     if (contractMode === "perpetual") {
       return calculateQuantityFromAmount(numericAmount, currentPrice);
     }
-    
     return numericAmount;
   };
 
@@ -205,11 +236,16 @@ export const PlaceOrderWidget = ({
     const lockedBalance = minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
-    // For perpetual mode, return max size (notional) = (availableBalance - 0.1 USDC) × leverage
+    // For perpetual mode, return max size (notional) or max quantity depending on amountMode
     if (contractMode === "perpetual") {
       const buffer = 100_000n; // 0.1 USDC in base units (6 decimals)
       const effectiveBalance = availableBalance > buffer ? availableBalance - buffer : 0n;
-      return (Number(effectiveBalance) / 1e6) * leverage;
+      const maxSize = (Number(effectiveBalance) / 1e6) * leverage;
+      if (amountMode === "quantity") {
+        const priceNum = parseFloat(price) || 0;
+        return priceNum > 0 ? maxSize / priceNum : 0;
+      }
+      return maxSize;
     }
 
     const orderFee = orderFeeRaw ?? 0n;
@@ -276,6 +312,44 @@ export const PlaceOrderWidget = ({
     }
   }, [highlightMode, externalIsBuy, externalPrice, externalAmount, highlightTrigger]);
 
+  // Simulation hooks for market orders in perps mode.
+  // Must be called unconditionally here, before the early loading return below.
+  const simMarketPriceDecimal = marketPrice ? Number(marketPrice) / 1e6 : 0;
+  const simNumericAmount = (() => {
+    const parsed = typeof amount === "string" ? parseFloat(amount) : amount;
+    return isNaN(parsed) || parsed <= 0 ? 0 : parsed;
+  })();
+  const simQuantity =
+    orderType === "market" && contractMode === "perpetual" && simMarketPriceDecimal > 0 && simNumericAmount > 0
+      ? (amountMode === "quantity" ? simNumericAmount : simNumericAmount / simMarketPriceDecimal)
+      : 0;
+  // Slippage-adjusted sim prices mirror what getEffectivePrice() produces for each side.
+  // Snap a bigint price (1e6 units) to the nearest price-step boundary.
+  // priceStep may be null here (before the early return), so fall back to 1 unit = no snap.
+  const stepUnits = priceStep ? Math.round(priceStep * 1e6) : 1;
+  const snapBigInt = (raw: number) => BigInt(Math.round(raw / stepUnits) * stepUnits);
+
+  const simBuyPriceArg =
+    orderType === "market" && contractMode === "perpetual" && marketPrice
+      ? snapBigInt(Number(marketPrice) * (1 + MARKET_SLIPPAGE))
+      : undefined;
+  const simSellPriceArg =
+    orderType === "market" && contractMode === "perpetual" && marketPrice
+      ? snapBigInt(Number(marketPrice) * (1 - MARKET_SLIPPAGE))
+      : undefined;
+
+  // Auto-fetch disabled — refetch() is called manually on Bid/Ask click only.
+  const { refetch: refetchSimBuy } = useSimulatePerpsOrder({
+    price: simBuyPriceArg,
+    quantity: simQuantity > 0 ? simQuantity : undefined,
+    enabled: false,
+  });
+  const { refetch: refetchSimSell } = useSimulatePerpsOrder({
+    price: simSellPriceArg,
+    quantity: simQuantity > 0 ? -simQuantity : undefined,
+    enabled: false,
+  });
+
   // Show loading state while minimumPriceIncrement is being fetched
   if (contractSpecsQuery.isLoading || !priceStep || isMarketPriceLoading || !newestItemPrice) {
     return (
@@ -292,6 +366,21 @@ export const PlaceOrderWidget = ({
   // Helper functions for price adjustment
   const snapToStep = (value: number): number => {
     return Math.round(value / priceStep) * priceStep;
+  };
+
+  // Returns the effective order price: market price (snapped) for market orders, input price for limit orders.
+  // For market orders in perpetual mode, a 5% slippage buffer is applied so the order is
+  // guaranteed to cross the spread: buys are priced 5% above market, sells 5% below.
+  const getEffectivePrice = (side?: "buy" | "sell"): number => {
+    if (orderType === "market" && newestItemPrice) {
+      const base = newestItemPrice;
+      if (contractMode === "perpetual" && side) {
+        const slipped = side === "buy" ? base * (1 + MARKET_SLIPPAGE) : base * (1 - MARKET_SLIPPAGE);
+        return snapToStep(slipped);
+      }
+      return snapToStep(base);
+    }
+    return parseFloat(price) || 0;
   };
 
   const incrementPrice = () => {
@@ -343,15 +432,40 @@ export const PlaceOrderWidget = ({
       return;
     }
 
+    if (orderType === "market") {
+      try {
+        const simResult = await refetchSimBuy();
+        const filledQty = simResult.data?.[0];
+        const remainingQty = simResult.data?.[2];
+        if (remainingQty !== undefined && remainingQty > 0n) {
+          if (!filledQty || filledQty === 0n) {
+            alert("There is no liquidity in order book");
+          } else {
+            const filled = (Number(filledQty) / 1e6).toFixed(6);
+            const remaining = (Number(remainingQty) / 1e6).toFixed(6);
+            const total = ((Number(filledQty) + Number(remainingQty)) / 1e6).toFixed(6);
+            alert(
+              `Order would only be partially filled.\n\nRequested: ${total}\nWill be filled: ${filled}\nUnfilled: ${remaining}\n\nNot enough liquidity to fill the full order.`,
+            );
+          }
+          return;
+        }
+      } catch {
+        alert("Failed to check order book liquidity");
+        return;
+      }
+    }
+
     // Validate minimum margin
-    const currentPrice = parseFloat(price);
+    const currentPrice = getEffectivePrice("buy");
     const priceInWei = BigInt(Math.round(currentPrice * 1e6));
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance = minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
-    // Required margin = size / leverage
-    const requiredMargin = numericAmount / leverage;
+    // Required margin = effectiveSize / leverage (effectiveSize accounts for amountMode)
+    const effectiveSizeBuy = getEffectiveSize();
+    const requiredMargin = effectiveSizeBuy / leverage;
     const marginInWei = BigInt(Math.round(requiredMargin * 1e6));
 
     if (marginInWei > availableBalance) {
@@ -367,7 +481,7 @@ export const PlaceOrderWidget = ({
       return;
     }
 
-    // Calculate quantity from size
+    // Calculate quantity from amount (respects amountMode)
     const quantity = calculateQuantityFromAmount(numericAmount, currentPrice);
 
     // Check for conflicting orders (opposite action, same price)
@@ -402,14 +516,39 @@ export const PlaceOrderWidget = ({
       return;
     }
 
-    const currentPrice = parseFloat(price);
+    if (orderType === "market") {
+      try {
+        const simResult = await refetchSimSell();
+        const filledQty = simResult.data?.[0];
+        const remainingQty = simResult.data?.[2];
+        if (remainingQty !== undefined && remainingQty > 0n) {
+          if (!filledQty || filledQty === 0n) {
+            alert("There is no liquidity in order book");
+          } else {
+            const filled = (Number(filledQty) / 1e6).toFixed(6);
+            const remaining = (Number(remainingQty) / 1e6).toFixed(6);
+            const total = ((Number(filledQty) + Number(remainingQty)) / 1e6).toFixed(6);
+            alert(
+              `Order would only be partially filled.\n\nRequested: ${total}\nWill be filled: ${filled}\nUnfilled: ${remaining}\n\nNot enough liquidity to fill the full order.`,
+            );
+          }
+          return;
+        }
+      } catch {
+        alert("Failed to check order book liquidity");
+        return;
+      }
+    }
+
+    const currentPrice = getEffectivePrice("sell");
     const priceInWei = BigInt(Math.round(currentPrice * 1e6));
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance = minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
-    // Required margin = size / leverage
-    const requiredMargin = numericAmount / leverage;
+    // Required margin = effectiveSize / leverage (effectiveSize accounts for amountMode)
+    const effectiveSizeSell = getEffectiveSize();
+    const requiredMargin = effectiveSizeSell / leverage;
     const marginInWei = BigInt(Math.round(requiredMargin * 1e6));
 
     if (marginInWei > availableBalance) {
@@ -425,7 +564,7 @@ export const PlaceOrderWidget = ({
       return;
     }
 
-    // Calculate quantity from size
+    // Calculate quantity from amount (respects amountMode)
     const quantity = calculateQuantityFromAmount(numericAmount, currentPrice);
 
     // Check for conflicting orders (opposite action, same price)
@@ -466,7 +605,7 @@ export const PlaceOrderWidget = ({
     }
 
     // Validate balance for buy orders using getMinMarginForPositionManual
-    const currentPrice = parseFloat(price);
+    const currentPrice = getEffectivePrice("buy");
     const priceInWei = BigInt(Math.round(currentPrice * 1e6));
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance = minMargin ?? 0n;
@@ -528,17 +667,18 @@ export const PlaceOrderWidget = ({
       }
     }
 
-    // Check if price exceeds the configured percentage of newest item price
-    const maxAllowedPrice = newestItemPrice * maxPriceMultiplier;
-
-    if (currentPrice > maxAllowedPrice) {
-      setPendingOrder({
-        price: currentPrice,
-        amount: numericAmount,
-        quantity: numericAmount, // Positive for Buy
-      });
-      setShowHighPriceModal(true);
-      return;
+    // Check if price exceeds configured percentage of market price (limit orders only)
+    if (orderType === "limit") {
+      const maxAllowedPrice = newestItemPrice * maxPriceMultiplier;
+      if (currentPrice > maxAllowedPrice) {
+        setPendingOrder({
+          price: currentPrice,
+          amount: numericAmount,
+          quantity: numericAmount, // Positive for Buy
+        });
+        setShowHighPriceModal(true);
+        return;
+      }
     }
 
     openOrderForm(currentPrice, numericAmount, numericAmount); // Positive quantity for Buy
@@ -558,7 +698,7 @@ export const PlaceOrderWidget = ({
     }
 
     // Validate balance for sell orders using getMinMarginForPositionManual
-    const currentPrice = parseFloat(price);
+    const currentPrice = getEffectivePrice("sell");
     const priceInWei = BigInt(Math.round(currentPrice * 1e6));
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance = minMargin ?? 0n;
@@ -620,17 +760,18 @@ export const PlaceOrderWidget = ({
       }
     }
 
-    // Check if price exceeds the configured percentage of newest item price
-    const maxAllowedPrice = newestItemPrice * maxPriceMultiplier;
-
-    if (currentPrice > maxAllowedPrice) {
-      setPendingOrder({
-        price: currentPrice,
-        amount: numericAmount,
-        quantity: -numericAmount, // Negative for Sell
-      });
-      setShowHighPriceModal(true);
-      return;
+    // Check if price exceeds configured percentage of market price (limit orders only)
+    if (orderType === "limit") {
+      const maxAllowedPrice = newestItemPrice * maxPriceMultiplier;
+      if (currentPrice > maxAllowedPrice) {
+        setPendingOrder({
+          price: currentPrice,
+          amount: numericAmount,
+          quantity: -numericAmount, // Negative for Sell
+        });
+        setShowHighPriceModal(true);
+        return;
+      }
     }
 
     openOrderForm(currentPrice, numericAmount, -numericAmount); // Negative quantity for Sell
@@ -681,63 +822,97 @@ export const PlaceOrderWidget = ({
 
         <MainSection>
           <InputSection>
-            {contractMode === "perpetual" && (
-              <LeverageButtonContainer>
-                <LeverageButton onClick={() => setShowLeverageModal(true)} disabled={showOrderForm}>
-                  <LeverageButtonLabel>Leverage</LeverageButtonLabel>
-                  <LeverageButtonValue>{leverage}x</LeverageButtonValue>
-                </LeverageButton>
-              </LeverageButtonContainer>
+            <OrderTypeRow>
+              <ModeToggle>
+                <ModeButton
+                  $active={orderType === "limit"}
+                  onClick={() => setOrderType("limit")}
+                  disabled={showOrderForm}
+                >
+                  Limit
+                </ModeButton>
+                <ModeButton
+                  $active={orderType === "market"}
+                  onClick={() => setOrderType("market")}
+                  disabled={showOrderForm}
+                >
+                  Market
+                </ModeButton>
+              </ModeToggle>
+
+              {contractMode === "perpetual" && (
+                <ModeToggle>
+                  <ModeButton
+                    $active
+                    onClick={() => setShowLeverageModal(true)}
+                    disabled={showOrderForm}
+                  >
+                    {leverage}x
+                  </ModeButton>
+                </ModeToggle>
+              )}
+            </OrderTypeRow>
+
+            {orderType === "limit" && (
+              <InputGroup $isHighlighted={highlightedButton !== null}>
+                <label>{contractMode === "futures" ? "Price per day (USDC)" : "Price (USDC)"}</label>
+                <PriceInputContainer $isHighlighted={highlightedButton !== null}>
+                  <PriceButton
+                    onClick={decrementPrice}
+                    disabled={showOrderForm}
+                    $isHighlighted={highlightedButton !== null}
+                  >
+                    −
+                  </PriceButton>
+                  <input
+                    type="text"
+                    value={price}
+                    onChange={(e) => {
+                      setPrice(e.target.value);
+                    }}
+                    onBeforeInput={handleNumericDecimalInput}
+                    step={priceStep}
+                    min="0.01"
+                    inputMode={"numeric"}
+                    style={{ minWidth: "70px" }}
+                  />
+                  <PriceButton
+                    onClick={incrementPrice}
+                    disabled={showOrderForm}
+                    $isHighlighted={highlightedButton !== null}
+                  >
+                    +
+                  </PriceButton>
+                </PriceInputContainer>
+                {/* <MinMarginLabel>Min Margin: 10%</MinMarginLabel> */}
+              </InputGroup>
             )}
-            <InputGroup $isHighlighted={highlightedButton !== null}>
-              <label>{contractMode === "futures" ? "Price per day (USDC)" : "Price (USDC)"}</label>
-              <PriceInputContainer $isHighlighted={highlightedButton !== null}>
-                <PriceButton
-                  onClick={decrementPrice}
-                  disabled={showOrderForm}
-                  $isHighlighted={highlightedButton !== null}
-                >
-                  −
-                </PriceButton>
-                <input
-                  type="text"
-                  value={price}
-                  onChange={(e) => {
-                    setPrice(e.target.value);
-                  }}
-                  onBeforeInput={handleNumericDecimalInput}
-                  step={priceStep}
-                  min="0.01"
-                  inputMode={"numeric"}
-                  style={{ minWidth: "70px" }}
-                />
-                <PriceButton
-                  onClick={incrementPrice}
-                  disabled={showOrderForm}
-                  $isHighlighted={highlightedButton !== null}
-                >
-                  +
-                </PriceButton>
-              </PriceInputContainer>
-              {/* <MinMarginLabel>Min Margin: 10%</MinMarginLabel> */}
-            </InputGroup>
 
             <InputGroup $isHighlighted={highlightedButton !== null}>
               <label>
-                {contractMode === "perpetual" ? "Size (USDC)" : "Quantity"}
-                {/* {contractMode === "perpetual" && <span style={{ fontSize: "0.7rem", color: "#a7a9b6", marginLeft: "0.5rem" }}>(min: 5)</span>} */}
+                {contractMode === "perpetual" ? (amountMode === "size" ? "Size" : "Quantity") : "Quantity"}
               </label>
               {contractMode === "perpetual" ? (
-                <input
-                  type="text"
-                  value={amount}
-                  onChange={(e) => handleAmountChange(e.target.value.replace("-", ""))}
-                  onBeforeInput={handleNumericDecimalInput6Decimals}
-                  inputMode="decimal"
-                  placeholder="0.00"
-                  min="0"
-                  style={{ minWidth: "70px" }}
-                />
+                <AmountInputWrapper>
+                  <input
+                    type="text"
+                    value={amount}
+                    onChange={(e) => handleAmountChange(e.target.value.replace("-", ""))}
+                    onBeforeInput={handleNumericDecimalInput6Decimals}
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    min="0"
+                    disabled={showOrderForm}
+                  />
+                  <AmountModeDropdown
+                    value={amountMode}
+                    onChange={(e) => handleAmountModeChange(e.target.value as AmountMode)}
+                    disabled={showOrderForm}
+                  >
+                    <option value="size">Size</option>
+                    <option value="quantity">Quantity</option>
+                  </AmountModeDropdown>
+                </AmountInputWrapper>
               ) : (
                 <input
                   type="number"
@@ -763,7 +938,8 @@ export const PlaceOrderWidget = ({
                     const newAmount = (maxQty * numValue) / 100;
                     
                     if (contractMode === "perpetual") {
-                      setAmount(newAmount > 0 ? newAmount.toFixed(2) : "0");
+                      const decimals = amountMode === "quantity" ? 6 : 2;
+                      setAmount(newAmount > 0 ? newAmount.toFixed(decimals) : "0");
                     } else {
                       // Round to nearest integer for futures
                       setAmount(Math.floor(newAmount));
@@ -804,7 +980,7 @@ export const PlaceOrderWidget = ({
             <OrderSummary>
               <OrderSummaryRow>
                 <span>Required Margin</span>
-                <span>{(getNumericAmount() / leverage).toFixed(2)} USDC</span>
+                <span>{(getEffectiveSize() / leverage).toFixed(2)} USDC</span>
               </OrderSummaryRow>
               <OrderSummaryRow>
                 <span>Quantity</span>
@@ -859,6 +1035,7 @@ export const PlaceOrderWidget = ({
             contractMode={contractMode}
             perpsCollection={perpsCollection}
             leverage={leverage}
+            isMarketOrder={orderType === "market"}
             closeForm={() => {
               setShowOrderForm(false);
               setPendingOrder(null);
@@ -873,6 +1050,18 @@ export const PlaceOrderWidget = ({
         <LeverageModal
           currentLeverage={leverage}
           onConfirm={(newLeverage) => {
+            const currentAmount = getNumericAmount();
+            if (currentAmount > 0 && contractMode === "perpetual") {
+              if (amountMode === "quantity") {
+                // Quantity scales proportionally with leverage: qty * (newLev / oldLev)
+                const newQty = currentAmount * (newLeverage / leverage);
+                setAmount(newQty.toFixed(6));
+              } else {
+                const currentMargin = currentAmount / leverage;
+                const newAmount = currentMargin * newLeverage;
+                setAmount(newAmount.toFixed(2));
+              }
+            }
             setLeverage(newLeverage);
             setShowLeverageModal(false);
           }}
@@ -1188,87 +1377,6 @@ const ExpectedQuantityLabel = styled("div")`
   font-weight: 500;
 `;
 
-const LeverageButtonContainer = styled("div")`
-  margin-top: 0.75rem;
-`;
-
-const LeverageButton = styled("button")`
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-  color: #fff;
-  font-size: 1rem;
-  background: rgba(255, 255, 255, 0.05);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-
-  &:hover:not(:disabled) {
-    border-color: #509EBA;
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  &:focus {
-    outline: none;
-    border-color: #509EBA;
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-`;
-
-const LeverageButtonLabel = styled("span")`
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #fff;
-`;
-
-const LeverageButtonValue = styled("span")`
-  font-size: 1rem;
-  font-weight: 600;
-  color: #fff;
-`;
-
-const LeverageHeader = styled("div")`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 0.75rem;
-  margin-bottom: 0.25rem;
-  
-  label {
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: #a7a9b6;
-  }
-`;
-
-const LeverageValue = styled("span")`
-  font-size: 1rem;
-  font-weight: 600;
-  color: #509EBA;
-`;
-
-const LeverageSliderContainer = styled("div")`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0 0.5rem;
-  margin-top: 0.5rem;
-`;
-
-const MarginInfo = styled("div")`
-  font-size: 0.75rem;
-  color: #a7a9b6;
-  text-align: center;
-  margin-top: 0.25rem;
-`;
 
 const PriceInputContainer = styled("div")<{ $isHighlighted?: boolean }>`
   display: flex;
@@ -1529,6 +1637,13 @@ const StyledSlider = styled(Slider)`
   }
 `;
 
+const OrderTypeRow = styled("div")`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.25rem;
+`;
+
 const SliderInfoContainer = styled("div")`
   display: flex;
   justify-content: center;
@@ -1541,4 +1656,83 @@ const SliderInfo = styled("span")`
   font-weight: 500;
   text-align: center;
   font-size: 0.875rem;
+`;
+
+const AmountInputWrapper = styled("div")`
+  display: flex;
+  align-items: stretch;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+
+  &:focus-within {
+    border-color: #509eba;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  /* Override InputGroup's generic input styles for the inner input */
+  input {
+    flex: 1 !important;
+    width: auto !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    animation: none !important;
+    min-width: 0;
+
+    &:focus {
+      outline: none;
+      border-color: transparent !important;
+      background: transparent !important;
+    }
+
+    &::placeholder {
+      color: #6b7280;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+`;
+
+const AmountModeDropdown = styled("select")`
+  appearance: none;
+  padding: 0 0.75rem;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  min-width: 56px;
+  text-align: center;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23a7a9b6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.4rem center;
+  padding-right: 1.4rem;
+  transition: background-color 0.15s ease;
+
+  &:hover:not(:disabled) {
+    background-color: rgba(255, 255, 255, 0.14);
+  }
+
+  &:focus {
+    outline: none;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  option {
+    background: #1e2433;
+    color: #fff;
+  }
 `;
