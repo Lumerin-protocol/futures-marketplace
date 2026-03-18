@@ -4,6 +4,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import IconButton from "@mui/material/IconButton";
 import type { PositionSession } from "../../../hooks/data/perps/useUserPositionSessions";
 import { useCreatePerpsOrder } from "../../../hooks/data/perps/useCreatePerpsOrder";
+import { useSimulatePerpsOrder } from "../../../hooks/data/perps/useSimulatePerpsOrder";
 import { useQueryClient } from "@tanstack/react-query";
 import { USER_PERPS_ORDERS_QK } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { USER_POSITION_SESSIONS_QK } from "../../../hooks/data/perps/useUserPositionSessions";
@@ -24,8 +25,13 @@ import {
   ModalActions,
   ModalCancelButton,
   ModalConfirmButton,
+  ModeToggle,
+  ModeButton,
 } from "./PerpsOrderFormFields";
 import { useState } from "react";
+import styled from "@mui/material/styles/styled";
+
+const MARKET_SLIPPAGE = 0.05;
 
 interface ClosePerpsPositionModalProps {
   open: boolean;
@@ -48,6 +54,7 @@ export const ClosePerpsPositionModal = ({
 }: ClosePerpsPositionModalProps) => {
   const [isClosing, setIsClosing] = useState(false);
   const [closeError, setCloseError] = useState<string | null>(null);
+  const [orderType, setOrderType] = useState<"limit" | "market">("limit");
 
   const { createOrderAsync } = useCreatePerpsOrder();
   const queryClient = useQueryClient();
@@ -60,6 +67,28 @@ export const ClosePerpsPositionModal = ({
   const closeSide = isLong ? "Short" : "Long";
 
   const form = usePerpsOrderForm({ maxQuantity, priceStep });
+
+  // Lazy simulation hook — auto-fetch is disabled; refetch() is called manually on confirm.
+  // Args reflect the latest form state at every render so refetch() always uses fresh values.
+  const simCloseQty = form.getCurrentQuantity();
+  const simSignedQty = simCloseQty > 0 ? (isLong ? -simCloseQty : simCloseQty) : undefined;
+
+  // For market orders, apply slippage so simulation matches the actual order price:
+  // closing a long = sell order → price 5% below market
+  // closing a short = buy order → price 5% above market
+  // Snap to the minimum price increment (priceStep, default 0.01) to avoid contract errors.
+  const stepUnits = Math.round(priceStep * 1e6);
+  const snapBigInt = (raw: number) => BigInt(Math.round(raw / stepUnits) * stepUnits);
+  const simMarketPrice =
+    marketPrice !== undefined
+      ? snapBigInt(Number(marketPrice) * (isLong ? 1 - MARKET_SLIPPAGE : 1 + MARKET_SLIPPAGE))
+      : undefined;
+
+  const { refetch: refetchSim } = useSimulatePerpsOrder({
+    price: simMarketPrice,
+    quantity: simSignedQty,
+    enabled: false,
+  });
 
   useEffect(() => {
     if (!open || !session) return;
@@ -93,8 +122,41 @@ export const ClosePerpsPositionModal = ({
     setIsClosing(true);
     setCloseError(null);
 
+    if (orderType === "market") {
+      try {
+        const simResult = await refetchSim();
+        const filledQty = simResult.data?.[0];
+        const remainingQty = simResult.data?.[2];
+        if (remainingQty !== undefined && remainingQty > 0n) {
+          if (!filledQty || filledQty === 0n) {
+            setCloseError("There is no liquidity in order book");
+          } else {
+            const filled = (Number(filledQty) / 1e6).toFixed(6);
+            const remaining = (Number(remainingQty) / 1e6).toFixed(6);
+            const total = ((Number(filledQty) + Number(remainingQty)) / 1e6).toFixed(6);
+            setCloseError(
+              `Order would only be partially filled. Requested: ${total} | Will fill: ${filled} | Unfilled: ${remaining}`,
+            );
+          }
+          setIsClosing(false);
+          return;
+        }
+      } catch {
+        setCloseError("Failed to check order book liquidity");
+        setIsClosing(false);
+        return;
+      }
+    }
+
     try {
-      const closePriceBig = BigInt(Math.round(form.currentPrice * 1e6));
+      // For market orders apply 5% slippage so the order crosses the spread:
+      // closing a long = sell → price below market; closing a short = buy → price above market
+      // Snap to the minimum price increment to avoid contract errors.
+      const effectivePrice =
+        orderType === "market" && marketPrice
+          ? Number(snapBigInt(Number(marketPrice) * (isLong ? 1 - MARKET_SLIPPAGE : 1 + MARKET_SLIPPAGE))) / 1e6
+          : form.currentPrice;
+      const closePriceBig = BigInt(Math.round(effectivePrice * 1e6));
       const signedQty = isLong ? -closeQty : closeQty;
 
       const txHash = await createOrderAsync({ price: closePriceBig, quantity: signedQty });
@@ -119,7 +181,7 @@ export const ClosePerpsPositionModal = ({
       setIsClosing(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, netQty, form.currentPrice, isLong, createOrderAsync, queryClient, publicClient, participantAddress, handleClose, form.amount, form.amountMode, onConfirmed]);
+  }, [session, netQty, form.currentPrice, isLong, createOrderAsync, queryClient, publicClient, participantAddress, handleClose, form.amount, form.amountMode, onConfirmed, orderType, marketPrice, refetchSim]);
 
   if (!session) return null;
 
@@ -128,9 +190,13 @@ export const ClosePerpsPositionModal = ({
   const closeSizeDisplay = form.getCurrentSize();
 
   const entryPriceValue = Number(session.entryPrice) / 1e6;
+  const effectiveClosePrice =
+    orderType === "market" && marketPrice
+      ? Number(snapBigInt(Number(marketPrice) * (isLong ? 1 - MARKET_SLIPPAGE : 1 + MARKET_SLIPPAGE))) / 1e6
+      : form.currentPrice;
   const realizedPnl =
-    form.currentPrice > 0 && closeQtyDisplay > 0
-      ? (form.currentPrice - entryPriceValue) * closeQtyDisplay * (isLong ? 1 : -1)
+    effectiveClosePrice > 0 && closeQtyDisplay > 0
+      ? (effectiveClosePrice - entryPriceValue) * closeQtyDisplay * (isLong ? 1 : -1)
       : null;
 
   return (
@@ -169,12 +235,37 @@ export const ClosePerpsPositionModal = ({
           </InfoRow>
         </PositionInfoSection>
 
+        <OrderTypeRow>
+          <ModeToggle>
+            <ModeButton
+              $active={orderType === "limit"}
+              onClick={() => setOrderType("limit")}
+              disabled={isClosing}
+            >
+              Limit
+            </ModeButton>
+            <ModeButton
+              $active={orderType === "market"}
+              onClick={() => {
+                setOrderType("market");
+                if (marketPrice) {
+                  form.handlePriceChange((Number(marketPrice) / 1e6).toFixed(2));
+                }
+              }}
+              disabled={isClosing || !marketPrice}
+            >
+              Market
+            </ModeButton>
+          </ModeToggle>
+        </OrderTypeRow>
+
         <PerpsOrderFormFields
           price={form.price}
           amount={form.amount}
           amountMode={form.amountMode}
           sliderValue={form.sliderValue}
           disabled={isClosing}
+          hidePriceInput={orderType === "market"}
           priceLabel="Close Price (USDC)"
           quantityLabel="Close Quantity"
           sizeLabel="Close Size (USDC)"
@@ -197,7 +288,7 @@ export const ClosePerpsPositionModal = ({
           </ModalCancelButton>
           <ModalConfirmButton
             onClick={handleConfirm}
-            disabled={isClosing || closeQtyDisplay <= 0 || form.currentPrice <= 0}
+            disabled={isClosing || closeQtyDisplay <= 0 || effectiveClosePrice <= 0}
           >
             {isClosing ? "Closing..." : "Confirm"}
           </ModalConfirmButton>
@@ -207,3 +298,8 @@ export const ClosePerpsPositionModal = ({
   );
 };
 
+const OrderTypeRow = styled("div")`
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+`;

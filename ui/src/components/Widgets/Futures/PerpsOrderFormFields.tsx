@@ -149,6 +149,7 @@ interface PerpsOrderFormFieldsProps {
   amountMode: AmountMode;
   sliderValue: number;
   disabled?: boolean;
+  hidePriceInput?: boolean;
   priceLabel?: string;
   quantityLabel?: string;
   sizeLabel?: string;
@@ -169,6 +170,7 @@ export const PerpsOrderFormFields = ({
   amountMode,
   sliderValue,
   disabled,
+  hidePriceInput,
   priceLabel = "Price (USDC)",
   quantityLabel = "Quantity",
   sizeLabel = "Size (USDC)",
@@ -184,22 +186,24 @@ export const PerpsOrderFormFields = ({
 }: PerpsOrderFormFieldsProps) => (
   <>
     <InputsSection>
-      <InputGroup>
-        <InputLabel>{priceLabel}</InputLabel>
-        <PriceInputContainer>
-          <PriceStepButton onClick={onDecrementPrice} disabled={disabled}>−</PriceStepButton>
-          <PriceInput
-            type="text"
-            value={price}
-            onChange={(e) => onPriceChange(e.target.value)}
-            onBeforeInput={handleNumericDecimalInput6Decimals}
-            inputMode="decimal"
-            placeholder="0.00"
-            disabled={disabled}
-          />
-          <PriceStepButton onClick={onIncrementPrice} disabled={disabled}>+</PriceStepButton>
-        </PriceInputContainer>
-      </InputGroup>
+      {!hidePriceInput && (
+        <InputGroup>
+          <InputLabel>{priceLabel}</InputLabel>
+          <PriceInputContainer>
+            <PriceStepButton onClick={onDecrementPrice} disabled={disabled}>−</PriceStepButton>
+            <PriceInput
+              type="text"
+              value={price}
+              onChange={(e) => onPriceChange(e.target.value)}
+              onBeforeInput={handleNumericDecimalInput6Decimals}
+              inputMode="decimal"
+              placeholder="0.00"
+              disabled={disabled}
+            />
+            <PriceStepButton onClick={onIncrementPrice} disabled={disabled}>+</PriceStepButton>
+          </PriceInputContainer>
+        </InputGroup>
+      )}
 
       <InputGroup>
         <AmountLabelRow>

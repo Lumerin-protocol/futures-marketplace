@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import styled from "@mui/material/styles/styled";
 import Modal from "@mui/material/Modal";
 import CloseIcon from "@mui/icons-material/Close";
@@ -116,6 +116,15 @@ export const PerpsOrdersPositionsTabWidget = ({
     // Count open positions (status === "OPEN")
     return positionSessions.filter((session) => session.status === "OPEN").length;
   }, [positionSessions]);
+
+  // Auto-switch to Positions tab when there are no open orders but there are open positions
+  useEffect(() => {
+    if (!openOrdersQuery.isLoading && !positionSessionsLoading) {
+      if (ordersCount === 0 && positionsCount > 0) {
+        setActiveTab("POSITIONS");
+      }
+    }
+  }, [openOrdersQuery.isLoading, positionSessionsLoading, ordersCount, positionsCount]);
 
   // Count closed positions
   const positionHistoryCount = useMemo(() => {
