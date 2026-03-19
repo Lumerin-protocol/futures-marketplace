@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useMemo } from "react";
+import { useEffect, useCallback } from "react";
 import Modal from "@mui/material/Modal";
 import CloseIcon from "@mui/icons-material/Close";
 import IconButton from "@mui/material/IconButton";
@@ -20,8 +20,6 @@ import {
   InfoLabel,
   InfoValue,
   TypeBadge,
-  PnLText,
-  ErrorText,
   ModalActions,
   ModalCancelButton,
   ModalConfirmButton,
@@ -53,7 +51,6 @@ export const ClosePerpsPositionModal = ({
   onConfirmed,
 }: ClosePerpsPositionModalProps) => {
   const [isClosing, setIsClosing] = useState(false);
-  const [closeError, setCloseError] = useState<string | null>(null);
   const [orderType, setOrderType] = useState<"limit" | "market">("limit");
 
   const { createOrderAsync } = useCreatePerpsOrder();
@@ -96,20 +93,10 @@ export const ClosePerpsPositionModal = ({
       ? (Number(marketPrice) / 1e6).toFixed(2)
       : (Number(session.entryPrice) / 1e6).toFixed(2);
     form.reset(initPrice, 100);
-    setCloseError(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, session]);
 
-  const unrealizedPnl = useMemo(() => {
-    if (!session || !marketPrice || netQty === 0n) return 0n;
-    const priceDiff = marketPrice - session.entryPrice;
-    return (priceDiff * netQty) / 1_000_000n;
-  }, [session, marketPrice, netQty]);
-
-  const unrealizedPnlValue = Number(unrealizedPnl) / 1e6;
-
   const handleClose = useCallback(() => {
-    setCloseError(null);
     setIsClosing(false);
     onClose();
   }, [onClose]);
@@ -120,7 +107,6 @@ export const ClosePerpsPositionModal = ({
     if (closeQty <= 0) return;
 
     setIsClosing(true);
-    setCloseError(null);
 
     if (orderType === "market") {
       try {
@@ -129,12 +115,12 @@ export const ClosePerpsPositionModal = ({
         const remainingQty = simResult.data?.[2];
         if (remainingQty !== undefined && remainingQty > 0n) {
           if (!filledQty || filledQty === 0n) {
-            setCloseError("There is no liquidity in order book");
+            alert("There is no liquidity in order book");
           } else {
             const filled = (Number(filledQty) / 1e6).toFixed(6);
             const remaining = (Number(remainingQty) / 1e6).toFixed(6);
             const total = ((Number(filledQty) + Number(remainingQty)) / 1e6).toFixed(6);
-            setCloseError(
+            alert(
               `Order would only be partially filled. Requested: ${total} | Will fill: ${filled} | Unfilled: ${remaining}`,
             );
           }
@@ -142,7 +128,7 @@ export const ClosePerpsPositionModal = ({
           return;
         }
       } catch {
-        setCloseError("Failed to check order book liquidity");
+        alert("Failed to check order book liquidity");
         setIsClosing(false);
         return;
       }
@@ -176,7 +162,7 @@ export const ClosePerpsPositionModal = ({
       if (onConfirmed) await onConfirmed();
       handleClose();
     } catch (err) {
-      setCloseError(err instanceof Error ? err.message : "Failed to close position");
+      alert(err instanceof Error ? err.message : "Failed to close position");
     } finally {
       setIsClosing(false);
     }
@@ -225,14 +211,7 @@ export const ClosePerpsPositionModal = ({
               <InfoValue>{formatPrice(marketPrice)} USDC</InfoValue>
             </InfoRow>
           )}
-          <InfoRow>
-            <InfoLabel>Unrealized PnL</InfoLabel>
-            <InfoValue>
-              <PnLText $isPositive={unrealizedPnlValue >= 0}>
-                {unrealizedPnlValue >= 0 ? "+" : ""}{unrealizedPnlValue.toFixed(2)} USDC
-              </PnLText>
-            </InfoValue>
-          </InfoRow>
+
         </PositionInfoSection>
 
         <OrderTypeRow>
@@ -279,8 +258,6 @@ export const ClosePerpsPositionModal = ({
           onIncrementPrice={form.incrementPrice}
           onDecrementPrice={form.decrementPrice}
         />
-
-        {closeError && <ErrorText>{closeError}</ErrorText>}
 
         <ModalActions>
           <ModalCancelButton onClick={handleClose} disabled={isClosing}>
