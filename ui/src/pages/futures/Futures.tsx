@@ -144,6 +144,18 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const { data: maintenanceMarginPercentRaw } = useMaintenanceMarginPercent();
   const maintenanceMarginPercent = maintenanceMarginPercentRaw !== undefined ? BigInt(maintenanceMarginPercentRaw) : undefined;
 
+  const openPositionNetQuantity = useMemo(() => {
+    if (contractMode !== "perpetual") return null;
+    const sessions = positionSessionsQuery.data?.positionSessions || [];
+    const openSessions = sessions.filter((s) => s.status === "OPEN");
+    if (openSessions.length === 0) return null;
+    let sum = 0n;
+    for (const s of openSessions) {
+      sum += s.user.netQuantity;
+    }
+    return sum;
+  }, [contractMode, positionSessionsQuery.data?.positionSessions]);
+
   const openPositionEntryPrice = useMemo(() => {
     if (contractMode !== "perpetual") return null;
     const sessions = positionSessionsQuery.data?.positionSessions || [];
@@ -350,6 +362,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
           highlightMode={highlightMode}
           latestPrice={marketPrice ?? null}
           minMargin={minMargin}
+          openPositionNetQuantity={openPositionNetQuantity}
           contractMode={contractMode}
           accountBalance={accountBalanceQuery}
           balanceQuery={balanceQuery}

@@ -37,6 +37,7 @@ import { handleNumericDecimalInput, handleNumericDecimalInput6Decimals } from ".
 import { useOrderFee } from "../../../hooks/data/useOrderFee";
 import { ModeToggle, ModeButton, type AmountMode } from "./PerpsOrderFormFields";
 import { useSimulatePerpsOrder } from "../../../hooks/data/perps/useSimulatePerpsOrder";
+import { useGetPerpsInitialMargin } from "../../../hooks/data/perps/useGetPerpsInitialMargin";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -58,6 +59,8 @@ interface PlaceOrderWidgetProps {
   highlightMode: "inputs" | "buttons" | undefined;
   onOrderPlaced?: () => void | Promise<void>;
   minMargin?: bigint | null;
+  /** Aggregated net quantity across OPEN perps sessions; used with getInitialMargin when adding to the same side. */
+  openPositionNetQuantity?: bigint | null;
   contractMode?: ContractMode;
   accountBalance?: AccountBalance;
   balanceQuery: BalanceQueryResult;
@@ -68,6 +71,21 @@ interface PlaceOrderWidgetProps {
 // Slippage applied to market orders in perpetual mode so the order crosses the spread.
 // Buy orders are priced this much above market; sell orders this much below.
 const MARKET_SLIPPAGE = 0.05;
+
+/** Locked collateral for max-withdraw style math: initial margin when adding to an existing position on the same side (Bid/long, Ask/short), else maintenance. */
+function getPerpsLockedBalanceForSide(
+  minMargin: bigint | null | undefined,
+  initialMargin: bigint | null | undefined,
+  netQty: bigint | null | undefined,
+  side: "buy" | "sell",
+): bigint {
+  const maintenance = minMargin && minMargin > 0n ? minMargin : 0n;
+  const initial =
+    initialMargin !== null && initialMargin !== undefined && initialMargin > 0n ? initialMargin : maintenance;
+  if (!netQty || netQty === 0n) return maintenance;
+  const sameSide = (netQty > 0n && side === "buy") || (netQty < 0n && side === "sell");
+  return sameSide ? initial : maintenance;
+}
 
 export const PlaceOrderWidget = ({
   externalPrice,
@@ -81,6 +99,7 @@ export const PlaceOrderWidget = ({
   highlightMode,
   onOrderPlaced,
   minMargin,
+  openPositionNetQuantity = null,
   contractMode = "futures",
   accountBalance,
   balanceQuery,
@@ -89,6 +108,13 @@ export const PlaceOrderWidget = ({
 }: PlaceOrderWidgetProps) => {
   const { data: marketPrice, isLoading: isMarketPriceLoading } = useGetMarketPrice();
   const { address } = useAccount();
+  const initialMarginQuery = useGetPerpsInitialMargin(address, {
+    enabled: contractMode === "perpetual" && !!address,
+  });
+  const initialMargin =
+    initialMarginQuery.data !== undefined ? (initialMarginQuery.data as bigint) : null;
+
+  const [perpsMarginSide, setPerpsMarginSide] = useState<"buy" | "sell">("buy");
   const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
   const { data: orderFeeRaw } = useOrderFee(address);
 
@@ -153,6 +179,14 @@ export const PlaceOrderWidget = ({
     }
   }, [externalAmount]);
 
+  // Default margin side for max-size math: align with open position (Bid if long, Ask if short).
+  useEffect(() => {
+    if (contractMode !== "perpetual") return;
+    if (openPositionNetQuantity === null || openPositionNetQuantity === undefined) return;
+    if (openPositionNetQuantity > 0n) setPerpsMarginSide("buy");
+    else if (openPositionNetQuantity < 0n) setPerpsMarginSide("sell");
+  }, [contractMode, openPositionNetQuantity]);
+
   // Update slider when price or balance changes
   useEffect(() => {
     const maxQty = calculateMaxQuantity();
@@ -164,7 +198,17 @@ export const PlaceOrderWidget = ({
       setSliderValue(0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [price, balanceQuery.data, minMargin, latestPrice, amount]);
+  }, [
+    price,
+    balanceQuery.data,
+    minMargin,
+    latestPrice,
+    amount,
+    contractMode,
+    openPositionNetQuantity,
+    perpsMarginSide,
+    initialMargin,
+  ]);
 
   // Helper to get numeric amount value for calculations
   const getNumericAmount = (): number => {
@@ -233,7 +277,10 @@ export const PlaceOrderWidget = ({
 
     const priceInWei = BigInt(Math.round(currentPrice * 1e6));
     const totalBalance = balanceQuery.data ?? 0n;
-    const lockedBalance = minMargin ?? 0n;
+    const lockedBalance =
+      contractMode === "perpetual"
+        ? getPerpsLockedBalanceForSide(minMargin, initialMargin, openPositionNetQuantity, perpsMarginSide)
+        : minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
     // For perpetual mode, return max size (notional) or max quantity depending on amountMode
@@ -426,6 +473,7 @@ export const PlaceOrderWidget = ({
 
   // Perps mode buy handler - uses amount as margin
   const handleBuyPerps = async () => {
+    setPerpsMarginSide("buy");
     const numericAmount = getNumericAmount();
     if (numericAmount <= 0) {
       alert("Amount must be greater than 0");
@@ -460,7 +508,12 @@ export const PlaceOrderWidget = ({
     const currentPrice = getEffectivePrice("buy");
     const priceInWei = BigInt(Math.round(currentPrice * 1e6));
     const totalBalance = balanceQuery.data ?? 0n;
-    const lockedBalance = minMargin ?? 0n;
+    const lockedBalance = getPerpsLockedBalanceForSide(
+      minMargin,
+      initialMargin,
+      openPositionNetQuantity,
+      "buy",
+    );
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
     // Required margin = effectiveSize / leverage (effectiveSize accounts for amountMode)
@@ -510,6 +563,7 @@ export const PlaceOrderWidget = ({
 
   // Perps mode sell handler - uses amount as margin
   const handleSellPerps = async () => {
+    setPerpsMarginSide("sell");
     const numericAmount = getNumericAmount();
     if (numericAmount <= 0) {
       alert("Amount must be greater than 0");
@@ -543,7 +597,12 @@ export const PlaceOrderWidget = ({
     const currentPrice = getEffectivePrice("sell");
     const priceInWei = BigInt(Math.round(currentPrice * 1e6));
     const totalBalance = balanceQuery.data ?? 0n;
-    const lockedBalance = minMargin ?? 0n;
+    const lockedBalance = getPerpsLockedBalanceForSide(
+      minMargin,
+      initialMargin,
+      openPositionNetQuantity,
+      "sell",
+    );
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
     // Required margin = effectiveSize / leverage (effectiveSize accounts for amountMode)
@@ -968,10 +1027,24 @@ export const PlaceOrderWidget = ({
           </InputSection>
 
           <ButtonSection>
-            <BuyButton onClick={handleBuy} disabled={showOrderForm} $isHighlighted={highlightedButton === "buy"}>
+            <BuyButton
+              onMouseDown={() => {
+                if (contractMode === "perpetual") setPerpsMarginSide("buy");
+              }}
+              onClick={handleBuy}
+              disabled={showOrderForm}
+              $isHighlighted={highlightedButton === "buy"}
+            >
               Bid
             </BuyButton>
-            <SellButton onClick={handleSell} disabled={showOrderForm} $isHighlighted={highlightedButton === "sell"}>
+            <SellButton
+              onMouseDown={() => {
+                if (contractMode === "perpetual") setPerpsMarginSide("sell");
+              }}
+              onClick={handleSell}
+              disabled={showOrderForm}
+              $isHighlighted={highlightedButton === "sell"}
+            >
               Ask
             </SellButton>
           </ButtonSection>
@@ -1030,7 +1103,12 @@ export const PlaceOrderWidget = ({
             quantity={pendingOrder.quantity}
             participantData={participantData}
             latestPrice={latestPrice}
-            onOrderPlaced={onOrderPlaced}
+            onOrderPlaced={async () => {
+              if (contractMode === "perpetual") {
+                await initialMarginQuery.refetch();
+              }
+              await onOrderPlaced?.();
+            }}
             bypassConflictCheck={bypassConflictCheck}
             contractMode={contractMode}
             perpsCollection={perpsCollection}
