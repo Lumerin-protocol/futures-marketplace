@@ -14,6 +14,7 @@ import { WithdrawalFormPerps } from "../../Forms/WithdrawalFormPerps";
 import EastIcon from "@mui/icons-material/East";
 import type { ContractMode, AccountBalance } from "../../../types/types";
 import { DepositFormPerps } from "../../Forms/DepositFormPerps";
+import { useGetPerpsInitialMargin } from "../../../hooks/data/perps/useGetPerpsInitialMargin";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -47,6 +48,14 @@ export const FuturesBalanceWidget = ({
   const lmrBalanceValidation = useLmrBalanceValidation(address);
   const depositModal = useModal();
   const withdrawalModal = useModal();
+
+  const initialMarginQuery = useGetPerpsInitialMargin(address, {
+    enabled: withdrawalModal.isOpen && contractMode === "perpetual",
+  });
+  const initialMargin =
+    initialMarginQuery.data !== undefined ? (initialMarginQuery.data as bigint) : null;
+  const isLoadingInitialMargin = initialMarginQuery.isLoading && withdrawalModal.isOpen;
+  const isInitialMarginError = initialMarginQuery.isError;
 
   const handleDepositSuccess = () => {
     balanceQuery.refetch();
@@ -198,8 +207,9 @@ export const FuturesBalanceWidget = ({
         {contractMode === "perpetual" ? (
           <WithdrawalFormPerps
             closeForm={handleWithdrawalSuccess}
-            minMargin={minMargin}
-            isLoadingMinMargin={isLoadingMinMargin}
+            initialMargin={initialMargin}
+            isLoadingInitialMargin={isLoadingInitialMargin}
+            isInitialMarginError={isInitialMarginError}
             balanceQuery={balanceQuery}
           />
         ) : (

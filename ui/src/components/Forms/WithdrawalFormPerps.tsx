@@ -1,5 +1,7 @@
 import { type FC, useCallback, useMemo } from "react";
 import { useForm } from "react-hook-form";
+import Tooltip from "@mui/material/Tooltip";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import { AmountInputForm } from "./Shared/AmountInputForm";
 import { formatValue, paymentToken } from "../../lib/units";
@@ -15,8 +17,9 @@ interface BalanceQueryResult {
 
 interface WithdrawalFormPerpsProps {
   closeForm: () => void;
-  minMargin: bigint | null;
-  isLoadingMinMargin: boolean;
+  initialMargin: bigint | null;
+  isLoadingInitialMargin: boolean;
+  isInitialMarginError: boolean;
   balanceQuery: BalanceQueryResult;
 }
 
@@ -24,23 +27,27 @@ interface InputValues {
   amount: string;
 }
 
+const INITIAL_MARGIN_TOOLTIP =
+  "This amount is initial margin from the contract. It is higher than maintenance margin when you have open positions or resting orders, because it includes margin required to keep those positions and orders open.";
+
 export const WithdrawalFormPerps: FC<WithdrawalFormPerpsProps> = ({
   closeForm,
-  minMargin,
-  isLoadingMinMargin,
+  initialMargin,
+  isLoadingInitialMargin,
+  isInitialMarginError,
   balanceQuery,
 }) => {
   const { removeCollateralAsync } = usePerpsRemoveCollateral();
 
   const lockedAmount = useMemo(() => {
-    return minMargin && minMargin > 0n ? minMargin : 0n;
-  }, [minMargin]);
+    return initialMargin && initialMargin > 0n ? initialMargin : 0n;
+  }, [initialMargin]);
 
   const availableBalance = useMemo(() => {
-    if (!balanceQuery.data) return undefined;
+    if (!balanceQuery.data || isLoadingInitialMargin || isInitialMarginError) return undefined;
     const balance = balanceQuery.data;
     return balance > lockedAmount ? balance - lockedAmount : 0n;
-  }, [balanceQuery.data, lockedAmount]);
+  }, [balanceQuery.data, lockedAmount, isLoadingInitialMargin, isInitialMarginError]);
 
   const form = useForm<InputValues>({
     mode: "onBlur",
@@ -52,6 +59,9 @@ export const WithdrawalFormPerps: FC<WithdrawalFormPerpsProps> = ({
 
   const validateBalance = useCallback(
     (value: string): string | true => {
+      if (isInitialMarginError) {
+        return "Unable to fetch locked margin. Please try again.";
+      }
       if (!balanceQuery.data || availableBalance === undefined) {
         return "Unable to fetch balance. Please try again.";
       }
@@ -62,7 +72,7 @@ export const WithdrawalFormPerps: FC<WithdrawalFormPerpsProps> = ({
       }
       return true;
     },
-    [balanceQuery.data, availableBalance],
+    [balanceQuery.data, availableBalance, isInitialMarginError],
   );
 
   const handleMaxClick = useCallback(() => {
@@ -81,7 +91,7 @@ export const WithdrawalFormPerps: FC<WithdrawalFormPerpsProps> = ({
           label="Withdrawal Amount"
           additionalValidate={validateBalance}
           onMaxClick={handleMaxClick}
-          showMaxButton={availableBalance !== undefined}
+          showMaxButton={availableBalance !== undefined && !isLoadingInitialMargin}
         />
         <div className="p-4 rounded-lg">
           <div className="flex justify-between items-center mb-2">
@@ -92,26 +102,49 @@ export const WithdrawalFormPerps: FC<WithdrawalFormPerpsProps> = ({
             </span>
           </div>
           <div className="flex justify-between items-center mb-2">
-            <span className="text-gray-300">Locked amount:</span>
+            <span className="text-gray-300 inline-flex items-center gap-1">
+              Locked:
+              <Tooltip title={INITIAL_MARGIN_TOOLTIP} arrow placement="top">
+                <HelpOutlineIcon
+                  sx={{ fontSize: "0.95rem", color: "#a7a9b6", cursor: "help", verticalAlign: "middle" }}
+                  aria-label="About locked amount"
+                />
+              </Tooltip>
+            </span>
             <span className="text-white font-medium">
-              {isLoadingMinMargin
+              {isLoadingInitialMargin
                 ? "..."
-                : `${Number(formatValue(lockedAmount, paymentToken).value).toFixed(2)} ${paymentToken.symbol}`}
+                : isInitialMarginError
+                  ? "—"
+                  : `${Number(formatValue(lockedAmount, paymentToken).value).toFixed(2)} ${paymentToken.symbol}`}
             </span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-gray-300">Available balance:</span>
             <span className="text-white font-medium">
-              {availableBalance !== undefined
-                ? `${(Math.floor((Number(availableBalance) / 1e6) * 100) / 100).toFixed(2)}`
-                : "0"}{" "}
+              {isLoadingInitialMargin || isInitialMarginError
+                ? isInitialMarginError
+                  ? "—"
+                  : "..."
+                : availableBalance !== undefined
+                  ? `${(Math.floor((Number(availableBalance) / 1e6) * 100) / 100).toFixed(2)}`
+                  : "0"}{" "}
               {paymentToken.symbol}
             </span>
           </div>
         </div>
       </div>
     ),
-    [form.control, validateBalance, handleMaxClick, availableBalance, balanceQuery.data, lockedAmount, isLoadingMinMargin],
+    [
+      form.control,
+      validateBalance,
+      handleMaxClick,
+      availableBalance,
+      balanceQuery.data,
+      lockedAmount,
+      isLoadingInitialMargin,
+      isInitialMarginError,
+    ],
   );
 
   const validateInput = useCallback(async () => {
@@ -120,6 +153,14 @@ export const WithdrawalFormPerps: FC<WithdrawalFormPerpsProps> = ({
       form.setError("amount", {
         type: "validation",
         message: "Withdrawal Amount must be a positive number",
+      });
+      return false;
+    }
+
+    if (isInitialMarginError) {
+      form.setError("amount", {
+        type: "validation",
+        message: "Unable to fetch locked margin. Please try again.",
       });
       return false;
     }
@@ -143,7 +184,7 @@ export const WithdrawalFormPerps: FC<WithdrawalFormPerpsProps> = ({
     }
 
     return true;
-  }, [form, balanceQuery.data, availableBalance]);
+  }, [form, balanceQuery.data, availableBalance, isInitialMarginError]);
 
   const transactionSteps = [
     {
