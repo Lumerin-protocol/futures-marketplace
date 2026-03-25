@@ -17,6 +17,7 @@ on:
       - 'ui/vite.config.ts'
       - 'ui/tsconfig.json'
       - 'ui/index.html'
+      - 'ui/.cicd_trigger'
 
 
   workflow_dispatch:
@@ -179,30 +180,24 @@ jobs:
           echo "🔧 Creating .env file for ${ENV} environment"
           echo "📌 Version tag: ${VERSION}"
           
-          # Construct Graph URLs from org secrets/vars based on environment
+          # Goldsky public subgraph URLs (org-level vars, no API key needed)
           case $ENV in
             dev)
-              GRAPH_API_KEY="${{ secrets.DEV_GRAPH_APIKEY }}"
-              FUTURES_SUBGRAPH_ID="${{ vars.DEV_FUTURES_SUBGRAPH_ID }}"
-              ORACLES_SUBGRAPH_ID="${{ vars.DEV_ORACLES_SUBGRAPH_ID }}"
-              PERPS_SUBGRAPH_ID="${{ vars.DEV_DERIVATIVES_SUBGRAPH_ID }}"
+              FUTURES_SUBGRAPH_URL="${{ vars.DEV_GS_FUTURES }}"
+              ORACLES_SUBGRAPH_URL="${{ vars.DEV_GS_ORACLES }}"
+              PERPS_SUBGRAPH_URL="${{ vars.DEV_GS_DERIVATIVES }}"
               ;;
             stg)
-              GRAPH_API_KEY="${{ secrets.STG_GRAPH_APIKEY }}"
-              FUTURES_SUBGRAPH_ID="${{ vars.STG_FUTURES_SUBGRAPH_ID }}"
-              ORACLES_SUBGRAPH_ID="${{ vars.STG_ORACLES_SUBGRAPH_ID }}"
-              PERPS_SUBGRAPH_ID="${{ vars.STG_DERIVATIVES_SUBGRAPH_ID }}"
+              FUTURES_SUBGRAPH_URL="${{ vars.STG_GS_FUTURES }}"
+              ORACLES_SUBGRAPH_URL="${{ vars.STG_GS_ORACLES }}"
+              PERPS_SUBGRAPH_URL="${{ vars.STG_GS_DERIVATIVES }}"
               ;;
             main)
-              GRAPH_API_KEY="${{ secrets.LMN_GRAPH_APIKEY }}"
-              FUTURES_SUBGRAPH_ID="${{ vars.LMN_FUTURES_SUBGRAPH_ID }}"
-              ORACLES_SUBGRAPH_ID="${{ vars.LMN_ORACLES_SUBGRAPH_ID }}"
-              PERPS_SUBGRAPH_ID="${{ vars.LMN_DERIVATIVES_SUBGRAPH_ID }}"
+              FUTURES_SUBGRAPH_URL="${{ vars.LMN_GS_FUTURES }}"
+              ORACLES_SUBGRAPH_URL="${{ vars.LMN_GS_ORACLES }}"
+              PERPS_SUBGRAPH_URL="${{ vars.LMN_GS_DERIVATIVES }}"
               ;;
           esac
-          FUTURES_SUBGRAPH_URL="https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/${FUTURES_SUBGRAPH_ID}"
-          ORACLES_SUBGRAPH_URL="https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/${ORACLES_SUBGRAPH_ID}"
-          PERPS_SUBGRAPH_URL="https://gateway.thegraph.com/api/${GRAPH_API_KEY}/subgraphs/id/${PERPS_SUBGRAPH_ID}"
           # Create .env file with environment-scoped variables
           # GitHub Environments automatically scope secrets/vars to the environment
           cat > ui/.env << EOF
