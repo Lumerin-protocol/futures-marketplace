@@ -1,8 +1,9 @@
-import { arbitrum, arbitrumSepolia, hardhat } from "viem/chains";
+import { arbitrum, arbitrumSepolia, baseSepolia, hardhat } from "viem/chains";
 
 const chains = {
   [arbitrumSepolia.id]: arbitrumSepolia,
   [arbitrum.id]: arbitrum,
+  [baseSepolia.id]: baseSepolia,
   [hardhat.id]: hardhat,
 } as const;
 
