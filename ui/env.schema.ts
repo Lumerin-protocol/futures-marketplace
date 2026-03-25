@@ -7,7 +7,6 @@ const TypeEthAddress = (opt?: StringOptions) =>
 // Environment variables schema
 export const EnvSchema = Type.Object({
   DEV_SERVER_HTTPS: Type.Boolean({ default: false }),
-  REACT_APP_BUY_LMR_URL: Type.String({ format: "uri" }),
   REACT_APP_CHAIN_ID: Type.Number(),
   REACT_APP_CLONE_FACTORY: TypeEthAddress(),
   REACT_APP_ETHERSCAN_URL: Type.String({ format: "uri" }),
@@ -17,7 +16,6 @@ export const EnvSchema = Type.Object({
       "https://gitbook.lumerin.io/lumerin-hashpower-marketplace/lumerin-futures/02.contract-specifications",
   }),
   REACT_APP_FUTURES_HIGH_PRICE_PERCENTAGE: Type.Integer({ minimum: 0, maximum: 300, default: 50 }),
-  REACT_APP_FUTURES_REQUIRED_LMR: Type.String({ default: "10000" }),
   REACT_APP_FUTURES_TOKEN_ADDRESS: TypeEthAddress(),
   REACT_APP_GITBOOK_URL: Type.String({ format: "uri" }),
   REACT_APP_INDEXER_URL: Type.String({ format: "uri" }),

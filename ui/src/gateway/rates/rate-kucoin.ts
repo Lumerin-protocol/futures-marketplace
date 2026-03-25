@@ -1,13 +1,13 @@
 import type { Rates } from "./interfaces";
 
 /**
- * Returns ETH and LMR prices in USD from coingecko api
+ * Returns ETH and BTC prices in USD from kucoin api
  */
 export const getRateKucoin = async (): Promise<Rates> => {
   const baseUrl = "https://api.kucoin.com/api";
 
-  const [LMR, ETH, BTC] = await Promise.all(
-    ["LMR-USDT", "ETH-USDT", "BTC-USDC"].map(async (pair) => {
+  const [ETH, BTC] = await Promise.all(
+    ["ETH-USDT", "BTC-USDC"].map(async (pair) => {
       const searchParams = new URLSearchParams();
       searchParams.append("symbol", pair);
 
@@ -22,5 +22,5 @@ export const getRateKucoin = async (): Promise<Rates> => {
     }),
   );
 
-  return { LMR, ETH, BTC };
+  return { ETH, BTC };
 };

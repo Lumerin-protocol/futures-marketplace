@@ -1,13 +1,13 @@
 import type { Rates } from "./interfaces";
 
 /**
- * Returns ETH and LMR prices in USD from coingecko api
+ * Returns ETH and BTC prices in USD from coinpaprika api
  */
 export const getRateCoinpaprika = async (): Promise<Rates> => {
   const baseUrl = "https://api.coinpaprika.com";
 
-  const [LMR, ETH, BTC] = await Promise.all(
-    ["lmr-lumerin", "eth-ethereum", "btc-bitcoin"].map(async (coin) => {
+  const [ETH, BTC] = await Promise.all(
+    ["eth-ethereum", "btc-bitcoin"].map(async (coin) => {
       const res = await fetch(`${baseUrl}/v1/tickers/${coin}`);
       const data = await res.json();
       const price = data?.quotes?.USD?.price;
@@ -18,5 +18,5 @@ export const getRateCoinpaprika = async (): Promise<Rates> => {
     }),
   );
 
-  return { LMR, ETH, BTC };
+  return { ETH, BTC };
 };

@@ -1,5 +1,4 @@
 import styled from "@mui/material/styles/styled";
-import EastIcon from "@mui/icons-material/East";
 import { useAccount } from "wagmi";
 import { useFeeTokenBalance } from "../../hooks/data/useFeeTokenBalance";
 import { useFuturesPaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
@@ -32,7 +31,7 @@ export const WalletBalanceWidget = () => {
       name: feeToken.name,
       symbol: feeToken.symbol,
       balance: feeTokenBalance.data,
-      rateUSD: ratesQuery.data?.LMR ?? 0,
+      rateUSD: 0,
       decimals: feeToken.decimals,
       icon: <LumerinIcon />,
     },
@@ -88,11 +87,6 @@ export const WalletBalanceWidget = () => {
             );
           })}
       </Balances>
-      <div className="link">
-        <a href={process.env.REACT_APP_BUY_LMR_URL} target="_blank" rel="noreferrer">
-          Buy LMR tokens on Uniswap <EastIcon style={{ fontSize: "0.75rem" }} />
-        </a>
-      </div>
     </SmallWidget>
   );
 };

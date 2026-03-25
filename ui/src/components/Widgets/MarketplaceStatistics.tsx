@@ -6,6 +6,7 @@ import { SmallWidget } from "../Cards/Cards.styled";
 import { useWatchAsset } from "wagmi";
 import { useFeeTokenAddress } from "../../hooks/data/useFeeTokenBalance";
 import { useContracts } from "../../hooks/data/useContracts";
+import { feeToken } from "../../lib/units";
 
 export const MarketplaceStatistics = () => {
   const { watchAsset } = useWatchAsset();
@@ -65,14 +66,14 @@ export const MarketplaceStatistics = () => {
               type: "ERC20",
               options: {
                 address: feeTokenAddress!,
-                symbol: "LMR",
-                decimals: 8,
+                symbol: feeToken.symbol,
+                decimals: feeToken.decimals,
                 image: "https://s2.coinmarketcap.com/static/img/coins/128x128/19118.png",
               },
             })
           }
         >
-          Add LMR token to your wallet <EastIcon style={{ fontSize: "0.75rem" }} />
+          Add fee token to your wallet <EastIcon style={{ fontSize: "0.75rem" }} />
         </button>
       </div>
     </MarketplaceStatisticsWrapper>

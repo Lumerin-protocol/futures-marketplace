@@ -21,10 +21,10 @@ const usdcToken: Unit = {
   name: "USDC Coin",
 } as const;
 
-const lmrToken: Unit = {
+const feeTokenUnit: Unit = {
   decimals: 8,
-  symbol: "LMR",
-  name: "Lumerin",
+  symbol: "Fee",
+  name: "Fee token",
 } as const;
 
 const ethToken: Unit = {
@@ -34,9 +34,9 @@ const ethToken: Unit = {
 } as const;
 
 export const paymentToken = usdcToken;
-export const feeToken = lmrToken;
-export const validatorStakeToken = lmrToken;
-export const sellerStakeToken = lmrToken;
+export const feeToken = feeTokenUnit;
+export const validatorStakeToken = feeTokenUnit;
+export const sellerStakeToken = feeTokenUnit;
 export const gasToken = ethToken;
 
 const terahashPerSecond: Unit = {

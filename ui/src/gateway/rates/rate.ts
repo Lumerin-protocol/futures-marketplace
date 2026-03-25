@@ -4,7 +4,7 @@ import { getRateCoinpaprika } from "./rate-coinpaprika";
 import { getRateKucoin } from "./rate-kucoin";
 
 /**
- * Returns ETH and LMR prices in USD from exchanges api
+ * Returns ETH and BTC prices in USD from exchanges api
  */
 export const getRate = async (): Promise<Rates | undefined> => {
   const servicePriority = [getRateCoingecko, getRateCoinpaprika, getRateKucoin];

@@ -92,7 +92,7 @@ export const RegisterSellerForm: React.FC<CreateFormProps> = memo(({ onClose }) 
           helperText={stakeController.fieldState.error?.message}
           slotProps={{
             input: {
-              endAdornment: <InputAdornment position="end">LMR</InputAdornment>,
+              endAdornment: <InputAdornment position="end">{sellerStakeToken.symbol}</InputAdornment>,
             },
           }}
         />

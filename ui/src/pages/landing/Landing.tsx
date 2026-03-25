@@ -25,7 +25,7 @@ export const Landing: FC = () => {
   const instructions = [
     {
       step: 1,
-      text: "Purchase Lumerin Tokens (LMR)",
+      text: "Purchase fee tokens for the marketplace",
     },
     {
       step: 2,

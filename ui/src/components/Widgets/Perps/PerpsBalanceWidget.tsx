@@ -1,7 +1,6 @@
 import styled from "@mui/material/styles/styled";
 import { useAccount } from "wagmi";
 import { useMemo } from "react";
-import { useLmrBalanceValidation } from "../../../hooks/data/useLmrBalanceValidation";
 import { useModal } from "../../../hooks/useModal";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { Spinner } from "../../Spinner.styled";
@@ -10,7 +9,6 @@ import { UsdcIcon } from "../../../images";
 import { PrimaryButton } from "../../Forms/FormButtons/Buttons.styled";
 import { ModalItem } from "../../Modal";
 import { WithdrawalFormPerps } from "../../Forms/WithdrawalFormPerps";
-import EastIcon from "@mui/icons-material/East";
 import type { AccountBalance } from "../../../types/types";
 import { DepositFormPerps } from "../../Forms/DepositFormPerps";
 import { useGetPerpsInitialMargin } from "../../../hooks/data/perps/useGetPerpsInitialMargin";
@@ -42,7 +40,6 @@ export const PerpsBalanceWidget = ({
   accountBalance,
 }: PerpsBalanceWidgetProps) => {
   const { address } = useAccount();
-  const lmrBalanceValidation = useLmrBalanceValidation(address);
   const depositModal = useModal();
   const withdrawalModal = useModal();
 
@@ -151,30 +148,10 @@ export const PerpsBalanceWidget = ({
             </BalanceRow>
           )}
         </BalanceContainer>
-        {isSuccess && address && (
-          <div className="link">
-            <a href={process.env.REACT_APP_BUY_LMR_URL} target="_blank" rel="noreferrer">
-              Buy LMR tokens on Uniswap <EastIcon style={{ fontSize: "0.75rem" }} />
-            </a>
-          </div>
-        )}
-
         {shouldHighlight && (
           <MarginCallWarning>
             ⚠️ Margin Call Warning: Add Funds to Avoid Liquidation
           </MarginCallWarning>
-        )}
-
-        {/* Bottom footer */}
-        {!shouldHighlight && (
-          <div className="link">
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-              }}
-            />
-          </div>
         )}
       </BalanceWidgetContainer>
 

@@ -76,7 +76,7 @@ export const EditSellerForm: FC<EditSellerFormProps> = memo(
                   helperText={stakeController.fieldState.error?.message}
                   slotProps={{
                     input: {
-                      endAdornment: <InputAdornment position="end">LMR</InputAdornment>,
+                      endAdornment: <InputAdornment position="end">{sellerStakeToken.symbol}</InputAdornment>,
                     },
                   }}
                 />

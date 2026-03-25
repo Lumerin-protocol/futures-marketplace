@@ -206,7 +206,6 @@ jobs:
           # Create .env file with environment-scoped variables
           # GitHub Environments automatically scope secrets/vars to the environment
           cat > ui/.env << EOF
-          REACT_APP_BUY_LMR_URL=${{ vars.REACT_APP_BUY_LMR_URL }}
           REACT_APP_CHAIN_ID=${{ vars.REACT_APP_CHAIN_ID }}
           REACT_APP_CLONE_FACTORY=${{ vars.REACT_APP_CLONE_FACTORY }}
           REACT_APP_ETHERSCAN_URL=${{ vars.REACT_APP_ETHERSCAN_URL }}
@@ -222,7 +221,6 @@ jobs:
           REACT_APP_WALLET_CONNECT_ID=${{ secrets.REACT_APP_WALLET_CONNECT_ID }}
           DEV_SERVER_HTTPS=false
           REACT_APP_FUTURES_TOKEN_ADDRESS=${{ vars.REACT_APP_FUTURES_TOKEN_ADDRESS }}
-          REACT_APP_FUTURES_REQUIRED_LMR=${{ vars.REACT_APP_FUTURES_REQUIRED_LMR }}
           REACT_APP_SUBGRAPH_FUTURES_URL=${FUTURES_SUBGRAPH_URL}
           REACT_APP_SUBGRAPH_ORACLES_URL=${ORACLES_SUBGRAPH_URL}
           REACT_APP_SUBGRAPH_PERPS_URL=${PERPS_SUBGRAPH_URL}
