@@ -21,7 +21,7 @@ market_maker = {
   risk_aversion               = 3000000     # Risk aversion parameter (higher = more conservative)
   max_position                = 10
   log_level                   = "info"
-  chain_id                    = 421614      # Arbitrum Sepolia
+  chain_id                    = 84532       # Base Sepolia
   # Balance Thresholds (graceful exit when funds low)
   min_eth_balance             = "100000000000000"     # 0.0001 ETH in wei (~1.4 txns - stops before failing)
   min_usdc_balance            = "10000000"            # 10 USDC (10n * 10n ** 6n)
@@ -66,11 +66,19 @@ notifications_service = {
 ########################################
 # Note: ethereum_rpc_url is defined in secret.auto.tfvars (contains API key)
 # Contract addresses for the environment
-# DEV uses Arbitrum Sepolia testnet, STG/LMN use Arbitrum mainnet
-clone_factory_address   = "0x998135c509b64083cd27ed976c1bcda35ab7a40b"
-hashrate_oracle_address = "0x6f736186d2c93913721e2570c283dff2a08575e9"
-futures_address         = "0xec76867e96d942282fc7aafe3f778de34d41a311"
+# DEV uses Base Sepolia testnet, STG/LMN use Arbitrum mainnet
+clone_factory_address   = "0x998135c509b64083cd27ed976c1bcda35ab7a40b"  # not consumed by any TF resource; placeholder
+hashrate_oracle_address = "0xf97a1bbfb5e061ef73dad8ebf25939d93639fb7f"
+futures_address         = "0x56d8d4a03a0f34b93b86e0b7941aff29178d0479"
 multicall_address       = "0xcA11bde05977b3631167028862bE2a173976CA11"
+
+########################################
+# Goldsky Subgraph Endpoints (public)
+########################################
+gs_subgraphs = {
+  futures = "https://api.goldsky.com/api/public/project_cmmz59uoa7b5201wthnkxbuqy/subgraphs/lumerin-futures/dev-latest/gn"
+  oracles = "https://api.goldsky.com/api/public/project_cmmz59uoa7b5201wthnkxbuqy/subgraphs/lumerin-oracles/dev-latest/gn"
+}
 
 ########################################
 # Monitoring Configuration

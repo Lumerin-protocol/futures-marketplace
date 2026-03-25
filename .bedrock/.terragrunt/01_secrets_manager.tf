@@ -3,7 +3,7 @@
 ################################################################################
 # AWS Secrets Manager resources for sensitive variables
 
-# IAM policy to allow ECS task execution role to read the graph indexer secrets
+# IAM policy to allow ECS task execution role to read service secrets
 resource "aws_iam_policy" "futures_marketplace_secret_access" {
   count       = (var.create_core || var.market_maker.create || var.notifications_service.create || var.margin_call_lambda.create) ? 1 : 0
   provider    = aws.use1
@@ -98,8 +98,8 @@ resource "aws_secretsmanager_secret_version" "market_maker" {
   secret_string = jsonencode({
     private_key          = var.market_maker_private_key
     eth_node_url         = var.market_maker_eth_node_url
-    futures_subgraph_url = "https://gateway.thegraph.com/api/${var.graph_api_key}/subgraphs/id/${var.futures_subgraph_id}"
-    oracles_subgraph_url = "https://gateway.thegraph.com/api/${var.graph_api_key}/subgraphs/id/${var.oracles_subgraph_id}"
+    futures_subgraph_url = lookup(var.gs_subgraphs, "futures", "")
+    oracles_subgraph_url = lookup(var.gs_subgraphs, "oracles", "")
   })
 }
 
@@ -145,6 +145,6 @@ resource "aws_secretsmanager_secret_version" "margin_call" {
   # lifecycle {ignore_changes = [secret_string]}
   secret_id = aws_secretsmanager_secret.margin_call.id
   secret_string = jsonencode({
-    futures_subgraph_url = "https://gateway.thegraph.com/api/${var.graph_api_key}/subgraphs/id/${var.futures_subgraph_id}"
+    futures_subgraph_url = lookup(var.gs_subgraphs, "futures", "")
   })
 }
