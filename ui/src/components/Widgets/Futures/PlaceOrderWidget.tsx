@@ -187,6 +187,13 @@ export const PlaceOrderWidget = ({
     else if (openPositionNetQuantity < 0n) setPerpsMarginSide("sell");
   }, [contractMode, openPositionNetQuantity]);
 
+  // Limit/market selection is perps-only; futures orders are always limit.
+  useEffect(() => {
+    if (contractMode === "futures") {
+      setOrderType("limit");
+    }
+  }, [contractMode]);
+
   // Update slider when price or balance changes
   useEffect(() => {
     const maxQty = calculateMaxQuantity();
@@ -881,25 +888,25 @@ export const PlaceOrderWidget = ({
 
         <MainSection>
           <InputSection>
-            <OrderTypeRow>
-              <ModeToggle>
-                <ModeButton
-                  $active={orderType === "limit"}
-                  onClick={() => setOrderType("limit")}
-                  disabled={showOrderForm}
-                >
-                  Limit
-                </ModeButton>
-                <ModeButton
-                  $active={orderType === "market"}
-                  onClick={() => setOrderType("market")}
-                  disabled={showOrderForm}
-                >
-                  Market
-                </ModeButton>
-              </ModeToggle>
+            {contractMode === "perpetual" && (
+              <OrderTypeRow>
+                <ModeToggle>
+                  <ModeButton
+                    $active={orderType === "limit"}
+                    onClick={() => setOrderType("limit")}
+                    disabled={showOrderForm}
+                  >
+                    Limit
+                  </ModeButton>
+                  <ModeButton
+                    $active={orderType === "market"}
+                    onClick={() => setOrderType("market")}
+                    disabled={showOrderForm}
+                  >
+                    Market
+                  </ModeButton>
+                </ModeToggle>
 
-              {contractMode === "perpetual" && (
                 <ModeToggle>
                   <ModeButton
                     $active
@@ -909,8 +916,8 @@ export const PlaceOrderWidget = ({
                     {leverage}x
                   </ModeButton>
                 </ModeToggle>
-              )}
-            </OrderTypeRow>
+              </OrderTypeRow>
+            )}
 
             {orderType === "limit" && (
               <InputGroup $isHighlighted={highlightedButton !== null}>

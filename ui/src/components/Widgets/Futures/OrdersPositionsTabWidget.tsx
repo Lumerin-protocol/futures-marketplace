@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import styled from "@mui/material/styles/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { TabSwitch } from "../../TabSwitch";
@@ -126,6 +126,15 @@ export const OrdersPositionsTabWidget = ({
     });
     return unique.size;
   }, [positions, participantAddress, isHistoricalMode, historicalPositionsQuery.data?.data]);
+
+  // Auto-switch to Positions tab when there are no open orders but there are open positions (Active only).
+  useEffect(() => {
+    if (isHistoricalMode) return;
+    if (ordersLoading || positionsLoading) return;
+    if (ordersCount === 0 && positionsCount > 0) {
+      setActiveTab("POSITIONS");
+    }
+  }, [isHistoricalMode, ordersLoading, positionsLoading, ordersCount, positionsCount]);
 
   return (
     <TabContainer>

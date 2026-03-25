@@ -99,7 +99,7 @@ export const RegisterValidatorForm: React.FC<CreateFormProps> = memo(({ onClose 
                 helperText={stakeController.fieldState.error?.message}
                 slotProps={{
                   input: {
-                    endAdornment: <InputAdornment position="end">LMR</InputAdornment>,
+                    endAdornment: <InputAdornment position="end">{validatorStakeToken.symbol}</InputAdornment>,
                   },
                 }}
               />

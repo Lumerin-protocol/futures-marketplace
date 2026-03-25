@@ -5,8 +5,8 @@ import { formatUnits, type RoundingOpts } from "./formatUnits";
 
 const token = {
   decimals: 8,
-  symbol: "LMR",
-  name: "Lumerin",
+  symbol: "Fee",
+  name: "Fee token",
 };
 
 describe("should use correct suffix for numbers that do not need rounding", () => {

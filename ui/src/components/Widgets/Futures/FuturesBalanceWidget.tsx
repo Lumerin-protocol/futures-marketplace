@@ -1,7 +1,6 @@
 import styled from "@mui/material/styles/styled";
 import { useAccount } from "wagmi";
 import { useMemo } from "react";
-import { useLmrBalanceValidation } from "../../../hooks/data/useLmrBalanceValidation";
 import { useModal } from "../../../hooks/useModal";
 import { Spinner } from "../../Spinner.styled";
 import { formatValue, paymentToken } from "../../../lib/units";
@@ -11,7 +10,6 @@ import { ModalItem } from "../../Modal";
 import { DepositForm } from "../../Forms/DepositForm";
 import { WithdrawalForm } from "../../Forms/WithdrawalForm";
 import { WithdrawalFormPerps } from "../../Forms/WithdrawalFormPerps";
-import EastIcon from "@mui/icons-material/East";
 import type { ContractMode, AccountBalance } from "../../../types/types";
 import { DepositFormPerps } from "../../Forms/DepositFormPerps";
 import { useGetPerpsInitialMargin } from "../../../hooks/data/perps/useGetPerpsInitialMargin";
@@ -45,7 +43,6 @@ export const FuturesBalanceWidget = ({
   accountBalance,
 }: FuturesBalanceWidgetProps) => {
   const { address } = useAccount();
-  const lmrBalanceValidation = useLmrBalanceValidation(address);
   const depositModal = useModal();
   const withdrawalModal = useModal();
 
@@ -86,10 +83,6 @@ export const FuturesBalanceWidget = ({
       : "#fff";
   const realizedPnL30DFormatted = realizedPnL30D !== null ? (realizedPnL30D / 1e6).toFixed(2) : "-";
 
-  const requiredLmrAmount = 0n;
-  const hasMinimumLmrBalance = lmrBalanceValidation.totalBalance >= requiredLmrAmount;
-  const isLmrBalanceLoading = lmrBalanceValidation.isLoading;
-
   const lockedBalanceThreshold = Number(
     process.env.REACT_APP_MARGIN_UTILIZATION_WARNING_PERCENT || "80",
   );
@@ -119,21 +112,8 @@ export const FuturesBalanceWidget = ({
         {/* Loading */}
         {isLoading && address && <Spinner fontSize="0.3em" />}
 
-        {/* Insufficient LMR */}
-        {isSuccess && address && !hasMinimumLmrBalance && (
-          <div style={{ fontSize: "0.75rem", color: "#a7a9b6" }}>
-            {isLmrBalanceLoading
-              ? "Checking LMR balance..."
-              : `⚠ Insufficient LMR balance (${lmrBalanceValidation.totalBalance.toString()} LMR)`}
-            <br />
-            <a href={process.env.REACT_APP_BUY_LMR_URL} target="_blank" rel="noreferrer" style={{ color: "#22c55e" }}>
-              Buy LMR on Uniswap <EastIcon style={{ fontSize: "0.65rem" }} />
-            </a>
-          </div>
-        )}
-
         {/* Main metrics */}
-        {isSuccess && address && hasMinimumLmrBalance && (
+        {isSuccess && address && (
           <>
             <MetricsGrid>
               <MetricCell>
@@ -167,18 +147,8 @@ export const FuturesBalanceWidget = ({
             </MetricsGrid>
 
             <ActionButtons>
-              <ActionButton
-                onClick={depositModal.open}
-                disabled={!hasMinimumLmrBalance || isLmrBalanceLoading}
-              >
-                Deposit
-              </ActionButton>
-              <ActionButton
-                onClick={withdrawalModal.open}
-                disabled={!hasMinimumLmrBalance || isLmrBalanceLoading}
-              >
-                Withdraw
-              </ActionButton>
+              <ActionButton onClick={depositModal.open}>Deposit</ActionButton>
+              <ActionButton onClick={withdrawalModal.open}>Withdraw</ActionButton>
             </ActionButtons>
           </>
         )}

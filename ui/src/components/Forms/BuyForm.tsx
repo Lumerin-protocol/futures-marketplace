@@ -275,7 +275,7 @@ function validateBalance(
   let isValid = true;
   if (feeTokenBalance.isSuccess && paymentTokenBalance.isSuccess) {
     if (feeTokenBalance.data < BigInt(feeWSlippage)) {
-      form.setError("root.feeTokenBalance", { message: "Insufficient LMR balance" });
+      form.setError("root.feeTokenBalance", { message: "Insufficient fee token balance" });
       isValid = false;
     }
     if (paymentTokenBalance.data < BigInt(priceWSlippage)) {
