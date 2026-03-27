@@ -292,6 +292,13 @@ const Header = styled("div")`
   justify-content: space-between;
   align-items: center;
   width: 100%;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    align-items: stretch;
+  }
 `;
 
 const ClaimButton = styled("button")`
