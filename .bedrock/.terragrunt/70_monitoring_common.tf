@@ -60,10 +60,11 @@ locals {
   notifications_tg_arn_suffix  = var.notifications_service.create ? replace(aws_alb_target_group.notifications_int_use1[0].arn, "arn:aws:elasticloadbalancing:${var.default_region}:${var.account_number}:", "") : ""
   
   # Futures UI URL for Synthetics Canary and Route53 Health Check
-  futures_ui_url = var.account_lifecycle == "prd" ? "https://futures.lumerin.io" : "https://futures.${var.account_lifecycle}.lumerin.io"
-  
+  # Zone apex only (matches CloudFront alias): hashpower.exchange | dev.* | stg.*
+  futures_ui_url = "https://${local.hp_dns["exc"].name}"
+
   # Extract domain for Route53 health check (remove https://)
-  futures_ui_domain = var.account_lifecycle == "prd" ? "futures.lumerin.io" : "futures.${var.account_lifecycle}.lumerin.io"
+  futures_ui_domain = local.hp_dns["exc"].name
 }
 
 ################################################################################

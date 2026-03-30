@@ -4,7 +4,7 @@
 resource "aws_s3_bucket" "marketplace" {
   count    = var.create_core ? 1 : 0
   provider = aws.use1
-  bucket   = var.account_lifecycle == "prd" ? "${local.s3_cf_origin}.${data.aws_route53_zone.public_lumerin_root.name}" : "${local.s3_cf_origin}.${data.aws_route53_zone.public_lumerin.name}"
+  bucket   = "${local.s3_cf_origin}.${local.marketplace_s3_domain_suffix}"
   lifecycle {
     prevent_destroy = false
   }
@@ -96,17 +96,15 @@ resource "aws_cloudfront_distribution" "marketplace" {
   retain_on_delete    = true
   enabled             = true
   is_ipv6_enabled     = true
-  comment             = "${local.s3_cf_website}.${data.aws_route53_zone.public_lumerin_root.name} Distribution"
+  # Public URL is zone apex only: hashpower.exchange | dev.hashpower.exchange | stg.hashpower.exchange (no futures. subdomain)
+  comment             = "${local.hp_dns["exc"].name} marketplace"
   default_root_object = "index.html"
-  aliases = [
-    var.account_lifecycle == "prd" ? "${local.s3_cf_origin}.${data.aws_route53_zone.public_lumerin_root.name}" : "${local.s3_cf_origin}.${data.aws_route53_zone.public_lumerin.name}",
-    var.account_lifecycle == "prd" ? "${local.s3_cf_website}.${data.aws_route53_zone.public_lumerin_root.name}" : "${local.s3_cf_website}.${data.aws_route53_zone.public_lumerin.name}"
-  ]
+  aliases             = [local.hp_dns["exc"].name]
   price_class = "PriceClass_200" #200=all except SouthAmerica, Australia/NZ, 100=NA/EMEA only All=All
   logging_config {
     include_cookies = false
     bucket          = "${var.account_shortname}-devops.s3.amazonaws.com"
-    prefix          = var.account_lifecycle == "prd" ? "${local.s3_cf_origin}.${data.aws_route53_zone.public_lumerin_root.name}" : "${local.s3_cf_origin}.${data.aws_route53_zone.public_lumerin.name}}."
+    prefix          = "${local.s3_cf_origin}.${local.marketplace_s3_domain_suffix}."
   }
   default_cache_behavior {
     allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
@@ -170,26 +168,12 @@ resource "aws_cloudfront_origin_access_control" "marketplace" {
 }
 
 
-########## DNS Record  
+########## DNS — apex of the Hashpower zone → CloudFront (same hostname as public URL)
 resource "aws_route53_record" "marketplace" {
   count    = var.create_core ? 1 : 0
   provider = aws.special-dns
-  zone_id  = var.account_lifecycle == "prd" ? data.aws_route53_zone.public_lumerin_root.zone_id : data.aws_route53_zone.public_lumerin.zone_id
-  name     = var.account_lifecycle == "prd" ? "${local.s3_cf_website}.${data.aws_route53_zone.public_lumerin_root.name}" : "${local.s3_cf_website}.${data.aws_route53_zone.public_lumerin.name}"
-  type     = "A"
-  alias {
-    name                   = aws_cloudfront_distribution.marketplace[0].domain_name
-    zone_id                = aws_cloudfront_distribution.marketplace[0].hosted_zone_id
-    evaluate_target_health = true
-  }
-}
-
-########## DNS Record Source Alias
-resource "aws_route53_record" "marketplace_origin_alias" {
-  count    = var.create_core ? 1 : 0
-  provider = aws.special-dns
-  zone_id  = var.account_lifecycle == "prd" ? data.aws_route53_zone.public_lumerin_root.zone_id : data.aws_route53_zone.public_lumerin.zone_id
-  name     = var.account_lifecycle == "prd" ? "${local.s3_cf_origin}.${data.aws_route53_zone.public_lumerin_root.name}" : "${local.s3_cf_origin}.${data.aws_route53_zone.public_lumerin.name}"
+  zone_id  = local.hp_dns["exc"].zone_id
+  name     = ""
   type     = "A"
   alias {
     name                   = aws_cloudfront_distribution.marketplace[0].domain_name
