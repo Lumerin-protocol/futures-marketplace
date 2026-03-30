@@ -70,7 +70,7 @@ resource "aws_secretsmanager_secret_version" "futures" {
     deployment = {
       s3_bucket                  = var.create_core ? aws_s3_bucket.marketplace[0].id : ""
       cloudfront_distribution_id = var.create_core ? aws_cloudfront_distribution.marketplace[0].id : ""
-      marketplace_url            = var.create_core ? (var.account_lifecycle == "prd" ? "https://${local.s3_cf_website}.${data.aws_route53_zone.public_lumerin_root.name}" : "https://${local.s3_cf_website}.${data.aws_route53_zone.public_lumerin.name}") : ""
+      marketplace_url            = var.create_core ? "https://${local.hp_dns["exc"].name}" : ""
       aws_region                 = var.default_region
       environment                = var.account_lifecycle
     }
