@@ -1,3 +1,4 @@
+import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import { useMemo } from "react";
 import { formatHashrateTHPS } from "../../../lib/units";
@@ -259,13 +260,13 @@ const ModalContainer = styled("div")`
   h2 {
     font-size: 1.5rem;
     font-weight: 600;
-    color: #fff;
+    color: ${tokens.text.onDark};
     margin-bottom: 1.5rem;
   }
 `;
 
 const LoadingText = styled("div")`
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   font-size: 0.875rem;
 `;
 
@@ -280,11 +281,11 @@ const SpecSection = styled("div")`
 const SectionTitle = styled("h3")`
   font-size: 0.75rem;
   font-weight: 700;
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   letter-spacing: 0.05em;
   margin-bottom: 0.75rem;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid ${tokens.overlay.white10};
 `;
 
 const SpecItem = styled("div")`
@@ -300,14 +301,14 @@ const SpecItem = styled("div")`
 
 const SpecLabel = styled("span")`
   font-size: 0.875rem;
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   flex-shrink: 0;
 `;
 
 const SpecValue = styled("span")`
   font-size: 0.875rem;
   font-weight: 500;
-  color: #22c55e;
+  color: ${tokens.trading.long};
   text-align: right;
   margin-left: 1rem;
 `;
@@ -322,7 +323,7 @@ const SpecValueMono = styled(SpecValue)`
 const SpecLink = styled("a")`
   font-size: 0.875rem;
   font-weight: 500;
-  color: #22c55e;
+  color: ${tokens.trading.long};
   text-decoration: none;
   transition: opacity 0.2s;
 

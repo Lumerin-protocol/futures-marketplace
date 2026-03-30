@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { tokens } from "../styles/tokens";
 
 interface ErrorPageProps {
   error: Error;
@@ -15,7 +16,7 @@ export const ErrorPage: React.FC<ErrorPageProps> = ({ error }) => {
               <h3 className="mt-1 text-base text-gray-500">{error.message}</h3>
             </div>
             <div className="mt-10 flex space-x-3 sm:border-l sm:border-transparent sm:pl-6">
-              <Link style={{ color: "blue" }} to="/">
+              <Link style={{ color: tokens.error.link }} to="/">
                 Return to Marketplace
               </Link>
             </div>

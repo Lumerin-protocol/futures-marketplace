@@ -8,6 +8,7 @@ import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import type { ReactNode } from "react";
 import { faFilter } from "@fortawesome/free-solid-svg-icons/faFilter";
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../styles/tokens";
 
 type Props<T> = {
   readonly values: readonly Value<T>[];
@@ -116,7 +117,7 @@ const ToggleButtonStyled = styled(ToggleButton)`
   justify-content: center;
 
   svg {
-    fill: #fff;
+    fill: ${tokens.text.onDark};
   }
 `;
 

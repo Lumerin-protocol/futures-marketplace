@@ -1,5 +1,6 @@
 import styled from "@mui/material/styles/styled";
 import Tooltip from "@mui/material/Tooltip";
+import { tokens } from "../../../styles/tokens";
 import type { ComponentProps } from "react";
 
 export const FormButtonsWrapper = styled("div")`
@@ -24,21 +25,21 @@ export const Button = styled("button")`
 `;
 
 export const DisabledButton = styled(Button)`
-  color: black;
+  color: ${tokens.text.onLight};
   background: grey;
   box-shadow: none;
   cursor: not-allowed;
 `;
 
 export const SecondaryButton = styled(Button)`
-  color: #fff;
+  color: ${tokens.text.onDark};
   background: none;
-  border: 2px solid #fff;
+  border: 2px solid ${tokens.text.onDark};
 `;
 
 export const CancelButton = styled(Button)`
-  color: red;
-  border: 2px solid red;
+  color: ${tokens.trading.short};
+  border: 2px solid ${tokens.trading.short};
 `;
 
 type PrimaryButtonProps = ComponentProps<typeof PrimaryButtonComponent> & {
@@ -63,14 +64,14 @@ export const PrimaryButton = ({ disabledText, disabled, tooltipText, ...props }:
 const PrimaryButtonComponent = styled(Button, {
   shouldForwardProp: (prop) => typeof prop === "string" && !prop.startsWith("$"),
 })<{ $hoverText?: string }>`
-  color: #fff;
-  background-color: #4c5a5f;
+  color: ${tokens.text.onDark};
+  background-color: ${tokens.surface.tabActive};
   position: relative;
   cursor: pointer;
 
   &:disabled {
-    background-color: rgb(84, 90, 92);
-    color: rgb(163, 163, 163);
+    background-color: ${tokens.formButtons.secondaryBg};
+    color: ${tokens.formButtons.secondaryText};
     cursor: not-allowed;
   }
 
@@ -88,8 +89,8 @@ const PrimaryButtonComponent = styled(Button, {
     width: max-content;
     padding: 0.5em;
     border-radius: 0.5em;
-    background-color: rgba(0, 0, 0, 0.9);
-    color: #ccc;
+    background-color: ${tokens.modal.backdrop};
+    color: ${tokens.text.buttonDisabled};
     font-size: 0.8rem;
     visibility: hidden;
     transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;

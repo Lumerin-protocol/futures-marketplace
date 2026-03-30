@@ -6,6 +6,7 @@ import { useAppKit } from "@reown/appkit/react";
 import { ChainIcon } from "../../config/chains";
 import { useEffect, useRef } from "react";
 import { truncateAddress } from "../../utils/formatters";
+import { tokens } from "../../styles/tokens";
 
 type Props = {
   onConnect?: () => void;
@@ -30,13 +31,7 @@ export const AccountButton = (props: Props) => {
   if (address) {
     return (
       <Button type="button" onClick={() => open({ view: "Account" })}>
-        {/* <Avatar
-        size="24px"
-        name={address}
-        variant="marble"
-        colors={["#1876D1", "#9A5AF7", "#CF9893", "#849483", "#4E937A"]}
-        style={{ marginRight: "0.5rem" }}
-      /> */}
+        {/* Avatar (marble palette) omitted */}
         <WuiAvatar address={address} />
         {truncateAddress(address, addressLength)}
       </Button>
@@ -97,7 +92,7 @@ const ConnectorIcon = styled("img")`
 export const Button = styled(PrimaryButton)`
   height: 48px;
   border-radius: 10px;
-  color: #fff;
+  color: ${tokens.text.onDark};
   font-weight: 600;
   font-size: 16px;
   background: none;
@@ -106,7 +101,7 @@ export const Button = styled(PrimaryButton)`
   align-items: center;
   justify-content: space-evenly;
   gap: 0.5rem;
-  border: rgba(171, 171, 171, 0.5) 1px solid;
+  border: ${tokens.border.muted05} 1px solid;
   &:not(:last-child) {
     margin-right: 0;
   }

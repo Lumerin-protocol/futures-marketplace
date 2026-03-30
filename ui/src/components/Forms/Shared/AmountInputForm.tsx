@@ -3,6 +3,7 @@ import TextField from "@mui/material/TextField";
 import { type Control, useController } from "react-hook-form";
 import { ErrorWrapper, InputWrapper } from "./Forms.styled";
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../../../styles/tokens";
 
 interface Props {
   control: Control<{ amount: string }>;
@@ -156,8 +157,8 @@ const InputContainer = styled("div")`
 
 const MaxButton = styled("button")`
   padding: 0.75rem 1rem;
-  background: #4c5a5f;
-  color: #fff;
+  background: ${tokens.surface.tabActive};
+  color: ${tokens.text.onDark};
   height: 56px;
   width: 100px;
   border: none;
@@ -169,7 +170,7 @@ const MaxButton = styled("button")`
   white-space: nowrap;
 
   &:hover {
-    background: #5a6b70;
+    background: ${tokens.surface.tabHover};
     transform: translateY(-1px);
   }
 

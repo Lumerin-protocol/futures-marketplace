@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Slider from "@mui/material/Slider";
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../../../styles/tokens";
 import { handleNumericDecimalInput6Decimals } from "../../Forms/Shared/AmountInputForm";
 import { ModalCard } from "../../Modal.styled";
 
@@ -294,7 +295,7 @@ export const PositionInfoSection = styled("div")`
   flex-direction: column;
   gap: 0.625rem;
   padding: 0.875rem 1rem;
-  background: rgba(255, 255, 255, 0.05);
+  background: ${tokens.overlay.white05};
   border-radius: 8px;
   margin-bottom: 1.25rem;
 `;
@@ -306,12 +307,12 @@ export const InfoRow = styled("div")`
 `;
 
 export const InfoLabel = styled("span")`
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   font-size: 0.875rem;
 `;
 
 export const InfoValue = styled("span")`
-  color: #fff;
+  color: ${tokens.text.onDark};
   font-size: 0.875rem;
   font-weight: 600;
 `;
@@ -323,12 +324,12 @@ export const TypeBadge = styled("span")<{ $type: string }>`
   font-size: 0.75rem;
   font-weight: 600;
   background-color: ${(props) =>
-    props.$type === "Long" ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)"};
-  color: ${(props) => (props.$type === "Long" ? "#22c55e" : "#ef4444")};
+    props.$type === "Long" ? tokens.trading.longRowBg : tokens.trading.shortRowBg};
+  color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
 export const PnLText = styled("span")<{ $isPositive: boolean }>`
-  color: ${(props) => (props.$isPositive ? "#22c55e" : "#ef4444")};
+  color: ${(props) => (props.$isPositive ? tokens.trading.long : tokens.trading.short)};
   font-weight: 600;
 `;
 
@@ -348,7 +349,7 @@ export const InputGroup = styled("div")`
 export const InputLabel = styled("label")`
   font-size: 0.875rem;
   font-weight: 500;
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
 `;
 
 export const AmountLabelRow = styled("div")`
@@ -360,7 +361,7 @@ export const AmountLabelRow = styled("div")`
 
 export const ModeToggle = styled("div")`
   display: flex;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid ${tokens.overlay.white15};
   border-radius: 6px;
   overflow: hidden;
 `;
@@ -372,12 +373,12 @@ export const ModeButton = styled("button")<{ $active: boolean }>`
   cursor: pointer;
   border: none;
   transition: background 0.15s ease, color 0.15s ease;
-  background: ${(props) => (props.$active ? "rgba(255,255,255,0.15)" : "transparent")};
-  color: ${(props) => (props.$active ? "#fff" : "#a7a9b6")};
+  background: ${(props) => (props.$active ? tokens.overlay.white15 : "transparent")};
+  color: ${(props) => (props.$active ? tokens.text.onDark : tokens.text.secondary)};
 
   &:hover:not(:disabled) {
-    background: ${(props) => (props.$active ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.08)")};
-    color: #fff;
+    background: ${(props) => (props.$active ? tokens.overlay.white15 : tokens.overlay.white08)};
+    color: ${tokens.text.onDark};
   }
 
   &:disabled {
@@ -394,9 +395,9 @@ export const PriceInputContainer = styled("div")`
 
 export const PriceStepButton = styled("button")`
   padding: 0.75rem 1rem;
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.1);
+  color: ${tokens.text.onDark};
+  border: 1px solid ${tokens.overlay.white20};
+  background: ${tokens.overlay.white10};
   font-size: 1.2rem;
   font-weight: 600;
   cursor: pointer;
@@ -416,7 +417,7 @@ export const PriceStepButton = styled("button")`
   }
 
   &:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.18);
+    background: ${tokens.overlay.white18};
   }
 
   &:disabled {
@@ -427,23 +428,23 @@ export const PriceStepButton = styled("button")`
 
 const sharedInputStyles = `
   padding: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid ${tokens.overlay.white20};
   border-radius: 0;
-  color: #fff;
+  color: ${tokens.text.onDark};
   font-size: 1rem;
   width: 100%;
   flex: 1;
-  background: rgba(255, 255, 255, 0.05);
+  background: ${tokens.overlay.white05};
   transition: border-color 0.2s ease;
 
   &:focus {
     outline: none;
-    border-color: #509EBA;
-    background: rgba(255, 255, 255, 0.08);
+    border-color: ${tokens.accent.main};
+    background: ${tokens.overlay.white08};
   }
 
   &::placeholder {
-    color: #6b7280;
+    color: ${tokens.text.muted};
   }
 
   &:disabled {
@@ -467,77 +468,77 @@ export const SliderContainer = styled("div")`
 `;
 
 export const StyledSlider = styled(Slider)`
-  color: #ffffff;
+  color: ${tokens.text.primary};
   height: 6px;
   padding: 13px 0;
 
   & .MuiSlider-thumb {
     width: 18px;
     height: 18px;
-    background-color: #ffffff;
+    background-color: ${tokens.surface.inputIsland};
     transition: all 0.2s ease;
 
     &:hover,
     &.Mui-focusVisible {
-      box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.16);
-      background-color: #f0f0f0;
+      box-shadow: 0 0 0 8px ${tokens.overlay.white16};
+      background-color: ${tokens.surface.inputIslandHover};
     }
 
     &.Mui-active {
-      box-shadow: 0 0 0 14px rgba(255, 255, 255, 0.16);
+      box-shadow: 0 0 0 14px ${tokens.overlay.white16};
     }
   }
 
   & .MuiSlider-track {
     height: 6px;
     border: none;
-    background-color: #ffffff;
+    background-color: ${tokens.surface.inputIsland};
   }
 
   & .MuiSlider-rail {
     height: 6px;
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: ${tokens.overlay.white20};
     opacity: 1;
   }
 
   & .MuiSlider-mark {
     width: 2px;
     height: 6px;
-    background-color: rgba(255, 255, 255, 0.5);
+    background-color: ${tokens.overlay.white50};
     opacity: 1;
   }
 
   & .MuiSlider-markActive {
-    background-color: rgba(0, 0, 0, 0.3);
+    background-color: ${tokens.overlay.black30};
   }
 
   & .MuiSlider-markLabel {
-    color: #a7a9b6;
+    color: ${tokens.text.secondary};
     font-size: 0.75rem;
     top: 26px;
   }
 
   & .MuiSlider-valueLabel {
-    background-color: #ffffff;
-    color: #000000;
+    background-color: ${tokens.surface.inputIsland};
+    color: ${tokens.text.onLight};
     border-radius: 4px;
     padding: 4px 8px;
     font-size: 0.75rem;
   }
 
   &.Mui-disabled {
-    color: #6b7280;
+    color: ${tokens.text.muted};
 
     & .MuiSlider-thumb {
-      background-color: #6b7280;
+      background-color: ${tokens.surface.tabMuted};
     }
 
     & .MuiSlider-track {
-      background-color: #6b7280;
+      background-color: ${tokens.surface.tabMuted};
     }
 
     & .MuiSlider-mark {
-      background-color: rgba(107, 114, 128, 0.5);
+      background-color: ${tokens.slider.thumbMuted};
     }
   }
 `;
@@ -547,8 +548,8 @@ export const OrderSummary = styled("div")`
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: ${tokens.overlay.white03};
+  border: 1px solid ${tokens.overlay.white10};
   border-radius: 6px;
   margin-bottom: 1.25rem;
 `;
@@ -560,12 +561,12 @@ export const SummaryRow = styled("div")`
 `;
 
 export const SummaryLabel = styled("span")`
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   font-size: 0.8rem;
 `;
 
 export const SummaryValue = styled("span")`
-  color: #fff;
+  color: ${tokens.text.onDark};
   font-size: 0.8rem;
   font-weight: 500;
 `;
@@ -573,11 +574,11 @@ export const SummaryValue = styled("span")`
 export const SummaryPnLValue = styled("span")<{ $isPositive: boolean }>`
   font-size: 0.8rem;
   font-weight: 600;
-  color: ${(props) => (props.$isPositive ? "#22c55e" : "#ef4444")};
+  color: ${(props) => (props.$isPositive ? tokens.trading.long : tokens.trading.short)};
 `;
 
 export const ErrorText = styled("p")`
-  color: #ef4444;
+  color: ${tokens.trading.short};
   font-size: 0.8125rem;
   margin: 0 0 1rem 0;
 `;
@@ -590,8 +591,8 @@ export const ModalActions = styled("div")`
 
 export const ModalCancelButton = styled("button")`
   padding: 0.5rem 1rem;
-  background: #4c5a5f;
-  color: #fff;
+  background: ${tokens.surface.tabActive};
+  color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
   font-size: 0.875rem;
@@ -600,7 +601,7 @@ export const ModalCancelButton = styled("button")`
   transition: background-color 0.2s ease;
 
   &:hover:not(:disabled) {
-    background: #5a6b70;
+    background: ${tokens.surface.tabHover};
   }
 
   &:disabled {

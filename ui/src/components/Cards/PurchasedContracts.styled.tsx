@@ -1,3 +1,4 @@
+import { tokens } from "../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 
 export const ContractCards = styled("div")`
@@ -11,10 +12,9 @@ export const ContractCards = styled("div")`
     grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
   }
   .card {
-    background-color: rgba(79, 126, 145, 0.04);
-    background: radial-gradient(circle, rgba(0, 0, 0, 0) 36%, rgba(255, 255, 255, 0.05) 100%);
-    border: rgba(171, 171, 171, 1) 1px solid;
-    color: #fff;
+    background: ${tokens.card.radialGradient};
+    border: ${tokens.border.default} 1px solid;
+    color: ${tokens.text.onDark};
     border-radius: 9px;
     padding: 1.75rem;
     padding-bottom: 1rem;
@@ -57,7 +57,7 @@ export const ContractCards = styled("div")`
       margin-bottom: 1.5rem;
 
       .pickaxe {
-        background: linear-gradient(0deg, rgba(128, 125, 125, 1) 12%, rgba(26, 26, 26, 1) 100%);
+        background: ${tokens.purchasedContracts.lineGradient};
         display: flex;
         justify-content: center;
         align-items: center;
@@ -115,7 +115,7 @@ export const ContractCards = styled("div")`
         font-size: 0.65rem;
         font-weight: 300;
         margin-bottom: 0.6rem;
-        color: #999999;
+        color: ${tokens.chart.axisMuted};
       }
       .item-value {
         display: flex;

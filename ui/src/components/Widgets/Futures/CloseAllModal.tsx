@@ -1,3 +1,4 @@
+import { tokens } from "../../../styles/tokens";
 import { useState, useMemo, useCallback } from "react";
 import styled from "@mui/material/styles/styled";
 import Modal from "@mui/material/Modal";
@@ -204,7 +205,7 @@ const CloseAllModalCard = styled(ModalCard)`
 `;
 
 const Description = styled("p")`
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   font-size: 0.875rem;
   margin: 0 0 1.25rem 0;
 `;
@@ -214,7 +215,7 @@ const Summary = styled("div")`
   flex-direction: column;
   gap: 0.75rem;
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.05);
+  background: ${tokens.overlay.white05};
   border-radius: 8px;
   margin-bottom: 1.25rem;
 `;
@@ -226,18 +227,18 @@ const SummaryRow = styled("div")`
 `;
 
 const SummaryLabel = styled("span")`
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   font-size: 0.875rem;
 `;
 
 const SummaryValue = styled("span")`
-  color: #fff;
+  color: ${tokens.text.onDark};
   font-size: 0.875rem;
   font-weight: 600;
 `;
 
 const ErrorText = styled("p")`
-  color: #ef4444;
+  color: ${tokens.trading.short};
   font-size: 0.8125rem;
   margin: 0 0 1rem 0;
 `;
@@ -253,12 +254,12 @@ const SimResultsContainer = styled("div")`
   }
 
   &::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
+    background: ${tokens.overlay.white10};
     border-radius: 2px;
   }
 
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
+    background: ${tokens.overlay.white30};
     border-radius: 2px;
   }
 `;
@@ -272,22 +273,22 @@ const Table = styled("table")`
     padding: 0.75rem 0.5rem;
     font-size: 0.75rem;
     font-weight: 600;
-    color: #a7a9b6;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: ${tokens.text.secondary};
+    border-bottom: 1px solid ${tokens.overlay.white10};
     white-space: nowrap;
   }
 
   td {
     padding: 0.75rem 0.5rem;
     font-size: 0.875rem;
-    color: #fff;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: ${tokens.text.onDark};
+    border-bottom: 1px solid ${tokens.overlay.white05};
   }
 `;
 
 const ResultRow = styled("tr")`
   &:hover {
-    background-color: rgba(255, 255, 255, 0.02);
+    background-color: ${tokens.overlay.white02};
   }
 
   &:last-child td {
@@ -301,6 +302,6 @@ const TypeBadge = styled("span")<{ $type: string }>`
   border-radius: 4px;
   font-size: 0.75rem;
   font-weight: 600;
-  background-color: ${(props) => (props.$type === "Long" ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)")};
-  color: ${(props) => (props.$type === "Long" ? "#22c55e" : "#ef4444")};
+  background-color: ${(props) => (props.$type === "Long" ? tokens.trading.longRowBg : tokens.trading.shortRowBg)};
+  color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;

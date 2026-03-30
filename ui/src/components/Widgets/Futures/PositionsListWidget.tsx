@@ -1,3 +1,4 @@
+import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import Tooltip from "@mui/material/Tooltip";
 import { SmallWidget } from "../../Cards/Cards.styled";
@@ -52,9 +53,9 @@ export const PositionsListWidget = ({
 
   const getStatusColor = (isActive: boolean, closedAt: string | null) => {
     if (closedAt) {
-      return "#6b7280"; // Closed
+      return tokens.text.muted; // Closed
     }
-    return isActive ? "#22c55e" : "#ef4444"; // Active or Cancelled
+    return isActive ? tokens.trading.long : tokens.trading.short; // Active or Cancelled
   };
 
   const getStatusText = (isActive: boolean, closedAt: string | null) => {
@@ -71,7 +72,7 @@ export const PositionsListWidget = ({
 
   const getTypeColor = (position: PositionBookPosition) => {
     const type = getPositionType(position);
-    return type === "Long" ? "#22c55e" : "#ef4444";
+    return type === "Long" ? tokens.trading.long : tokens.trading.short;
   };
 
   const getPriceForPosition = (position: PositionBookPosition) => {
@@ -252,7 +253,7 @@ export const PositionsListWidget = ({
     return (
       <PositionsContainer>
         <h3>Positions</h3>
-        <div style={{ textAlign: "center", padding: "2rem", color: "#6b7280" }}>
+        <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.muted }}>
           <p>Loading positions...</p>
         </div>
       </PositionsContainer>
@@ -319,9 +320,9 @@ export const PositionsListWidget = ({
                   {groupedPosition.destURL ? (
                     <PaymentStatusCell>
                       {groupedPosition.paidCount === groupedPosition.amount ? (
-                        <CheckCircleIcon width={20} height={20} color="#22c55e" />
+                        <CheckCircleIcon width={20} height={20} color={tokens.trading.long} />
                       ) : (
-                        <XCircleIcon width={20} height={20} color="#ef4444" />
+                        <XCircleIcon width={20} height={20} color={tokens.trading.short} />
                       )}
                       <PaymentText>
                         {groupedPosition.paidCount}/{groupedPosition.amount}
@@ -408,7 +409,7 @@ const PositionsContainer = styled(SmallWidget)`
     margin: 0;
     font-size: 1.1rem;
     font-weight: 600;
-    color: #fff;
+    color: ${tokens.text.onDark};
   }
 `;
 
@@ -421,12 +422,12 @@ const TableContainer = styled("div")`
   }
   
   &::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
+    background: ${tokens.overlay.white10};
     border-radius: 2px;
   }
   
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
+    background: ${tokens.overlay.white30};
     border-radius: 2px;
   }
 `;
@@ -441,8 +442,8 @@ const Table = styled("table")`
     padding: 0.75rem 0.5rem;
     font-size: 0.75rem;
     font-weight: 600;
-    color: #a7a9b6;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: ${tokens.text.secondary};
+    border-bottom: 1px solid ${tokens.overlay.white10};
     white-space: nowrap;
     
     &:first-child {
@@ -454,8 +455,8 @@ const Table = styled("table")`
   td {
     padding: 0.75rem 0.5rem;
     font-size: 0.875rem;
-    color: #fff;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: ${tokens.text.onDark};
+    border-bottom: 1px solid ${tokens.overlay.white05};
     
     &:first-child {
       width: 200px;
@@ -466,7 +467,7 @@ const Table = styled("table")`
 
 const TableRow = styled("tr")`
   &:hover {
-    background-color: rgba(255, 255, 255, 0.02);
+    background-color: ${tokens.overlay.white02};
   }
   
   &:last-child td {
@@ -480,12 +481,12 @@ const TypeBadge = styled("span")<{ $type: string }>`
   border-radius: 4px;
   font-size: 0.75rem;
   font-weight: 600;
-  background-color: ${(props) => (props.$type === "Long" ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)")};
-  color: ${(props) => (props.$type === "Long" ? "#22c55e" : "#ef4444")};
+  background-color: ${(props) => (props.$type === "Long" ? tokens.trading.longRowBg : tokens.trading.shortRowBg)};
+  color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
 const PnLCell = styled("span")<{ $isPositive: boolean }>`
-  color: ${(props) => (props.$isPositive ? "#22c55e" : "#ef4444")};
+  color: ${(props) => (props.$isPositive ? tokens.trading.long : tokens.trading.short)};
   font-weight: 600;
 `;
 
@@ -496,7 +497,7 @@ const DestURLCell = styled("span")`
   cursor: pointer;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   font-size: 0.875rem;
 `;
 
@@ -508,7 +509,7 @@ const PaymentStatusCell = styled("span")`
 
 const PaymentText = styled("span")`
   font-size: 0.875rem;
-  color: #fff;
+  color: ${tokens.text.onDark};
 `;
 
 const StatusBadge = styled("span")<{ $status: string }>`
@@ -520,11 +521,11 @@ const StatusBadge = styled("span")<{ $status: string }>`
   background-color: ${(props) => {
     switch (props.$status) {
       case "Open":
-        return "rgba(34, 197, 94, 0.2)";
+        return tokens.trading.longRowBg;
       case "Closed":
-        return "rgba(107, 114, 128, 0.2)";
+        return tokens.trading.neutralRowBg;
       default:
-        return "rgba(107, 114, 128, 0.2)";
+        return tokens.trading.neutralRowBg;
     }
   }};
   color: ${(props) => getStatusColor(props.$status)};
@@ -538,8 +539,8 @@ const ActionButtons = styled("div")`
 
 const DepositButton = styled("button")`
   padding: 0.5rem 0.875rem;
-  background: #4c5a5f;
-  color: #fff;
+  background: ${tokens.surface.tabActive};
+  color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
   font-size: 0.875rem;
@@ -548,7 +549,7 @@ const DepositButton = styled("button")`
   transition: background-color 0.2s ease, transform 0.1s ease;
   
   &:hover {
-    background: #5a6b70;
+    background: ${tokens.surface.tabHover};
     transform: translateY(-1px);
   }
   
@@ -559,8 +560,8 @@ const DepositButton = styled("button")`
 
 const CloseButton = styled("button")`
   padding: 0.5rem 0.875rem;
-  background:rgb(76, 90, 95);
-  color: #fff;
+  background: ${tokens.surface.tabActive};
+  color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
   font-size: 0.875rem;
@@ -569,7 +570,7 @@ const CloseButton = styled("button")`
   transition: background-color 0.2s ease, transform 0.1s ease;
   
   &:hover:not(:disabled) {
-    background: #5a6b70;
+    background: ${tokens.surface.tabHover};
     transform: translateY(-1px);
   }
   
@@ -578,7 +579,7 @@ const CloseButton = styled("button")`
   }
 
   &:disabled {
-    background: #6b7280;
+    background: ${tokens.text.muted};
     cursor: not-allowed;
     opacity: 0.6;
   }
@@ -587,7 +588,7 @@ const CloseButton = styled("button")`
 const EmptyState = styled("div")`
   text-align: center;
   padding: 2rem;
-  color: #6b7280;
+  color: ${tokens.text.muted};
   
   p {
     margin: 0;
@@ -599,10 +600,10 @@ const EmptyState = styled("div")`
 const getStatusColor = (status: string) => {
   switch (status) {
     case "Open":
-      return "#22c55e";
+      return tokens.trading.long;
     case "Closed":
-      return "#6b7280";
+      return tokens.text.muted;
     default:
-      return "#6b7280";
+      return tokens.text.muted;
   }
 };

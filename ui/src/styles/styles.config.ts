@@ -1,5 +1,6 @@
-// styles that are used in tailwind theme but need to be imported directly
-export const colors = {
+import { futuresDarkTailwind } from "./schemes/futures-dark";
+
+const lumerinColors = {
   "lumerin-gray": "#F2F5F9",
   "lumerin-light-gray": "#EAF7FC",
   "lumerin-blue-text": "#0E4353",
@@ -17,4 +18,10 @@ export const colors = {
   "lumerin-green": "#399E5A",
   "lumerin-light-green": "#5EF38C",
   "lumerin-polygon": "#8247E5",
+} as const;
+
+// Tailwind: legacy lumerin palette + futures tokens (futures keys override on collision by spread order)
+export const colors: Record<string, string> = {
+  ...lumerinColors,
+  ...futuresDarkTailwind,
 };

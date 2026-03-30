@@ -1,4 +1,5 @@
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../../../styles/tokens";
 import { useAccount } from "wagmi";
 import { useMemo } from "react";
 import { useModal } from "../../../hooks/useModal";
@@ -71,16 +72,16 @@ export const FuturesBalanceWidget = ({
   const unrealizedPnLValue = formatValue(unrealizedPnL ?? 0n, paymentToken);
   const unrealizedPnlColor =
     unrealizedPnL && unrealizedPnL > 0
-      ? "#22c55e"
+      ? tokens.trading.long
       : unrealizedPnL && unrealizedPnL < 0
-      ? "#ef4444"
-      : "#fff";
+      ? tokens.trading.short
+      : tokens.text.onDark;
   const realizedPnlColor =
     realizedPnL30D && realizedPnL30D > 0
-      ? "#22c55e"
+      ? tokens.trading.long
       : realizedPnL30D && realizedPnL30D < 0
-      ? "#ef4444"
-      : "#fff";
+      ? tokens.trading.short
+      : tokens.text.onDark;
   const realizedPnL30DFormatted = realizedPnL30D !== null ? (realizedPnL30D / 1e6).toFixed(2) : "-";
 
   const lockedBalanceThreshold = Number(
@@ -201,11 +202,8 @@ const PanelSection = styled("div")<{ $shouldHighlight: boolean }>`
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  background: ${(props) =>
-    props.$shouldHighlight
-      ? "radial-gradient(circle, rgba(0,0,0,0) 36%, rgba(255,255,0,0.05) 100%)"
-      : "transparent"};
-  border-left: ${(props) => (props.$shouldHighlight ? "2px solid #fbbf24" : "none")} !important;
+  background: ${(props) => (props.$shouldHighlight ? tokens.perps.yellowRadial : "transparent")};
+  border-left: ${(props) => (props.$shouldHighlight ? `2px solid ${tokens.trading.highlight}` : "none")} !important;
 `;
 
 const SectionHeader = styled("div")`
@@ -217,14 +215,14 @@ const SectionHeader = styled("div")`
 const SectionTitle = styled("span")`
   font-size: 0.7rem;
   font-weight: 500;
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   text-transform: uppercase;
   letter-spacing: 0.03em;
 `;
 
 const DisconnectedMsg = styled("div")`
   font-size: 0.75rem;
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   text-align: center;
   padding: 0.5rem 0;
 `;
@@ -244,7 +242,7 @@ const MetricCell = styled("div")`
 const MetricLabel = styled("span")`
   font-size: 0.6rem;
   font-weight: 500;
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   text-transform: uppercase;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -253,7 +251,7 @@ const MetricLabel = styled("span")`
 const MetricValue = styled("span")`
   font-size: 0.95rem;
   font-weight: 600;
-  color: #fff;
+  color: ${tokens.text.onDark};
   line-height: 1.2;
 `;
 
@@ -271,10 +269,10 @@ const ActionButton = styled(PrimaryButton)`
 
 const MarginCallWarning = styled("div")`
   padding: 0.35rem 0.5rem;
-  background-color: rgba(251, 191, 36, 0.1);
-  border: 1px solid rgba(251, 191, 36, 0.3);
+  background-color: ${tokens.perps.highlightBg};
+  border: 1px solid ${tokens.perps.highlightBorderSoft};
   border-radius: 6px;
-  color: #fbbf24;
+  color: ${tokens.trading.highlight};
   font-size: 0.75rem;
   font-weight: 600;
   text-align: center;

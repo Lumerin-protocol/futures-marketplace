@@ -8,6 +8,7 @@ import FlagCircleIcon from "@mui/icons-material/FlagCircle";
 import HelpIcon from "@mui/icons-material/Help";
 import ShieldIcon from "@mui/icons-material/Shield";
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../styles/tokens";
 
 const socials = [
   { link: "https://discord.gg/lumerin", icon: faDiscord },
@@ -31,7 +32,7 @@ export const Footer = () => {
           <LinksRow>
             {resources.map((item) => (
               <ResourceLink href={item.href} target="_blank" rel="noreferrer" key={item.label}>
-                <item.icon style={{ fill: "#509EBA", fontSize: "20px" }} />
+                <item.icon style={{ fill: tokens.accent.main, fontSize: "20px" }} />
                 <span>{item.label}</span>
               </ResourceLink>
             ))}
@@ -55,8 +56,6 @@ export const Footer = () => {
 
 const FooterWrapper = styled("footer")`
   width: 100%;
-//   background: linear-gradient(180deg, rgba(79, 126, 145, 0.08) 0%, rgba(79, 126, 145, 0.02) 100%);
-//   border-top: 1px solid rgba(171, 171, 171, 0.3);
   margin-top: auto;
   padding: 2rem 0;
 `;
@@ -79,7 +78,7 @@ const FooterContent = styled("div")`
 `;
 
 const SectionTitle = styled("h3")`
-  color: #fff;
+  color: ${tokens.text.onDark};
   font-size: 0.875rem;
   font-weight: 600;
   margin-bottom: 1rem;
@@ -106,13 +105,13 @@ const ResourceLink = styled("a")`
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: rgba(255, 255, 255, 0.8);
+  color: ${tokens.text.footerStrong};
   text-decoration: none;
   font-size: 0.875rem;
   transition: color 0.2s ease;
 
   &:hover {
-    color: #509eba;
+    color: ${tokens.accent.mainLower};
   }
 `;
 
@@ -138,20 +137,20 @@ const SocialLink = styled("a")`
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: ${tokens.overlay.white10};
+  color: ${tokens.text.onDark};
   font-size: 1.125rem;
   transition: all 0.2s ease;
 
   &:hover {
-    background: #509eba;
+    background: ${tokens.accent.mainLower};
     transform: translateY(-2px);
   }
 `;
 
 const VersionText = styled("div")`
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: ${tokens.text.footerSubtle};
   margin-top: 1rem;
 
   @media (max-width: 768px) {

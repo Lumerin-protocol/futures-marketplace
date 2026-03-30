@@ -1,4 +1,5 @@
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../styles/tokens";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import { safeLazy } from "../utils/safeLazy";
@@ -52,7 +53,7 @@ const Logo = styled("img")`
 `;
 
 const PageTitle = styled(Typography)`
-  color: #fff;
+  color: ${tokens.text.onDark};
   font-weight: 600;
   font-family: Raleway, sans-serif;
   font-size: 2rem;

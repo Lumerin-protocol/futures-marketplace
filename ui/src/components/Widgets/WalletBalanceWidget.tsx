@@ -1,4 +1,5 @@
 import styled from "@mui/material/styles/styled";
+import { tokens as colorTokens } from "../../styles/tokens";
 import { useAccount } from "wagmi";
 import { useFeeTokenBalance } from "../../hooks/data/useFeeTokenBalance";
 import { useFuturesPaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
@@ -18,7 +19,7 @@ export const WalletBalanceWidget = () => {
   const ethBalance = useEthBalance({ address });
   const ratesQuery = useRates();
 
-  const tokens = [
+  const tokenRows = [
     {
       name: paymentToken.name,
       symbol: paymentToken.symbol,
@@ -59,7 +60,7 @@ export const WalletBalanceWidget = () => {
         {isLoading && <Spinner fontSize="0.3em" />}
         {isSuccess &&
           address &&
-          tokens.map((token) => {
+          tokenRows.map((token) => {
             const balanceValue = formatValue(token.balance || 0n, token);
             const rateUSD = token.rateUSD * Number(balanceValue.value);
             return (
@@ -112,12 +113,12 @@ const TokenBalanceWrapper = styled("div")`
 const BalanceText = styled("span")`
   font-size: 1.1rem;
   margin-left: 0.3rem;
-  color: #fff;
+  color: ${colorTokens.text.onDark};
 
   @media (max-width: 768px) {
     font-size: 1rem;
     margin-left: 0.65rem;
-    color: #fff;
+    color: ${colorTokens.text.onDark};
   }
 `;
 
@@ -156,5 +157,5 @@ const Balances = styled("div")`
 const Rate = styled("p")`
   font-size: 0.8rem;
   text-align: center;
-  color: rgb(155, 155, 155);
+  color: ${colorTokens.text.walletMuted};
 `;

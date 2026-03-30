@@ -1,11 +1,12 @@
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../../styles/tokens";
 
 export const Card = styled("div")`
   padding: 1.5rem;
-  background-color: rgba(79, 126, 145, 0.04);
-  background: radial-gradient(circle, rgba(0, 0, 0, 0) 36%, rgba(255, 255, 255, 0.05) 100%);
-  border: rgba(171, 171, 171, 1) 1px solid;
-  color: #fff;
+  background-color: ${tokens.card.tint};
+  background: ${tokens.card.radialGradient};
+  border: ${tokens.border.default} 1px solid;
+  color: ${tokens.text.onDark};
   border-radius: 9px;
   display: flex;
   justify-content: center;
@@ -24,10 +25,10 @@ export const SmallWidget = styled(Card)`
   flex-direction: column;
   justify-content: center;
   min-width: 215px;
-  background-color: rgba(79, 126, 145, 0.04);
-  background: radial-gradient(circle, rgba(0, 0, 0, 0) 36%, rgba(255, 255, 255, 0.05) 100%);
-  border: rgba(171, 171, 171, 1) 1px solid;
-  color: #fff;
+  background-color: ${tokens.card.tint};
+  background: ${tokens.card.radialGradient};
+  border: ${tokens.border.default} 1px solid;
+  color: ${tokens.text.onDark};
 
   h3 {
     text-align: center;
@@ -39,7 +40,7 @@ export const SmallWidget = styled(Card)`
     text-align: center;
     border-top-width: 2px;
     font-size: 0.65rem;
-    border-top: 1px solid #eaf7fc;
+    border-top: 1px solid ${tokens.card.dividerLight};
     width: 100%;
     display: flex;
     justify-content: center;
@@ -49,10 +50,10 @@ export const SmallWidget = styled(Card)`
 
 export const MobileWidget = styled("div")`
   padding: 0.5rem;
-  background-color: rgba(79, 126, 145, 0.04);
-  background: radial-gradient(circle, rgba(0, 0, 0, 0) 36%, rgba(255, 255, 255, 0.05) 100%);
-  border: rgba(171, 171, 171, 1) 1px solid;
-  color: #fff;
+  background-color: ${tokens.card.tint};
+  background: ${tokens.card.radialGradient};
+  border: ${tokens.border.default} 1px solid;
+  color: ${tokens.text.onDark};
   border-radius: 9px;
   display: flex;
   justify-content: center;

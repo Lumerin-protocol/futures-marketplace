@@ -1,4 +1,5 @@
 import Dialog from "@mui/material/Dialog";
+import { tokens } from "../styles/tokens";
 import { ModalBox } from "./Modal.styled";
 
 interface AlertProps {
@@ -15,7 +16,7 @@ export const Alert: React.FC<AlertProps> = ({ message, isOpen, onClose, onClick 
         <div className="modal-card">
           <button
             type="button"
-            style={{ background: "#383838" }}
+            style={{ background: tokens.surface.alert }}
             className="inline-flex justify-center w-full bg-white text-base text-color-white font-medium"
             onClick={onClick ? () => onClick() : () => {}}
           >

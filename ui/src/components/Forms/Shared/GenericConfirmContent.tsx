@@ -1,5 +1,6 @@
 import type { FC } from "react";
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../../../styles/tokens";
 
 interface GenericConfirmContentProps {
   data: Record<string, string | number | bigint>;
@@ -24,7 +25,7 @@ const ReviewItems = styled("div")`
     justify-content: space-between;
     margin: 1.25rem 0;
     padding-bottom: 1rem;
-    border-bottom: 1px solid #eaf7fc;
+    border-bottom: 1px solid ${tokens.card.dividerLight};
     &:last-child {
       border-bottom: none;
     }
@@ -33,7 +34,7 @@ const ReviewItems = styled("div")`
       align-self: center;
     }
     p {
-      color: #fff;
+      color: ${tokens.text.onDark};
       font-weight: 500;
     }
   }

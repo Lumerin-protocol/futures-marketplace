@@ -1,3 +1,4 @@
+import { tokens } from "../../styles/tokens";
 import { AddressLength } from "../../types/types";
 import { truncateAddress } from "../../utils/formatters";
 import "react-circular-progressbar/dist/styles.css";
@@ -24,11 +25,11 @@ const BorderLinearProgress = styled(LinearProgress)(({ theme }) => ({
   height: 10,
   borderRadius: 5,
   [`&.${linearProgressClasses.colorPrimary}`]: {
-    backgroundColor: "#000",
+    backgroundColor: tokens.text.onLight,
   },
   [`& .${linearProgressClasses.bar}`]: {
     borderRadius: 5,
-    backgroundColor: "#fff",
+    backgroundColor: tokens.text.onDark,
   },
 }));
 
@@ -39,7 +40,7 @@ const getIcon = (icon: "inprogress" | "completed" | "closed-early") => {
   if (icon === "completed") {
     return <DoneIcon sx={{ color: "white" }} />;
   }
-  return <CancelIcon sx={{ color: "#ff3b3b" }} />;
+  return <CancelIcon sx={{ color: tokens.error.iconDanger }} />;
 };
 
 export type CardData = {

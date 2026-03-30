@@ -1,3 +1,4 @@
+import { tokens } from "../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import { PrimaryButton } from "../../components/Forms/FormButtons/Buttons.styled";
 //@ts-ignore
@@ -10,14 +11,14 @@ export const HeroWrapper = styled("div")`
   width: 100%;
 
   background-image: url(${Grid}), url(${BackgroundDots}),
-    radial-gradient(ellipse 90% 350% at 82% 50%, rgb(41, 50, 54) 15%, #1e1e1e 35%);
+    radial-gradient(ellipse 90% 350% at 82% 50%, ${tokens.landing.gradientStop} 15%, ${tokens.app.bg} 35%);
   background-position: right 50px top 60px, top right, top right;
   background-repeat: no-repeat, no-repeat, no-repeat;
   background-size: 65%, 40%, contain;
 
   @media (max-width: 650px) {
     background-image: url(${BackgroundDots}),
-      radial-gradient(ellipse 100% 80% at 50% 20%, rgb(41, 50, 54) 50%, #1e1e1e 75%);
+      radial-gradient(ellipse 100% 80% at 50% 20%, ${tokens.landing.gradientStop} 50%, ${tokens.app.bg} 75%);
     background-size: 70%, 60%;
     background-position: top right, top right;
     background-repeat: no-repeat, no-repeat;
@@ -48,12 +49,12 @@ export const HeroWrapper = styled("div")`
     }
   }
   p {
-    color: #fff;
+    color: ${tokens.text.onDark};
     font-family: Montserrat;
   }
 
   h3 {
-    color: #fff;
+    color: ${tokens.text.onDark};
     font-size: 1.75rem;
     font-weight: 600;
     font-family: Raleway;
@@ -64,7 +65,7 @@ export const HeroWrapper = styled("div")`
   }
 
   .instructions-link {
-    color: #fff;
+    color: ${tokens.text.onDark};
     font-weight: 600;
     display: flex;
     align-items: center;
@@ -79,7 +80,7 @@ export const HeroWrapper = styled("div")`
 export const HeroHeadline = styled("h1")`
   font-size: 4rem;
   font-weight: 700;
-  color: #fff;
+  color: ${tokens.text.onDark};
   font-family: Raleway;
   line-height: 1.25;
 
@@ -92,7 +93,7 @@ export const HeroSubheadline = styled("div")`
   font-size: 1.5rem;
   max-width: 400px;
   margin-bottom: 1.5rem;
-  color: #fff;
+  color: ${tokens.text.onDark};
 `;
 
 export const Steps = styled("ul")`
@@ -117,7 +118,7 @@ export const Steps = styled("ul")`
 
   .step {
     border-radius: 50%;
-    background: #eaf7fc;
+    background: ${tokens.card.dividerLight};
     width: 75px;
     height: 75px;
     display: flex;
@@ -135,11 +136,10 @@ export const Steps = styled("ul")`
 `;
 
 export const ConnectBtn = styled(PrimaryButton)`
-  background-color: #4c5a5f;
-  background: #4c5a5f
-    linear-gradient(45deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 100%);
-  box-shadow: 0px 4px 10px 0px rgba(0, 0, 0, 0.2);
-  color: #fff;
+  background-color: ${tokens.surface.tabActive};
+  background: ${tokens.surface.tabActive} ${tokens.landing.buttonOverlay};
+  box-shadow: 0px 4px 10px 0px ${tokens.landing.cardShadow};
+  color: ${tokens.text.onDark};
   font-weight: 500;
   padding: 0.75rem 1.75rem;
   flex-shrink: 0;

@@ -1,4 +1,5 @@
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../../../styles/tokens";
 import { useAccount } from "wagmi";
 import { useMemo } from "react";
 import { useModal } from "../../../hooks/useModal";
@@ -68,16 +69,16 @@ export const PerpsBalanceWidget = ({
   const unrealizedPnLValue = formatValue(unrealizedPnL ?? 0n, paymentToken);
   const unrealizedPnlColor =
     unrealizedPnL && unrealizedPnL > 0
-      ? "#22c55e"
+      ? tokens.trading.long
       : unrealizedPnL && unrealizedPnL < 0
-      ? "#ef4444"
-      : "#fff";
+      ? tokens.trading.short
+      : tokens.text.onDark;
   const realizedPnlColor =
     realizedPnL30D && realizedPnL30D > 0
-      ? "#22c55e"
+      ? tokens.trading.long
       : realizedPnL30D && realizedPnL30D < 0
-      ? "#ef4444"
-      : "#fff";
+      ? tokens.trading.short
+      : tokens.text.onDark;
   const realizedPnL30DFormatted = realizedPnL30D !== null ? (realizedPnL30D / 1e6).toFixed(2) : "-";
 
   // Check if locked amount is at or above threshold percentage of balance
@@ -225,7 +226,7 @@ const MetricCell = styled("div")`
 const MetricLabel = styled("span")`
   font-size: 0.65rem;
   font-weight: 500;
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   text-transform: uppercase;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -234,7 +235,7 @@ const MetricLabel = styled("span")`
 const MetricValue = styled("span")`
   font-size: 1.25rem;
   font-weight: 600;
-  color: #fff;
+  color: ${tokens.text.onDark};
   line-height: 1.2;
 
   @media (max-width: 1200px) {
@@ -281,11 +282,9 @@ const BalanceWidgetContainer = styled(SmallWidget)<{
   $centerContent: boolean;
 }>`
   border: ${(props) =>
-    props.$shouldHighlight ? "2px solid #fbbf24" : "rgba(171, 171, 171, 1) 1px solid"};
+    props.$shouldHighlight ? `2px solid ${tokens.trading.highlight}` : `${tokens.border.default} 1px solid`};
   background: ${(props) =>
-    props.$shouldHighlight
-      ? "radial-gradient(circle, rgba(0, 0, 0, 0) 36%, rgba(255, 255, 0, 0.05) 100%)"
-      : "radial-gradient(circle, rgba(0, 0, 0, 0) 36%, rgba(255, 255, 255, 0.05) 100%)"};
+    props.$shouldHighlight ? tokens.perps.yellowRadial : tokens.card.radialGradient};
   transition: border-color 0.3s ease;
   justify-content: ${(props) => (props.$centerContent ? "center" : "space-between")};
   align-items: ${(props) => (props.$centerContent ? "center" : "stretch")};
@@ -293,10 +292,10 @@ const BalanceWidgetContainer = styled(SmallWidget)<{
 
 const MarginCallWarning = styled("div")`
   padding: 0.2rem;
-  background-color: rgba(251, 191, 36, 0.1);
-  border: 1px solid rgba(251, 191, 36, 0.3);
+  background-color: ${tokens.perps.highlightBg};
+  border: 1px solid ${tokens.perps.highlightBorderSoft};
   border-radius: 6px;
-  color: #fbbf24;
+  color: ${tokens.trading.highlight};
   font-size: 0.875rem;
   font-weight: 600;
   text-align: center;

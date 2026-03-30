@@ -12,6 +12,7 @@ import { type TransactionStep, type TxState, useMultistepTx } from "../../../hoo
 import { SpinnerV2 } from "../../Spinner.styled";
 import { Link } from "react-router";
 import { getTxUrl } from "../../../lib/indexer";
+import { tokens } from "../../../styles/tokens";
 
 interface TransactionFormProps {
   title: string;
@@ -272,7 +273,7 @@ export const MultipleTransactionProgress = (props: {
 
 const RetryButton = styled(Button)`
   padding: 0.1em 0.1em;
-  background-color: rgba(106, 0, 0, 0.44);
+  background-color: ${tokens.multistep.errorOverlay};
 `;
 
 function mapErrorToString(error: Error): string {
@@ -382,7 +383,7 @@ const StepTxHash = styled("div")`
 
 const StepError = styled("div")`
   font-weight: normal;
-  color: red;
+  color: ${tokens.trading.short};
   grid-column-start: 2;
   overflow-wrap: break-word;
   word-break: break-word;
@@ -391,7 +392,7 @@ const StepError = styled("div")`
   min-width: 0;
   min-height: 0;
 
-  scrollbar-color: #888 #222;
+  scrollbar-color: ${tokens.scrollbar.thumb} ${tokens.scrollbar.track};
   scrollbar-width: thin;
 
   &::-webkit-scrollbar {
@@ -399,12 +400,12 @@ const StepError = styled("div")`
   }
 
   &::-webkit-scrollbar-thumb {
-    background-color: #444;
+    background-color: ${tokens.scrollbar.hover};
     border-radius: 4px;
   }
 
   &::-webkit-scrollbar-track {
-    background-color: #222;
+    background-color: ${tokens.scrollbar.track};
   }
 `;
 

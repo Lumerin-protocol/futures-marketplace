@@ -1,3 +1,4 @@
+import { tokens } from "../../styles/tokens";
 import { type FC, useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { useAccount } from "wagmi";
 import { useLocation, useNavigate } from "react-router";
@@ -310,9 +311,18 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
       {/* Row 2, Col 1: Chart */}
       <ChartArea>
-        <SmallWidget className="w-full justify-start" style={{ 
-          marginBottom: 0, paddingLeft: 5, paddingTop: "0.875rem", paddingRight: 10, height: "100%",
-          justifyContent: "start", border: "1px solid rgba(171, 171, 171, 0.4)" }}>
+        <SmallWidget
+          className="w-full justify-start"
+          style={{
+            marginBottom: 0,
+            paddingLeft: 5,
+            paddingTop: "0.875rem",
+            paddingRight: 10,
+            height: "100%",
+            justifyContent: "start",
+            border: `1px solid ${tokens.border.muted04}`,
+          }}
+        >
           <HashrateChart
             data={hashrateQuery.data || []}
             btcPriceData={btcPriceQuery.data || []}
@@ -509,14 +519,14 @@ const RightPanelArea = styled("div")`
   gap: 0;
   min-width: 0;
   overflow-y: auto;
-  border: 1px solid rgba(171, 171, 171, 0.4);
+  border: 1px solid ${tokens.border.muted04};
   border-radius: 8px;
 
   /* All children: strip individual borders and blend into panel */
   > * {
     border: none !important;
     border-radius: 0 !important;
-    border-bottom: 1px solid rgba(171, 171, 171, 0.2) !important;
+    border-bottom: 1px solid ${tokens.border.muted02} !important;
 
     &:last-child {
       border-bottom: none !important;
@@ -562,7 +572,7 @@ const OrderInfoSection = styled("div")`
 const OrderInfoTitle = styled("div")`
   font-size: 0.7rem;
   font-weight: 600;
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   text-transform: uppercase;
   letter-spacing: 0.04em;
 `;

@@ -7,6 +7,7 @@ import { useWatchAsset } from "wagmi";
 import { useFeeTokenAddress } from "../../hooks/data/useFeeTokenBalance";
 import { useContracts } from "../../hooks/data/useContracts";
 import { feeToken } from "../../lib/units";
+import { tokens } from "../../styles/tokens";
 
 export const MarketplaceStatistics = () => {
   const { watchAsset } = useWatchAsset();
@@ -90,10 +91,10 @@ const MarketplaceStatisticsWrapper = styled(SmallWidget)`
   }
 
   .active {
-    color: #fff;
+    color: ${tokens.text.onDark};
   }
   .completed {
-    color: #a7a9b6;
+    color: ${tokens.text.secondary};
   }
 
   .stat {
