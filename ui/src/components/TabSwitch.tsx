@@ -65,6 +65,48 @@ export const TabSwitch = <T extends string>(props: Props<T>) => {
     );
   }
 
+  if (isMobile) {
+    return (
+      <MobileTabSelectWrap fullWidth size="small">
+        <MobileTabSelect
+          value={value}
+          onChange={(e) => setValue(e.target.value as T)}
+          displayEmpty
+          renderValue={(selected) => {
+            const v = values.find((x) => x.value === selected);
+            if (!v) return null;
+            return (
+              <MobileTabSelectValue>
+                <span>{v.text}</span>
+                <MobileCountBadge>{v.count}</MobileCountBadge>
+              </MobileTabSelectValue>
+            );
+          }}
+          MenuProps={{
+            PaperProps: {
+              sx: {
+                bgcolor: "#2f3639",
+                color: "#fff",
+                border: "1px solid rgba(171, 171, 171, 0.6)",
+                borderRadius: "9px",
+                maxHeight: 320,
+              },
+            },
+          }}
+        >
+          {values.map((val) => (
+            <MenuItem value={val.value} key={val.value} sx={{ fontSize: "0.95rem" }}>
+              <MobileMenuItemInner>
+                <span>{val.text}</span>
+                <MobileCountBadge>{val.count}</MobileCountBadge>
+              </MobileMenuItemInner>
+            </MenuItem>
+          ))}
+        </MobileTabSelect>
+      </MobileTabSelectWrap>
+    );
+  }
+
   return (
     <TabSwitchStyled $numTabs={numTabs}>
       {values.map((val) => (

@@ -1197,6 +1197,9 @@ const Header = styled("div")`
 `;
 
 const TabSwitchWrapper = styled("div")`
+  width: 100%;
+  min-width: 0;
+
   button {
     font-size: 0.875rem;
     padding: 0.1em 0.5em;
