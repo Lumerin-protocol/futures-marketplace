@@ -5,7 +5,7 @@
 @layer components {
   /* buttons */
   .btn-action-panel {
-    @apply w-5/12 rounded-full inline-flex justify-center rounded-md border focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2563EB] sm:mt-0 sm:col-start-1 sm:text-sm;
+    @apply w-5/12 rounded-full inline-flex justify-center rounded-md border focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-futures-brand-blue sm:mt-0 sm:col-start-1 sm:text-sm;
   }
 
   .btn-wallet {
@@ -59,11 +59,11 @@
 
   /* inputs */
   .review-input {
-    @apply appearance-none block w-full px-3 py-2 placeholder-opacity-75 focus:outline-none focus:ring-[#2563EB] focus:border-[#2563EB] sm:text-sm;
+    @apply appearance-none block w-full px-3 py-2 placeholder-opacity-75 focus:outline-none focus:ring-futures-brand-blue focus:border-futures-brand-blue sm:text-sm;
   }
 
   .review-no-errors {
-    @apply bg-[#232736] btn-modal;
+    @apply bg-futures-surface-card btn-modal;
   }
 
   /* divs */

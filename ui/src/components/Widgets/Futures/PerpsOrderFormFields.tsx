@@ -295,8 +295,9 @@ export const PositionInfoSection = styled("div")`
   flex-direction: column;
   gap: 0.625rem;
   padding: 0.875rem 1rem;
-  background: ${tokens.overlay.white05};
-  border-radius: 8px;
+  background: ${tokens.surface.inputIsland};
+  border: 1px solid ${tokens.border.default};
+  border-radius: ${tokens.radius.md};
   margin-bottom: 1.25rem;
 `;
 
@@ -397,7 +398,7 @@ export const PriceStepButton = styled("button")`
   padding: 0.75rem 1rem;
   color: ${tokens.text.onDark};
   border: 1px solid ${tokens.overlay.white20};
-  background: ${tokens.overlay.white10};
+  background: ${tokens.surface.inputIsland};
   font-size: 1.2rem;
   font-weight: 600;
   cursor: pointer;
@@ -417,7 +418,7 @@ export const PriceStepButton = styled("button")`
   }
 
   &:hover:not(:disabled) {
-    background: ${tokens.overlay.white18};
+    background: ${tokens.surface.inputIslandHover};
   }
 
   &:disabled {
@@ -434,13 +435,13 @@ const sharedInputStyles = `
   font-size: 1rem;
   width: 100%;
   flex: 1;
-  background: ${tokens.overlay.white05};
+  background: ${tokens.surface.inputIsland};
   transition: border-color 0.2s ease;
 
   &:focus {
     outline: none;
     border-color: ${tokens.accent.main};
-    background: ${tokens.overlay.white08};
+    background: ${tokens.surface.inputIsland};
   }
 
   &::placeholder {
@@ -475,13 +476,13 @@ export const StyledSlider = styled(Slider)`
   & .MuiSlider-thumb {
     width: 18px;
     height: 18px;
-    background-color: ${tokens.surface.inputIsland};
+    background-color: ${tokens.brand.green};
     transition: all 0.2s ease;
 
     &:hover,
     &.Mui-focusVisible {
       box-shadow: 0 0 0 8px ${tokens.overlay.white16};
-      background-color: ${tokens.surface.inputIslandHover};
+      background-color: ${tokens.brand.greenDark};
     }
 
     &.Mui-active {
@@ -548,9 +549,9 @@ export const OrderSummary = styled("div")`
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
-  background: ${tokens.overlay.white03};
-  border: 1px solid ${tokens.overlay.white10};
-  border-radius: 6px;
+  background: ${tokens.surface.inputIsland};
+  border: 1px solid ${tokens.border.default};
+  border-radius: ${tokens.radius.md};
   margin-bottom: 1.25rem;
 `;
 

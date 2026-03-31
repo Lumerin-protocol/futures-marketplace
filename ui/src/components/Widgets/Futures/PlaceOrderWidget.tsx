@@ -1177,14 +1177,14 @@ const LeverageModal = ({
     <div className="space-y-6">
       <h2 className="text-2xl font-semibold text-white mb-6">Adjust Leverage</h2>
 
-      <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4">
+      <div style={{ background: tokens.surface.inputIsland, border: `1px solid ${tokens.border.default}`, borderRadius: tokens.radius.md, padding: '1rem' }}>
         <div className="flex justify-between items-center mb-4">
           <span className="text-gray-300 text-sm">Current Leverage:</span>
           <span className="text-white font-semibold text-lg">{tempLeverage}x</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-gray-300 text-sm">Margin Required:</span>
-          <span className="text-blue-400 font-semibold">{getMarginPercent(tempLeverage).toFixed(2)}%</span>
+          <span className="text-futures-brand-green font-semibold">{getMarginPercent(tempLeverage).toFixed(2)}%</span>
         </div>
       </div>
 
@@ -1434,12 +1434,12 @@ const InputGroup = styled("div")<{ $isHighlighted?: boolean }>`
     transition: border-color 0.2s ease;
     width: 100%;
     animation: ${(props) => getPulseAnimation(props.$isHighlighted)};
-    background: ${(props) => (props.$isHighlighted ? undefined : tokens.overlay.white05)};
+    background: ${(props) => (props.$isHighlighted ? undefined : tokens.surface.inputIsland)};
     
     &:focus {
       outline: none;
       border-color: ${tokens.accent.main};
-      background: ${tokens.overlay.white08};
+      background: ${tokens.surface.inputIsland};
     }
     
     &::placeholder {
@@ -1477,8 +1477,8 @@ const PriceInputContainer = styled("div")<{ $isHighlighted?: boolean }>`
     border-top: 1px solid ${tokens.overlay.white20};
     border-bottom: 1px solid ${tokens.overlay.white20};
     animation: ${(props) => getPulseAnimation(props.$isHighlighted)};
-    background: ${(props) => (props.$isHighlighted ? undefined : tokens.overlay.white05)};
-    
+    background: ${(props) => (props.$isHighlighted ? undefined : tokens.surface.inputIsland)};
+
     &:focus {
       border-left: 1px solid ${tokens.accent.main};
       border-right: 1px solid ${tokens.accent.main};
@@ -1501,19 +1501,19 @@ const PriceButton = styled("button")<{ $isHighlighted?: boolean }>`
   align-items: center;
   justify-content: center;
   animation: ${(props) => getPulseAnimation(props.$isHighlighted)};
-  background: ${(props) => (props.$isHighlighted ? undefined : tokens.overlay.white10)};
+  background: ${(props) => (props.$isHighlighted ? undefined : tokens.surface.inputIsland)};
   
   &:hover:not(:disabled) {
-    background: ${tokens.overlay.white15};
+    background: ${tokens.surface.inputIslandHover};
     border-color: ${tokens.overlay.white30};
   }
   
   &:active:not(:disabled) {
-    background: ${tokens.overlay.white20};
+    background: ${tokens.scrollbar.hover};
   }
   
   &:disabled {
-    background: ${tokens.overlay.white05};
+    background: ${tokens.surface.card};
     border-color: ${tokens.overlay.white10};
     cursor: not-allowed;
     opacity: 0.5;
@@ -1614,13 +1614,13 @@ const SellButton = styled("button")<{ $isHighlighted?: boolean }>`
 
 const OrderSummary = styled("div")`
   width: 100%;
-  border: 1px solid ${tokens.overlay.white10};
-  border-radius: 6px;
+  border: 1px solid ${tokens.border.default};
+  border-radius: ${tokens.radius.md};
   padding: 0.625rem 0.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
-  background: ${tokens.overlay.white03};
+  background: ${tokens.surface.inputIsland};
 `;
 
 const OrderSummaryRow = styled("div")`
@@ -1655,13 +1655,13 @@ const StyledSlider = styled(Slider)`
   & .MuiSlider-thumb {
     width: 18px;
     height: 18px;
-    background-color: ${tokens.surface.inputIsland};
+    background-color: ${tokens.brand.green};
     transition: all 0.2s ease;
-    
+
     &:hover,
     &.Mui-focusVisible {
       box-shadow: 0 0 0 8px ${tokens.overlay.white16};
-      background-color: ${tokens.surface.inputIslandHover};
+      background-color: ${tokens.brand.greenDark};
     }
     
     &.Mui-active {
@@ -1750,12 +1750,12 @@ const AmountInputWrapper = styled("div")`
   border: 1px solid ${tokens.overlay.white20};
   border-radius: 6px;
   overflow: hidden;
-  background: ${tokens.overlay.white05};
+  background: ${tokens.surface.inputIsland};
   transition: border-color 0.2s ease, background-color 0.2s ease;
 
   &:focus-within {
     border-color: ${tokens.brand.blue};
-    background: ${tokens.overlay.white08};
+    background: ${tokens.surface.inputIsland};
   }
 
   /* Override InputGroup's generic input styles for the inner input */
