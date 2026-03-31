@@ -1,3 +1,4 @@
+import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import EastIcon from "@mui/icons-material/East";
 import { useModal } from "../../../hooks/useModal";
@@ -118,9 +119,9 @@ const HeaderBar = styled("div")`
   align-items: center;
   gap: 1.5rem;
   padding: 0.5rem 0.75rem;
-  border: 1px solid rgba(171, 171, 171, 0.4);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid ${tokens.border.default};
+  border-radius: ${tokens.radius.md};
+  background: ${tokens.surface.card};
   flex-wrap: wrap;
 
   @media (max-width: 768px) {
@@ -131,16 +132,16 @@ const HeaderBar = styled("div")`
 const ModeToggle = styled("div")`
   display: flex;
   gap: 0;
-  border: 1px solid rgba(171, 171, 171, 1);
-  border-radius: 6px;
+  border: 1px solid ${tokens.border.default};
+  border-radius: ${tokens.radius.sm};
   overflow: hidden;
   flex-shrink: 0;
 `;
 
 const ModeButton = styled("button")<{ $active: boolean }>`
   padding: 0.4rem 1rem;
-  background: ${(props) => (props.$active ? "#4c5a5f" : "transparent")};
-  color: #fff;
+  background: ${(props) => (props.$active ? tokens.surface.tabActive : "transparent")};
+  color: ${tokens.text.onDark};
   border: none;
   font-size: 0.875rem;
   font-weight: 500;
@@ -149,11 +150,11 @@ const ModeButton = styled("button")<{ $active: boolean }>`
   white-space: nowrap;
 
   &:hover {
-    background: ${(props) => (props.$active ? "#4c5a5f" : "rgba(76, 90, 95, 0.5)")};
+    background: ${(props) => (props.$active ? tokens.surface.tabActive : tokens.surface.tabInactiveHover)};
   }
 
   &:not(:last-child) {
-    border-right: 1px solid rgba(171, 171, 171, 0.5);
+    border-right: 1px solid ${tokens.border.muted05};
   }
 `;
 
@@ -173,14 +174,14 @@ const StatItem = styled("div")`
 const StatValue = styled("span")`
   font-size: 1rem;
   font-weight: 600;
-  color: #fff;
+  color: ${tokens.text.onDark};
   line-height: 1.2;
 `;
 
 const StatLabel = styled("span")`
   font-size: 0.6rem;
   font-weight: 500;
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   text-transform: uppercase;
   letter-spacing: 0.04em;
 `;
@@ -188,7 +189,7 @@ const StatLabel = styled("span")`
 const Divider = styled("div")`
   width: 1px;
   height: 28px;
-  background: rgba(171, 171, 171, 0.3);
+  background: ${tokens.border.muted03};
   flex-shrink: 0;
 `;
 
@@ -197,7 +198,7 @@ const DetailsLink = styled("a")`
   align-items: center;
   gap: 0.25rem;
   font-size: 0.75rem;
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   text-decoration: none;
   white-space: nowrap;
   flex-shrink: 0;
@@ -205,6 +206,6 @@ const DetailsLink = styled("a")`
   transition: color 0.2s;
 
   &:hover {
-    color: #fff;
+    color: ${tokens.text.onDark};
   }
 `;

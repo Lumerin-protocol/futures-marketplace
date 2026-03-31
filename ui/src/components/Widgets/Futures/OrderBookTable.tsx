@@ -1,3 +1,4 @@
+import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -312,7 +313,7 @@ export const OrderBookTable = ({
           </button>
         </Header>
         <TableContainer>
-          <div style={{ textAlign: "center", padding: "2rem", color: "#ef4444" }}>Failed to load order book data</div>
+          <div style={{ textAlign: "center", padding: "2rem", color: tokens.trading.short }}>Failed to load order book data</div>
         </TableContainer>
       </OrderBookWidget>
     );
@@ -332,7 +333,7 @@ export const OrderBookTable = ({
           </button>
         </Header>
         <TableContainer>
-          <div style={{ textAlign: "center", padding: "2rem", color: "#a7a9b6" }}>Loading order book data...</div>
+          <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.secondary }}>Loading order book data...</div>
         </TableContainer>
       </OrderBookWidget>
     );
@@ -405,7 +406,7 @@ const OrderBookWidget = styled(SmallWidget)`
   padding: 0.875rem 1rem;
   justify-content: space-between;
   margin-bottom: 0;
-  border: 1px solid rgba(171, 171, 171, 0.4);
+  border: 1px solid ${tokens.border.muted04};
 `;
 
 const Header = styled("div")`
@@ -423,7 +424,7 @@ const Header = styled("div")`
   .nav-arrow {
     background: none;
     border: none;
-    color: #fff;
+    color: ${tokens.text.onDark};
     font-size: 0.9rem;
     cursor: pointer;
     padding: 0.2rem 0.4rem;
@@ -431,11 +432,11 @@ const Header = styled("div")`
     transition: all 0.2s ease;
 
     &:hover:not(:disabled) {
-      background-color: rgba(255, 255, 255, 0.1);
+      background-color: ${tokens.overlay.white10};
     }
 
     &:disabled {
-      color: #666;
+      color: ${tokens.text.orderBookMuted};
       cursor: not-allowed;
       opacity: 0.5;
     }
@@ -452,17 +453,17 @@ const TableContainer = styled("div")`
   }
 
   &::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
+    background: ${tokens.overlay.white05};
     border-radius: 2px;
   }
 
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
+    background: ${tokens.overlay.white20};
     border-radius: 2px;
   }
 
   &::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.4);
+    background: ${tokens.overlay.white40};
   }
 `;
 
@@ -476,11 +477,11 @@ const Table = styled("table")`
     padding: 0.3rem 0.4rem;
     font-size: 0.65rem;
     font-weight: 600;
-    color: #a7a9b6;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: ${tokens.text.secondary};
+    border-bottom: 1px solid ${tokens.overlay.white10};
     position: sticky;
     top: 0;
-    background-color: #1a1a1a;
+    background-color: ${tokens.surface.panel};
     z-index: 1;
     letter-spacing: 0.03em;
     text-transform: uppercase;
@@ -491,7 +492,7 @@ const Table = styled("table")`
     text-align: center;
     padding: 0.15rem 0.4rem;
     font-size: 0.75rem;
-    color: #fff;
+    color: ${tokens.text.onDark};
     height: 20px;
     line-height: 20px;
     width: 33.33%;
@@ -507,7 +508,7 @@ const TableRow = styled("tr")<{
 }>`
   position: relative;
   cursor: pointer;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid ${tokens.overlay.white05};
   
   /* Background fills for order book depth visualization */
   background: ${(props) => {
@@ -524,12 +525,12 @@ const TableRow = styled("tr")<{
         to right,
         transparent 0%,
         transparent ${bidStart}%,
-        rgba(34, 197, 94, 0.25) ${bidStart}%,
-        rgba(34, 197, 94, 0.25) 33%,
+        ${tokens.trading.longRowBgAlt} ${bidStart}%,
+        ${tokens.trading.longRowBgAlt} 33%,
         transparent 33%,
         transparent 67%,
-        rgba(239, 68, 68, 0.25) 67%,
-        rgba(239, 68, 68, 0.25) ${askEnd}%,
+        ${tokens.trading.shortRowBgAlt} 67%,
+        ${tokens.trading.shortRowBgAlt} ${askEnd}%,
         transparent ${askEnd}%,
         transparent 100%
       )`;
@@ -542,8 +543,8 @@ const TableRow = styled("tr")<{
         to right,
         transparent 0%,
         transparent ${bidStart}%,
-        rgba(34, 197, 94, 0.25) ${bidStart}%,
-        rgba(34, 197, 94, 0.25) 33%,
+        ${tokens.trading.longRowBgAlt} ${bidStart}%,
+        ${tokens.trading.longRowBgAlt} 33%,
         transparent 33%,
         transparent 100%
       )`;
@@ -556,8 +557,8 @@ const TableRow = styled("tr")<{
         to right,
         transparent 0%,
         transparent 67%,
-        rgba(239, 68, 68, 0.25) 67%,
-        rgba(239, 68, 68, 0.25) ${askEnd}%,
+        ${tokens.trading.shortRowBgAlt} 67%,
+        ${tokens.trading.shortRowBgAlt} ${askEnd}%,
         transparent ${askEnd}%,
         transparent 100%
       )`;
@@ -567,7 +568,7 @@ const TableRow = styled("tr")<{
   }};
   
   &:hover {
-    background: rgba(255, 255, 255, 0.1) !important;
+    background: ${tokens.overlay.white10} !important;
   }
   
   &:last-child {
@@ -576,42 +577,43 @@ const TableRow = styled("tr")<{
 `;
 
 const BidCell = styled("td")<{ $isHighlighted?: boolean }>`
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
-  background-color: ${(props) => (props.$isHighlighted ? "rgba(34, 197, 94, 0.3)" : "transparent")};
+  border-right: 1px solid ${tokens.overlay.white05};
+  background-color: ${(props) => (props.$isHighlighted ? tokens.trading.longHighlightBg : "transparent")};
   ${(props) =>
     props.$isHighlighted &&
     `
-    box-shadow: inset 0 0 8px rgba(34, 197, 94, 0.4);
+    box-shadow: inset 0 0 8px ${tokens.trading.longHighlightGlow};
   `}
 `;
 
 const AskCell = styled("td")<{ $isHighlighted?: boolean }>`
-  border-left: 1px solid rgba(255, 255, 255, 0.05);
-  background-color: ${(props) => (props.$isHighlighted ? "rgba(239, 68, 68, 0.3)" : "transparent")};
+  border-left: 1px solid ${tokens.overlay.white05};
+  background-color: ${(props) => (props.$isHighlighted ? tokens.trading.shortHighlightBg : "transparent")};
   ${(props) =>
     props.$isHighlighted &&
     `
-    box-shadow: inset 0 0 8px rgba(239, 68, 68, 0.4);
+    box-shadow: inset 0 0 8px ${tokens.trading.shortHighlightGlow};
   `}
 `;
 
 const PriceCell = styled("td")<{ $isLastHashprice?: boolean }>`
-  background-color: ${(props) => (props.$isLastHashprice ? "rgba(59, 130, 246, 0.3)" : "transparent")};
+  background-color: ${(props) => (props.$isLastHashprice ? tokens.trading.infoHighlightBg : "transparent")};
   font-weight: ${(props) => (props.$isLastHashprice ? "700" : "normal")};
-  border-radius: 4px;
+  font-family: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
+  border-radius: ${tokens.radius.sm};
   
   ${(props) =>
     props.$isLastHashprice &&
     `
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
-    border: 1px solid rgba(59, 130, 246, 0.6);
+    box-shadow: 0 0 8px ${tokens.trading.infoHighlightGlow};
+    border: 1px solid ${tokens.trading.infoBorder};
   `}
 `;
 
 const OrderBookTitle = styled("div")`
   font-size: 0.7rem;
   font-weight: 500;
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   text-transform: uppercase;
   letter-spacing: 0.03em;
   margin-bottom: 0.3rem;
@@ -622,7 +624,7 @@ const PerpsInfoHeader = styled("div")`
   justify-content: space-around;
   align-items: center;
   padding: 0.75rem 1rem;
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: ${tokens.overlay.white05};
   border-radius: 8px;
   gap: 1rem;
 `;
@@ -635,13 +637,13 @@ const InfoLabel = styled("div")`
   
   .label {
     font-size: 0.85rem;
-    color: #a7a9b6;
+    color: ${tokens.text.secondary};
     font-weight: 500;
   }
   
   .value {
     font-size: 1.1rem;
-    color: #fff;
+    color: ${tokens.text.onDark};
     font-weight: 600;
   }
 `;

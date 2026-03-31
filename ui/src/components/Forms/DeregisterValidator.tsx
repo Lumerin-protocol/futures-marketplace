@@ -2,7 +2,7 @@ import type { FC } from "react";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCheckCircle } from "@fortawesome/free-solid-svg-icons/faCheckCircle";
-import { colors } from "../../styles/styles.config";
+import { tokens } from "../../styles/tokens";
 import { TransactionForm } from "./Shared/MultistepForm";
 import { validatorRegistryAbi } from "contracts-js/dist/abi/abi";
 
@@ -25,7 +25,7 @@ export const DeregisterValidator: FC<CancelFormProps> = ({ closeForm }) => {
       )}
       resultForm={(props) => (
         <>
-          <FontAwesomeIcon className="mb-8" icon={faCheckCircle} size="5x" color={colors["lumerin-aqua"]} />
+          <FontAwesomeIcon className="mb-8" icon={faCheckCircle} size="5x" color={tokens.brand.green} />
           <h2 className="w-6/6 text-left font-semibold mb-3">The order has been cancelled successfully.</h2>
           <p className="w-6/6 text-left font-normal text-s">The status of the order will update shortly.</p>
         </>

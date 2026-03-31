@@ -1,5 +1,6 @@
 import type { FC, HTMLProps, PropsWithChildren } from "react";
 import { PieChart, PieChartProps } from "react-minimal-pie-chart";
+import { tokens } from "../styles/tokens";
 
 type Props = PropsWithChildren<{
   progress: number;
@@ -7,10 +8,10 @@ type Props = PropsWithChildren<{
   color?: "default" | "error" | "success";
 }>;
 
-const colors = {
-  default: "rgb(80, 158, 186)",
-  error: "rgb(255, 59, 59)",
-  success: "rgb(71, 158, 71)",
+const segmentColors = {
+  default: tokens.circularProgress.default,
+  error: tokens.circularProgress.error,
+  success: tokens.circularProgress.success,
 };
 
 export const CircularProgress: FC<Props> = (props) => {
@@ -22,18 +23,14 @@ export const CircularProgress: FC<Props> = (props) => {
   }
 
   const data = [
-    { value: progress, color: colors[color] },
-    { value: 1 - progress, color: "rgba(50, 50, 50)" },
+    { value: progress, color: segmentColors[color] },
+    { value: 1 - progress, color: tokens.circularProgress.track },
   ];
 
   return (
     <PieChart
       {...props}
-      // segmentsStyle={(index) => {
-      //   return {
-      //     stroke: index === 0 ? "url(#cl1)" : "rgb(80, 158, 186)",
-      //   };
-      // }}
+      // segmentsStyle: optional per-segment stroke (gradient vs solid accent)
       data={data}
       totalValue={1}
       lineWidth={lineWidth}

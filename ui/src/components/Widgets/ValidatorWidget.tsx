@@ -1,4 +1,5 @@
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../../styles/tokens";
 import { isAddressEqual, zeroAddress } from "viem";
 import { useAccount, useReadContract } from "wagmi";
 import { SmallWidget } from "../Cards/Cards.styled";
@@ -146,8 +147,8 @@ const Entry = styled("dl", {
     width: max-content;
     padding: 0.5em;
     border-radius: 0.5em;
-    background-color: rgba(0, 0, 0, 0.9);
-    color: #ccc;
+    background-color: ${tokens.modal.backdrop};
+    color: ${tokens.text.buttonDisabled};
     font-size: 0.8rem;
     visibility: hidden;
     transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
@@ -213,8 +214,8 @@ const Tooltip = styled("div", {
     width: max-content;
     padding: 0.5em;
     border-radius: 0.5em;
-    background-color: rgba(0, 0, 0, 0.9);
-    color: #ccc;
+    background-color: ${tokens.modal.backdrop};
+    color: ${tokens.text.buttonDisabled};
     font-size: 0.8rem;
     visibility: hidden;
     transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;

@@ -1,3 +1,4 @@
+import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import type { HistoricalPosition } from "../../../hooks/data/useHistoricalPositions";
@@ -93,7 +94,7 @@ export const HistoricalPositionsListWidget = ({
     return (
       <PositionsContainer>
         <h3>Historical Positions</h3>
-        <div style={{ textAlign: "center", padding: "2rem", color: "#6b7280" }}>
+        <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.muted }}>
           <p>Loading historical positions...</p>
         </div>
       </PositionsContainer>
@@ -161,7 +162,7 @@ const PositionsContainer = styled(SmallWidget)`
     margin: 0;
     font-size: 1.1rem;
     font-weight: 600;
-    color: #fff;
+    color: ${tokens.text.onDark};
   }
 `;
 
@@ -174,12 +175,12 @@ const TableContainer = styled("div")`
   }
   
   &::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
+    background: ${tokens.overlay.white10};
     border-radius: 2px;
   }
   
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
+    background: ${tokens.overlay.white30};
     border-radius: 2px;
   }
 `;
@@ -194,8 +195,8 @@ const Table = styled("table")`
     padding: 0.75rem 0.5rem;
     font-size: 0.75rem;
     font-weight: 600;
-    color: #a7a9b6;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: ${tokens.text.secondary};
+    border-bottom: 1px solid ${tokens.overlay.white10};
     white-space: nowrap;
     
     &:first-child {
@@ -207,8 +208,8 @@ const Table = styled("table")`
   td {
     padding: 0.75rem 0.5rem;
     font-size: 0.875rem;
-    color: #fff;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: ${tokens.text.onDark};
+    border-bottom: 1px solid ${tokens.overlay.white05};
     
     &:first-child {
       width: 200px;
@@ -219,7 +220,7 @@ const Table = styled("table")`
 
 const TableRow = styled("tr")`
   &:hover {
-    background-color: rgba(255, 255, 255, 0.02);
+    background-color: ${tokens.overlay.white02};
   }
   
   &:last-child td {
@@ -233,19 +234,19 @@ const TypeBadge = styled("span")<{ $type: string }>`
   border-radius: 4px;
   font-size: 0.75rem;
   font-weight: 600;
-  background-color: ${(props) => (props.$type === "Long" ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)")};
-  color: ${(props) => (props.$type === "Long" ? "#22c55e" : "#ef4444")};
+  background-color: ${(props) => (props.$type === "Long" ? tokens.trading.longRowBg : tokens.trading.shortRowBg)};
+  color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
 const PnLCell = styled("span")<{ $isPositive: boolean; $isZero: boolean }>`
-  color: ${(props) => (props.$isZero ? "white" : props.$isPositive ? "#22c55e" : "#ef4444")};
+  color: ${(props) => (props.$isZero ? "white" : props.$isPositive ? tokens.trading.long : tokens.trading.short)};
   font-weight: 600;
 `;
 
 const EmptyState = styled("div")`
   text-align: center;
   padding: 2rem;
-  color: #6b7280;
+  color: ${tokens.text.muted};
   
   p {
     margin: 0;

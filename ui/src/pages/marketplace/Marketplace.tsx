@@ -1,3 +1,4 @@
+import { tokens } from "../../styles/tokens";
 import { type FC, useCallback, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
 import Skeleton from "@mui/material/Skeleton";
@@ -193,8 +194,8 @@ const StatsChart: FC<{ successCount: number; failCount: number }> = (props) => {
           width: max-content;
           transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
           content: "Success: ${stats.successCount} / Fail: ${stats.failCount}";
-          background-color: rgba(0, 0, 0, 0.5);
-          color: #fff;
+          background-color: ${tokens.overlay.black50};
+          color: ${tokens.text.onDark};
           font-size: 0.75rem;
           padding: 0.5rem;
           border-radius: 8px;
@@ -211,10 +212,10 @@ const StatsChart: FC<{ successCount: number; failCount: number }> = (props) => {
           {
             label: "Success",
             value: Number(stats.successCount),
-            color: "rgb(80, 158, 186)",
+            color: tokens.marketplaceChart.success,
           },
-          { label: "Fail", value: Number(stats.failCount), color: "rgb(42, 42, 42)" },
-          { label: "Total", value: total === 0 ? 1 : 0, color: "rgb(42, 42, 42)" },
+          { label: "Fail", value: Number(stats.failCount), color: tokens.marketplaceChart.neutral },
+          { label: "Total", value: total === 0 ? 1 : 0, color: tokens.marketplaceChart.neutral },
         ]}
         lineWidth={30}
         rounded={false}
@@ -231,7 +232,7 @@ const StatsChart: FC<{ successCount: number; failCount: number }> = (props) => {
           justify-content: center;
           align-items: center;
           font-size: 0.75rem;
-          color: rgba(255, 255, 255, 0.7);
+          color: ${tokens.text.onDarkMuted};
         `}
       >
         {total === 0 ? "n/a" : total}

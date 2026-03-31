@@ -1,3 +1,4 @@
+import { tokens } from "../../styles/tokens";
 import { type FC, useCallback, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import Tooltip from "@mui/material/Tooltip";
@@ -106,7 +107,7 @@ export const WithdrawalFormPerps: FC<WithdrawalFormPerpsProps> = ({
               Locked:
               <Tooltip title={INITIAL_MARGIN_TOOLTIP} arrow placement="top">
                 <HelpOutlineIcon
-                  sx={{ fontSize: "0.95rem", color: "#a7a9b6", cursor: "help", verticalAlign: "middle" }}
+                  sx={{ fontSize: "0.95rem", color: tokens.text.secondary, cursor: "help", verticalAlign: "middle" }}
                   aria-label="About locked amount"
                 />
               </Tooltip>

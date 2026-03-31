@@ -10,6 +10,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
 import type { ParticipantOrder, Participant } from "../../hooks/data/useParticipant";
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../../styles/tokens";
 import { handleNumericDecimalInput } from "./Shared/AmountInputForm";
 import { getMinMarginForPositionManual } from "../../hooks/data/getMinMarginForPositionManual";
 import { useOrderFee } from "../../hooks/data/useOrderFee";
@@ -323,33 +324,33 @@ const InputGroup = styled("div")`
   label {
     font-size: 0.875rem;
     font-weight: 500;
-    color: #a7a9b6;
+    color: ${tokens.text.secondary};
   }
 
   input {
     padding: 0.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid ${tokens.overlay.white20};
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.05);
-    color: #fff;
+    background: ${tokens.overlay.white05};
+    color: ${tokens.text.onDark};
     font-size: 1rem;
     transition: border-color 0.2s ease, background-color 0.2s ease;
     width: 100%;
 
     &:focus {
       outline: none;
-      border-color: #509EBA;
-      background: rgba(255, 255, 255, 0.08);
+      border-color: ${tokens.accent.main};
+      background: ${tokens.overlay.white08};
     }
 
     &::placeholder {
-      color: #6b7280;
+      color: ${tokens.text.muted};
     }
   }
 `;
 
 const ErrorText = styled("span")`
-  color: #ef4444;
+  color: ${tokens.trading.short};
   font-size: 0.75rem;
   margin-top: -0.25rem;
 `;

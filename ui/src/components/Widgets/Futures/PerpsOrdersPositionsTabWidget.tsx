@@ -1,3 +1,4 @@
+import { tokens } from "../../../styles/tokens";
 import { useState, useMemo, useCallback, useEffect } from "react";
 import styled from "@mui/material/styles/styled";
 import Modal from "@mui/material/Modal";
@@ -307,15 +308,15 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
   const getStatusColor = (status: string) => {
     switch (status) {
       case "ACTIVE":
-        return "#22c55e";
+        return tokens.trading.long;
       case "PARTIAL":
-        return "#f59e0b";
+        return tokens.trading.warning;
       case "FILLED":
-        return "#6b7280";
+        return tokens.text.muted;
       case "CANCELLED":
-        return "#ef4444";
+        return tokens.trading.short;
       default:
-        return "#6b7280";
+        return tokens.text.muted;
     }
   };
 
@@ -327,7 +328,7 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
 
   if (isLoading) {
     return (
-      <div style={{ textAlign: "center", padding: "2rem", color: "#6b7280" }}>
+      <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.muted }}>
         <p>Loading orders...</p>
       </div>
     );
@@ -537,15 +538,15 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }:
   const getStatusColor = (status: string) => {
     switch (status) {
       case "ACTIVE":
-        return "#22c55e";
+        return tokens.trading.long;
       case "PARTIAL":
-        return "#f59e0b";
+        return tokens.trading.warning;
       case "FILLED":
-        return "#6b7280";
+        return tokens.text.muted;
       case "CANCELLED":
-        return "#ef4444";
+        return tokens.trading.short;
       default:
-        return "#6b7280";
+        return tokens.text.muted;
     }
   };
 
@@ -561,7 +562,7 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }:
 
   if (isLoading) {
     return (
-      <div style={{ textAlign: "center", padding: "2rem", color: "#6b7280" }}>
+      <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.muted }}>
         <p>Loading order history...</p>
       </div>
     );
@@ -695,7 +696,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
 
   if (isLoading) {
     return (
-      <div style={{ textAlign: "center", padding: "2rem", color: "#6b7280" }}>
+      <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.muted }}>
         <p>Loading positions...</p>
       </div>
     );
@@ -843,11 +844,11 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "OPEN":
-        return "#22c55e";
+        return tokens.trading.long;
       case "CLOSE":
-        return "#6b7280";
+        return tokens.text.muted;
       default:
-        return "#6b7280";
+        return tokens.text.muted;
     }
   };
 
@@ -858,7 +859,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, 
 
   if (isLoading) {
     return (
-      <div style={{ textAlign: "center", padding: "2rem", color: "#6b7280" }}>
+      <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.muted }}>
         <p>Loading position history...</p>
       </div>
     );
@@ -993,7 +994,7 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoad
 
   if (isLoading) {
     return (
-      <div style={{ textAlign: "center", padding: "2rem", color: "#6b7280" }}>
+      <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.muted }}>
         <p>Loading trades...</p>
       </div>
     );
@@ -1177,13 +1178,13 @@ const TabContainer = styled(SmallWidget)`
   display: flex;
   flex-direction: column;
   align-items: start;
-  border: 1px solid rgba(171, 171, 171, 0.4);
+  border: 1px solid ${tokens.border.muted04};
   
   h3 {
     margin: 0;
     font-size: 1.1rem;
     font-weight: 600;
-    color: #fff;
+    color: ${tokens.text.onDark};
   }
 `;
 
@@ -1235,7 +1236,7 @@ const TradesWrapper = styled("div")`
 const PlaceholderText = styled("div")`
   padding: 2rem;
   text-align: center;
-  color: rgba(255, 255, 255, 0.5);
+  color: ${tokens.overlay.white50};
   font-size: 0.875rem;
 `;
 
@@ -1248,12 +1249,12 @@ const TableContainer = styled("div")`
   }
   
   &::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
+    background: ${tokens.overlay.white10};
     border-radius: 2px;
   }
   
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
+    background: ${tokens.overlay.white30};
     border-radius: 2px;
   }
 `;
@@ -1268,22 +1269,22 @@ const Table = styled("table")`
     padding: 0.75rem 0.5rem;
     font-size: 0.75rem;
     font-weight: 600;
-    color: #a7a9b6;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: ${tokens.text.secondary};
+    border-bottom: 1px solid ${tokens.overlay.white10};
     white-space: nowrap;
   }
   
   td {
     padding: 0.75rem 0.5rem;
     font-size: 0.875rem;
-    color: #fff;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: ${tokens.text.onDark};
+    border-bottom: 1px solid ${tokens.overlay.white05};
   }
 `;
 
 const TableRow = styled("tr")`
   &:hover {
-    background-color: rgba(255, 255, 255, 0.02);
+    background-color: ${tokens.overlay.white02};
   }
   
   &:last-child td {
@@ -1297,8 +1298,8 @@ const TypeBadge = styled("span")<{ $type: string }>`
   border-radius: 4px;
   font-size: 0.75rem;
   font-weight: 600;
-  background-color: ${(props) => (props.$type === "Long" ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)")};
-  color: ${(props) => (props.$type === "Long" ? "#22c55e" : "#ef4444")};
+  background-color: ${(props) => (props.$type === "Long" ? tokens.trading.longRowBg : tokens.trading.shortRowBg)};
+  color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
 const StatusBadge = styled("span")<{ $status: string; $color: string }>`
@@ -1319,8 +1320,8 @@ const ActionButtons = styled("div")`
 
 const ModifyButton = styled("button")`
   padding: 0.5rem 0.875rem;
-  background: #4c5a5f;
-  color: #fff;
+  background: ${tokens.surface.tabActive};
+  color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
   font-size: 0.875rem;
@@ -1329,7 +1330,7 @@ const ModifyButton = styled("button")`
   transition: background-color 0.2s ease, transform 0.1s ease;
 
   &:hover:not(:disabled) {
-    background: #5a6b70;
+    background: ${tokens.surface.tabHover};
     transform: translateY(-1px);
   }
 
@@ -1338,7 +1339,7 @@ const ModifyButton = styled("button")`
   }
 
   &:disabled {
-    background: #6b7280;
+    background: ${tokens.text.muted};
     cursor: not-allowed;
     opacity: 0.6;
   }
@@ -1346,8 +1347,8 @@ const ModifyButton = styled("button")`
 
 const CancelButton = styled("button")`
   padding: 0.5rem 0.875rem;
-  background: #4c5a5f;
-  color: #fff;
+  background: ${tokens.surface.tabActive};
+  color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
   font-size: 0.875rem;
@@ -1356,7 +1357,7 @@ const CancelButton = styled("button")`
   transition: background-color 0.2s ease, transform 0.1s ease;
   
   &:hover:not(:disabled) {
-    background: #5a6b70;
+    background: ${tokens.surface.tabHover};
     transform: translateY(-1px);
   }
   
@@ -1365,7 +1366,7 @@ const CancelButton = styled("button")`
   }
 
   &:disabled {
-    background: #6b7280;
+    background: ${tokens.text.muted};
     cursor: not-allowed;
     opacity: 0.6;
   }
@@ -1374,7 +1375,7 @@ const CancelButton = styled("button")`
 const EmptyState = styled("div")`
   text-align: center;
   padding: 2rem;
-  color: #6b7280;
+  color: ${tokens.text.muted};
   
   p {
     margin: 0;
@@ -1383,12 +1384,12 @@ const EmptyState = styled("div")`
 `;
 
 const PnLText = styled("span")<{ $isPositive: boolean }>`
-  color: ${(props) => (props.$isPositive ? "#22c55e" : "#ef4444")};
+  color: ${(props) => (props.$isPositive ? tokens.trading.long : tokens.trading.short)};
   font-weight: 600;
 `;
 
 const TxLink = styled("a")`
-  color: #3b82f6;
+  color: ${tokens.trading.info};
   text-decoration: none;
   font-family: monospace;
   font-size: 0.8rem;
@@ -1400,8 +1401,8 @@ const TxLink = styled("a")`
 
 const DetailsButton = styled("button")`
   padding: 0.5rem 0.875rem;
-  background: #4c5a5f;
-  color: #fff;
+  background: ${tokens.surface.tabActive};
+  color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
   font-size: 0.875rem;
@@ -1410,7 +1411,7 @@ const DetailsButton = styled("button")`
   transition: background-color 0.2s ease, transform 0.1s ease;
   
   &:hover:not(:disabled) {
-    background: #5a6b70;
+    background: ${tokens.surface.tabHover};
     transform: translateY(-1px);
   }
   
@@ -1419,7 +1420,7 @@ const DetailsButton = styled("button")`
   }
 
   &:disabled {
-    background: #6b7280;
+    background: ${tokens.text.muted};
     cursor: not-allowed;
     opacity: 0.6;
   }
@@ -1450,12 +1451,12 @@ const TradesTableContainer = styled("div")`
   }
   
   &::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
+    background: ${tokens.overlay.white10};
     border-radius: 4px;
   }
   
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
+    background: ${tokens.overlay.white30};
     border-radius: 4px;
   }
 `;
@@ -1466,7 +1467,7 @@ const LoadMoreButton = styled("button")`
   padding: 0.75rem;
   margin-top: 0.5rem;
   background: transparent;
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   border: none;
   font-size: 0.875rem;
   cursor: pointer;
@@ -1474,7 +1475,7 @@ const LoadMoreButton = styled("button")`
   transition: color 0.2s ease;
 
   &:hover {
-    color: #fff;
+    color: ${tokens.text.onDark};
   }
 `;
 
@@ -1488,16 +1489,16 @@ const TradesTable = styled("table")`
     padding: 0.75rem 0.5rem;
     font-size: 0.75rem;
     font-weight: 600;
-    color: #a7a9b6;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    color: ${tokens.text.secondary};
+    border-bottom: 1px solid ${tokens.overlay.white20};
     white-space: nowrap;
   }
   
   td {
     padding: 0.75rem 0.5rem;
     font-size: 0.875rem;
-    color: #fff;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: ${tokens.text.onDark};
+    border-bottom: 1px solid ${tokens.overlay.white10};
   }
   
   tbody tr:last-child td {
@@ -1505,7 +1506,7 @@ const TradesTable = styled("table")`
   }
   
   tbody tr:hover {
-    background-color: rgba(255, 255, 255, 0.05);
+    background-color: ${tokens.overlay.white05};
   }
 `;
 
@@ -1521,7 +1522,7 @@ const CloseAllModalCard = styled(ModalCard)`
 `;
 
 const CloseAllDescription = styled("p")`
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   font-size: 0.875rem;
   margin: 0 0 1.25rem 0;
 `;
@@ -1531,7 +1532,7 @@ const CloseAllSummary = styled("div")`
   flex-direction: column;
   gap: 0.75rem;
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.05);
+  background: ${tokens.overlay.white05};
   border-radius: 8px;
   margin-bottom: 1.25rem;
 `;
@@ -1543,18 +1544,18 @@ const SummaryRow = styled("div")`
 `;
 
 const SummaryLabel = styled("span")`
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   font-size: 0.875rem;
 `;
 
 const SummaryValue = styled("span")`
-  color: #fff;
+  color: ${tokens.text.onDark};
   font-size: 0.875rem;
   font-weight: 600;
 `;
 
 const ErrorText = styled("p")`
-  color: #ef4444;
+  color: ${tokens.trading.short};
   font-size: 0.8125rem;
   margin: 0 0 1rem 0;
 `;
@@ -1568,8 +1569,8 @@ const CloseAllActions = styled("div")`
 
 const ModalCancelButton = styled("button")`
   padding: 0.5rem 1rem;
-  background: #4c5a5f;
-  color: #fff;
+  background: ${tokens.surface.tabActive};
+  color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
   font-size: 0.875rem;
@@ -1578,14 +1579,14 @@ const ModalCancelButton = styled("button")`
   transition: background-color 0.2s ease;
 
   &:hover {
-    background: #5a6b70;
+    background: ${tokens.surface.tabHover};
   }
 `;
 
 const ModalConfirmButton = styled("button")`
   padding: 0.5rem 1rem;
-  background: #ef4444;
-  color: #fff;
+  background: ${tokens.trading.short};
+  color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
   font-size: 0.875rem;
@@ -1594,18 +1595,18 @@ const ModalConfirmButton = styled("button")`
   transition: background-color 0.2s ease;
 
   &:hover:not(:disabled) {
-    background: #dc2626;
+    background: ${tokens.trading.shortHover};
   }
 
   &:disabled {
-    background: #6b7280;
+    background: ${tokens.text.muted};
     cursor: not-allowed;
     opacity: 0.6;
   }
 `;
 
 const SimulatingText = styled("p")`
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   font-size: 0.875rem;
   margin: 0;
   text-align: center;
@@ -1621,12 +1622,12 @@ const SimResultsContainer = styled("div")`
   }
 
   &::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
+    background: ${tokens.overlay.white10};
     border-radius: 2px;
   }
 
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
+    background: ${tokens.overlay.white30};
     border-radius: 2px;
   }
 `;

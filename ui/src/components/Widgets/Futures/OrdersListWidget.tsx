@@ -1,3 +1,4 @@
+import { tokens } from "../../../styles/tokens";
 import { useState } from "react";
 import styled from "@mui/material/styles/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
@@ -48,9 +49,9 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   } | null>(null);
   const getStatusColor = (isActive: boolean, closedAt: string | null) => {
     if (closedAt) {
-      return "#3b82f6"; // Filled/Closed
+      return tokens.trading.info; // Filled/Closed
     }
-    return isActive ? "#22c55e" : "#ef4444"; // Active or Cancelled
+    return isActive ? tokens.trading.long : tokens.trading.short; // Active or Cancelled
   };
 
   // const getStatusText = (isActive: boolean, closedAt: string | null) => {
@@ -61,7 +62,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   // };
 
   const getTypeColor = (isBuy: boolean) => {
-    return isBuy ? "#22c55e" : "#ef4444";
+    return isBuy ? tokens.trading.long : tokens.trading.short;
   };
 
   const formatPrice = (price: bigint) => {
@@ -162,7 +163,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
     return (
       <OrdersContainer>
         <h3>Orders</h3>
-        <div style={{ textAlign: "center", padding: "2rem", color: "#6b7280" }}>
+        <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.muted }}>
           <p>Loading orders...</p>
         </div>
       </OrdersContainer>
@@ -290,7 +291,7 @@ const OrdersContainer = styled(SmallWidget)`
     margin: 0;
     font-size: 1.1rem;
     font-weight: 600;
-    color: #fff;
+    color: ${tokens.text.onDark};
   }
 `;
 
@@ -303,12 +304,12 @@ const TableContainer = styled("div")`
   }
   
   &::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
+    background: ${tokens.overlay.white10};
     border-radius: 2px;
   }
   
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
+    background: ${tokens.overlay.white30};
     border-radius: 2px;
   }
 `;
@@ -323,8 +324,8 @@ const Table = styled("table")`
     padding: 0.75rem 0.5rem;
     font-size: 0.75rem;
     font-weight: 600;
-    color: #a7a9b6;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: ${tokens.text.secondary};
+    border-bottom: 1px solid ${tokens.overlay.white10};
     white-space: nowrap;
     
     &:first-child {
@@ -336,8 +337,8 @@ const Table = styled("table")`
   td {
     padding: 0.75rem 0.5rem;
     font-size: 0.875rem;
-    color: #fff;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: ${tokens.text.onDark};
+    border-bottom: 1px solid ${tokens.overlay.white05};
     
     &:first-child {
       width: 200px;
@@ -348,7 +349,7 @@ const Table = styled("table")`
 
 const TableRow = styled("tr")`
   &:hover {
-    background-color: rgba(255, 255, 255, 0.02);
+    background-color: ${tokens.overlay.white02};
   }
   
   &:last-child td {
@@ -362,8 +363,8 @@ const TypeBadge = styled("span")<{ $type: string }>`
   border-radius: 4px;
   font-size: 0.75rem;
   font-weight: 600;
-  background-color: ${(props) => (props.$type === "Long" ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)")};
-  color: ${(props) => (props.$type === "Long" ? "#22c55e" : "#ef4444")};
+  background-color: ${(props) => (props.$type === "Long" ? tokens.trading.longRowBg : tokens.trading.shortRowBg)};
+  color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
 const DestURLCell = styled("span")`
@@ -373,7 +374,7 @@ const DestURLCell = styled("span")`
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   font-size: 0.875rem;
 `;
 
@@ -386,13 +387,13 @@ const StatusBadge = styled("span")<{ $status: string }>`
   background-color: ${(props) => {
     switch (props.$status) {
       case "Active":
-        return "rgba(34, 197, 94, 0.2)";
+        return tokens.trading.longRowBg;
       case "Filled":
-        return "rgba(59, 130, 246, 0.2)";
+        return tokens.trading.infoRowBg;
       case "Cancelled":
-        return "rgba(239, 68, 68, 0.2)";
+        return tokens.trading.shortRowBg;
       default:
-        return "rgba(107, 114, 128, 0.2)";
+        return tokens.trading.neutralRowBg;
     }
   }};
   color: ${(props) => getStatusColor(props.$status)};
@@ -406,8 +407,8 @@ const ActionButtons = styled("div")`
 
 const ModifyButton = styled("button")`
   padding: 0.5rem 0.875rem;
-  background: #4c5a5f;
-  color: #fff;
+  background: ${tokens.surface.tabActive};
+  color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
   font-size: 0.875rem;
@@ -416,7 +417,7 @@ const ModifyButton = styled("button")`
   transition: background-color 0.2s ease, transform 0.1s ease;
   
   &:hover:not(:disabled) {
-    background: #5a6b70;
+    background: ${tokens.surface.tabHover};
     transform: translateY(-1px);
   }
   
@@ -425,7 +426,7 @@ const ModifyButton = styled("button")`
   }
 
   &:disabled {
-    background: #6b7280;
+    background: ${tokens.text.muted};
     cursor: not-allowed;
     opacity: 0.6;
   }
@@ -433,8 +434,8 @@ const ModifyButton = styled("button")`
 
 const CloseButton = styled("button")`
   padding: 0.5rem 0.875rem;
-  background: #4c5a5f;
-  color: #fff;
+  background: ${tokens.surface.tabActive};
+  color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
   font-size: 0.875rem;
@@ -443,7 +444,7 @@ const CloseButton = styled("button")`
   transition: background-color 0.2s ease, transform 0.1s ease;
   
   &:hover:not(:disabled) {
-    background: #5a6b70;
+    background: ${tokens.surface.tabHover};
     transform: translateY(-1px);
   }
   
@@ -452,7 +453,7 @@ const CloseButton = styled("button")`
   }
 
   &:disabled {
-    background: #6b7280;
+    background: ${tokens.text.muted};
     cursor: not-allowed;
     opacity: 0.6;
   }
@@ -461,7 +462,7 @@ const CloseButton = styled("button")`
 const EmptyState = styled("div")`
   text-align: center;
   padding: 2rem;
-  color: #6b7280;
+  color: ${tokens.text.muted};
   
   p {
     margin: 0;
@@ -473,12 +474,12 @@ const EmptyState = styled("div")`
 const getStatusColor = (status: string) => {
   switch (status) {
     case "Active":
-      return "#22c55e";
+      return tokens.trading.long;
     case "Filled":
-      return "#3b82f6";
+      return tokens.trading.info;
     case "Cancelled":
-      return "#ef4444";
+      return tokens.trading.short;
     default:
-      return "#6b7280";
+      return tokens.text.muted;
   }
 };

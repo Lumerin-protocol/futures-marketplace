@@ -1,4 +1,5 @@
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../styles/tokens";
 
 export const SpinnerV2 = () => {
   return (
@@ -18,7 +19,7 @@ export const SpinnerV2 = () => {
 };
 
 export const Spinner = styled("div")<{ fontSize?: string }>`
-  color: #53b1bd;
+  color: ${tokens.spinner.accent};
   font-size: ${({ fontSize }) => fontSize || "1.3em"};
   margin: 4.5em;
   width: 1em;

@@ -1,4 +1,5 @@
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../../styles/tokens";
 
 export const DrawerContent = styled("div")`
   height: 100vh;
@@ -7,14 +8,14 @@ export const DrawerContent = styled("div")`
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  color: white;
+  color: ${tokens.text.primary};
 
   nav a,
   .resources a {
     display: flex;
     padding: 0.5rem;
     align-items: center;
-    color: white;
+    color: ${tokens.text.primary};
   }
 
   .item-name {
@@ -40,10 +41,10 @@ export const DrawerContent = styled("div")`
 
   .resources {
     padding: 1rem 0;
-    border-top: 2px solid #f4f4f4;
+    border-top: 2px solid ${tokens.nav.divider};
 
     h3 {
-      color: white;
+      color: ${tokens.text.primary};
       margin-bottom: 1rem;
       font-weight: 500;
       padding-left: 0.5rem;

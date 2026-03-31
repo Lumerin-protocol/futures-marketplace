@@ -15,6 +15,7 @@ import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { formatStratumUrl } from "../../utils/formatters";
 import { isValidHost, isValidUsername } from "../../utils/validators";
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../../styles/tokens";
 import type { Participant } from "../../hooks/data/useParticipant";
 import type { ContractMode } from "../../types/types";
 import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpecs";
@@ -372,24 +373,24 @@ const PoolSelectWrapper = styled("div")`
   }
   
   .MuiInputBase-root {
-    background: rgba(255, 255, 255, 0.05);
-    color: #fff;
+    background: ${tokens.overlay.white05};
+    color: ${tokens.text.onDark};
     
     &:hover {
-      background: rgba(255, 255, 255, 0.08);
+      background: ${tokens.overlay.white08};
     }
   }
   
   .MuiInputLabel-root {
-    color: #a7a9b6;
+    color: ${tokens.text.secondary};
   }
   
   .MuiOutlinedInput-notchedOutline {
-    border-color: rgba(255, 255, 255, 0.2);
+    border-color: ${tokens.overlay.white20};
   }
   
   .MuiSelect-icon {
-    color: #a7a9b6;
+    color: ${tokens.text.secondary};
   }
 `;
 
@@ -401,34 +402,34 @@ const InputGroup = styled("div")`
   label {
     font-size: 0.875rem;
     font-weight: 500;
-    color: #a7a9b6;
+    color: ${tokens.text.secondary};
   }
 
   input {
     padding: 0.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.05);
-    color: #fff;
-    font-size: 1rem;
+    border: 1px solid ${tokens.border.default};
+    border-radius: ${tokens.radius.sm};
+    background: ${tokens.surface.inputIsland};
+    color: ${tokens.text.onDark};
+    font-size: 0.875rem;
     transition: border-color 0.2s ease, background-color 0.2s ease;
     width: 100%;
     min-width: 65px;
 
     &:focus {
       outline: none;
-      border-color: #509EBA;
-      background: rgba(255, 255, 255, 0.08);
+      border-color: ${tokens.brand.blue};
+      background: ${tokens.overlay.white08};
     }
 
     &::placeholder {
-      color: #6b7280;
+      color: ${tokens.text.muted};
     }
   }
 `;
 
 const ErrorText = styled("span")`
-  color: #ef4444;
+  color: ${tokens.trading.short};
   font-size: 0.75rem;
   margin-top: -0.25rem;
 `;
@@ -438,15 +439,15 @@ const CheckboxContainer = styled("div")`
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid ${tokens.overlay.white20};
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
+  background: ${tokens.overlay.white05};
   cursor: pointer;
   transition: background-color 0.2s ease, border-color 0.2s ease;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.3);
+    background: ${tokens.overlay.white08};
+    border-color: ${tokens.overlay.white30};
   }
 `;
 
@@ -454,12 +455,12 @@ const CheckboxInput = styled("input")`
   width: 18px;
   height: 18px;
   cursor: pointer;
-  accent-color: #509EBA;
+  accent-color: ${tokens.accent.main};
 `;
 
 const CheckboxLabel = styled("label")`
   font-size: 0.875rem;
-  color: #fff;
+  color: ${tokens.text.onDark};
   cursor: pointer;
   user-select: none;
 `;

@@ -3,14 +3,15 @@ import { keyframes, css } from "@emotion/react";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { useState, useEffect, useCallback } from "react";
 import Slider from "@mui/material/Slider";
+import { tokens } from "../../../styles/tokens";
 
 // Pulsing background animation - single blue color for all inputs
 const pulseYellow = keyframes`
   0%, 100% {
-    background-color: rgba(251, 191, 36, 0.15);
+    background-color: ${tokens.perps.highlightBorder};
   }
   50% {
-    background-color: rgba(251, 191, 36, 0.45);
+    background-color: ${tokens.perps.highlightBorderStrong};
   }
 `;
 
@@ -409,7 +410,7 @@ export const PlaceOrderWidget = ({
     return (
       <PlaceOrderContainer>
         {/* <h3>Place Order{contractMode === "perpetual" ? " - PERP" : ""}</h3> */}
-        <div style={{ textAlign: "center", padding: "2rem", color: "#6b7280" }}>
+        <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.muted }}>
           <Spinner fontSize="0.3em" />
           <p style={{ marginTop: "1rem", margin: 0 }}>Loading contract specifications...</p>
         </div>
@@ -1385,7 +1386,7 @@ const PlaceOrderContainer = styled(SmallWidget)`
     margin-bottom: 0.3rem;
     font-size: 0.75rem;
     font-weight: 600;
-    color: #a7a9b6;
+    color: ${tokens.text.secondary};
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
@@ -1421,42 +1422,42 @@ const InputGroup = styled("div")<{ $isHighlighted?: boolean }>`
   label {
     font-size: 0.875rem;
     font-weight: 500;
-    color: #a7a9b6;
+    color: ${tokens.text.secondary};
   }
   
   input {
     padding: 0.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid ${tokens.overlay.white20};
     border-radius: 6px;
-    color: #fff;
+    color: ${tokens.text.onDark};
     font-size: 1rem;
     transition: border-color 0.2s ease;
     width: 100%;
     animation: ${(props) => getPulseAnimation(props.$isHighlighted)};
-    background: ${(props) => (props.$isHighlighted ? undefined : "rgba(255, 255, 255, 0.05)")};
+    background: ${(props) => (props.$isHighlighted ? undefined : tokens.overlay.white05)};
     
     &:focus {
       outline: none;
-      border-color: #509EBA;
-      background: rgba(255, 255, 255, 0.08);
+      border-color: ${tokens.accent.main};
+      background: ${tokens.overlay.white08};
     }
     
     &::placeholder {
-      color: #6b7280;
+      color: ${tokens.text.muted};
     }
   }
 `;
 
 const MinMarginLabel = styled("div")`
   font-size: 0.75rem;
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   margin-top: 0.25rem;
   text-align: center;
 `;
 
 const ExpectedQuantityLabel = styled("div")`
   font-size: 0.75rem;
-  color: #509EBA;
+  color: ${tokens.accent.main};
   margin-top: 0.25rem;
   text-align: center;
   font-weight: 500;
@@ -1473,22 +1474,22 @@ const PriceInputContainer = styled("div")<{ $isHighlighted?: boolean }>`
     border-radius: 0;
     border-left: none;
     border-right: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.2);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    border-top: 1px solid ${tokens.overlay.white20};
+    border-bottom: 1px solid ${tokens.overlay.white20};
     animation: ${(props) => getPulseAnimation(props.$isHighlighted)};
-    background: ${(props) => (props.$isHighlighted ? undefined : "rgba(255, 255, 255, 0.05)")};
+    background: ${(props) => (props.$isHighlighted ? undefined : tokens.overlay.white05)};
     
     &:focus {
-      border-left: 1px solid #509EBA;
-      border-right: 1px solid #509EBA;
+      border-left: 1px solid ${tokens.accent.main};
+      border-right: 1px solid ${tokens.accent.main};
     }
   }
 `;
 
 const PriceButton = styled("button")<{ $isHighlighted?: boolean }>`
   padding: 0.75rem 1rem;
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: ${tokens.text.onDark};
+  border: 1px solid ${tokens.overlay.white20};
   border-radius: 6px;
   font-size: 1.2rem;
   font-weight: 600;
@@ -1500,20 +1501,20 @@ const PriceButton = styled("button")<{ $isHighlighted?: boolean }>`
   align-items: center;
   justify-content: center;
   animation: ${(props) => getPulseAnimation(props.$isHighlighted)};
-  background: ${(props) => (props.$isHighlighted ? undefined : "rgba(255, 255, 255, 0.1)")};
+  background: ${(props) => (props.$isHighlighted ? undefined : tokens.overlay.white10)};
   
   &:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.3);
+    background: ${tokens.overlay.white15};
+    border-color: ${tokens.overlay.white30};
   }
   
   &:active:not(:disabled) {
-    background: rgba(255, 255, 255, 0.2);
+    background: ${tokens.overlay.white20};
   }
   
   &:disabled {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.1);
+    background: ${tokens.overlay.white05};
+    border-color: ${tokens.overlay.white10};
     cursor: not-allowed;
     opacity: 0.5;
   }
@@ -1552,10 +1553,10 @@ const ButtonSection = styled("div")`
 const BuyButton = styled("button")<{ $isHighlighted?: boolean }>`
   width: 100%;
   padding: 0.875rem 1rem;
-  background: #22c55e;
-  color: #fff;
+  background: ${tokens.trading.long};
+  color: ${tokens.text.onDark};
   border: none;
-  border-radius: 6px;
+  border-radius: ${tokens.radius.sm};
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
@@ -1564,7 +1565,7 @@ const BuyButton = styled("button")<{ $isHighlighted?: boolean }>`
   animation: ${(props) => (props.$isHighlighted ? css`${pulseYellow} 1.5s ease-in-out infinite` : "none")};
   
   &:hover:not(:disabled) {
-    background: #16a34a;
+    background: ${tokens.trading.longHover};
     transform: translateY(-1px);
   }
   
@@ -1573,7 +1574,7 @@ const BuyButton = styled("button")<{ $isHighlighted?: boolean }>`
   }
   
   &:disabled {
-    background: #6b7280;
+    background: ${tokens.surface.tabMuted};
     cursor: not-allowed;
     opacity: 0.6;
     animation: none;
@@ -1583,10 +1584,10 @@ const BuyButton = styled("button")<{ $isHighlighted?: boolean }>`
 const SellButton = styled("button")<{ $isHighlighted?: boolean }>`
   width: 100%;
   padding: 0.875rem 1rem;
-  background: #ef4444;
-  color: #fff;
+  background: ${tokens.trading.short};
+  color: ${tokens.text.onDark};
   border: none;
-  border-radius: 6px;
+  border-radius: ${tokens.radius.sm};
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
@@ -1595,7 +1596,7 @@ const SellButton = styled("button")<{ $isHighlighted?: boolean }>`
   animation: ${(props) => (props.$isHighlighted ? css`${pulseYellow} 1.5s ease-in-out infinite` : "none")};
   
   &:hover:not(:disabled) {
-    background: #dc2626;
+    background: ${tokens.trading.shortHover};
     transform: translateY(-1px);
   }
   
@@ -1604,7 +1605,7 @@ const SellButton = styled("button")<{ $isHighlighted?: boolean }>`
   }
   
   &:disabled {
-    background: #6b7280;
+    background: ${tokens.surface.tabMuted};
     cursor: not-allowed;
     opacity: 0.6;
     animation: none;
@@ -1613,13 +1614,13 @@ const SellButton = styled("button")<{ $isHighlighted?: boolean }>`
 
 const OrderSummary = styled("div")`
   width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid ${tokens.overlay.white10};
   border-radius: 6px;
   padding: 0.625rem 0.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
-  background: rgba(255, 255, 255, 0.03);
+  background: ${tokens.overlay.white03};
 `;
 
 const OrderSummaryRow = styled("div")`
@@ -1629,11 +1630,11 @@ const OrderSummaryRow = styled("div")`
   font-size: 0.8rem;
 
   span:first-child {
-    color: #a7a9b6;
+    color: ${tokens.text.secondary};
   }
 
   span:last-child {
-    color: #fff;
+    color: ${tokens.text.onDark};
     font-weight: 500;
   }
 `;
@@ -1647,77 +1648,77 @@ const SliderContainer = styled("div")`
 `;
 
 const StyledSlider = styled(Slider)`
-  color: #ffffff;
+  color: ${tokens.text.primary};
   height: 6px;
   padding: 13px 0;
   
   & .MuiSlider-thumb {
     width: 18px;
     height: 18px;
-    background-color: #ffffff;
+    background-color: ${tokens.surface.inputIsland};
     transition: all 0.2s ease;
     
     &:hover,
     &.Mui-focusVisible {
-      box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.16);
-      background-color: #f0f0f0;
+      box-shadow: 0 0 0 8px ${tokens.overlay.white16};
+      background-color: ${tokens.surface.inputIslandHover};
     }
     
     &.Mui-active {
-      box-shadow: 0 0 0 14px rgba(255, 255, 255, 0.16);
+      box-shadow: 0 0 0 14px ${tokens.overlay.white16};
     }
   }
   
   & .MuiSlider-track {
     height: 6px;
     border: none;
-    background-color: #ffffff;
+    background-color: ${tokens.surface.inputIsland};
   }
   
   & .MuiSlider-rail {
     height: 6px;
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: ${tokens.overlay.white20};
     opacity: 1;
   }
   
   & .MuiSlider-mark {
     width: 2px;
     height: 6px;
-    background-color: rgba(255, 255, 255, 0.5);
+    background-color: ${tokens.overlay.white50};
     opacity: 1;
   }
   
   & .MuiSlider-markActive {
-    background-color: rgba(0, 0, 0, 0.3);
+    background-color: ${tokens.overlay.black30};
   }
   
   & .MuiSlider-markLabel {
-    color: #a7a9b6;
+    color: ${tokens.text.secondary};
     font-size: 0.75rem;
     top: 26px;
   }
   
   & .MuiSlider-valueLabel {
-    background-color: #ffffff;
-    color: #000000;
+    background-color: ${tokens.surface.inputIsland};
+    color: #FFFFFF;
     border-radius: 4px;
     padding: 4px 8px;
     font-size: 0.75rem;
   }
   
   &.Mui-disabled {
-    color: #6b7280;
+    color: ${tokens.text.muted};
     
     & .MuiSlider-thumb {
-      background-color: #6b7280;
+      background-color: ${tokens.surface.tabMuted};
     }
     
     & .MuiSlider-track {
-      background-color: #6b7280;
+      background-color: ${tokens.surface.tabMuted};
     }
     
     & .MuiSlider-mark {
-      background-color: rgba(107, 114, 128, 0.5);
+      background-color: ${tokens.slider.thumbMuted};
     }
   }
 `;
@@ -1737,7 +1738,7 @@ const SliderInfoContainer = styled("div")`
 `;
 
 const SliderInfo = styled("span")`
-  color: #ffffff;
+  color: ${tokens.text.primary};
   font-weight: 500;
   text-align: center;
   font-size: 0.875rem;
@@ -1746,15 +1747,15 @@ const SliderInfo = styled("span")`
 const AmountInputWrapper = styled("div")`
   display: flex;
   align-items: stretch;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid ${tokens.overlay.white20};
   border-radius: 6px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.05);
+  background: ${tokens.overlay.white05};
   transition: border-color 0.2s ease, background-color 0.2s ease;
 
   &:focus-within {
-    border-color: #509eba;
-    background: rgba(255, 255, 255, 0.08);
+    border-color: ${tokens.brand.blue};
+    background: ${tokens.overlay.white08};
   }
 
   /* Override InputGroup's generic input styles for the inner input */
@@ -1774,7 +1775,7 @@ const AmountInputWrapper = styled("div")`
     }
 
     &::placeholder {
-      color: #6b7280;
+      color: ${tokens.text.muted};
     }
 
     &:disabled {
@@ -1788,23 +1789,23 @@ const AmountModeDropdown = styled("select")`
   appearance: none;
   padding: 0 0.75rem;
   border: none;
-  border-left: 1px solid rgba(255, 255, 255, 0.15);
+  border-left: 1px solid ${tokens.overlay.white15};
   border-radius: 0;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: ${tokens.overlay.white08};
+  color: ${tokens.text.onDark};
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
   min-width: 56px;
   text-align: center;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23a7a9b6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23${tokens.text.secondary.slice(1)}'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.4rem center;
   padding-right: 1.4rem;
   transition: background-color 0.15s ease;
 
   &:hover:not(:disabled) {
-    background-color: rgba(255, 255, 255, 0.14);
+    background-color: ${tokens.overlay.white14};
   }
 
   &:focus {
@@ -1817,7 +1818,7 @@ const AmountModeDropdown = styled("select")`
   }
 
   option {
-    background: #1e2433;
-    color: #fff;
+    background: ${tokens.surface.footer};
+    color: ${tokens.text.onDark};
   }
 `;

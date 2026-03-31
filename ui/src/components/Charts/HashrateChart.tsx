@@ -3,11 +3,12 @@ import Highcharts from "highcharts";
 import HighchartsReact from "highcharts-react-official";
 import styled from "@mui/material/styles/styled";
 import type { TimePeriod } from "../../hooks/data/useHashRateIndexData";
+import { tokens } from "../../styles/tokens";
 
 const PeriodSwitch = styled("div")`
   display: flex;
   gap: 0;
-  border: 1px solid rgba(171, 171, 171, 1);
+  border: 1px solid ${tokens.border.default};
   border-radius: 6px;
   overflow: hidden;
   align-self: end;
@@ -18,28 +19,28 @@ const PeriodSwitch = styled("div")`
 
 const PeriodButton = styled("button")<{ $active: boolean }>`
   padding: 0.5rem 1rem;
-  background: ${(props) => (props.$active ? "#4c5a5f" : "transparent")};
-  color: #fff;
+  background: ${(props) => (props.$active ? tokens.surface.tabActive : "transparent")};
+  color: ${tokens.text.onDark};
   border: none;
-  font-size: 1rem;
+  font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.2s ease;
   white-space: nowrap;
 
   &:hover {
-    background: ${(props) => (props.$active ? "#4c5a5f" : "rgba(76, 90, 95, 0.5)")};
+    background: ${(props) => (props.$active ? tokens.surface.tabActive : tokens.surface.tabInactiveHover)};
   }
 
   &:not(:last-child) {
-    border-right: 1px solid rgba(171, 171, 171, 0.5);
+    border-right: 1px solid ${tokens.border.muted05};
   }
 `;
 
 const ChartTitle = styled("div")`
   font-size: 0.7rem;
   font-weight: 500;
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   text-transform: uppercase;
   letter-spacing: 0.03em;
 `;
@@ -174,15 +175,15 @@ export const HashrateChart: FC<HashrateChartProps> = ({
       title: {
         text: null,
         style: {
-          color: "#ffffff",
+          color: tokens.text.primary,
         },
       },
       labels: {
         style: {
-          color: "#ffffff",
+          color: tokens.text.primary,
         },
       },
-      gridLineColor: "#333333",
+      gridLineColor: tokens.chart.grid,
     },
     yAxis: [
       {
@@ -190,32 +191,32 @@ export const HashrateChart: FC<HashrateChartProps> = ({
         title: {
           text: "Hashprice (USDC)",
           style: {
-            color: "white",
+            color: tokens.text.primary,
           },
         },
         labels: {
           style: {
-            color: "white",
+            color: tokens.text.primary,
           },
           formatter: function () {
             return Number(this.value).toFixed(2);
           },
         },
-        gridLineColor: "#333333",
+        gridLineColor: tokens.chart.grid,
         plotLines: (() => {
           const lines: Highcharts.YAxisPlotLinesOptions[] = [];
 
           if (entryPrice) {
             lines.push({
               value: entryPrice,
-              color: "white",
+              color: tokens.text.primary,
               dashStyle: "Dash",
               width: 1,
               zIndex: 5,
               label: {
                 text: `Entry: ${entryPrice.toFixed(2)}`,
                 align: "right",
-                style: { color: "white" },
+                style: { color: tokens.text.primary },
               },
             });
           }
@@ -235,14 +236,14 @@ export const HashrateChart: FC<HashrateChartProps> = ({
 
             lines.push({
               value: clampedValue,
-              color: "#ef4444",
+              color: tokens.trading.short,
               dashStyle: "Dash",
               width: 1,
               zIndex: 5,
               label: {
                 text: `Liq${arrow}: ${liquidationPrice.toFixed(2)}`,
                 align: "right",
-                style: { color: "#ef4444" },
+                style: { color: tokens.trading.short },
               },
             });
           }
@@ -255,13 +256,13 @@ export const HashrateChart: FC<HashrateChartProps> = ({
         title: {
           text: isBtcPriceVisible ? "BTC Price (USD)" : "",
           style: {
-            color: "white",
+            color: tokens.text.primary,
           },
         },
         labels: {
           enabled: isBtcPriceVisible,
           style: {
-            color: "white",
+            color: tokens.text.primary,
           },
           formatter: function () {
             return Number(this.value).toLocaleString();
@@ -280,7 +281,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
         name: "Hashprice",
         showInLegend: true,
         data: chartData,
-        color: "#22c55e",
+        color: tokens.trading.long,
         lineWidth: 2,
         yAxis: 0,
         marker: {
@@ -306,7 +307,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
         showInLegend: true,
         visible: isBtcPriceVisible,
         data: btcPriceChartData,
-        color: "#f7931a",
+        color: tokens.chart.seriesBtc,
         lineWidth: 2,
         yAxis: 1,
         marker: {
@@ -322,14 +323,14 @@ export const HashrateChart: FC<HashrateChartProps> = ({
       enabled: true,
       useHTML: true,
       itemStyle: {
-        color: "#ffffff",
+        color: tokens.text.primary,
         cursor: "pointer",
       },
       itemHoverStyle: {
-        color: "#ffffff",
+        color: tokens.text.primary,
       },
       itemHiddenStyle: {
-        color: "#888888",
+        color: tokens.chart.axisMuted,
         textDecoration: "none",
       },
       labelFormatter: function () {
@@ -347,7 +348,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
           position: relative;
         `;
         const checkmark = checked && series.name !== "Hashprice"
-          ? `<span style="position: absolute; top: -1px; left: 0px; color: #fff; font-size: 11px; font-weight: bold;">✓</span>`
+          ? `<span style="position: absolute; top: -1px; left: 0px; color: ${tokens.text.onDark}; font-size: 11px; font-weight: bold;">✓</span>`
           : "";
         return `<span style="${checkboxStyle}">${checkmark}</span><span style="vertical-align: middle;">${series.name}</span>`;
       },
@@ -364,10 +365,10 @@ export const HashrateChart: FC<HashrateChartProps> = ({
     },
     tooltip: {
       shared: true,
-      backgroundColor: "#1a1a1a",
-      borderColor: "#333333",
+      backgroundColor: tokens.chart.tooltipBg,
+      borderColor: tokens.chart.tooltipBorder,
       style: {
-        color: "#ffffff",
+        color: tokens.text.primary,
       },
       formatter: function () {
         const date = new Date(this.x as number).toLocaleString(undefined, {
@@ -378,7 +379,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
           minute: "2-digit",
         });
 
-        let tooltipHtml = `<span style="color: grey; font-size: 10px;">${date}</span><br/>`;
+        let tooltipHtml = `<span style="color: ${tokens.chart.axisMuted}; font-size: 10px;">${date}</span><br/>`;
 
         this.points?.forEach((point) => {
           const color = point.series.color;
@@ -406,7 +407,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
           justifyContent: "center",
           alignItems: "center",
           height: "400px",
-          color: "#ffffff",
+          color: tokens.text.primary,
           fontSize: "18px",
         }}
       >
@@ -423,7 +424,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
           justifyContent: "center",
           alignItems: "center",
           height: "400px",
-          color: "#ffffff",
+          color: tokens.text.primary,
           fontSize: "18px",
         }}
       >

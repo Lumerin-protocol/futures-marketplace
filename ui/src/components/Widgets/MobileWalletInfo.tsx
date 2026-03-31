@@ -1,4 +1,5 @@
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../../styles/tokens";
 import { AddressLength } from "../../types/types";
 import { truncateAddress } from "../../utils/formatters";
 import { MobileWidget } from "../Cards/Cards.styled";
@@ -15,12 +16,12 @@ export const MobileWalletInfo = (props: { walletAddress: string; isMobile: boole
 const WalletBalanceWrapper = styled(MobileWidget)`
   flex: 40%;
   h3 {
-    color: #fff;
+    color: ${tokens.text.onDark};
     font-size: 10px;
   }
   p {
     font-size: 16px;
-    color: #fff;
+    color: ${tokens.text.onDark};
     font-weight: 500;
   }
 `;

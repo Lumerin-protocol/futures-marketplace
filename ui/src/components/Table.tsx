@@ -4,6 +4,7 @@ import { ArrowDownIcon } from "@heroicons/react/24/outline";
 import { ArrowUpIcon } from "@heroicons/react/24/outline";
 import { ArrowsUpDownIcon } from "@heroicons/react/24/outline";
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../styles/tokens";
 
 interface TableProps<T> {
   tableInstance: ReactTable<T>;
@@ -121,8 +122,8 @@ const TableHeader2 = styled("div")`
   grid-template-rows: 1fr;
   font-size: 0.625rem;
   align-items: center;
-  border: 1px solid rgba(171, 171, 171, 1);
-  border-radius: 9px;
+  border: 1px solid ${tokens.border.default};
+  border-radius: ${tokens.radius.md};
   margin-bottom: 1rem;
   div {
     height: 3rem;
@@ -145,15 +146,15 @@ const Tr = styled("div")`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   grid-template-rows: 1fr;
-  background: radial-gradient(circle, rgba(0, 0, 0, 0) 36%, rgba(255, 255, 255, 0.05) 100%);
-  border-radius: 9px;
-  color: white;
+  background: ${tokens.card.bg};
+  border-radius: ${tokens.radius.md};
+  color: ${tokens.text.onDark};
   margin-bottom: 1rem;
   width: 100%;
   height: 100px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(171, 171, 171, 1);
+  border: 1px solid ${tokens.border.default};
 
   @media (max-width: 1024px) {
     grid-template-columns: 1fr 1fr 1fr;
@@ -164,7 +165,7 @@ const Tr = styled("div")`
 
 const TableHeadingStyled = styled("div")`
   text-align: center;
-  color: #fff;
+  color: ${tokens.text.onDark};
   cursor: pointer;
   font-weight: normal;
   font-size: 1.3em;
@@ -196,7 +197,7 @@ const Td = styled("div")`
 const ColumnTitleMobile = styled("div")`
   display: none;
   font-size: 0.8em;
-  color: rgb(194, 194, 194);
+  color: ${tokens.text.tableRgb};
 
   @media (max-width: 1024px) {
     display: flex;

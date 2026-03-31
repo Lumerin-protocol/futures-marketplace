@@ -6,6 +6,7 @@ import { faPencil } from "@fortawesome/free-solid-svg-icons/faPencil";
 import { faRotateBack } from "@fortawesome/free-solid-svg-icons/faRotateBack";
 import { faSackDollar } from "@fortawesome/free-solid-svg-icons/faSackDollar";
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../styles/tokens";
 import { PrimaryButton } from "./Forms/FormButtons/Buttons.styled";
 
 export const CancelButton: FC<BaseProps> = (props) => (
@@ -55,13 +56,13 @@ export const ActionButtonWrapper = styled("div")`
     width: 30px;
     height: 30px;
     border: none;
-    background: #e2edfb;
+    background: ${tokens.actionButton.bg};
     display: flex;
     justify-content: center;
     align-items: center;
-    color: #064152;
+    color: ${tokens.actionButton.text};
     &:disabled {
-      color: rgb(111, 111, 111);
+      color: ${tokens.actionButton.iconMuted};
     }
   }
   p {

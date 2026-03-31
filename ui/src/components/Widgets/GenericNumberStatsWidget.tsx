@@ -1,4 +1,5 @@
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../../styles/tokens";
 import Skeleton from "@mui/material/Skeleton";
 import { SmallWidget } from "../Cards/Cards.styled";
 import type { ReactNode } from "react";
@@ -56,10 +57,10 @@ const Wrapper = styled(SmallWidget, {
   }
 
   .active {
-    color: #fff;
+    color: ${tokens.text.onDark};
   }
   .completed {
-    color: #a7a9b6;
+    color: ${tokens.text.secondary};
   }
 
   .stat {
