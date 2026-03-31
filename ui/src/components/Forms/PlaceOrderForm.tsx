@@ -373,7 +373,7 @@ const PoolSelectWrapper = styled("div")`
   }
   
   .MuiInputBase-root {
-    background: ${tokens.overlay.white05};
+    background: ${tokens.surface.inputIsland};
     color: ${tokens.text.onDark};
     
     &:hover {
@@ -441,7 +441,7 @@ const CheckboxContainer = styled("div")`
   padding: 0.75rem;
   border: 1px solid ${tokens.overlay.white20};
   border-radius: 6px;
-  background: ${tokens.overlay.white05};
+  background: ${tokens.surface.inputIsland};
   cursor: pointer;
   transition: background-color 0.2s ease, border-color 0.2s ease;
 
