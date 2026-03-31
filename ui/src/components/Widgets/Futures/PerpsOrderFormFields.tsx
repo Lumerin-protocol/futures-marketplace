@@ -373,12 +373,12 @@ export const ModeButton = styled("button")<{ $active: boolean }>`
   cursor: pointer;
   border: none;
   transition: background 0.15s ease, color 0.15s ease;
-  background: ${(props) => (props.$active ? tokens.overlay.white15 : "transparent")};
-  color: ${(props) => (props.$active ? tokens.text.onDark : tokens.text.secondary)};
+  background: ${(props) => (props.$active ? tokens.brand.green : "transparent")};
+  color: ${(props) => (props.$active ? "#FFFFFF" : tokens.text.secondary)};
 
   &:hover:not(:disabled) {
-    background: ${(props) => (props.$active ? tokens.overlay.white15 : tokens.overlay.white08)};
-    color: ${tokens.text.onDark};
+    background: ${(props) => (props.$active ? tokens.brand.greenDark : tokens.overlay.white08)};
+    color: #FFFFFF;
   }
 
   &:disabled {
@@ -520,7 +520,7 @@ export const StyledSlider = styled(Slider)`
 
   & .MuiSlider-valueLabel {
     background-color: ${tokens.surface.inputIsland};
-    color: ${tokens.text.onLight};
+    color: #FFFFFF;
     border-radius: 4px;
     padding: 4px 8px;
     font-size: 0.75rem;

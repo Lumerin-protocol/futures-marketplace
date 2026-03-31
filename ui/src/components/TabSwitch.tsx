@@ -43,59 +43,17 @@ export const TabSwitch = <T extends string>(props: Props<T>) => {
           MenuProps={{
             PaperProps: {
               sx: {
-                bgcolor: tokens.surface.mobileTabBg,
+                bgcolor: tokens.surface.card,
                 color: tokens.text.onDark,
-                border: `1px solid ${tokens.border.muted06}`,
-                borderRadius: "9px",
+                border: `1px solid ${tokens.border.default}`,
+                borderRadius: tokens.radius.md,
                 maxHeight: 320,
               },
             },
           }}
         >
           {values.map((val) => (
-            <MenuItem value={val.value} key={val.value} sx={{ fontSize: "0.95rem" }}>
-              <MobileMenuItemInner>
-                <span>{val.text}</span>
-                <MobileCountBadge>{val.count}</MobileCountBadge>
-              </MobileMenuItemInner>
-            </MenuItem>
-          ))}
-        </MobileTabSelect>
-      </MobileTabSelectWrap>
-    );
-  }
-
-  if (isMobile) {
-    return (
-      <MobileTabSelectWrap fullWidth size="small">
-        <MobileTabSelect
-          value={value}
-          onChange={(e) => setValue(e.target.value as T)}
-          displayEmpty
-          renderValue={(selected) => {
-            const v = values.find((x) => x.value === selected);
-            if (!v) return null;
-            return (
-              <MobileTabSelectValue>
-                <span>{v.text}</span>
-                <MobileCountBadge>{v.count}</MobileCountBadge>
-              </MobileTabSelectValue>
-            );
-          }}
-          MenuProps={{
-            PaperProps: {
-              sx: {
-                bgcolor: "#2f3639",
-                color: "#fff",
-                border: "1px solid rgba(171, 171, 171, 0.6)",
-                borderRadius: "9px",
-                maxHeight: 320,
-              },
-            },
-          }}
-        >
-          {values.map((val) => (
-            <MenuItem value={val.value} key={val.value} sx={{ fontSize: "0.95rem" }}>
+            <MenuItem value={val.value} key={val.value} sx={{ fontSize: "0.875rem" }}>
               <MobileMenuItemInner>
                 <span>{val.text}</span>
                 <MobileCountBadge>{val.count}</MobileCountBadge>
@@ -133,10 +91,10 @@ const MobileTabSelectWrap = styled(FormControl)`
 `;
 
 const MobileTabSelect = styled(Select)`
-  border-radius: 9px;
+  border-radius: ${tokens.radius.md};
 
   & .MuiOutlinedInput-root {
-    border-radius: 9px;
+    border-radius: ${tokens.radius.md};
     background-color: ${tokens.surface.mobileTabBgAlpha};
   }
 
@@ -145,12 +103,12 @@ const MobileTabSelect = styled(Select)`
   }
 
   &:hover .MuiOutlinedInput-notchedOutline {
-    border-color: ${tokens.border.default};
+    border-color: ${tokens.brand.blue};
   }
 
   &.Mui-focused .MuiOutlinedInput-notchedOutline {
-    border-color: ${tokens.surface.tabActive};
-    border-width: 1px;
+    border-color: ${tokens.brand.blue};
+    border-width: 2px;
   }
 
   & .MuiSelect-select {
@@ -192,9 +150,9 @@ const MobileCountBadge = styled("span")`
   min-width: 2em;
   height: 2em;
   padding: 0 0.35em;
-  border-radius: 50%;
-  color: ${tokens.surface.tabActive};
-  background-color: ${tokens.surface.inputIsland};
+  border-radius: ${tokens.radius.full};
+  color: ${tokens.brand.green};
+  background-color: #FFFFFF;
   flex-shrink: 0;
 `;
 
@@ -202,26 +160,26 @@ export const TabSwitchStyled = styled("div")<{ $numTabs: number }>`
   display: inline-grid;
   grid-template-columns: ${(props) => `repeat(${props.$numTabs}, 1fr)`};
   align-items: center;
-  border: ${tokens.border.default} 1px solid;
+  border: 1px solid ${tokens.border.default};
   color: ${tokens.text.onDark};
   padding: 0.7rem 0.25rem;
-  border-radius: 9px;
+  border-radius: ${tokens.radius.md};
   position: relative;
 
   button {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1rem;
+    font-size: 0.875rem;
     font-weight: 500;
-    border-radius: 99px;
+    border-radius: ${tokens.radius.full};
     cursor: pointer;
     transition: color 0.15s ease-in;
     z-index: 2;
     padding: 0.1em 0.7em;
 
     @media (max-width: 500px) {
-      font-size: 0.8em;
+      font-size: 0.75rem;
     }
 
     span {
@@ -232,10 +190,10 @@ export const TabSwitchStyled = styled("div")<{ $numTabs: number }>`
       width: 2em;
       height: 2em;
       margin-left: 0.75em;
-      border-radius: 50%;
+      border-radius: ${tokens.radius.full};
       transition: 0.15s ease-in;
-      color: ${tokens.surface.tabActive};
-      background-color: ${tokens.surface.inputIsland};
+      color: ${tokens.brand.green};
+      background-color: #FFFFFF;
     }
   }
 
@@ -254,11 +212,10 @@ export const TabSwitchStyled = styled("div")<{ $numTabs: number }>`
   }
 
   .active > span {
-    color: ${tokens.surface.tabActive};
-    background-color: ${tokens.surface.inputIsland};
+    color: ${tokens.brand.green};
+    background-color: #FFFFFF;
   }
 
-  /* Original glider for 2-tab layout */
   .glider {
     position: absolute;
     display: flex;
@@ -266,22 +223,21 @@ export const TabSwitchStyled = styled("div")<{ $numTabs: number }>`
     left: 3px;
     bottom: 3px;
     width: calc(50% - 6px);
-    background-color: ${tokens.surface.tabActive};
+    background-color: ${tokens.brand.green};
     z-index: 1;
-    border-radius: 7px;
+    border-radius: ${tokens.radius.sm};
     transition: 0.25s ease-out;
   }
 
-  /* Multi-glider for 3+ tabs */
   .multi-glider {
     position: absolute;
     display: flex;
     top: 3px;
     bottom: 3px;
     width: calc(${(props) => 100 / props.$numTabs}% - 6px);
-    background-color: ${tokens.surface.tabActive};
+    background-color: ${tokens.brand.green};
     z-index: 1;
-    border-radius: 7px;
+    border-radius: ${tokens.radius.sm};
     transition: left 0.25s ease-out;
   }
 `;

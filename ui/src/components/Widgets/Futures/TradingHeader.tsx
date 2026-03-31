@@ -119,9 +119,9 @@ const HeaderBar = styled("div")`
   align-items: center;
   gap: 1.5rem;
   padding: 0.5rem 0.75rem;
-  border: 1px solid ${tokens.border.muted04};
-  border-radius: 8px;
-  background: ${tokens.overlay.white02};
+  border: 1px solid ${tokens.border.default};
+  border-radius: ${tokens.radius.md};
+  background: ${tokens.surface.card};
   flex-wrap: wrap;
 
   @media (max-width: 768px) {
@@ -133,7 +133,7 @@ const ModeToggle = styled("div")`
   display: flex;
   gap: 0;
   border: 1px solid ${tokens.border.default};
-  border-radius: 6px;
+  border-radius: ${tokens.radius.sm};
   overflow: hidden;
   flex-shrink: 0;
 `;

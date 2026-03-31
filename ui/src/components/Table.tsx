@@ -123,7 +123,7 @@ const TableHeader2 = styled("div")`
   font-size: 0.625rem;
   align-items: center;
   border: 1px solid ${tokens.border.default};
-  border-radius: 9px;
+  border-radius: ${tokens.radius.md};
   margin-bottom: 1rem;
   div {
     height: 3rem;
@@ -146,8 +146,8 @@ const Tr = styled("div")`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   grid-template-rows: 1fr;
-  background: ${tokens.card.radialGradient};
-  border-radius: 9px;
+  background: ${tokens.card.bg};
+  border-radius: ${tokens.radius.md};
   color: ${tokens.text.onDark};
   margin-bottom: 1rem;
   width: 100%;

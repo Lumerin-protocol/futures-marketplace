@@ -22,7 +22,7 @@ const PeriodButton = styled("button")<{ $active: boolean }>`
   background: ${(props) => (props.$active ? tokens.surface.tabActive : "transparent")};
   color: ${tokens.text.onDark};
   border: none;
-  font-size: 1rem;
+  font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.2s ease;

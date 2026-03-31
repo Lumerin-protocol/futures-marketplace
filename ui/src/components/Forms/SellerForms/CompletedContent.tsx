@@ -1,6 +1,6 @@
 import { faCheckCircle } from "@fortawesome/free-solid-svg-icons/faCheckCircle";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { colors } from "../../../styles/styles.config";
+import { tokens } from "../../../styles/tokens";
 import { AddressLength, ContentState } from "../../../types/types";
 import { Spinner } from "../../Spinner.styled";
 import { getTxUrl } from "../../../lib/indexer";
@@ -27,7 +27,7 @@ export const CompletedContent: React.FC<CompletedContentProps> = ({ contentState
     <div className="flex flex-col items-center font-Inter">
       {contentState === ContentState.Pending ? null : (
         <div className="flex flex-col items-center">
-          <FontAwesomeIcon className="my-8" icon={faCheckCircle} size="5x" color={colors["lumerin-aqua"]} />
+          <FontAwesomeIcon className="my-8" icon={faCheckCircle} size="5x" color={tokens.brand.green} />
           <p className="w-4/6 text-center text-xl mb-8">{isEdit ? editText.thankYou : createText.thankYou}</p>
           <p className="w-5/6 text-center text-sm">{isEdit ? editText.view : createText.view}</p>
           {txHash && (

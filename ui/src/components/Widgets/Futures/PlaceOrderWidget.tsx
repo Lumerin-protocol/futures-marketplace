@@ -1556,7 +1556,7 @@ const BuyButton = styled("button")<{ $isHighlighted?: boolean }>`
   background: ${tokens.trading.long};
   color: ${tokens.text.onDark};
   border: none;
-  border-radius: 6px;
+  border-radius: ${tokens.radius.sm};
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
@@ -1587,7 +1587,7 @@ const SellButton = styled("button")<{ $isHighlighted?: boolean }>`
   background: ${tokens.trading.short};
   color: ${tokens.text.onDark};
   border: none;
-  border-radius: 6px;
+  border-radius: ${tokens.radius.sm};
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
@@ -1700,7 +1700,7 @@ const StyledSlider = styled(Slider)`
   
   & .MuiSlider-valueLabel {
     background-color: ${tokens.surface.inputIsland};
-    color: ${tokens.text.onLight};
+    color: #FFFFFF;
     border-radius: 4px;
     padding: 4px 8px;
     font-size: 0.75rem;
@@ -1754,7 +1754,7 @@ const AmountInputWrapper = styled("div")`
   transition: border-color 0.2s ease, background-color 0.2s ease;
 
   &:focus-within {
-    border-color: ${tokens.accent.mainLower};
+    border-color: ${tokens.brand.blue};
     background: ${tokens.overlay.white08};
   }
 

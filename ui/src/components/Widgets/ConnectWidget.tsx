@@ -91,17 +91,20 @@ const ConnectorIcon = styled("img")`
 
 export const Button = styled(PrimaryButton)`
   height: 48px;
-  border-radius: 10px;
+  border-radius: ${tokens.radius.md};
   color: ${tokens.text.onDark};
   font-weight: 600;
-  font-size: 16px;
+  font-size: 0.875rem;
   background: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-evenly;
   gap: 0.5rem;
-  border: ${tokens.border.muted05} 1px solid;
+  border: 1px solid ${tokens.border.muted05};
+  &:hover {
+    background: ${tokens.overlay.white08};
+  }
   &:not(:last-child) {
     margin-right: 0;
   }

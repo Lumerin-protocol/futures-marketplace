@@ -15,7 +15,7 @@ import SellerIconInactive from "../../images/icons/seller-grey.png";
 import { Link, useLocation, useNavigate } from "react-router";
 import BuyerIconActive from "../../images/icons/buyer-blue.png";
 import BuyerIconInactive from "../../images/icons/buyer-grey.png";
-import LogoIcon from "../../images/icons/nav-logo-white-cropped.png";
+import LogoIcon from "../../images/icons/hpdx-logo.png";
 import MarketplaceIconActive from "../../images/icons/store-blue.png";
 import MarketplaceIconInactive from "../../images/icons/store-grey.png";
 import { tokens } from "../../styles/tokens";
@@ -166,9 +166,8 @@ export const ResponsiveNavigation = (prop: {
             boxSizing: "border-box",
             width: prop.drawerWidth,
             border: "none",
-            backgroundColor: tokens.card.tint,
-            background: tokens.card.radialGradient,
-            borderRight: `${tokens.border.default} 1px solid`,
+            backgroundColor: tokens.surface.panel,
+            borderRight: `1px solid ${tokens.border.default}`,
           },
         }}
         open

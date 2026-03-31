@@ -407,18 +407,18 @@ const InputGroup = styled("div")`
 
   input {
     padding: 0.75rem;
-    border: 1px solid ${tokens.overlay.white20};
-    border-radius: 6px;
-    background: ${tokens.overlay.white05};
+    border: 1px solid ${tokens.border.default};
+    border-radius: ${tokens.radius.sm};
+    background: ${tokens.surface.inputIsland};
     color: ${tokens.text.onDark};
-    font-size: 1rem;
+    font-size: 0.875rem;
     transition: border-color 0.2s ease, background-color 0.2s ease;
     width: 100%;
     min-width: 65px;
 
     &:focus {
       outline: none;
-      border-color: ${tokens.accent.main};
+      border-color: ${tokens.brand.blue};
       background: ${tokens.overlay.white08};
     }
 

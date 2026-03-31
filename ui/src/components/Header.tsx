@@ -3,7 +3,7 @@ import { tokens } from "../styles/tokens";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import { safeLazy } from "../utils/safeLazy";
-import LogoIcon from "../images/icons/nav-logo-white-cropped.png";
+import LogoIcon from "../images/icons/hpdx-logo.png";
 
 type Props = {
   pageTitle: string;
@@ -23,8 +23,8 @@ export const Header = (props: Props) => {
   return (
     <StyledToolbar>
       <TitleWrapper>
-        <Logo src={LogoIcon} alt="Lumerin" onClick={handleLogoClick} />
-        <PageTitle>{props.pageTitle}</PageTitle>
+        <Logo src={LogoIcon} alt="HPDX" onClick={handleLogoClick} />
+        <BrandName onClick={handleLogoClick}>HPDX</BrandName>
       </TitleWrapper>
       <Web3ProviderLazy>
         <HeaderConnectLazy />
@@ -46,19 +46,16 @@ const TitleWrapper = styled("div")`
 `;
 
 const Logo = styled("img")`
-  height: auto;
-  width: auto;
-  max-height: 50px;
+  height: 46px;
+  width: 46px;
   cursor: pointer;
 `;
 
-const PageTitle = styled(Typography)`
+const BrandName = styled(Typography)`
   color: ${tokens.text.onDark};
-  font-weight: 600;
-  font-family: Raleway, sans-serif;
-  font-size: 2rem;
-
-  @media (max-width: 768px) {
-    font-size: 1.4rem;
-  }
+  font-weight: 700;
+  font-family: "Inter", sans-serif;
+  font-size: 1.6rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
 `;

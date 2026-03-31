@@ -599,7 +599,8 @@ const AskCell = styled("td")<{ $isHighlighted?: boolean }>`
 const PriceCell = styled("td")<{ $isLastHashprice?: boolean }>`
   background-color: ${(props) => (props.$isLastHashprice ? tokens.trading.infoHighlightBg : "transparent")};
   font-weight: ${(props) => (props.$isLastHashprice ? "700" : "normal")};
-  border-radius: 4px;
+  font-family: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
+  border-radius: ${tokens.radius.sm};
   
   ${(props) =>
     props.$isLastHashprice &&

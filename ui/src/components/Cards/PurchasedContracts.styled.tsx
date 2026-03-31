@@ -12,10 +12,10 @@ export const ContractCards = styled("div")`
     grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
   }
   .card {
-    background: ${tokens.card.radialGradient};
-    border: ${tokens.border.default} 1px solid;
+    background: ${tokens.card.bg};
+    border: 1px solid ${tokens.border.default};
     color: ${tokens.text.onDark};
-    border-radius: 9px;
+    border-radius: ${tokens.radius.md};
     padding: 1.75rem;
     padding-bottom: 1rem;
     margin-bottom: 1rem;

@@ -9,9 +9,8 @@ export const MessageWidget = (props: { isMobile: boolean }) => {
     padding: 1rem;
     min-height: fit-content;
     width: 100%;
-    background-color: ${tokens.card.tint};
-    background: ${tokens.card.radialGradient};
-    border: ${tokens.border.default} 1px solid;
+    background-color: ${tokens.card.bg};
+    border: 1px solid ${tokens.border.default};
     p {
       font-size: 14px;
       color: ${tokens.text.onDark};
@@ -26,9 +25,8 @@ export const MessageWidget = (props: { isMobile: boolean }) => {
     width: 100%;
     padding: 18px;
     margin-bottom: 1rem;
-    background-color: ${tokens.card.tint};
-    background: ${tokens.card.radialGradient};
-    border: ${tokens.border.default} 1px solid;
+    background-color: ${tokens.card.bg};
+    border: 1px solid ${tokens.border.default};
     p {
       font-size: 14px;
       color: ${tokens.text.onDark};
