@@ -600,13 +600,14 @@ const PriceCell = styled("td")<{ $isLastHashprice?: boolean }>`
   background-color: ${(props) => (props.$isLastHashprice ? tokens.trading.infoHighlightBg : "transparent")};
   font-weight: ${(props) => (props.$isLastHashprice ? "700" : "normal")};
   font-family: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
-  border-radius: ${tokens.radius.sm};
+  position: relative;
   
   ${(props) =>
     props.$isLastHashprice &&
     `
     box-shadow: 0 0 8px ${tokens.trading.infoHighlightGlow};
-    border: 1px solid ${tokens.trading.infoBorder};
+    outline: 1px solid ${tokens.trading.infoBorder};
+    outline-offset: -1px;
   `}
 `;
 
