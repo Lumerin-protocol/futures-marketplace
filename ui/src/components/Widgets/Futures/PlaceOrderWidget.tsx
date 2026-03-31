@@ -1672,12 +1672,12 @@ const StyledSlider = styled(Slider)`
   & .MuiSlider-track {
     height: 6px;
     border: none;
-    background-color: ${tokens.surface.inputIsland};
+    background-color: ${tokens.brand.green};
   }
-  
+
   & .MuiSlider-rail {
     height: 6px;
-    background-color: ${tokens.overlay.white20};
+    background-color: ${tokens.surface.inputIsland};
     opacity: 1;
   }
   
@@ -1791,7 +1791,7 @@ const AmountModeDropdown = styled("select")`
   border: none;
   border-left: 1px solid ${tokens.overlay.white15};
   border-radius: 0;
-  background: ${tokens.overlay.white08};
+  background: transparent;
   color: ${tokens.text.onDark};
   font-size: 0.875rem;
   font-weight: 600;
@@ -1805,7 +1805,7 @@ const AmountModeDropdown = styled("select")`
   transition: background-color 0.15s ease;
 
   &:hover:not(:disabled) {
-    background-color: ${tokens.overlay.white14};
+    background-color: ${tokens.overlay.white08};
   }
 
   &:focus {
@@ -1818,7 +1818,7 @@ const AmountModeDropdown = styled("select")`
   }
 
   option {
-    background: ${tokens.surface.footer};
+    background: ${tokens.surface.inputIsland};
     color: ${tokens.text.onDark};
   }
 `;

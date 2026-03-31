@@ -492,12 +492,12 @@ export const StyledSlider = styled(Slider)`
   & .MuiSlider-track {
     height: 6px;
     border: none;
-    background-color: ${tokens.surface.inputIsland};
+    background-color: ${tokens.brand.green};
   }
 
   & .MuiSlider-rail {
     height: 6px;
-    background-color: ${tokens.overlay.white20};
+    background-color: ${tokens.surface.inputIsland};
     opacity: 1;
   }
 
