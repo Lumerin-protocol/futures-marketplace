@@ -1,6 +1,6 @@
 import { memo, useCallback, useState, type FC } from "react";
 import { useForm, useController, type Control } from "react-hook-form";
-import { waitForAggregateBlockNumber, AGGREGATE_ORDER_BOOK_QK } from "../../hooks/data/useAggregateOrderBook";
+import { waitForOrderBookBlockNumber, getOrderBookQueryKey } from "../../hooks/data/orderBookHelpers";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import type { TransactionReceipt } from "viem";
 import { useModifyOrder } from "../../hooks/data/useModifyOrder";
@@ -10,11 +10,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
 import type { ParticipantOrder, Participant } from "../../hooks/data/useParticipant";
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../../styles/tokens";
 import { handleNumericDecimalInput } from "./Shared/AmountInputForm";
 import { getMinMarginForPositionManual } from "../../hooks/data/getMinMarginForPositionManual";
-import { useGetFutureBalance } from "../../hooks/data/useGetFutureBalance";
-import { usePaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
 import { useOrderFee } from "../../hooks/data/useOrderFee";
+import type { AccountBalance, ContractMode } from "../../types/types";
+
+interface BalanceQueryResult {
+  data: bigint | undefined;
+  isLoading: boolean;
+  isSuccess: boolean;
+  refetch: () => void;
+}
 
 interface ModifyOrderFormProps {
   order: ParticipantOrder;
@@ -27,6 +34,9 @@ interface ModifyOrderFormProps {
   deliveryDurationDays: number;
   minMargin?: bigint | null;
   newestItemPrice: number | null;
+  accountBalance?: AccountBalance;
+  contractMode?: ContractMode;
+  balanceQuery: BalanceQueryResult;
 }
 
 interface ModifyFormValues {
@@ -46,12 +56,14 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
     deliveryDurationDays,
     minMargin,
     newestItemPrice,
+    accountBalance,
+    contractMode = "futures",
+    balanceQuery,
   }) => {
     const { modifyOrderAsync } = useModifyOrder();
     const qc = useQueryClient();
     const { address } = useAccount();
-    const balanceQuery = useGetFutureBalance(address);
-    const accountBalanceQuery = usePaymentTokenBalance(address);
+    const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
     const { data: orderFeeRaw } = useOrderFee(address);
 
     // Determine order type from quantity sign
@@ -154,8 +166,8 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
         }
       }
 
-      // Check if price exceeds the configured percentage of newest item price
-      if (newestItemPrice) {
+      // Check if price exceeds the configured percentage of newest item price (skip for perpetual)
+      if (contractMode !== "perpetual" && newestItemPrice) {
         const maxAllowedPrice = newestItemPrice * maxPriceMultiplier;
         if (newPrice > maxAllowedPrice) {
           const percentageOver = ((newPrice / newestItemPrice) * 100).toFixed(1);
@@ -221,15 +233,11 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
                   <span className="text-white">{parseFloat(form.watch("price")).toFixed(2)} USDC</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-300">Quantity:</span>
-                  <span className="text-white">{form.watch("quantity")} units</span>
-                </div>
-                <div className="flex justify-between">
                   <span className="text-gray-300">Delivery Date:</span>
                   <span className="text-white">{new Date(Number(order.deliveryAt) * 1000).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-300">Total Value:</span>
+                  <span className="text-gray-300">Size:</span>
                   <span className="text-white">
                     {(parseFloat(form.watch("price")) * form.watch("quantity")).toFixed(2)} USDC
                   </span>
@@ -273,11 +281,11 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
             },
             postConfirmation: async (receipt: TransactionReceipt) => {
               // Wait for block number to ensure indexer has updated
-              await waitForAggregateBlockNumber(receipt.blockNumber, qc, Number(order.deliveryAt));
+              await waitForOrderBookBlockNumber(receipt.blockNumber, qc, contractMode, Number(order.deliveryAt));
 
               // Refetch order book, positions, and participant data
               await Promise.all([
-                qc.invalidateQueries({ queryKey: [AGGREGATE_ORDER_BOOK_QK] }),
+                qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
                 address && qc.invalidateQueries({ queryKey: [POSITION_BOOK_QK] }),
                 address && qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
               ]);
@@ -316,33 +324,33 @@ const InputGroup = styled("div")`
   label {
     font-size: 0.875rem;
     font-weight: 500;
-    color: #a7a9b6;
+    color: ${tokens.text.secondary};
   }
 
   input {
     padding: 0.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid ${tokens.overlay.white20};
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.05);
-    color: #fff;
+    background: ${tokens.overlay.white05};
+    color: ${tokens.text.onDark};
     font-size: 1rem;
     transition: border-color 0.2s ease, background-color 0.2s ease;
     width: 100%;
 
     &:focus {
       outline: none;
-      border-color: #509EBA;
-      background: rgba(255, 255, 255, 0.08);
+      border-color: ${tokens.accent.main};
+      background: ${tokens.overlay.white08};
     }
 
     &::placeholder {
-      color: #6b7280;
+      color: ${tokens.text.muted};
     }
   }
 `;
 
 const ErrorText = styled("span")`
-  color: #ef4444;
+  color: ${tokens.trading.short};
   font-size: 0.75rem;
   margin-top: -0.25rem;
 `;

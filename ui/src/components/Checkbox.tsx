@@ -24,7 +24,7 @@ export const Checkbox: React.FC<CheckboxProps> = ({ legend, label, description, 
               setChecked(!checked);
               onChange(!checked);
             }}
-            className="focus:ring-lumerin-aqua h-4 w-4 text-lumerin-aqua border-gray-300 rounded"
+            className="focus:ring-futures-brand-blue h-4 w-4 text-futures-brand-blue border-gray-300 rounded"
           />
         </div>
         <div className="ml-3 text-sm">

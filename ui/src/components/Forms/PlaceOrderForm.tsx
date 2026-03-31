@@ -1,17 +1,23 @@
 import { memo, type FC, useCallback, useState, useEffect } from "react";
 import { useForm, useController, useWatch, type Control } from "react-hook-form";
-import { waitForAggregateBlockNumber, AGGREGATE_ORDER_BOOK_QK } from "../../hooks/data/useAggregateOrderBook";
+import { waitForOrderBookBlockNumber, getOrderBookQueryKey } from "../../hooks/data/orderBookHelpers";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import type { TransactionReceipt } from "viem";
 import { useCreateOrder } from "../../hooks/data/useCreateOrder";
+import { useCreatePerpsOrder } from "../../hooks/data/perps/useCreatePerpsOrder";
 import { PARTICIPANT_QK } from "../../hooks/data/useParticipant";
 import { POSITION_BOOK_QK } from "../../hooks/data/usePositionBook";
+import { USER_PERPS_ORDERS_QK } from "../../hooks/data/perps/useUserPerpsOrders";
+import { USER_POSITION_SESSIONS_QK } from "../../hooks/data/perps/useUserPositionSessions";
+import { USER_PERPS_TRADES_QK } from "../../hooks/data/perps/useUserPerpsTrades";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { formatStratumUrl } from "../../utils/formatters";
 import { isValidHost, isValidUsername } from "../../utils/validators";
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../../styles/tokens";
 import type { Participant } from "../../hooks/data/useParticipant";
+import type { ContractMode } from "../../types/types";
 import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpecs";
 import { calculateMinMargin } from "../../hooks/data/useGetMinMarginForPosition";
 import { getMinMarginForPositionManual } from "../../hooks/data/getMinMarginForPositionManual";
@@ -19,6 +25,7 @@ import { predefinedPools } from "./BuyerForms/predefinedPools";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
 import { useOrderFee } from "../../hooks/data/useOrderFee";
+import type { PerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
 
 interface PoolFormValues {
   predefinedPoolIndex: number | "";
@@ -35,6 +42,10 @@ interface Props {
   onOrderPlaced?: () => void | Promise<void>;
   closeForm: () => void;
   bypassConflictCheck?: boolean; // Allow proceeding despite conflicting orders
+  contractMode?: ContractMode;
+  perpsCollection?: PerpsCollection;
+  leverage?: number; // Leverage value for perps mode (e.g., 10 for 10x)
+  isMarketOrder?: boolean;
 }
 
 export const PlaceOrderForm: FC<Props> = ({
@@ -46,8 +57,16 @@ export const PlaceOrderForm: FC<Props> = ({
   onOrderPlaced,
   closeForm,
   bypassConflictCheck = false,
+  contractMode = "futures",
+  perpsCollection,
+  leverage = 10,
+  isMarketOrder = false,
 }) => {
-  const { createOrderAsync } = useCreateOrder();
+  // Conditionally use futures or perps create order hook
+  const futuresCreateOrder = useCreateOrder();
+  const perpsCreateOrder = useCreatePerpsOrder();
+  const { createOrderAsync } = contractMode == "perpetual" ? perpsCreateOrder : futuresCreateOrder;
+  
   const qc = useQueryClient();
   const { address } = useAccount();
   const publicClient = usePublicClient();
@@ -68,10 +87,23 @@ export const PlaceOrderForm: FC<Props> = ({
   useEffect(() => {
     if (!latestPrice) return;
     setIsLoadingMargin(true);
-    const margin = getMinMarginForPositionManual(price, quantity, latestPrice, marginPersent, deliveryDurationDays);
+    
+    let margin: bigint;
+    if (contractMode === "perpetual") {
+      // For perps: calculate margin based on leverage
+      // Formula: (price * quantity) * (1 / leverage)
+      // Example: 10x leverage = 10% margin, 5x leverage = 20% margin
+      const positionValue = price * BigInt(Math.round(absoluteQuantity * 1e6)) / 1000000n;
+      const marginPercent = BigInt(Math.round((1 / leverage) * 100)); // Convert leverage to margin %
+      margin = (positionValue * marginPercent) / 100n;
+    } else {
+      // For futures: use the existing calculation with PnL
+      margin = getMinMarginForPositionManual(price, quantity, latestPrice, marginPersent, deliveryDurationDays);
+    }
+    
     setRequiredMargin(margin);
     setIsLoadingMargin(false);
-  }, [latestPrice, price, quantity]);
+  }, [latestPrice, price, quantity, contractMode, absoluteQuantity, marginPersent, deliveryDurationDays, leverage]);
 
   // Check for conflicting orders (opposite action, same price, same delivery date)
   const hasConflictingOrder = () => {
@@ -168,27 +200,33 @@ export const PlaceOrderForm: FC<Props> = ({
           <div className="mb-4">
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-300">Price Per Day:</span>
-                <span className="text-white">{Number(price) / 1e6} USDC</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">Quantity:</span>
-                <span className="text-white">{absoluteQuantity} units</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">Delivery Date:</span>
-                <span className="text-white">{new Date(Number(deliveryDate) * 1000).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">Total Value:</span>
+                <span className="text-gray-300">{contractMode === "futures" ? "Price Per Day:" : "Price:"}</span>
                 <span className="text-white">
-                  {((Number(price) / 1e6) * absoluteQuantity * deliveryDurationDays).toFixed(2)} USDC
+                  {isMarketOrder ? "Market" : `${Number(price) / 1e6} USDC`}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-300">Expected Hashrate:</span>
-                <span className="text-white">{absoluteQuantity * 100} Th/s</span>
+                <span className="text-gray-300">Quantity:</span>
+                <span className="text-white">{absoluteQuantity.toFixed(6)}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-gray-300">Size:</span>
+                <span className="text-white">
+                  {((Number(price) / 1e6) * absoluteQuantity).toFixed(2)} USDC
+                </span>
+              </div>
+              {contractMode === "futures" && (
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Delivery Date:</span>
+                  <span className="text-white">{new Date(Number(deliveryDate) * 1000).toLocaleString()}</span>
+                </div>
+              )}
+              {contractMode === "futures" && (
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Expected Hashrate:</span>
+                  <span className="text-white">{absoluteQuantity * 100} Th/s</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-gray-300">Required Margin:</span>
                 <span className="text-white">
@@ -199,15 +237,36 @@ export const PlaceOrderForm: FC<Props> = ({
                       : "N/A"}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">Order Creation Fee:</span>
-                <span className="text-white">
-                  {orderFeeUSDC !== null ? `${orderFeeUSDC.toFixed(2)} USDC` : isOrderFeeLoading ? "Loading..." : "N/A"}
-                </span>
-              </div>
+              {contractMode === "perpetual" ? (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Maker Fee:</span>
+                    <span className="text-white">
+                      {perpsCollection?.makerFeeBps !== undefined 
+                        ? `${(perpsCollection.makerFeeBps / 100).toFixed(2)}%` 
+                        : "N/A"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Taker Fee:</span>
+                    <span className="text-white">
+                      {perpsCollection?.takerFeeBps !== undefined 
+                        ? `${(perpsCollection.takerFeeBps / 100).toFixed(2)}%` 
+                        : "N/A"}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Order Creation Fee:</span>
+                  <span className="text-white">
+                    {orderFeeUSDC !== null ? `${orderFeeUSDC.toFixed(2)} USDC` : isOrderFeeLoading ? "Loading..." : "N/A"}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
-          {isBuy && (
+          {isBuy && contractMode === "futures" && (
             <div className="mb-4">
               <CheckboxContainer>
                 <CheckboxInput
@@ -247,12 +306,22 @@ export const PlaceOrderForm: FC<Props> = ({
             }
 
             const destUrl = getDestUrl();
-            const txhash = await createOrderAsync({
-              price,
-              deliveryDate,
-              quantity,
-              destUrl,
-            });
+            let txhash;
+            if (contractMode === "perpetual") {
+              // Perps only needs price and quantity
+              txhash = await (createOrderAsync as any)({
+                price,
+                quantity,
+              });
+            } else {
+              // Futures needs price, deliveryDate, quantity, and destUrl
+              txhash = await (createOrderAsync as any)({
+                price,
+                deliveryDate,
+                quantity,
+                destUrl,
+              });
+            }
             return {
               isSkipped: false,
               txhash: txhash,
@@ -260,14 +329,26 @@ export const PlaceOrderForm: FC<Props> = ({
           },
           postConfirmation: async (receipt: TransactionReceipt) => {
             // Wait for block number to ensure indexer has updated
-            await waitForAggregateBlockNumber(receipt.blockNumber, qc, Number(deliveryDate));
+            await waitForOrderBookBlockNumber(receipt.blockNumber, qc, contractMode, Number(deliveryDate));
 
-            // Refetch order book, positions, and participant data
-            await Promise.all([
-              qc.invalidateQueries({ queryKey: [AGGREGATE_ORDER_BOOK_QK] }),
-              address && qc.invalidateQueries({ queryKey: [POSITION_BOOK_QK] }),
-              address && qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
-            ]);
+            // Invalidate queries based on contract mode
+            if (contractMode === "perpetual") {
+              // For perps, invalidate perps-specific queries
+              await Promise.all([
+                qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
+                address && qc.invalidateQueries({ queryKey: [USER_PERPS_ORDERS_QK, address] }),
+                address && qc.invalidateQueries({ queryKey: [USER_POSITION_SESSIONS_QK, address] }),
+                address && qc.invalidateQueries({ queryKey: [USER_PERPS_TRADES_QK, address] }),
+                // address && qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
+              ]);
+            } else {
+              // For futures, invalidate futures-specific queries
+              await Promise.all([
+                qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
+                address && qc.invalidateQueries({ queryKey: [POSITION_BOOK_QK] }),
+                address && qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
+              ]);
+            }
 
             if (onOrderPlaced) {
               await onOrderPlaced();
@@ -292,24 +373,24 @@ const PoolSelectWrapper = styled("div")`
   }
   
   .MuiInputBase-root {
-    background: rgba(255, 255, 255, 0.05);
-    color: #fff;
+    background: ${tokens.surface.inputIsland};
+    color: ${tokens.text.onDark};
     
     &:hover {
-      background: rgba(255, 255, 255, 0.08);
+      background: ${tokens.overlay.white08};
     }
   }
   
   .MuiInputLabel-root {
-    color: #a7a9b6;
+    color: ${tokens.text.secondary};
   }
   
   .MuiOutlinedInput-notchedOutline {
-    border-color: rgba(255, 255, 255, 0.2);
+    border-color: ${tokens.overlay.white20};
   }
   
   .MuiSelect-icon {
-    color: #a7a9b6;
+    color: ${tokens.text.secondary};
   }
 `;
 
@@ -321,34 +402,34 @@ const InputGroup = styled("div")`
   label {
     font-size: 0.875rem;
     font-weight: 500;
-    color: #a7a9b6;
+    color: ${tokens.text.secondary};
   }
 
   input {
     padding: 0.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.05);
-    color: #fff;
-    font-size: 1rem;
+    border: 1px solid ${tokens.border.default};
+    border-radius: ${tokens.radius.sm};
+    background: ${tokens.surface.inputIsland};
+    color: ${tokens.text.onDark};
+    font-size: 0.875rem;
     transition: border-color 0.2s ease, background-color 0.2s ease;
     width: 100%;
     min-width: 65px;
 
     &:focus {
       outline: none;
-      border-color: #509EBA;
-      background: rgba(255, 255, 255, 0.08);
+      border-color: ${tokens.brand.blue};
+      background: ${tokens.overlay.white08};
     }
 
     &::placeholder {
-      color: #6b7280;
+      color: ${tokens.text.muted};
     }
   }
 `;
 
 const ErrorText = styled("span")`
-  color: #ef4444;
+  color: ${tokens.trading.short};
   font-size: 0.75rem;
   margin-top: -0.25rem;
 `;
@@ -358,15 +439,15 @@ const CheckboxContainer = styled("div")`
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid ${tokens.overlay.white20};
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
+  background: ${tokens.surface.inputIsland};
   cursor: pointer;
   transition: background-color 0.2s ease, border-color 0.2s ease;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.3);
+    background: ${tokens.overlay.white08};
+    border-color: ${tokens.overlay.white30};
   }
 `;
 
@@ -374,12 +455,12 @@ const CheckboxInput = styled("input")`
   width: 18px;
   height: 18px;
   cursor: pointer;
-  accent-color: #509EBA;
+  accent-color: ${tokens.accent.main};
 `;
 
 const CheckboxLabel = styled("label")`
   font-size: 0.875rem;
-  color: #fff;
+  color: ${tokens.text.onDark};
   cursor: pointer;
   user-select: none;
 `;

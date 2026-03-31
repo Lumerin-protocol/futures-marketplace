@@ -2,7 +2,6 @@ import { type FC, useCallback, useMemo, useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useAccount } from "wagmi";
 import { useDepositDeliveryPayment } from "../../hooks/data/useDepositDeliveryPayment";
-import { useGetFutureBalance } from "../../hooks/data/useGetFutureBalance";
 import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpecs";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import { formatValue, paymentToken } from "../../lib/units";
@@ -11,12 +10,20 @@ import type { PositionBookPosition } from "../../hooks/data/usePositionBook";
 import { POSITION_BOOK_QK, waitForBlockNumberPositionBook } from "../../hooks/data/usePositionBook";
 import { useQueryClient } from "@tanstack/react-query";
 
+interface BalanceQueryResult {
+  data: bigint | undefined;
+  isLoading: boolean;
+  isSuccess: boolean;
+  refetch: () => void;
+}
+
 interface DepositDeliveryPaymentFormProps {
   closeForm: () => void;
   deliveryDate: bigint;
   pricePerDay: bigint;
   totalContracts: number;
   positions: PositionBookPosition[];
+  balanceQuery: BalanceQueryResult;
 }
 
 interface InputValues {
@@ -30,10 +37,11 @@ export const DepositDeliveryPaymentForm: FC<DepositDeliveryPaymentFormProps> = (
   pricePerDay,
   totalContracts,
   positions,
+  balanceQuery,
 }) => {
   const { address } = useAccount();
   const { depositDeliveryPaymentAsync } = useDepositDeliveryPayment();
-  const futureBalance = useGetFutureBalance(address);
+  const futureBalance = balanceQuery;
   const contractSpecsQuery = useFuturesContractSpecs();
   const deliveryDurationDays = contractSpecsQuery.data?.data?.deliveryDurationDays ?? 7;
   const qc = useQueryClient();

@@ -1,19 +1,23 @@
+import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useGetDeliveryDates } from "../../../hooks/data/useGetDeliveryDates";
 import { useAggregateOrderBook } from "../../../hooks/data/useAggregateOrderBook";
+import { usePerpsOrderBook } from "../../../hooks/data/perps/usePerpsOrderBook";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { createFinalOrderBookData } from "./orderBookHelpers";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
+import type { ContractMode } from "../../../types/types";
 
 interface OrderBookTableProps {
   onRowClick?: (price: string, amount: number | null) => void;
   onDeliveryDateChange?: (deliveryDate: number | undefined) => void;
   contractSpecsQuery: UseQueryResult<GetResponse<FuturesContractSpecs>, Error>;
   previousOrderBookStateRef: React.MutableRefObject<Map<number, { bidUnits: number | null; askUnits: number | null }>>;
+  contractMode?: ContractMode;
 }
 
 export const OrderBookTable = ({
@@ -21,6 +25,7 @@ export const OrderBookTable = ({
   onDeliveryDateChange,
   contractSpecsQuery,
   previousOrderBookStateRef,
+  contractMode = "futures",
 }: OrderBookTableProps) => {
   const [selectedDateIndex, setSelectedDateIndex] = useState(0);
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -65,9 +70,50 @@ export const OrderBookTable = ({
     }
   }, [selectedDeliveryDate]);
 
-  // Fetch order book for selected delivery date
-  const orderBookQuery = useAggregateOrderBook(selectedDeliveryDate, { refetch: true, interval: 15000 });
-  const orderBookData = orderBookQuery.data?.data?.orders || [];
+  // Fetch order book based on contract mode
+  const futuresOrderBookQuery = useAggregateOrderBook(
+    contractMode === "futures" ? selectedDeliveryDate : undefined,
+    { refetch: true, interval: 15000 }
+  );
+  const perpsOrderBookQuery = usePerpsOrderBook(
+    contractMode === "perpetual" ? { refetch: true, interval: 15000 } : undefined
+  );
+  
+  const orderBookQuery = contractMode === "perpetual" ? perpsOrderBookQuery : futuresOrderBookQuery;
+  
+  // Transform perps data to match futures structure
+  const orderBookData = useMemo(() => {
+    if (contractMode === "perpetual" && perpsOrderBookQuery.data?.data?.priceLevels) {
+      // Convert perps price levels to aggregate order format
+      const priceLevelMap = new Map<string, { buyOrdersCount: number; sellOrdersCount: number; price: bigint }>();
+      
+      for (const level of perpsOrderBookQuery.data.data.priceLevels) {
+        const key = level.price.toString();
+        const existing = priceLevelMap.get(key) || { buyOrdersCount: 0, sellOrdersCount: 0, price: level.price };
+        
+        // Divide by 10^6 to get actual quantity with 6 decimals
+        const quantity = Number(level.totalQuantity) / 1e6;
+        
+        if (level.isBid) {
+          existing.buyOrdersCount = quantity;
+        } else {
+          existing.sellOrdersCount = quantity;
+        }
+        
+        priceLevelMap.set(key, existing);
+      }
+      
+      return Array.from(priceLevelMap.values()).map((item, index) => ({
+        id: `perps-${index}`,
+        price: item.price,
+        deliveryDate: 0n, // Not used in perpetual
+        buyOrdersCount: item.buyOrdersCount,
+        sellOrdersCount: item.sellOrdersCount,
+      }));
+    }
+    
+    return futuresOrderBookQuery.data?.data?.orders || [];
+  }, [contractMode, perpsOrderBookQuery.data?.data?.priceLevels, futuresOrderBookQuery.data?.data?.orders]);
 
   useEffect(() => {
     previousOrderBookStateRef.current = new Map();
@@ -222,11 +268,11 @@ export const OrderBookTable = ({
   const scrollToOrder = (orderIndex: number) => {
     setTimeout(() => {
       if (orderIndex !== -1 && tableContainerRef.current) {
-        const rowHeight = 51.4; // Fixed row height from styles
+        const rowHeight = 26; // Fixed row height from styles
 
         // Calculate scroll position to center the row in the viewport
         // (row index * row height) - (container height / 2) + (row height / 2)
-        const scrollPosition = orderIndex * rowHeight - 5 * rowHeight;
+        const scrollPosition = orderIndex * rowHeight - 9 * rowHeight;
 
         // Smooth scroll to center the row
         tableContainerRef.current.scrollTo({
@@ -267,7 +313,7 @@ export const OrderBookTable = ({
           </button>
         </Header>
         <TableContainer>
-          <div style={{ textAlign: "center", padding: "2rem", color: "#ef4444" }}>Failed to load order book data</div>
+          <div style={{ textAlign: "center", padding: "2rem", color: tokens.trading.short }}>Failed to load order book data</div>
         </TableContainer>
       </OrderBookWidget>
     );
@@ -287,7 +333,7 @@ export const OrderBookTable = ({
           </button>
         </Header>
         <TableContainer>
-          <div style={{ textAlign: "center", padding: "2rem", color: "#a7a9b6" }}>Loading order book data...</div>
+          <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.secondary }}>Loading order book data...</div>
         </TableContainer>
       </OrderBookWidget>
     );
@@ -295,20 +341,22 @@ export const OrderBookTable = ({
 
   return (
     <OrderBookWidget>
-      <h3>Order Book</h3>
-      <Header>
-        <button onClick={goToPreviousDate} className="nav-arrow" disabled={selectedDateIndex === 0 || isLoading}>
-          ←
-        </button>
-        <h3>{selectedDateDisplay}</h3>
-        <button
-          onClick={goToNextDate}
-          className="nav-arrow"
-          disabled={selectedDateIndex === deliveryDates.length - 1 || isLoading}
-        >
-          →
-        </button>
-      </Header>
+      <OrderBookTitle>Order Book{contractMode === "perpetual" ? " — PERP" : ""}</OrderBookTitle>
+      {contractMode === "futures" && (
+        <Header>
+          <button onClick={goToPreviousDate} className="nav-arrow" disabled={selectedDateIndex === 0 || isLoading}>
+            ←
+          </button>
+          <h3>{selectedDateDisplay}</h3>
+          <button
+            onClick={goToNextDate}
+            className="nav-arrow"
+            disabled={selectedDateIndex === deliveryDates.length - 1 || isLoading}
+          >
+            →
+          </button>
+        </Header>
+      )}
 
       <TableContainer ref={tableContainerRef}>
         <Table>
@@ -336,9 +384,13 @@ export const OrderBookTable = ({
                     onRowClick?.(row.price.toFixed(2), amount);
                   }}
                 >
-                  <BidCell $isHighlighted={row.highlightBid}>{row.bidUnits || ""}</BidCell>
+                  <BidCell $isHighlighted={row.highlightBid}>
+                    {row.bidUnits ? (row.bidUnits * row.price).toFixed(2) : ""}
+                  </BidCell>
                   <PriceCell $isLastHashprice={row.isLastHashprice}>{row.price.toFixed(2)}</PriceCell>
-                  <AskCell $isHighlighted={row.highlightAsk}>{row.askUnits || ""}</AskCell>
+                  <AskCell $isHighlighted={row.highlightAsk}>
+                    {row.askUnits ? (row.askUnits * row.price).toFixed(2) : ""}
+                  </AskCell>
                 </TableRow>
               );
             })}
@@ -351,43 +403,40 @@ export const OrderBookTable = ({
 
 const OrderBookWidget = styled(SmallWidget)`
   width: 100%;
-  padding: 1.5rem;
-  padding-top: 0.5rem;
+  padding: 0.875rem 1rem;
   justify-content: space-between;
-
-  @media (max-width: 1400px) {
-    justify-content: start;
-  }
+  margin-bottom: 0;
+  border: 1px solid ${tokens.border.muted04};
 `;
 
 const Header = styled("div")`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
-  
+  margin-bottom: 0.4rem;
+
   h3 {
     margin: 0;
-    font-size: 1.3rem;
+    font-size: 0.85rem;
     font-weight: 600;
   }
-  
+
   .nav-arrow {
     background: none;
     border: none;
-    color: #fff;
-    font-size: 1.5rem;
+    color: ${tokens.text.onDark};
+    font-size: 0.9rem;
     cursor: pointer;
-    padding: 0.5rem 0.75rem;
+    padding: 0.2rem 0.4rem;
     border-radius: 4px;
     transition: all 0.2s ease;
-    
+
     &:hover:not(:disabled) {
-      background-color: rgba(255, 255, 255, 0.1);
+      background-color: ${tokens.overlay.white10};
     }
-    
+
     &:disabled {
-      color: #666;
+      color: ${tokens.text.orderBookMuted};
       cursor: not-allowed;
       opacity: 0.5;
     }
@@ -397,51 +446,59 @@ const Header = styled("div")`
 const TableContainer = styled("div")`
   overflow-y: auto;
   width: 100%;
-  max-height: 607px; /* Approximately 10 rows * 40px per row */
-  
+  max-height: 510px; /* ~20 rows * 26px per row */
+
   &::-webkit-scrollbar {
-    width: 6px;
+    width: 4px;
   }
-  
+
   &::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
+    background: ${tokens.overlay.white05};
+    border-radius: 2px;
   }
-  
+
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 3px;
+    background: ${tokens.overlay.white20};
+    border-radius: 2px;
   }
-  
+
   &::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.5);
+    background: ${tokens.overlay.white40};
   }
 `;
 
 const Table = styled("table")`
   width: 100%;
   border-collapse: collapse;
-  
+  table-layout: fixed;
+
   th {
     text-align: center;
-    padding: 1rem 0.75rem;
-    font-size: 1rem;
+    padding: 0.3rem 0.4rem;
+    font-size: 0.65rem;
     font-weight: 600;
-    color: #a7a9b6;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: ${tokens.text.secondary};
+    border-bottom: 1px solid ${tokens.overlay.white10};
     position: sticky;
     top: 0;
-    background-color: #1a1a1a; /* Match the widget background */
+    background-color: ${tokens.surface.panel};
     z-index: 1;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    width: 33.33%;
   }
-  
+
   td {
     text-align: center;
-    padding: 0.75rem 0.75rem;
-    font-size: 1.1rem;
-    color: #fff;
-    width: 130px;
-    height: 40px; /* Fixed row height for consistent scrolling */
+    padding: 0.15rem 0.4rem;
+    font-size: 0.75rem;
+    color: ${tokens.text.onDark};
+    height: 20px;
+    line-height: 20px;
+    width: 33.33%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 `;
 
@@ -451,7 +508,7 @@ const TableRow = styled("tr")<{
 }>`
   position: relative;
   cursor: pointer;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid ${tokens.overlay.white05};
   
   /* Background fills for order book depth visualization */
   background: ${(props) => {
@@ -468,12 +525,12 @@ const TableRow = styled("tr")<{
         to right,
         transparent 0%,
         transparent ${bidStart}%,
-        rgba(34, 197, 94, 0.25) ${bidStart}%,
-        rgba(34, 197, 94, 0.25) 33%,
+        ${tokens.trading.longRowBgAlt} ${bidStart}%,
+        ${tokens.trading.longRowBgAlt} 33%,
         transparent 33%,
         transparent 67%,
-        rgba(239, 68, 68, 0.25) 67%,
-        rgba(239, 68, 68, 0.25) ${askEnd}%,
+        ${tokens.trading.shortRowBgAlt} 67%,
+        ${tokens.trading.shortRowBgAlt} ${askEnd}%,
         transparent ${askEnd}%,
         transparent 100%
       )`;
@@ -486,8 +543,8 @@ const TableRow = styled("tr")<{
         to right,
         transparent 0%,
         transparent ${bidStart}%,
-        rgba(34, 197, 94, 0.25) ${bidStart}%,
-        rgba(34, 197, 94, 0.25) 33%,
+        ${tokens.trading.longRowBgAlt} ${bidStart}%,
+        ${tokens.trading.longRowBgAlt} 33%,
         transparent 33%,
         transparent 100%
       )`;
@@ -500,8 +557,8 @@ const TableRow = styled("tr")<{
         to right,
         transparent 0%,
         transparent 67%,
-        rgba(239, 68, 68, 0.25) 67%,
-        rgba(239, 68, 68, 0.25) ${askEnd}%,
+        ${tokens.trading.shortRowBgAlt} 67%,
+        ${tokens.trading.shortRowBgAlt} ${askEnd}%,
         transparent ${askEnd}%,
         transparent 100%
       )`;
@@ -511,7 +568,7 @@ const TableRow = styled("tr")<{
   }};
   
   &:hover {
-    background: rgba(255, 255, 255, 0.1) !important;
+    background: ${tokens.overlay.white10} !important;
   }
   
   &:last-child {
@@ -520,34 +577,74 @@ const TableRow = styled("tr")<{
 `;
 
 const BidCell = styled("td")<{ $isHighlighted?: boolean }>`
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
-  background-color: ${(props) => (props.$isHighlighted ? "rgba(34, 197, 94, 0.3)" : "transparent")};
+  border-right: 1px solid ${tokens.overlay.white05};
+  background-color: ${(props) => (props.$isHighlighted ? tokens.trading.longHighlightBg : "transparent")};
   ${(props) =>
     props.$isHighlighted &&
     `
-    box-shadow: inset 0 0 8px rgba(34, 197, 94, 0.4);
+    box-shadow: inset 0 0 8px ${tokens.trading.longHighlightGlow};
   `}
 `;
 
 const AskCell = styled("td")<{ $isHighlighted?: boolean }>`
-  border-left: 1px solid rgba(255, 255, 255, 0.05);
-  background-color: ${(props) => (props.$isHighlighted ? "rgba(239, 68, 68, 0.3)" : "transparent")};
+  border-left: 1px solid ${tokens.overlay.white05};
+  background-color: ${(props) => (props.$isHighlighted ? tokens.trading.shortHighlightBg : "transparent")};
   ${(props) =>
     props.$isHighlighted &&
     `
-    box-shadow: inset 0 0 8px rgba(239, 68, 68, 0.4);
+    box-shadow: inset 0 0 8px ${tokens.trading.shortHighlightGlow};
   `}
 `;
 
 const PriceCell = styled("td")<{ $isLastHashprice?: boolean }>`
-  background-color: ${(props) => (props.$isLastHashprice ? "rgba(59, 130, 246, 0.3)" : "transparent")};
+  background-color: ${(props) => (props.$isLastHashprice ? tokens.trading.infoHighlightBg : "transparent")};
   font-weight: ${(props) => (props.$isLastHashprice ? "700" : "normal")};
-  border-radius: 4px;
+  font-family: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
+  position: relative;
   
   ${(props) =>
     props.$isLastHashprice &&
     `
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
-    border: 1px solid rgba(59, 130, 246, 0.6);
+    box-shadow: 0 0 8px ${tokens.trading.infoHighlightGlow};
+    outline: 1px solid ${tokens.trading.infoBorder};
+    outline-offset: -1px;
   `}
+`;
+
+const OrderBookTitle = styled("div")`
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: ${tokens.text.secondary};
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.3rem;
+`;
+
+const PerpsInfoHeader = styled("div")`
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background-color: ${tokens.overlay.white05};
+  border-radius: 8px;
+  gap: 1rem;
+`;
+
+const InfoLabel = styled("div")`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  
+  .label {
+    font-size: 0.85rem;
+    color: ${tokens.text.secondary};
+    font-weight: 500;
+  }
+  
+  .value {
+    font-size: 1.1rem;
+    color: ${tokens.text.onDark};
+    font-weight: 600;
+  }
 `;

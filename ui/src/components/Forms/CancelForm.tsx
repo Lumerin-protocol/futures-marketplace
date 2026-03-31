@@ -2,7 +2,7 @@ import { usePublicClient } from "wagmi";
 import { waitForBlockNumber } from "../../hooks/data/useContracts";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCheckCircle } from "@fortawesome/free-solid-svg-icons/faCheckCircle";
-import { colors } from "../../styles/styles.config";
+import { tokens } from "../../styles/tokens";
 import { useQueryClient } from "@tanstack/react-query";
 import { TransactionForm } from "./Shared/MultistepForm";
 import type { TransactionReceipt } from "viem";
@@ -25,7 +25,7 @@ export const CancelForm: React.FC<CancelFormProps> = ({ contractId, closeForm })
       reviewForm={(props) => <p>You are about to cancel your purchase. The hashpower will no longer be delivered</p>}
       resultForm={(props) => (
         <>
-          <FontAwesomeIcon className="mb-8" icon={faCheckCircle} size="5x" color={colors["lumerin-aqua"]} />
+          <FontAwesomeIcon className="mb-8" icon={faCheckCircle} size="5x" color={tokens.brand.green} />
           <h2 className="w-6/6 text-left font-semibold mb-3">The order has been cancelled successfully.</h2>
           <p className="w-6/6 text-left font-normal text-s">The status of the order will update shortly.</p>
           <br />

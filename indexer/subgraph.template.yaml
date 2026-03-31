@@ -53,8 +53,6 @@ dataSources:
         - event: ValidatorURLUpdated(string)
           handler: handleValidatorURLUpdated
       file: ./src/futures.ts
-# features:
-#   - grafting
-# graft:
-#   base: QmSagdeMzbrcwppgzTwsJk4uhKSXT5wXRDxWC3Bt1i4sQg
-#   block: 213834223
+# Required when deploying with `goldsky subgraph deploy ... --graft-from <name>/<version>`
+features:
+  - grafting

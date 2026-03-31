@@ -5,7 +5,7 @@
 @layer components {
   /* buttons */
   .btn-action-panel {
-    @apply w-5/12 rounded-full inline-flex justify-center rounded-md border focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:col-start-1 sm:text-sm;
+    @apply w-5/12 rounded-full inline-flex justify-center rounded-md border focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-futures-brand-blue sm:mt-0 sm:col-start-1 sm:text-sm;
   }
 
   .btn-wallet {
@@ -13,23 +13,15 @@
   }
 
   .btn-connected {
-    @apply w-auto h-12 hidden rounded-15 py-2 px-6 bg-white text-sm text-lumerin-black-text font-Inter font-medium;
-  }
-
-  .btn-lmr {
-    @apply w-40 sm:w-48 h-12 mt-4 flex items-center justify-center rounded-5 py-2 px-4 bg-white text-sm text-lumerin-aqua font-Inter font-medium;
-  }
-
-  .btn-add-lmr {
-    @apply w-40 h-12 mt-4 hidden md:block items-center justify-center rounded-5 py-2 px-4 bg-lumerin-aqua text-sm text-white font-Inter font-medium;
+    @apply w-auto h-12 hidden rounded-15 py-2 px-6 bg-white text-sm text-[#1A1A2E] font-sans font-medium;
   }
 
   .btn-disconnect {
-    @apply w-40 h-12 mt-4 md:block items-center justify-center rounded-5 py-2 px-4 text-sm text-lumerin-aqua font-semibold font-Inter;
+    @apply w-40 h-12 mt-4 md:block items-center justify-center rounded-sm py-2 px-4 text-sm text-futures-brand-green font-semibold font-sans;
   }
 
   .btn-modal {
-    @apply border border-transparent rounded-5 shadow-sm;
+    @apply border border-transparent rounded-sm shadow-sm;
   }
 
   .btn-edit-cancel {
@@ -67,11 +59,11 @@
 
   /* inputs */
   .review-input {
-    @apply appearance-none block w-full px-3 py-2 placeholder-opacity-75 focus:outline-none focus:ring-lumerin-aqua focus:border-indigo-500 sm:text-sm;
+    @apply appearance-none block w-full px-3 py-2 placeholder-opacity-75 focus:outline-none focus:ring-futures-brand-blue focus:border-futures-brand-blue sm:text-sm;
   }
 
   .review-no-errors {
-    @apply bg-lumerin-input-gray btn-modal;
+    @apply bg-futures-surface-card btn-modal;
   }
 
   /* divs */
@@ -85,7 +77,7 @@
 
   .link:hover {
     cursor: pointer;
-    @apply text-lumerin-aqua ease-in duration-200;
+    @apply text-futures-brand-green ease-in duration-200;
   }
 }
 
@@ -95,5 +87,4 @@ body {
   padding: 0;
   height: 100%;
   overflow: auto;
-  background-color: #1e1e1e;
 }

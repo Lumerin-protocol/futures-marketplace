@@ -189,7 +189,7 @@ resource "aws_cloudwatch_event_rule" "market_maker_schedule" {
   count               = var.market_maker.create ? 1 : 0
   name                = "market-maker-schedule-${substr(var.account_shortname, 8, 3)}"
   description         = "Trigger market maker every ${var.market_maker["schedule_rate"]} minute(s)"
-  schedule_expression = "rate(${var.market_maker["schedule_rate"]} minute)"
+  schedule_expression = "rate(${var.market_maker["schedule_rate"]} ${tonumber(var.market_maker["schedule_rate"]) == 1 ? "minute" : "minutes"})"
 
   tags = merge(
     var.default_tags,

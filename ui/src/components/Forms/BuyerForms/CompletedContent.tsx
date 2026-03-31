@@ -1,7 +1,7 @@
 import { faCheckCircle } from "@fortawesome/free-solid-svg-icons/faCheckCircle";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import type React from "react";
-import { colors } from "../../../styles/styles.config";
+import { tokens } from "../../../styles/tokens";
 import { AddressLength, ContentState } from "../../../types/types";
 import { truncateAddress } from "../../../utils/formatters";
 import { Spinner } from "../../Spinner.styled";
@@ -54,7 +54,7 @@ const CompletedContent2: React.FC<{
   const { isEdit, tx, useLightningPayouts } = props;
   return (
     <div className="flex flex-col px-8 py-2">
-      <FontAwesomeIcon className="mb-8" icon={faCheckCircle} size="5x" color={colors["lumerin-aqua"]} />
+      <FontAwesomeIcon className="mb-8" icon={faCheckCircle} size="5x" color={tokens.brand.green} />
       <h2 className="w-6/6 text-left font-semibold mb-3">{isEdit ? editText.thankYou : buyText.thankYou}</h2>
       <p className="w-6/6 text-left font-normal text-s">{isEdit ? editText.view : buyText.view}</p>
       <br />

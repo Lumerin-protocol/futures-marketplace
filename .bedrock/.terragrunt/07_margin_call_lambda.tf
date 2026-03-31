@@ -153,7 +153,7 @@ resource "aws_lambda_function" "margin_call" {
   environment {
     variables = {
       ETH_NODE_URL                       = var.ethereum_rpc_url # Shev's code expects ETH_NODE_URL
-      FUTURES_SUBGRAPH_URL               = "https://gateway.thegraph.com/api/${var.graph_api_key}/subgraphs/id/${var.futures_subgraph_id}"
+      FUTURES_SUBGRAPH_URL               = lookup(var.gs_subgraphs, "futures", "")
       FUTURES_ADDRESS                    = var.futures_address         # Shared variable
       HASHRATE_ORACLE_ADDRESS            = var.hashrate_oracle_address # Shared variable
       MULTICALL_ADDRESS                  = var.multicall_address       # Shared variable (Multicall3)

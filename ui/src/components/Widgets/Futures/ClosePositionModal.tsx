@@ -1,3 +1,4 @@
+import { tokens } from "../../../styles/tokens";
 import { useState, useCallback } from "react";
 import styled from "@mui/material/styles/styled";
 import { ModalItem } from "../../Modal";
@@ -140,17 +141,17 @@ const ModalTitle = styled("h2")`
   margin: 0;
   font-size: 1.5rem;
   font-weight: 600;
-  color: #fff;
+  color: ${tokens.text.onDark};
 `;
 
 const ModalMessage = styled("p")`
   margin: 0;
   font-size: 1rem;
-  color: #d1d5db;
+  color: ${tokens.closePositionModal.textMuted};
   line-height: 1.6;
 
   strong {
-    color: #fff;
+    color: ${tokens.text.onDark};
     font-weight: 600;
   }
 `;
@@ -158,7 +159,7 @@ const ModalMessage = styled("p")`
 const ModalNote = styled("p")`
   margin: 0;
   font-size: 0.875rem;
-  color: #9ca3af;
+  color: ${tokens.closePositionModal.textSubtle};
   font-style: italic;
 `;
 
@@ -167,19 +168,19 @@ const CheckboxContainer = styled("div")`
   align-items: center;
   gap: 0.5rem;
   padding: 0.75rem;
-  background: rgba(255, 255, 255, 0.05);
+  background: ${tokens.overlay.white05};
   border-radius: 6px;
 
   input[type="checkbox"] {
     width: 18px;
     height: 18px;
     cursor: pointer;
-    accent-color: #509EBA;
+    accent-color: ${tokens.accent.main};
   }
 
   label {
     font-size: 0.875rem;
-    color: #d1d5db;
+    color: ${tokens.closePositionModal.textMuted};
     cursor: pointer;
     user-select: none;
   }
@@ -194,9 +195,9 @@ const ModalButtons = styled("div")`
 
 const CancelButton = styled("button")`
   padding: 0.75rem 1.25rem;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: ${tokens.overlay.white10};
+  color: ${tokens.text.onDark};
+  border: 1px solid ${tokens.overlay.white20};
   border-radius: 6px;
   font-size: 0.875rem;
   font-weight: 600;
@@ -204,7 +205,7 @@ const CancelButton = styled("button")`
   transition: all 0.2s ease;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.3);
+    background: ${tokens.overlay.white15};
+    border-color: ${tokens.overlay.white30};
   }
 `;

@@ -10,7 +10,6 @@ async function main() {
   console.log();
 
   const env = requireEnvsSet(
-    "LUMERIN_TOKEN_ADDRESS",
     "USDC_TOKEN_ADDRESS",
     "HASHRATE_ORACLE_ADDRESS",
     "VALIDATOR_ADDRESS",
@@ -20,7 +19,7 @@ async function main() {
     "DELIVERY_DURATION_DAYS",
     "DELIVERY_INTERVAL_DAYS",
     "FUTURE_DELIVERY_DATES_COUNT",
-    "VALIDATOR_URL"
+    "VALIDATOR_URL",
   );
   const SAFE_OWNER_ADDRESS = process.env.SAFE_OWNER_ADDRESS as `0x${string}` | undefined;
 
@@ -30,7 +29,7 @@ async function main() {
   // Verify token contracts
   const paymentToken = await viem.getContractAt(
     "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol:IERC20Metadata",
-    env.USDC_TOKEN_ADDRESS as `0x${string}`
+    env.USDC_TOKEN_ADDRESS as `0x${string}`,
   );
   console.log("Payment token:", paymentToken.address);
   console.log("Name:", await paymentToken.read.name());
@@ -39,20 +38,11 @@ async function main() {
 
   console.log();
 
-  const feeToken = await viem.getContractAt(
-    "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol:IERC20Metadata",
-    env.LUMERIN_TOKEN_ADDRESS as `0x${string}`
-  );
-  console.log("Fee token:", feeToken.address);
-  console.log("Name:", await feeToken.read.name());
-  console.log("Symbol:", await feeToken.read.symbol());
-  console.log("Decimals:", await feeToken.read.decimals());
-
   console.log();
 
   const hashrateOracle = await viem.getContractAt(
     "HashrateOracle",
-    env.HASHRATE_ORACLE_ADDRESS as `0x${string}`
+    env.HASHRATE_ORACLE_ADDRESS as `0x${string}`,
   );
   console.log("Hashrate oracle:", hashrateOracle.address);
   console.log("Num hashes to find to earn 1 satoshi:", await hashrateOracle.read.getHashesForBTC());
@@ -61,7 +51,7 @@ async function main() {
 
   // Deploy Futures implementation
   console.log("Deploying Futures implementation...");
-  const futuresImpl = await viem.deployContract("contracts/marketplace/Futures.sol:Futures", []);
+  const futuresImpl = await viem.deployContract("contracts/Futures.sol:Futures", []);
   console.log("Deployed at:", futuresImpl.address);
   await verifyContract(futuresImpl.address, []);
 
@@ -92,7 +82,7 @@ async function main() {
 
   const futuresProxy = await viem.deployContract(
     "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy",
-    [futuresImpl.address, encodedInitFn]
+    [futuresImpl.address, encodedInitFn],
   );
   console.log("Deployed at:", futuresProxy.address);
   await verifyContract(futuresProxy.address, [futuresImpl.address, encodedInitFn]);

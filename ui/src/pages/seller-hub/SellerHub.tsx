@@ -1,5 +1,6 @@
 // biome-ignore-all lint/correctness/useExhaustiveDependencies: <explanation>
 
+import { tokens } from "../../styles/tokens";
 import AddIcon from "@mui/icons-material/Add";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { type FC, type HTMLProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -441,7 +442,7 @@ const QuickFilterValues = [
   },
   {
     value: "running",
-    icon: <Pickaxe fill="#fff" />,
+    icon: <Pickaxe fill={tokens.text.onDark} />,
     text: "Running",
   },
   {

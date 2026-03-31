@@ -15,9 +15,10 @@ import SellerIconInactive from "../../images/icons/seller-grey.png";
 import { Link, useLocation, useNavigate } from "react-router";
 import BuyerIconActive from "../../images/icons/buyer-blue.png";
 import BuyerIconInactive from "../../images/icons/buyer-grey.png";
-import LogoIcon from "../../images/icons/nav-logo-white-cropped.png";
+import LogoIcon from "../../images/icons/hpdx-logo.png";
 import MarketplaceIconActive from "../../images/icons/store-blue.png";
 import MarketplaceIconInactive from "../../images/icons/store-grey.png";
+import { tokens } from "../../styles/tokens";
 import { PathName } from "../../types/types";
 import { DrawerContent, Socials } from "./Navigation.styled";
 
@@ -74,7 +75,9 @@ export const ResponsiveNavigation = (prop: {
       activeIcon: "TrendingUp",
       inactiveIcon: "TrendingUp",
       current: location.pathname === PathName.Futures,
-      customIcon: (props: { item: Navigation }) => <TrendingUpIcon style={{ color: "#c2c9d6", fontSize: "24px" }} />,
+      customIcon: (props: { item: Navigation }) => (
+        <TrendingUpIcon style={{ color: tokens.text.navIcon, fontSize: "24px" }} />
+      ),
     },
   ];
 
@@ -108,15 +111,15 @@ export const ResponsiveNavigation = (prop: {
         <nav className="resources">
           <h3>Resources</h3>
           <a href={`${process.env.REACT_APP_GITBOOK_URL}`} target="_blank" rel="noreferrer">
-            <HelpIcon style={{ fill: "#509EBA" }} />
+            <HelpIcon style={{ fill: tokens.accent.main }} />
             <span className="item-name">Help</span>
           </a>
           <a href="https://github.com/Lumerin-protocol/proxy-router-ui/issues" target="_blank" rel="noreferrer">
-            <FlagCircleIcon style={{ fill: "#509EBA" }} />
+            <FlagCircleIcon style={{ fill: tokens.accent.main }} />
             <span className="item-name">Report issue</span>
           </a>
           <a href="https://lumerin.io/privacy-policy" target="_blank" rel="noreferrer">
-            <ShieldIcon style={{ fill: "#509EBA" }} />
+            <ShieldIcon style={{ fill: tokens.accent.main }} />
             <span className="item-name">Privacy Policy</span>
           </a>
         </nav>
@@ -130,7 +133,7 @@ export const ResponsiveNavigation = (prop: {
             { link: "https://www.tiktok.com/@hellolumerin_", icon: faTiktok },
           ].map((item) => (
             <a href={item.link} target="_blank" rel="noreferrer" key={item.link}>
-              <FontAwesomeIcon icon={item.icon} color="#fff" />
+              <FontAwesomeIcon icon={item.icon} color={tokens.text.onDark} />
             </a>
           ))}
         </Socials>
@@ -163,10 +166,8 @@ export const ResponsiveNavigation = (prop: {
             boxSizing: "border-box",
             width: prop.drawerWidth,
             border: "none",
-            backgroundColor: "rgba(79, 126, 145, 0.04)",
-            background: "radial-gradient(circle, rgba(0, 0, 0, 0) 36%, rgba(255, 255, 255, .05) 100%)",
-            // borderRight: 'linear-gradient(0deg, rgba(0,0,0,0) 0%, rgba(171,171,171,1) 100%)',
-            borderRight: "rgba(171,171,171,1) 1px solid",
+            backgroundColor: tokens.surface.panel,
+            borderRight: `1px solid ${tokens.border.default}`,
           },
         }}
         open

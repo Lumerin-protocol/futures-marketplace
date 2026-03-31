@@ -1,4 +1,5 @@
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../../../styles/tokens";
 import { SmallWidget } from "../../Cards/Cards.styled";
 
 interface FeedItem {
@@ -97,13 +98,13 @@ export const FeedWidget = () => {
   const getItemColor = (type: string) => {
     switch (type) {
       case "trade":
-        return "#22c55e";
+        return tokens.trading.long;
       case "price":
-        return "#3b82f6";
+        return tokens.trading.info;
       case "news":
-        return "#f59e0b";
+        return tokens.trading.warning;
       default:
-        return "#6b7280";
+        return tokens.text.muted;
     }
   };
 
@@ -165,7 +166,7 @@ const FeedHeader = styled("div")`
   align-items: center;
   margin-bottom: 1rem;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid ${tokens.overlay.white10};
   
   h3 {
     margin: 0;
@@ -178,12 +179,12 @@ const FeedHeader = styled("div")`
     align-items: center;
     gap: 0.5rem;
     font-size: 0.75rem;
-    color: #22c55e;
+    color: ${tokens.trading.long};
     
     .status-dot {
       width: 8px;
       height: 8px;
-      background-color: #22c55e;
+      background-color: ${tokens.trading.long};
       border-radius: 50%;
       animation: pulse 2s infinite;
     }
@@ -207,12 +208,12 @@ const FeedContent = styled("div")`
   }
   
   &::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
+    background: ${tokens.overlay.white10};
     border-radius: 2px;
   }
   
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
+    background: ${tokens.overlay.white30};
     border-radius: 2px;
   }
 `;
@@ -221,24 +222,24 @@ const FeedItem = styled("div")<{ $type: string }>`
   display: flex;
   gap: 0.75rem;
   padding: 0.75rem;
-  background: rgba(255, 255, 255, 0.02);
+  background: ${tokens.overlay.white02};
   border-radius: 8px;
   border-left: 3px solid ${(props) => {
     switch (props.$type) {
       case "trade":
-        return "#22c55e";
+        return tokens.trading.long;
       case "price":
-        return "#3b82f6";
+        return tokens.trading.info;
       case "news":
-        return "#f59e0b";
+        return tokens.trading.warning;
       default:
-        return "#6b7280";
+        return tokens.text.muted;
     }
   }};
   transition: background-color 0.2s ease;
   
   &:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: ${tokens.overlay.white05};
   }
   
   .item-icon {
@@ -262,13 +263,13 @@ const FeedItem = styled("div")<{ $type: string }>`
       margin: 0;
       font-size: 0.875rem;
       font-weight: 600;
-      color: #fff;
+      color: ${tokens.text.onDark};
       line-height: 1.2;
     }
     
     .timestamp {
       font-size: 0.75rem;
-      color: #6b7280;
+      color: ${tokens.text.muted};
       flex-shrink: 0;
       margin-left: 0.5rem;
     }
@@ -277,7 +278,7 @@ const FeedItem = styled("div")<{ $type: string }>`
   .description {
     margin: 0 0 0.5rem 0;
     font-size: 0.8rem;
-    color: #a7a9b6;
+    color: ${tokens.text.secondary};
     line-height: 1.3;
   }
   
@@ -289,7 +290,7 @@ const FeedItem = styled("div")<{ $type: string }>`
     .value {
       font-size: 0.8rem;
       font-weight: 600;
-      color: #fff;
+      color: ${tokens.text.onDark};
     }
     
     .change {
@@ -297,11 +298,11 @@ const FeedItem = styled("div")<{ $type: string }>`
       font-weight: 600;
       
       &.positive {
-        color: #22c55e;
+        color: ${tokens.trading.long};
       }
       
       &.negative {
-        color: #ef4444;
+        color: ${tokens.trading.short};
       }
     }
   }

@@ -1,9 +1,11 @@
-import { type Chain, arbitrum, arbitrumSepolia, hardhat } from "viem/chains";
-import { ArbitrumLogo, ArbitrumSepoliaLogo, HardhatLogo } from "../images";
+import { type Chain, arbitrum, arbitrumSepolia, base, baseSepolia, hardhat } from "viem/chains";
+import { ArbitrumLogo, ArbitrumSepoliaLogo, BaseLogo, BaseSepoliaLogo, HardhatLogo } from "../images";
 
 export const chains = {
   [arbitrumSepolia.id]: arbitrumSepolia,
   [arbitrum.id]: arbitrum,
+  [baseSepolia.id]: baseSepolia,
+  [base.id]: base,
   [hardhat.id]: hardhat,
 } as Record<number, Chain>;
 
@@ -16,6 +18,8 @@ if (!chain) {
 export const chainIcons = {
   [arbitrum.id]: ArbitrumLogo,
   [arbitrumSepolia.id]: ArbitrumSepoliaLogo,
+  [baseSepolia.id]: BaseSepoliaLogo,
+  [base.id]: BaseLogo,
   [hardhat.id]: HardhatLogo,
 } as Record<number, React.ComponentType<React.SVGProps<SVGSVGElement>>>;
 

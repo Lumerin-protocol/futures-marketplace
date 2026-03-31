@@ -14,7 +14,8 @@
     "compile": "yarn wagmi generate",
     "clean": "rm -rf abi artifacts cache abi",
     "aderyn": "yarn run aderyn",
-    "deploy-local": "yarn hardhat run scripts/deploy-local.ts"
+    "deploy-local": "yarn hardhat run scripts/deploy-local.ts",
+    "copytrade": "npx ts-node scripts/copytrade.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.4",

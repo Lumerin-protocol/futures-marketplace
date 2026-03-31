@@ -1,4 +1,5 @@
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../../../styles/tokens";
 import EastIcon from "@mui/icons-material/East";
 import { SmallWidget } from "../../Cards/Cards.styled";
 
@@ -46,12 +47,12 @@ const PortfolioStats = styled("div")`
       margin-bottom: 0.15rem;
       display: flex;
       justify-content: center;
-      color: #fff;
+      color: ${tokens.text.onDark};
     }
     p {
       font-size: 0.625rem;
       text-align: center;
-      color: #a7a9b6;
+      color: ${tokens.text.secondary};
     }
   }
 `;

@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { tokens } from "../../../styles/tokens";
+import { useState, useMemo, useEffect } from "react";
 import styled from "@mui/material/styles/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { TabSwitch } from "../../TabSwitch";
@@ -20,7 +21,16 @@ import { useHistoricalPositions } from "../../../hooks/data/useHistoricalPositio
 // import { waitForBlockNumberPositionBook } from "../../../hooks/data/usePositionBook";
 // import type { TransactionReceipt } from "viem";
 
+import type { AccountBalance, ContractMode } from "../../../types/types";
+
 type TimeFilter = "OPEN" | "LAST_30_DAYS";
+
+interface BalanceQueryResult {
+  data: bigint | undefined;
+  isLoading: boolean;
+  isSuccess: boolean;
+  refetch: () => void;
+}
 
 interface OrdersPositionsTabWidgetProps {
   orders: ParticipantOrder[];
@@ -31,6 +41,9 @@ interface OrdersPositionsTabWidgetProps {
   onClosePosition?: (price: string, amount: number, isBuy: boolean) => void;
   participantData?: any;
   minMargin?: bigint | null;
+  accountBalance?: AccountBalance;
+  contractMode?: ContractMode;
+  balanceQuery: BalanceQueryResult;
 }
 
 export const OrdersPositionsTabWidget = ({
@@ -42,6 +55,9 @@ export const OrdersPositionsTabWidget = ({
   onClosePosition,
   participantData,
   minMargin,
+  accountBalance,
+  contractMode = "futures",
+  balanceQuery,
 }: OrdersPositionsTabWidgetProps) => {
   const [activeTab, setActiveTab] = useState<"ORDERS" | "POSITIONS">("ORDERS");
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("OPEN");
@@ -112,6 +128,15 @@ export const OrdersPositionsTabWidget = ({
     return unique.size;
   }, [positions, participantAddress, isHistoricalMode, historicalPositionsQuery.data?.data]);
 
+  // Auto-switch to Positions tab when there are no open orders but there are open positions (Active only).
+  useEffect(() => {
+    if (isHistoricalMode) return;
+    if (ordersLoading || positionsLoading) return;
+    if (ordersCount === 0 && positionsCount > 0) {
+      setActiveTab("POSITIONS");
+    }
+  }, [isHistoricalMode, ordersLoading, positionsLoading, ordersCount, positionsCount]);
+
   return (
     <TabContainer>
       <Header>
@@ -147,6 +172,9 @@ export const OrdersPositionsTabWidget = ({
               isLoading={ordersLoading}
               participantData={participantData}
               minMargin={minMargin}
+              accountBalance={accountBalance}
+              contractMode={contractMode}
+              balanceQuery={balanceQuery}
             />
           </OrdersWrapper>
         )}
@@ -165,6 +193,8 @@ export const OrdersPositionsTabWidget = ({
               isLoading={positionsLoading}
               participantAddress={participantAddress}
               onClosePosition={onClosePosition}
+              contractMode={contractMode}
+              balanceQuery={balanceQuery}
             />
           </PositionsWrapper>
         )}
@@ -247,12 +277,13 @@ const TabContainer = styled(SmallWidget)`
   display: flex;
   flex-direction: column;
   align-items: start;
+  border: 1px solid ${tokens.border.muted04};
   
   h3 {
     margin: 0;
     font-size: 1.1rem;
     font-weight: 600;
-    color: #fff;
+    color: ${tokens.text.onDark};
   }
 `;
 
@@ -262,12 +293,19 @@ const Header = styled("div")`
   justify-content: space-between;
   align-items: center;
   width: 100%;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    align-items: stretch;
+  }
 `;
 
 const ClaimButton = styled("button")`
   padding: 0.5rem 1rem;
-  background: #4c5a5f;
-  color: #fff;
+  background: ${tokens.surface.tabActive};
+  color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
   font-size: 0.875rem;
@@ -277,7 +315,7 @@ const ClaimButton = styled("button")`
   white-space: nowrap;
   
   &:hover:not(:disabled) {
-    background: #5a6b70;
+    background: ${tokens.surface.tabHover};
     transform: translateY(-1px);
   }
   
@@ -286,7 +324,7 @@ const ClaimButton = styled("button")`
   }
 
   &:disabled {
-    background: #6b7280;
+    background: ${tokens.text.muted};
     cursor: not-allowed;
     opacity: 0.6;
   }
@@ -317,13 +355,13 @@ const PositionsWrapper = styled("div")`
 
 const DeliveryDatesModalContent = styled("div")`
   padding: 1.5rem;
-  color: #fff;
+  color: ${tokens.text.onDark};
   
   h3 {
     margin: 0 0 1rem 0;
     font-size: 1.25rem;
     font-weight: 600;
-    color: #fff;
+    color: ${tokens.text.onDark};
   }
 `;
 
@@ -337,12 +375,12 @@ const DeliveryDatesList = styled("div")`
   }
   
   &::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
+    background: ${tokens.overlay.white10};
     border-radius: 3px;
   }
   
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
+    background: ${tokens.overlay.white30};
     border-radius: 3px;
   }
 `;
@@ -350,11 +388,11 @@ const DeliveryDatesList = styled("div")`
 const DeliveryDateItem = styled("div")`
   padding: 0.75rem;
   margin-bottom: 0.5rem;
-  background: rgba(255, 255, 255, 0.05);
+  background: ${tokens.overlay.white05};
   border-radius: 6px;
   font-size: 0.875rem;
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: ${tokens.text.onDark};
+  border: 1px solid ${tokens.overlay.white10};
 `;
 
 const ModalActions = styled("div")`
@@ -365,8 +403,8 @@ const ModalActions = styled("div")`
 
 const CloseButton = styled("button")`
   padding: 0.5rem 1rem;
-  background: #4c5a5f;
-  color: #fff;
+  background: ${tokens.surface.tabActive};
+  color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
   font-size: 0.875rem;
@@ -375,34 +413,34 @@ const CloseButton = styled("button")`
   transition: background-color 0.2s ease;
   
   &:hover {
-    background: #5a6b70;
+    background: ${tokens.surface.tabHover};
   }
 `;
 
 const TimeFilterSwitch = styled("div")`
   display: flex;
   gap: 0;
-  border: 1px solid rgba(171, 171, 171, 1);
+  border: 1px solid ${tokens.border.default};
   border-radius: 6px;
   overflow: hidden;
 `;
 
 const TimeFilterButton = styled("button")<{ $active: boolean }>`
   padding: 0.5rem 1rem;
-  background: ${(props) => (props.$active ? "#4c5a5f" : "transparent")};
-  color: #fff;
+  background: ${(props) => (props.$active ? tokens.surface.tabActive : "transparent")};
+  color: ${tokens.text.onDark};
   border: none;
-  font-size: 1.2rem;
+  font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.2s ease;
   white-space: nowrap;
   
   &:hover {
-    background: ${(props) => (props.$active ? "#4c5a5f" : "rgba(76, 90, 95, 0.5)")};
+    background: ${(props) => (props.$active ? tokens.surface.tabActive : tokens.surface.tabInactiveHover)};
   }
   
   &:first-of-type {
-    border-right: 1px solid rgba(171, 171, 171, 0.5);
+    border-right: 1px solid ${tokens.border.muted05};
   }
 `;

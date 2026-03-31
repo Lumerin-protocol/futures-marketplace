@@ -2,26 +2,33 @@ import { type FC, useCallback, useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { useAccount } from "wagmi";
 import { useRemoveMargin } from "../../hooks/data/useRemoveMargin";
-import { useGetFutureBalance } from "../../hooks/data/useGetFutureBalance";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import { AmountInputForm } from "./Shared/AmountInputForm";
 import { formatValue, paymentToken } from "../../lib/units";
 import { parseUnits } from "viem";
 
+interface BalanceQueryResult {
+  data: bigint | undefined;
+  isLoading: boolean;
+  isSuccess: boolean;
+  refetch: () => void;
+}
+
 interface WithdrawalFormProps {
   closeForm: () => void;
   minMargin: bigint | null;
   isLoadingMinMargin: boolean;
+  balanceQuery: BalanceQueryResult;
 }
 
 interface InputValues {
   amount: string;
 }
 
-export const WithdrawalForm: FC<WithdrawalFormProps> = ({ closeForm, minMargin, isLoadingMinMargin }) => {
+export const WithdrawalForm: FC<WithdrawalFormProps> = ({ closeForm, minMargin, isLoadingMinMargin, balanceQuery }) => {
   const { address } = useAccount();
   const { removeMarginAsync, isPending } = useRemoveMargin();
-  const futureBalance = useGetFutureBalance(address);
+  const futureBalance = balanceQuery;
 
   // Calculate available balance: balance - minMargin (minMargin is locked amount)
   // getMinMargin returns int256, where positive values represent locked amount
