@@ -271,7 +271,7 @@ export const PositionsListWidget = ({
               <th>Contract Expiration</th>
               <th>Side</th>
               <th>Price (USDC)</th>
-              <th>Size (USDC)</th>
+              <th>Quantity</th>
               <th>Margin</th>
               <th>Unrealized PnL (USDC)</th>
               <th>Destination</th>
@@ -289,7 +289,7 @@ export const PositionsListWidget = ({
                   <TypeBadge $type={groupedPosition.positionType}>{groupedPosition.positionType}</TypeBadge>
                 </td>
                 <td>{formatPrice(groupedPosition.pricePerDay)}</td>
-                <td>{((Number(groupedPosition.pricePerDay) / 1e6) * groupedPosition.amount).toFixed(2)}</td>
+                <td>{groupedPosition.amount}</td>
                 <td>
                   {formatMargin(
                     calculateMargin(groupedPosition.pricePerDay, groupedPosition.amount, groupedPosition.positionType),

@@ -181,7 +181,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
               <th>Contract Expiration</th>
               <th>Side</th>
               <th>Price (USDC)</th>
-              <th>Size (USDC)</th>
+              <th>Quantity</th>
               <th>Margin</th>
               <th>Destination</th>
               <th>Actions</th>
@@ -197,7 +197,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
                   </TypeBadge>
                 </td>
                 <td>{formatPrice(groupedOrder.pricePerDay)}</td>
-                <td>{((Number(groupedOrder.pricePerDay) / 1e6) * groupedOrder.amount).toFixed(2)}</td>
+                <td>{groupedOrder.amount}</td>
                 <td>
                   {formatMargin(calculateMargin(groupedOrder.pricePerDay, groupedOrder.amount, groupedOrder.isBuy))}
                 </td>
