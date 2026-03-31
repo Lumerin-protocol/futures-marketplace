@@ -20,7 +20,7 @@ market_maker = {
   risk_aversion               = 15000
   max_position                = 10
   log_level                   = "info"
-  chain_id                    = 42161       # Arbitrum Mainnet
+  chain_id                    = 8453       # Base Mainnet
   # Balance Thresholds (graceful exit when funds low)
   min_eth_balance             = "100000000000000"     # 0.0001 ETH in wei (~1.4 txns - stops before failing)
   min_usdc_balance            = "10000000"            # 10 USDC (10n * 10n ** 6n)
@@ -67,8 +67,8 @@ notifications_service = {
 # Contract addresses for the environment
 # DEV uses Arbitrum Sepolia testnet, STG/LMN use Arbitrum mainnet
 clone_factory_address   = "0xb5838586b43b50f9a739d1256a067859fe5b3234"
-hashrate_oracle_address = "0x2c1db79d2f3df568275c940dac81ad251871faf4"
-futures_address         = "0xe11594879beb6c28c67bc251aa5e26ce126b82ba"
+hashrate_oracle_address = "0x614dCAfa33AF0705C7b4A37667eF511F400F36d0"
+futures_address         = "0xf97a1bbfb5e061ef73dad8ebf25939d93639fb7f"
 multicall_address       = "0xcA11bde05977b3631167028862bE2a173976CA11"
 
 ########################################
