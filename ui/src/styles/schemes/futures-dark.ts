@@ -154,12 +154,12 @@ export const futuresDark = {
       "linear-gradient(45deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0) 100%)",
   },
   actionButton: {
-    bg: "#2563EB",
+    bg: "#1E40AF",
     text: "#FFFFFF",
     iconMuted: "#64748B",
   },
   neutralButton: {
-    bg: "#2563EB",
+    bg: "#1E40AF",
     hover: "#1D4ED8",
   },
   circularProgress: {
