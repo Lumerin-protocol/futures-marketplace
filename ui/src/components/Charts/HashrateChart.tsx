@@ -29,7 +29,7 @@ const PeriodButton = styled("button")<{ $active: boolean }>`
   white-space: nowrap;
 
   &:hover {
-    background: ${(props) => (props.$active ? tokens.surface.tabActive : tokens.surface.tabInactiveHover)};
+    background: ${(props) => (props.$active ? tokens.surface.tabHover : tokens.surface.tabInactiveHover)};
   }
 
   &:not(:last-child) {

@@ -151,7 +151,7 @@ const MobileCountBadge = styled("span")`
   height: 2em;
   padding: 0 0.35em;
   border-radius: ${tokens.radius.full};
-  color: ${tokens.brand.green};
+  color: ${tokens.text.onLight};
   background-color: #FFFFFF;
   flex-shrink: 0;
 `;
@@ -192,7 +192,7 @@ export const TabSwitchStyled = styled("div")<{ $numTabs: number }>`
       margin-left: 0.75em;
       border-radius: ${tokens.radius.full};
       transition: 0.15s ease-in;
-      color: ${tokens.brand.green};
+      color: ${tokens.text.onLight};
       background-color: #FFFFFF;
     }
   }
@@ -212,7 +212,7 @@ export const TabSwitchStyled = styled("div")<{ $numTabs: number }>`
   }
 
   .active > span {
-    color: ${tokens.brand.green};
+    color: ${tokens.text.onLight};
     background-color: #FFFFFF;
   }
 
@@ -223,7 +223,7 @@ export const TabSwitchStyled = styled("div")<{ $numTabs: number }>`
     left: 3px;
     bottom: 3px;
     width: calc(50% - 6px);
-    background-color: ${tokens.brand.green};
+    background-color: ${tokens.surface.tabActive};
     z-index: 1;
     border-radius: ${tokens.radius.sm};
     transition: 0.25s ease-out;
@@ -235,7 +235,7 @@ export const TabSwitchStyled = styled("div")<{ $numTabs: number }>`
     top: 3px;
     bottom: 3px;
     width: calc(${(props) => 100 / props.$numTabs}% - 6px);
-    background-color: ${tokens.brand.green};
+    background-color: ${tokens.surface.tabActive};
     z-index: 1;
     border-radius: ${tokens.radius.sm};
     transition: left 0.25s ease-out;
