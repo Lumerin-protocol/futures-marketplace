@@ -5,8 +5,8 @@ export const darkTheme = createTheme({
   palette: {
     mode: "dark",
     primary: {
-      main: tokens.brand.green,
-      dark: tokens.brand.greenDark,
+      main: tokens.neutralButton.bg,
+      dark: tokens.neutralButton.hover,
       contrastText: "#FFFFFF",
     },
     secondary: {

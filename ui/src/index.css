@@ -17,7 +17,7 @@
   }
 
   .btn-disconnect {
-    @apply w-40 h-12 mt-4 md:block items-center justify-center rounded-sm py-2 px-4 text-sm text-futures-brand-green font-semibold font-sans;
+    @apply w-40 h-12 mt-4 md:block items-center justify-center rounded-sm py-2 px-4 text-sm text-futures-text-secondary font-semibold font-sans;
   }
 
   .btn-modal {
@@ -77,7 +77,7 @@
 
   .link:hover {
     cursor: pointer;
-    @apply text-futures-brand-green ease-in duration-200;
+    @apply text-futures-text-primary ease-in duration-200;
   }
 }
 

@@ -304,7 +304,7 @@ const Header = styled("div")`
 
 const ClaimButton = styled("button")`
   padding: 0.5rem 1rem;
-  background: ${tokens.surface.tabActive};
+  background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
@@ -315,7 +315,7 @@ const ClaimButton = styled("button")`
   white-space: nowrap;
   
   &:hover:not(:disabled) {
-    background: ${tokens.surface.tabHover};
+    background: ${tokens.neutralButton.hover};
     transform: translateY(-1px);
   }
   
@@ -403,7 +403,7 @@ const ModalActions = styled("div")`
 
 const CloseButton = styled("button")`
   padding: 0.5rem 1rem;
-  background: ${tokens.surface.tabActive};
+  background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
@@ -413,7 +413,7 @@ const CloseButton = styled("button")`
   transition: background-color 0.2s ease;
   
   &:hover {
-    background: ${tokens.surface.tabHover};
+    background: ${tokens.neutralButton.hover};
   }
 `;
 
@@ -437,7 +437,7 @@ const TimeFilterButton = styled("button")<{ $active: boolean }>`
   white-space: nowrap;
   
   &:hover {
-    background: ${(props) => (props.$active ? tokens.surface.tabActive : tokens.surface.tabInactiveHover)};
+    background: ${(props) => (props.$active ? tokens.surface.tabHover : tokens.surface.tabInactiveHover)};
   }
   
   &:first-of-type {
