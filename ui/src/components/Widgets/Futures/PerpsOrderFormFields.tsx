@@ -374,11 +374,11 @@ export const ModeButton = styled("button")<{ $active: boolean }>`
   cursor: pointer;
   border: none;
   transition: background 0.15s ease, color 0.15s ease;
-  background: ${(props) => (props.$active ? tokens.neutralButton.bg : "transparent")};
+  background: ${(props) => (props.$active ? tokens.surface.tabActive : "transparent")};
   color: ${(props) => (props.$active ? "#FFFFFF" : tokens.text.secondary)};
 
   &:hover:not(:disabled) {
-    background: ${(props) => (props.$active ? tokens.neutralButton.hover : tokens.overlay.white08)};
+    background: ${(props) => (props.$active ? tokens.surface.tabHover : tokens.overlay.white08)};
     color: #FFFFFF;
   }
 

@@ -1320,7 +1320,7 @@ const ActionButtons = styled("div")`
 
 const ModifyButton = styled("button")`
   padding: 0.5rem 0.875rem;
-  background: ${tokens.surface.tabActive};
+  background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
@@ -1330,7 +1330,7 @@ const ModifyButton = styled("button")`
   transition: background-color 0.2s ease, transform 0.1s ease;
 
   &:hover:not(:disabled) {
-    background: ${tokens.surface.tabHover};
+    background: ${tokens.neutralButton.hover};
     transform: translateY(-1px);
   }
 
@@ -1347,7 +1347,7 @@ const ModifyButton = styled("button")`
 
 const CancelButton = styled("button")`
   padding: 0.5rem 0.875rem;
-  background: ${tokens.surface.tabActive};
+  background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
@@ -1357,7 +1357,7 @@ const CancelButton = styled("button")`
   transition: background-color 0.2s ease, transform 0.1s ease;
   
   &:hover:not(:disabled) {
-    background: ${tokens.surface.tabHover};
+    background: ${tokens.neutralButton.hover};
     transform: translateY(-1px);
   }
   
@@ -1401,7 +1401,7 @@ const TxLink = styled("a")`
 
 const DetailsButton = styled("button")`
   padding: 0.5rem 0.875rem;
-  background: ${tokens.surface.tabActive};
+  background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
@@ -1411,7 +1411,7 @@ const DetailsButton = styled("button")`
   transition: background-color 0.2s ease, transform 0.1s ease;
   
   &:hover:not(:disabled) {
-    background: ${tokens.surface.tabHover};
+    background: ${tokens.neutralButton.hover};
     transform: translateY(-1px);
   }
   
@@ -1569,17 +1569,18 @@ const CloseAllActions = styled("div")`
 
 const ModalCancelButton = styled("button")`
   padding: 0.5rem 1rem;
-  background: ${tokens.surface.tabActive};
+  background: transparent;
   color: ${tokens.text.onDark};
-  border: none;
+  border: 1px solid ${tokens.border.default};
   border-radius: 6px;
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 
   &:hover {
-    background: ${tokens.surface.tabHover};
+    background: ${tokens.overlay.white08};
+    border-color: ${tokens.text.secondary};
   }
 `;
 

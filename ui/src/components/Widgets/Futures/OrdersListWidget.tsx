@@ -407,7 +407,7 @@ const ActionButtons = styled("div")`
 
 const ModifyButton = styled("button")`
   padding: 0.5rem 0.875rem;
-  background: ${tokens.surface.tabActive};
+  background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
@@ -417,7 +417,7 @@ const ModifyButton = styled("button")`
   transition: background-color 0.2s ease, transform 0.1s ease;
   
   &:hover:not(:disabled) {
-    background: ${tokens.surface.tabHover};
+    background: ${tokens.neutralButton.hover};
     transform: translateY(-1px);
   }
   
@@ -434,7 +434,7 @@ const ModifyButton = styled("button")`
 
 const CloseButton = styled("button")`
   padding: 0.5rem 0.875rem;
-  background: ${tokens.surface.tabActive};
+  background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
@@ -444,7 +444,7 @@ const CloseButton = styled("button")`
   transition: background-color 0.2s ease, transform 0.1s ease;
   
   &:hover:not(:disabled) {
-    background: ${tokens.surface.tabHover};
+    background: ${tokens.neutralButton.hover};
     transform: translateY(-1px);
   }
   

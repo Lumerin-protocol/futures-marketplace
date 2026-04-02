@@ -157,7 +157,7 @@ const InputContainer = styled("div")`
 
 const MaxButton = styled("button")`
   padding: 0.75rem 1rem;
-  background: ${tokens.surface.tabActive};
+  background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};
   height: 56px;
   width: 100px;
@@ -170,7 +170,7 @@ const MaxButton = styled("button")`
   white-space: nowrap;
 
   &:hover {
-    background: ${tokens.surface.tabHover};
+    background: ${tokens.neutralButton.hover};
     transform: translateY(-1px);
   }
 
