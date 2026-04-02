@@ -1184,7 +1184,7 @@ const LeverageModal = ({
         </div>
         <div className="flex justify-between items-center">
           <span className="text-gray-300 text-sm">Margin Required:</span>
-          <span className="text-futures-brand-green font-semibold">{getMarginPercent(tempLeverage).toFixed(2)}%</span>
+          <span className="text-futures-brand-blue font-semibold">{getMarginPercent(tempLeverage).toFixed(2)}%</span>
         </div>
       </div>
 

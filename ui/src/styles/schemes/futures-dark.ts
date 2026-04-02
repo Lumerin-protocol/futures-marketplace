@@ -103,8 +103,8 @@ export const futuresDark = {
     info: "#6366F1",
   },
   accent: {
-    main: "#00B894",
-    mainLower: "#009B7D",
+    main: "#2563EB",
+    mainLower: "#1D4ED8",
   },
   border: {
     default: "#2E3348",
