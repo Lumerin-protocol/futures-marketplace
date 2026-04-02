@@ -1655,13 +1655,13 @@ const StyledSlider = styled(Slider)`
   & .MuiSlider-thumb {
     width: 18px;
     height: 18px;
-    background-color: ${tokens.brand.green};
+    background-color: ${tokens.neutralButton.bg};
     transition: all 0.2s ease;
 
     &:hover,
     &.Mui-focusVisible {
       box-shadow: 0 0 0 8px ${tokens.overlay.white16};
-      background-color: ${tokens.brand.greenDark};
+      background-color: ${tokens.neutralButton.hover};
     }
     
     &.Mui-active {
@@ -1672,7 +1672,7 @@ const StyledSlider = styled(Slider)`
   & .MuiSlider-track {
     height: 6px;
     border: none;
-    background-color: ${tokens.brand.green};
+    background-color: ${tokens.neutralButton.bg};
   }
 
   & .MuiSlider-rail {

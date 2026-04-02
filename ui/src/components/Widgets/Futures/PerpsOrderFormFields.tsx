@@ -374,11 +374,11 @@ export const ModeButton = styled("button")<{ $active: boolean }>`
   cursor: pointer;
   border: none;
   transition: background 0.15s ease, color 0.15s ease;
-  background: ${(props) => (props.$active ? tokens.brand.green : "transparent")};
+  background: ${(props) => (props.$active ? tokens.neutralButton.bg : "transparent")};
   color: ${(props) => (props.$active ? "#FFFFFF" : tokens.text.secondary)};
 
   &:hover:not(:disabled) {
-    background: ${(props) => (props.$active ? tokens.brand.greenDark : tokens.overlay.white08)};
+    background: ${(props) => (props.$active ? tokens.neutralButton.hover : tokens.overlay.white08)};
     color: #FFFFFF;
   }
 
@@ -476,13 +476,13 @@ export const StyledSlider = styled(Slider)`
   & .MuiSlider-thumb {
     width: 18px;
     height: 18px;
-    background-color: ${tokens.brand.green};
+    background-color: ${tokens.neutralButton.bg};
     transition: all 0.2s ease;
 
     &:hover,
     &.Mui-focusVisible {
       box-shadow: 0 0 0 8px ${tokens.overlay.white16};
-      background-color: ${tokens.brand.greenDark};
+      background-color: ${tokens.neutralButton.hover};
     }
 
     &.Mui-active {
@@ -493,7 +493,7 @@ export const StyledSlider = styled(Slider)`
   & .MuiSlider-track {
     height: 6px;
     border: none;
-    background-color: ${tokens.brand.green};
+    background-color: ${tokens.neutralButton.bg};
   }
 
   & .MuiSlider-rail {
@@ -592,17 +592,18 @@ export const ModalActions = styled("div")`
 
 export const ModalCancelButton = styled("button")`
   padding: 0.5rem 1rem;
-  background: ${tokens.surface.tabActive};
+  background: transparent;
   color: ${tokens.text.onDark};
-  border: none;
+  border: 1px solid ${tokens.border.default};
   border-radius: 6px;
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 
   &:hover:not(:disabled) {
-    background: ${tokens.surface.tabHover};
+    background: ${tokens.overlay.white08};
+    border-color: ${tokens.text.secondary};
   }
 
   &:disabled {
@@ -611,4 +612,12 @@ export const ModalCancelButton = styled("button")`
   }
 `;
 
-export const ModalConfirmButton = styled(ModalCancelButton)``;
+export const ModalConfirmButton = styled(ModalCancelButton)`
+  background: ${tokens.neutralButton.bg};
+  border: none;
+
+  &:hover:not(:disabled) {
+    background: ${tokens.neutralButton.hover};
+    border-color: transparent;
+  }
+`;

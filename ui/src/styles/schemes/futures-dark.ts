@@ -13,11 +13,11 @@ export const futuresDark = {
     card: "#1A1D28",
     mobileTabBg: "#1A1D28",
     mobileTabBgAlpha: "rgba(26, 29, 40, 0.95)",
-    tabActive: "#00B894",
-    tabActiveRgb: "0, 184, 148",
-    tabHover: "#009B7D",
+    tabActive: "#3C465A",
+    tabActiveRgb: "60, 70, 90",
+    tabHover: "#505F78",
     tabMuted: "#64748B",
-    tabInactiveHover: "rgba(0, 184, 148, 0.25)",
+    tabInactiveHover: "rgba(60, 70, 90, 0.25)",
     alert: "#1A1D28",
     inputIsland: "#232736",
     inputIslandHover: "#2E3348",
@@ -154,9 +154,13 @@ export const futuresDark = {
       "linear-gradient(45deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0) 100%)",
   },
   actionButton: {
-    bg: "#00B894",
+    bg: "#3C465A",
     text: "#FFFFFF",
     iconMuted: "#64748B",
+  },
+  neutralButton: {
+    bg: "#3C465A",
+    hover: "#505F78",
   },
   circularProgress: {
     default: "#00B894",
@@ -274,4 +278,6 @@ export const futuresDarkTailwind: Record<string, string> = {
   "futures-chart-grid": futuresDark.chart.grid,
   "futures-chart-btc": futuresDark.chart.seriesBtc,
   "futures-border": futuresDark.border.default,
+  "futures-neutral-button": futuresDark.neutralButton.bg,
+  "futures-neutral-button-hover": futuresDark.neutralButton.hover,
 };

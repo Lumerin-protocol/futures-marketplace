@@ -102,12 +102,12 @@ const PrimaryButtonComponent = styled(Button, {
   shouldForwardProp: (prop) => typeof prop === "string" && !prop.startsWith("$"),
 })<{ $hoverText?: string }>`
   color: #FFFFFF;
-  background-color: ${tokens.brand.green};
+  background-color: ${tokens.neutralButton.bg};
   position: relative;
   cursor: pointer;
 
   &:hover {
-    background-color: ${tokens.brand.greenDark};
+    background-color: ${tokens.neutralButton.hover};
   }
 
   &:disabled {
