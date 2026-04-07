@@ -1,7 +1,17 @@
-import { type Hex, hexToNumber, type PartialBy, slice, type WalletClient, zeroAddress } from "viem";
+import {
+  erc20Abi,
+  type Hex,
+  hexToNumber,
+  type PartialBy,
+  slice,
+  type WalletClient,
+  zeroAddress,
+} from "viem";
 import { useReadContracts, useWalletClient } from "wagmi";
 
 import { useState } from "react";
+import { ierc20PermitAbi } from "../../../abi/ierc20permit";
+import { ierc5267Abi } from "../../../abi/ierc5267";
 
 export function usePermit({ contractAddress, spenderAddress, ttl = 3n * 60n }: UsePermitProps) {
   const [signature, setSignature] = useState<PermitSignature | undefined>();
@@ -13,23 +23,36 @@ export function usePermit({ contractAddress, spenderAddress, ttl = 3n * 60n }: U
   const chainId = walletClientToUse?.chain.id;
 
   const reads = useReadContracts({
-    allowFailure: false,
+    allowFailure: true,
     contracts: [
-      // {
-      //   address: contractAddress,
-      //   abi: PermitABI,
-      //   functionName: "version",
-      // },
       {
         address: contractAddress,
-        abi: PermitABI,
+        abi: erc20Abi,
         functionName: "name",
       },
       {
         address: contractAddress,
-        abi: PermitABI,
+        abi: [
+          {
+            inputs: [],
+            name: "version",
+            outputs: [{ internalType: "string", name: "", type: "string" }],
+            stateMutability: "view",
+            type: "function",
+          },
+        ],
+        functionName: "version",
+      },
+      {
+        address: contractAddress,
+        abi: ierc20PermitAbi,
         functionName: "nonces",
         args: [ownerToUse],
+      },
+      {
+        address: contractAddress,
+        abi: ierc5267Abi,
+        functionName: "eip712Domain",
       },
     ],
     query: {
@@ -37,62 +60,74 @@ export function usePermit({ contractAddress, spenderAddress, ttl = 3n * 60n }: U
     },
   });
 
-  const [/*versionFromContract,*/ name, nonce] = reads.data ?? [];
-
-  // const validatedVersionFromContract = [1, 2, "1", "2"].includes(versionFromContract ?? "")
-  //   ? versionFromContract
-  //   : null;
-
-  const version = /*validatedVersionFromContract ??*/ "1";
-
-  const ready =
-    walletClientToUse !== null &&
-    walletClientToUse !== undefined &&
-    spenderAddress !== undefined &&
-    chainId !== undefined &&
-    contractAddress !== undefined &&
-    name !== undefined &&
-    nonce !== undefined;
-
   return {
-    signPermit: ready
-      ? async (
-          props: PartialBy<
-            Eip2612Props,
-            | "chainId"
-            | "ownerAddress"
-            | "contractAddress"
-            | "spenderAddress"
-            | "nonce"
-            | "erc20Name"
-            | "permitVersion"
-            | "deadline"
-          > & {
-            walletClient?: WalletClient;
-          },
-        ) => {
-          try {
-            const nowBigInt = BigInt(Math.floor(Date.now() / 1000));
-            const deadline = nowBigInt + ttl;
-            const signature = await signPermit(props.walletClient ?? walletClientToUse, {
-              chainId,
-              ownerAddress: walletClientToUse.account.address,
-              contractAddress: contractAddress,
-              spenderAddress: spenderAddress ?? zeroAddress,
-              erc20Name: name,
-              nonce,
-              permitVersion: version,
-              deadline,
-              ...props,
-            });
-            setSignature(signature);
-            return { signature, deadline };
-          } catch (error) {
-            setError(error as Error);
-            throw error;
+    signPermit: async (
+      props: PartialBy<
+        Eip2612Props,
+        "ownerAddress" | "contractAddress" | "spenderAddress" | "deadline" | "value"
+      > & {
+        walletClient?: WalletClient;
+      },
+    ) => {
+      if (!walletClientToUse || !chainId || !contractAddress || !spenderAddress) {
+        return;
+      }
+      let domain:
+        | {
+            name: string;
+            version: string;
+            chainId: number;
+            verifyingContract: `0x${string}`;
           }
+        | undefined;
+      let nonce: bigint | undefined;
+      if (reads.data && chainId) {
+        const [name, version, _nonce, eip712Domain] = reads.data;
+        if (_nonce.status === "failure") {
+          throw new Error(`Failed to get nonce: ${_nonce.error?.message}`);
         }
-      : undefined,
+        nonce = _nonce.result;
+        if (eip712Domain.status === "success") {
+          const [, name, version, chainId, verifyingContract] = eip712Domain.result;
+          domain = {
+            name: name,
+            version: version,
+            chainId: Number(chainId),
+            verifyingContract: verifyingContract,
+          };
+        } else {
+          if (name.status === "failure")
+            throw new Error(`Failed to get name: ${name.error?.message}`);
+          domain = {
+            name: name.result,
+            version: version.result || "1",
+            chainId: chainId,
+            verifyingContract: contractAddress,
+          };
+        }
+      }
+      if (!domain || !nonce || !props.value) {
+        return;
+      }
+
+      try {
+        const nowBigInt = BigInt(Math.floor(Date.now() / 1000));
+        const deadline = nowBigInt + ttl;
+        const signature = await signPermit(props.walletClient ?? walletClientToUse, domain, {
+          ownerAddress: walletClientToUse.account.address,
+          contractAddress: contractAddress,
+          spenderAddress: spenderAddress ?? zeroAddress,
+          nonce,
+          deadline,
+          value: props.value,
+        });
+        setSignature(signature);
+        return { signature, deadline };
+      } catch (error) {
+        setError(error as Error);
+        throw error;
+      }
+    },
     signature,
     error,
   };
@@ -113,26 +148,15 @@ const types = {
  */
 export const signPermit = async (
   walletClient: WalletClient,
+  domain: { name: string; version: string; chainId: number; verifyingContract: `0x${string}` },
   {
-    contractAddress,
-    erc20Name,
     ownerAddress,
     spenderAddress,
     value,
     deadline,
     nonce,
-    chainId,
-    permitVersion,
-  }: Eip2612Props,
+  }: Omit<Eip2612Props, "chainId" | "erc20Name" | "permitVersion">,
 ): Promise<PermitSignature> => {
-  const domainData = {
-    name: erc20Name,
-    /** We assume 1 if permit version is not specified */
-    version: permitVersion ?? "1",
-    chainId: chainId,
-    verifyingContract: contractAddress,
-  };
-
   const message = {
     owner: ownerAddress,
     spender: spenderAddress,
@@ -144,7 +168,7 @@ export const signPermit = async (
   const signature = await walletClient.signTypedData({
     account: ownerAddress,
     message,
-    domain: domainData,
+    domain,
     primaryType: "Permit",
     types,
   });
@@ -158,22 +182,22 @@ export type PermitSignature = {
   v: number;
 };
 
+export type PermitDomain = {
+  name: string;
+  version: string;
+  chainId: number;
+  verifyingContract: `0x${string}`;
+};
+
 export type SignPermitProps = {
   /** Address of the token to approve */
   contractAddress: Hex;
-  /** Name of the token to approve.
-   * Corresponds to the `name` method on the ERC-20 contract. Please note this must match exactly byte-for-byte */
-  erc20Name: string;
   /** Owner of the tokens. Usually the currently connected address. */
   ownerAddress: Hex;
   /** Address to grant allowance to */
   spenderAddress: Hex;
   /** Expiration of this approval, in SECONDS */
   deadline: bigint;
-  /** Numerical chainId of the token contract */
-  chainId: number;
-  /** Defaults to 1. Some tokens need a different version, check the [PERMIT INFORMATION](https://github.com/vacekj/wagmi-permit/blob/main/PERMIT.md) for more information */
-  permitVersion?: string;
   /** Permit nonce for the specific address and token contract. You can get the nonce from the `nonces` method on the token contract. */
   nonce: bigint;
 };
@@ -182,48 +206,6 @@ export type Eip2612Props = SignPermitProps & {
   /** Amount to approve */
   value: bigint;
 };
-
-const PermitABI = [
-  {
-    inputs: [],
-    stateMutability: "view",
-    type: "function",
-    name: "name",
-    outputs: [
-      {
-        internalType: "string",
-        name: "",
-        type: "string",
-      },
-    ],
-  },
-  {
-    inputs: [
-      {
-        internalType: "address",
-        name: "owner",
-        type: "address",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-    name: "nonces",
-    outputs: [
-      {
-        internalType: "uint256",
-        name: "",
-        type: "uint256",
-      },
-    ],
-  },
-  {
-    inputs: [],
-    name: "version",
-    outputs: [{ internalType: "string", name: "", type: "string" }],
-    stateMutability: "view",
-    type: "function",
-  },
-] as const;
 
 export type UsePermitProps = {
   contractAddress: `0x${string}`;
