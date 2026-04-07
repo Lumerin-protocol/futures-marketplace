@@ -1,0 +1,18 @@
+export const ierc5267Abi = [
+  { type: "event", anonymous: false, inputs: [], name: "EIP712DomainChanged" },
+  {
+    type: "function",
+    inputs: [],
+    name: "eip712Domain",
+    outputs: [
+      { name: "fields", internalType: "bytes1", type: "bytes1" },
+      { name: "name", internalType: "string", type: "string" },
+      { name: "version", internalType: "string", type: "string" },
+      { name: "chainId", internalType: "uint256", type: "uint256" },
+      { name: "verifyingContract", internalType: "address", type: "address" },
+      { name: "salt", internalType: "bytes32", type: "bytes32" },
+      { name: "extensions", internalType: "uint256[]", type: "uint256[]" },
+    ],
+    stateMutability: "view",
+  },
+] as const;
