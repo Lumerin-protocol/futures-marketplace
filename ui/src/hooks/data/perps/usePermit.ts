@@ -10,7 +10,7 @@ import {
 import { useReadContracts, useWalletClient } from "wagmi";
 
 import { useState } from "react";
-import { ierc20PermitAbi } from "../../../abi/ierc20permit";
+import { ierc20PermitAbi } from "../../../abi/ierc20Permit";
 import { ierc5267Abi } from "../../../abi/ierc5267";
 
 export function usePermit({ contractAddress, spenderAddress, ttl = 3n * 60n }: UsePermitProps) {
