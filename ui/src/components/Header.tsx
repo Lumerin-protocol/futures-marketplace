@@ -24,7 +24,7 @@ export const Header = (props: Props) => {
     <StyledToolbar>
       <TitleWrapper>
         <Logo src={LogoIcon} alt="HPDX" onClick={handleLogoClick} />
-        <BrandName onClick={handleLogoClick}>HPDX</BrandName>
+        <BrandName onClick={handleLogoClick}>HashPower Derivatives Exchange</BrandName>
       </TitleWrapper>
       <Web3ProviderLazy>
         <HeaderConnectLazy />

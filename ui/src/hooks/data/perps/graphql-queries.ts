@@ -229,6 +229,7 @@ export const PerpsCollectionQuery = gql`
       minimumPriceIncrement
       marginPercent
       maintenanceMarginPercent
+      totalVolume
     }
   }
 `
