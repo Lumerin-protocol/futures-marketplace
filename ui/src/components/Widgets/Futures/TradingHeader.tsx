@@ -16,7 +16,15 @@ interface TradingHeaderProps {
   contractSpecsQuery: UseQueryResult<GetResponse<FuturesContractSpecs>, Error>;
   currentPrice?: string | null;
   fundingRate?: string;
+  totalVolume?: string;
 }
+
+const formatVolume = (raw: string): string => {
+  const num = Number(raw) / 1e6;
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(2)}K`;
+  return `${num.toFixed(2)}`;
+};
 
 export const TradingHeader = ({
   contractMode,
@@ -24,6 +32,7 @@ export const TradingHeader = ({
   contractSpecsQuery,
   currentPrice,
   fundingRate = "0%",
+  totalVolume,
 }: TradingHeaderProps) => {
   const detailedSpecsModal = useModal();
   const { data: contractSpecs } = contractSpecsQuery;
@@ -73,6 +82,15 @@ export const TradingHeader = ({
                 <StatValue>{fundingRate}</StatValue>
                 <StatLabel>Funding Rate</StatLabel>
               </StatItem>
+              {totalVolume && (
+                <>
+                  <Divider />
+                  <StatItem>
+                    <StatValue>{formatVolume(totalVolume)}</StatValue>
+                    <StatLabel>Total Volume</StatLabel>
+                  </StatItem>
+                </>
+              )}
             </>
           ) : (
             contractSpecs?.data && (
