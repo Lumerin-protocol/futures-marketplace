@@ -385,11 +385,19 @@ export const OrderBookTable = ({
                   }}
                 >
                   <BidCell $isHighlighted={row.highlightBid}>
-                    {row.bidUnits ? `${row.bidUnits} (${(row.bidUnits * row.price).toFixed(2)})` : ""}
+                    {row.bidUnits
+                      ? contractMode === "perpetual"
+                        ? (row.bidUnits * row.price).toFixed(2)
+                        : `${row.bidUnits} (${(row.bidUnits * row.price).toFixed(2)})`
+                      : ""}
                   </BidCell>
                   <PriceCell $isLastHashprice={row.isLastHashprice}>{row.price.toFixed(2)}</PriceCell>
                   <AskCell $isHighlighted={row.highlightAsk}>
-                    {row.askUnits ? `${row.askUnits} (${(row.askUnits * row.price).toFixed(2)})` : ""}
+                    {row.askUnits
+                      ? contractMode === "perpetual"
+                        ? (row.askUnits * row.price).toFixed(2)
+                        : `${row.askUnits} (${(row.askUnits * row.price).toFixed(2)})`
+                      : ""}
                   </AskCell>
                 </TableRow>
               );
