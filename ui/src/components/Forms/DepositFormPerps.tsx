@@ -146,13 +146,13 @@ export const DepositFormPerps: FC<DepositFormProps> = ({ closeForm, accountBalan
       async action() {
         const amount = form.getValues("amount");
         if (!amount) throw new Error("Amount not set");
+        if (!signPermit) throw new Error("Permit not ready. Please wait for wallet to connect and try again.");
         const amountBigInt = parseUnits(amount, paymentToken.decimals);
-        const result = await signPermit?.({
+        const result = await signPermit({
           value: amountBigInt,
         });
-        console.log("result", result);
         setSignature(result);
-        return result ? { isSkipped: false, state: result } : { isSkipped: false };
+        return { isSkipped: false, state: result };
       },
     },
     {

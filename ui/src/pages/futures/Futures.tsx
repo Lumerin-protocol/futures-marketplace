@@ -158,12 +158,23 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   }, [contractMode, positionSessionsQuery.data?.positionSessions]);
 
   const openPositionEntryPrice = useMemo(() => {
-    if (contractMode !== "perpetual") return null;
-    const sessions = positionSessionsQuery.data?.positionSessions || [];
-    const openSession = sessions.find((s) => s.status === "OPEN");
-    if (!openSession) return null;
-    return Number(openSession.entryPrice) / 1e6;
-  }, [contractMode, positionSessionsQuery.data?.positionSessions]);
+    if (contractMode === "perpetual") {
+      const sessions = positionSessionsQuery.data?.positionSessions || [];
+      const openSession = sessions.find((s) => s.status === "OPEN");
+      if (!openSession) return null;
+      return Number(openSession.entryPrice) / 1e6;
+    } else {
+      if (!address || !positionBookData?.data?.positions) return null;
+      const activePositions = positionBookData.data.positions.filter(
+        (p) => p.isActive && !p.closedAt
+      );
+      if (activePositions.length === 0) return null;
+      const position = activePositions[0];
+      const isLong = position.buyer.address.toLowerCase() === address.toLowerCase();
+      const entryPrice = isLong ? position.buyPricePerDay : position.sellPricePerDay;
+      return Number(entryPrice) / 1e6;
+    }
+  }, [contractMode, positionSessionsQuery.data?.positionSessions, positionBookData?.data?.positions, address]);
 
   const openPositionLiquidationPrice = useMemo(() => {
     if (contractMode !== "perpetual") return null;
