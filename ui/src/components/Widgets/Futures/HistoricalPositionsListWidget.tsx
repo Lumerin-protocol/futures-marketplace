@@ -2,6 +2,7 @@ import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import type { HistoricalPosition } from "../../../hooks/data/useHistoricalPositions";
+import { DateTimeCell } from "../../DateTimeCell";
 
 interface HistoricalPositionsListWidgetProps {
   positions: HistoricalPosition[];
@@ -38,16 +39,6 @@ export const HistoricalPositionsListWidget = ({
     return `${pnlValue.toFixed(2)}`;
   };
 
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(Number(timestamp) * 1000);
-    return date.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
 
   // Group positions by price (based on position type), deliveryAt, and position type
   const groupedPositions = positions.reduce(
@@ -123,7 +114,7 @@ export const HistoricalPositionsListWidget = ({
               <TableRow
                 key={`${groupedPosition.pricePerDay}-${groupedPosition.deliveryAt}-${groupedPosition.positionType}-${index}`}
               >
-                <td>{formatTimestamp(groupedPosition.deliveryAt)}</td>
+                <td><DateTimeCell timestamp={groupedPosition.deliveryAt} /></td>
                 <td>
                   <TypeBadge $type={groupedPosition.positionType}>{groupedPosition.positionType}</TypeBadge>
                 </td>
@@ -134,8 +125,8 @@ export const HistoricalPositionsListWidget = ({
                     {formatPnl(groupedPosition.realizedPnl)}
                   </PnLCell>
                 </td>
-                <td>{formatTimestamp(groupedPosition.timestamp)}</td>
-                <td>{groupedPosition.closedAt ? formatTimestamp(groupedPosition.closedAt) : "-"}</td>
+                <td><DateTimeCell timestamp={groupedPosition.timestamp} /></td>
+                <td>{groupedPosition.closedAt ? <DateTimeCell timestamp={groupedPosition.closedAt} /> : "-"}</td>
               </TableRow>
             ))}
           </tbody>
@@ -200,8 +191,8 @@ const Table = styled("table")`
     white-space: nowrap;
     
     &:first-child {
-      width: 200px;
-      min-width: 200px;
+      width: 130px;
+      min-width: 130px;
     }
   }
   
@@ -212,8 +203,8 @@ const Table = styled("table")`
     border-bottom: 1px solid ${tokens.overlay.white05};
     
     &:first-child {
-      width: 200px;
-      min-width: 200px;
+      width: 130px;
+      min-width: 130px;
     }
   }
 `;

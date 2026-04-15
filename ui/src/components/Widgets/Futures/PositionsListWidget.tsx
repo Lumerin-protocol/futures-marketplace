@@ -14,6 +14,7 @@ import { useState } from "react";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
 import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { ContractMode } from "../../../types/types";
+import { DateTimeCell } from "../../DateTimeCell";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -84,16 +85,6 @@ export const PositionsListWidget = ({
     return (Number(price) / 1e6).toFixed(2); // Convert from wei to USDC
   };
 
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(Number(timestamp) * 1000);
-    return date.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
 
   // Get latest price from market price hook
   const latestPrice = marketPrice ? Number(marketPrice) / 1e6 : null;
@@ -219,6 +210,7 @@ export const PositionsListWidget = ({
           paidCount: 0,
           isActive: position.isActive,
           closedAt: position.closedAt,
+          timestamp: position.timestamp,
           positions: [] as PositionBookPosition[],
         };
       }
@@ -242,6 +234,7 @@ export const PositionsListWidget = ({
         paidCount: number;
         isActive: boolean;
         closedAt: string | null;
+        timestamp: string;
         positions: PositionBookPosition[];
       }
     >,
@@ -276,6 +269,7 @@ export const PositionsListWidget = ({
               <th>Unrealized PnL (USDC)</th>
               <th>Destination</th>
               <th>Payment</th>
+              <th>Time</th>
               <th>Action</th>
             </tr>
           </thead>
@@ -284,7 +278,7 @@ export const PositionsListWidget = ({
               <TableRow
                 key={`${groupedPosition.pricePerDay}-${groupedPosition.deliveryAt}-${groupedPosition.positionType}-${index}`}
               >
-                <td>{formatTimestamp(groupedPosition.deliveryAt)}</td>
+                <td><DateTimeCell timestamp={groupedPosition.deliveryAt} /></td>
                 <td>
                   <TypeBadge $type={groupedPosition.positionType}>{groupedPosition.positionType}</TypeBadge>
                 </td>
@@ -332,6 +326,7 @@ export const PositionsListWidget = ({
                     <span>---</span>
                   )}
                 </td>
+                <td><DateTimeCell timestamp={groupedPosition.timestamp} /></td>
                 <td>
                   <ActionButtons>
                     {groupedPosition.destURL &&
@@ -447,8 +442,8 @@ const Table = styled("table")`
     white-space: nowrap;
     
     &:first-child {
-      width: 200px;
-      min-width: 200px;
+      width: 130px;
+      min-width: 130px;
     }
   }
   
@@ -459,8 +454,8 @@ const Table = styled("table")`
     border-bottom: 1px solid ${tokens.overlay.white05};
     
     &:first-child {
-      width: 200px;
-      min-width: 200px;
+      width: 130px;
+      min-width: 130px;
     }
   }
 `;
