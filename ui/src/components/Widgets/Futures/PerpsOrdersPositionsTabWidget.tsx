@@ -22,6 +22,7 @@ import { computeLiquidationState } from "../../../hooks/data/perps/positionHelpe
 import { ClosePerpsPositionModal } from "./ClosePerpsPositionModal";
 import { ModifyPerpsOrderModal } from "./ModifyPerpsOrderModal";
 import type { PerpsOrder } from "../../../hooks/data/perps/useUserPerpsOrders";
+import { DateTimeCell } from "../../DateTimeCell";
 
 type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "POSITION_HISTORY" | "ORDER_HISTORY";
 
@@ -269,7 +270,7 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
   const [pendingCancelOrder, setPendingCancelOrder] = useState<OpenOrder | null>(null);
 
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2); // Convert from wei to USDC
+    return (Number(price) / 1e6).toFixed(2);
   };
 
   const formatQuantity = (quantity: bigint) => {
@@ -277,17 +278,6 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
       return "0";
     }
     return (Number(quantity) / 1e6).toFixed(6);
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(Number(dateString) * 1000);
-    return date.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   };
 
   const formatStatus = (status: string) => {
@@ -358,7 +348,7 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
         <tbody>
           {displayedOrders.map((order) => (
             <TableRow key={order.id}>
-              <td>{formatDate(order.createdAt)}</td>
+              <td><DateTimeCell timestamp={order.createdAt} /></td>
               <td>
                 <TypeBadge $type={order.isBuy ? "Long" : "Short"}>
                   {order.isBuy ? "Long" : "Short"}
@@ -498,7 +488,7 @@ interface PerpsOrderHistoryTableProps {
 
 const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }: PerpsOrderHistoryTableProps) => {
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2); // Convert from wei to USDC
+    return (Number(price) / 1e6).toFixed(2);
   };
 
   const formatQuantity = (quantity: bigint) => {
@@ -506,18 +496,6 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }:
       return "0";
     }
     return (Number(quantity) / 1e6).toFixed(6);
-  };
-
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "-";
-    const date = new Date(Number(dateString) * 1000);
-    return date.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   };
 
   const formatStatus = (status: string) => {
@@ -592,7 +570,7 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }:
         <tbody>
           {displayedOrders.map((order) => (
             <TableRow key={order.id}>
-              <td>{formatDate(order.createdAt)}</td>
+              <td><DateTimeCell timestamp={order.createdAt} /></td>
               <td>
                 <TypeBadge $type={order.isBuy ? "Long" : "Short"}>
                   {order.isBuy ? "Long" : "Short"}
@@ -609,7 +587,7 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }:
                   {formatStatus(order.status)}
                 </StatusBadge>
               </td>
-              <td>{formatDate(order.updatedAt)}</td>
+              <td><DateTimeCell timestamp={order.updatedAt} /></td>
             </TableRow>
           ))}
         </tbody>
@@ -640,7 +618,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
   const [selectedSession, setSelectedSession] = useState<PositionSession | null>(null);
 
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2); // Convert from wei to USDC
+    return (Number(price) / 1e6).toFixed(2);
   };
 
   const formatQuantity = (quantity: bigint) => {
@@ -655,17 +633,6 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
     const funding = (Number(fundingFees) / 1e6).toFixed(2);
     const trading = (Number(tradingFees) / 1e6).toFixed(2);
     return `${funding} / ${trading}`;
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(Number(dateString) * 1000);
-    return date.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   };
 
   // Calculate unrealized PnL: (currentMarketPrice - entryPrice) * netQuantity
@@ -740,7 +707,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
 
               return (
                 <TableRow key={session.id}>
-                  <td>{formatDate(session.openedAt)}</td>
+                  <td><DateTimeCell timestamp={session.openedAt} /></td>
                   <td>
                     <TypeBadge $type={isLong ? "Long" : "Short"}>
                       {isLong ? "Long" : "Short"}
@@ -809,7 +776,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, 
   const [selectedSession, setSelectedSession] = useState<PositionSession | null>(null);
 
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2); // Convert from wei to USDC
+    return (Number(price) / 1e6).toFixed(2);
   };
 
   const formatQuantity = (quantity: bigint) => {
@@ -824,17 +791,6 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, 
     const funding = (Number(fundingFees) / 1e6).toFixed(2);
     const trading = (Number(tradingFees) / 1e6).toFixed(2);
     return `${funding} / ${trading}`;
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(Number(dateString) * 1000);
-    return date.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   };
 
   const formatStatus = (status: string) => {
@@ -897,7 +853,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, 
 
               return (
                 <TableRow key={session.id}>
-                  <td>{formatDate(session.openedAt)}</td>
+                  <td><DateTimeCell timestamp={session.openedAt} /></td>
                   {/* <td>
                     <StatusBadge $status={session.status} $color={getStatusColor(session.status)}>
                       {formatStatus(session.status)}
@@ -969,18 +925,6 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoad
     return (Number(absQuantity) / 1e6).toFixed(6);
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(Number(dateString) * 1000);
-    return date.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-  };
-
   const formatPnL = (pnl: bigint) => {
     const value = Number(pnl) / 1e6;
     return `${value >= 0 ? "+" : ""}${value.toFixed(2)} USDC`;
@@ -1026,7 +970,7 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoad
         <tbody>
           {displayedTrades.map((trade) => (
             <TableRow key={trade.id}>
-              <td>{formatDate(trade.timestamp)}</td>
+              <td><DateTimeCell timestamp={trade.timestamp} showSeconds /></td>
               <td>
                 <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
                   {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
@@ -1083,18 +1027,6 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
     return (Number(absQuantity) / 1e6).toFixed(6);
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(Number(dateString) * 1000);
-    return date.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-  };
-
   const formatPnL = (pnl: bigint) => {
     const value = Number(pnl) / 1e6;
     return `${value >= 0 ? "+" : ""}${value.toFixed(2)} USDC`;
@@ -1137,7 +1069,7 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
             <tbody>
               {sortedTrades.map((trade) => (
                 <TableRow key={trade.id}>
-                  <td>{formatDate(trade.timestamp)}</td>
+                  <td><DateTimeCell timestamp={trade.timestamp} showSeconds /></td>
                   <td>
                     <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
                       {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
