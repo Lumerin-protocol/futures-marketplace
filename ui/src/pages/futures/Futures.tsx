@@ -141,6 +141,9 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // Fetch user position sessions for perpetual contracts
   const positionSessionsQuery = useUserPositionSessions(address);
 
+  // Active delivery date selected in the order book (used for futures entry price line)
+  const [selectedDeliveryDate, setSelectedDeliveryDate] = useState<number | undefined>();
+
   // Read maintenanceMarginPercent from contract once (cached indefinitely)
   const { data: maintenanceMarginPercentRaw } = useMaintenanceMarginPercent();
   const maintenanceMarginPercent = maintenanceMarginPercentRaw !== undefined ? BigInt(maintenanceMarginPercentRaw) : undefined;
@@ -164,17 +167,17 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       if (!openSession) return null;
       return Number(openSession.entryPrice) / 1e6;
     } else {
-      if (!address || !positionBookData?.data?.positions) return null;
-      const activePositions = positionBookData.data.positions.filter(
-        (p) => p.isActive && !p.closedAt
-      );
+      if (!address || !positionBookData?.data?.positions || !selectedDeliveryDate) return null;
+      const activePositions = positionBookData.data.positions
+        .filter((p) => p.isActive && !p.closedAt && p.deliveryAt === String(selectedDeliveryDate))
+        .sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
       if (activePositions.length === 0) return null;
       const position = activePositions[0];
       const isLong = position.buyer.address.toLowerCase() === address.toLowerCase();
       const entryPrice = isLong ? position.buyPricePerDay : position.sellPricePerDay;
       return Number(entryPrice) / 1e6;
     }
-  }, [contractMode, positionSessionsQuery.data?.positionSessions, positionBookData?.data?.positions, address]);
+  }, [contractMode, positionSessionsQuery.data?.positionSessions, positionBookData?.data?.positions, address, selectedDeliveryDate]);
 
   const openPositionLiquidationPrice = useMemo(() => {
     if (contractMode !== "perpetual") return null;
@@ -266,7 +269,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // State for order book selection
   const [selectedPrice, setSelectedPrice] = useState<string | undefined>();
   const [selectedAmount, setSelectedAmount] = useState<number | undefined>();
-  const [selectedDeliveryDate, setSelectedDeliveryDate] = useState<number | undefined>();
   const [selectedIsBuy, setSelectedIsBuy] = useState<boolean | undefined>();
   const [highlightMode, setHighlightMode] = useState<"inputs" | "buttons" | undefined>();
   const [highlightTrigger, setHighlightTrigger] = useState(0);
