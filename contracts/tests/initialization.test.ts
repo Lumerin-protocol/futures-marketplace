@@ -11,7 +11,7 @@ describe("Futures - Initialization", function () {
     const tokenAddress = await futures.read.token();
     expect(getAddress(tokenAddress)).to.equal(getAddress(contracts.usdcMock.address));
 
-    // Check hashrate oracle address
+    // Check hashrate oracle address (now serves the hashprice in USD; getter name kept for back-compat)
     const oracleAddress = await futures.read.hashrateOracle();
     expect(getAddress(oracleAddress)).to.equal(getAddress(contracts.hashrateOracle.address));
 

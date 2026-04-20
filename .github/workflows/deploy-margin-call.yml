@@ -10,6 +10,15 @@ on:
       - 'margin-call/**'
       - '.github/workflows/deploy-margin-call.yml'
 
+  pull_request:
+    branches:
+      - dev
+      - stg
+      - main
+    paths:
+      - 'margin-call/**'
+      - '.github/workflows/deploy-margin-call.yml'
+
   workflow_dispatch:
     inputs:
       environment:
@@ -126,6 +135,17 @@ jobs:
           path: margin-call/margin-call-lambda.zip
           retention-days: 1
 
+      - name: PR build summary
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "## 🔨 PR Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Mode:** Build only (no deployment)" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.gen_tag.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Package:** margin-call-lambda.zip built successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Build verification successful — deploy will run on merge" >> $GITHUB_STEP_SUMMARY
+
       - name: CI/CD test summary
         if: steps.gen_tag.outputs.is_cicd_branch == 'true'
         run: |
@@ -141,7 +161,7 @@ jobs:
     name: 🚀 Deploy
     runs-on: ubuntu-latest
     needs: build
-    if: (github.event_name != 'workflow_dispatch' || github.event.inputs.action != 'invoke') && needs.build.outputs.is_cicd_branch != 'true'
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || github.event.inputs.action != 'invoke') && needs.build.outputs.is_cicd_branch != 'true'
     outputs:
       lambda_version: ${{ steps.publish.outputs.lambda_version }}
     
@@ -197,7 +217,7 @@ jobs:
     name: 🔍 Verify
     runs-on: ubuntu-latest
     needs: [build, deploy]
-    if: (github.event_name != 'workflow_dispatch' || github.event.inputs.action != 'invoke') && needs.build.outputs.is_cicd_branch != 'true'
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || github.event.inputs.action != 'invoke') && needs.build.outputs.is_cicd_branch != 'true'
     
     steps:
       - name: Configure AWS credentials
@@ -288,7 +308,7 @@ jobs:
     name: 🧹 Cleanup
     runs-on: ubuntu-latest
     needs: [build, deploy, verify]
-    if: always() && (github.event_name != 'workflow_dispatch' || github.event.inputs.action != 'invoke') && needs.build.outputs.is_cicd_branch != 'true'
+    if: always() && github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || github.event.inputs.action != 'invoke') && needs.build.outputs.is_cicd_branch != 'true'
     
     steps:
       - name: Checkout code
@@ -347,7 +367,7 @@ jobs:
     name: 📢 Notify
     runs-on: ubuntu-latest
     needs: [build, deploy, verify, cleanup]
-    if: always() && (needs.build.result == 'success') && (github.event_name != 'workflow_dispatch' || github.event.inputs.action != 'invoke')
+    if: always() && github.event_name != 'pull_request' && (needs.build.result == 'success') && (github.event_name != 'workflow_dispatch' || github.event.inputs.action != 'invoke')
     
     steps:
       - name: Checkout (for composite action)

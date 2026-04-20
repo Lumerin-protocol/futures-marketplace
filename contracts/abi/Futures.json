@@ -272,6 +272,11 @@
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "UnsupportedTokenDecimals",
+    "type": "error"
+  },
+  {
     "inputs": [
       {
         "internalType": "int256",
@@ -1161,10 +1166,23 @@
   },
   {
     "inputs": [],
+    "name": "hashpriceScalingDivisor",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "hashrateOracle",
     "outputs": [
       {
-        "internalType": "contract HashrateOracle",
+        "internalType": "contract AggregatorV3Interface",
         "name": "",
         "type": "address"
       }
@@ -1180,7 +1198,7 @@
         "type": "address"
       },
       {
-        "internalType": "contract HashrateOracle",
+        "internalType": "contract AggregatorV3Interface",
         "name": "_hashrateOracle",
         "type": "address"
       },

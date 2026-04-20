@@ -1,0 +1,90 @@
+name: Check ABI Up-to-Date
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - stg
+      - main
+    paths:
+      - "contracts/**"
+      - ".github/workflows/check-contracts-abi.yml"
+  push:
+    branches:
+      - dev
+      - stg
+      - main
+    paths:
+      - "contracts/**"
+      - ".github/workflows/check-contracts-abi.yml"
+
+concurrency:
+  group: check-contracts-abi-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-abi:
+    name: 🔍 Verify ABIs are up-to-date
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./contracts
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: contracts/yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Compile contracts and generate ABIs
+        run: yarn compile
+
+      - name: Check for ABI differences
+        run: |
+          if [ -n "$(git diff --name-only -- abi/)" ]; then
+            echo "::error::Generated ABIs do not match committed ABIs. Please run 'yarn compile' in contracts/ and commit the updated ABI files."
+            echo ""
+            echo "Changed files:"
+            git diff --name-only -- abi/
+            echo ""
+            echo "Diff:"
+            git diff -- abi/
+            exit 1
+          fi
+
+          if [ -n "$(git ls-files --others --exclude-standard -- abi/)" ]; then
+            echo "::error::New ABI files were generated but not committed. Please run 'yarn compile' in contracts/ and commit the new ABI files."
+            echo ""
+            echo "Untracked files:"
+            git ls-files --others --exclude-standard -- abi/
+            exit 1
+          fi
+
+          echo "✅ All ABIs are up-to-date."
+
+      - name: Summary
+        if: failure()
+        run: |
+          echo "## ❌ ABI Check Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The committed ABI files do not match what the contracts generate." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**To fix:** Run the following locally and commit the changes:" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "cd contracts && yarn compile" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Summary (success)
+        if: success()
+        run: |
+          echo "## ✅ ABI Check Passed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All generated ABIs match the committed versions." >> $GITHUB_STEP_SUMMARY

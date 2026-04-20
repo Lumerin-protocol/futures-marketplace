@@ -1,5 +1,5 @@
 import { viem } from "hardhat";
-import { parseUnits, maxUint256, encodeFunctionData, formatUnits } from "viem";
+import { parseUnits, maxUint256, encodeFunctionData, formatUnits, parseEventLogs } from "viem";
 import { deployTokenOraclesAndMulticall3 } from "./fixtures-2";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 
@@ -10,10 +10,10 @@ export async function deployFuturesFixture() {
 }
 
 export async function deployOnlyFuturesFixture(
-  data: Awaited<ReturnType<typeof deployTokenOraclesAndMulticall3>>
+  data: Awaited<ReturnType<typeof deployTokenOraclesAndMulticall3>>,
 ) {
   const { contracts, accounts, config } = data;
-  const { usdcMock, hashrateOracle, btcPriceOracleMock } = contracts;
+  const { usdcMock, hashrateOracle } = contracts;
   const { validator, seller, buyer, buyer2, owner, pc, tc } = accounts;
   const { oracle } = config;
 
@@ -80,7 +80,6 @@ export async function deployOnlyFuturesFixture(
     },
     contracts: {
       usdcMock,
-      btcPriceOracleMock,
       hashrateOracle,
       futures,
     },
@@ -97,12 +96,12 @@ export async function deployOnlyFuturesFixture(
 }
 
 export async function deployOnlyFuturesWithDummyData(
-  data: Awaited<ReturnType<typeof deployTokenOraclesAndMulticall3>>
+  data: Awaited<ReturnType<typeof deployTokenOraclesAndMulticall3>>,
 ) {
   const _data = await deployOnlyFuturesFixture(data);
   const { contracts, accounts, config } = _data;
   const { futures } = contracts;
-  const { seller, buyer, buyer2 } = accounts;
+  const { seller, buyer, buyer2, pc } = accounts;
 
   // create participants
   const mp = await futures.read.getMarketPrice();
@@ -113,7 +112,7 @@ export async function deployOnlyFuturesWithDummyData(
   await futures.write.addMargin([marginAmount], { account: buyer2.account });
 
   // create positions
-  let d = config.deliveryDates[0];
+  const d = config.deliveryDates[0];
   const dst = "//shev8.contract:anything@stratum.braiins.com:3333";
   // sell orders
   await futures.write.createOrder([mp + inc, d, "", -1], { account: seller.account });
@@ -127,7 +126,15 @@ export async function deployOnlyFuturesWithDummyData(
 
   // matched orders => position
   await futures.write.createOrder([mp, d, dst, -1], { account: seller.account });
-  await futures.write.createOrder([mp, d, dst, 1], { account: buyer.account });
+  const txhash = await futures.write.createOrder([mp, d, dst, 1], { account: buyer.account });
+
+  const receipt = await pc.waitForTransactionReceipt({ hash: txhash });
+  const [event] = parseEventLogs({
+    logs: receipt.logs,
+    abi: futures.abi,
+    eventName: "PositionCreated",
+  });
+  const positionId = event.args.positionId;
 
   const totalPayment = mp * BigInt(config.deliveryDurationDays);
 
@@ -137,6 +144,6 @@ export async function deployOnlyFuturesWithDummyData(
 
   // pay for the order
   await futures.write.addMargin([totalPayment], { account: buyer.account });
-  await futures.write.depositDeliveryPayment([totalPayment, d], { account: buyer.account });
+  await futures.write.depositDeliveryPaymentV2([positionId], { account: buyer.account });
   return _data;
 }
