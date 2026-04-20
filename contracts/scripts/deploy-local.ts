@@ -10,7 +10,7 @@ async function main() {
 
   const data = await deployLocalFixture();
   const dataFutures = await deployOnlyFuturesWithDummyData(data);
-  const { contracts, config } = data;
+  const { contracts } = data;
 
   console.log("Deployment completed successfully!");
 
@@ -27,8 +27,7 @@ async function main() {
   console.log("Contract addresses:");
   console.log("Multicall3:", contracts.multicall3.address);
   console.log("USDC Mock:", contracts.usdcMock.address);
-  console.log("BTC Price Oracle Mock:", contracts.btcPriceOracleMock.address);
-  console.log("HashrateOracle:", contracts.hashrateOracle.address);
+  console.log("Hashprice Oracle (PriceFeedMock):", contracts.hashrateOracle.address);
   console.log("Futures:", dataFutures.contracts.futures.address);
 
   console.log();
