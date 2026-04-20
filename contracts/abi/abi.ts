@@ -97,6 +97,7 @@ export const futuresAbi = [
     inputs: [{ name: 'slot', internalType: 'bytes32', type: 'bytes32' }],
     name: 'UUPSUnsupportedProxiableUUID',
   },
+  { type: 'error', inputs: [], name: 'UnsupportedTokenDecimals' },
   {
     type: 'error',
     inputs: [
@@ -670,9 +671,20 @@ export const futuresAbi = [
   {
     type: 'function',
     inputs: [],
+    name: 'hashpriceScalingDivisor',
+    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
     name: 'hashrateOracle',
     outputs: [
-      { name: '', internalType: 'contract HashrateOracle', type: 'address' },
+      {
+        name: '',
+        internalType: 'contract AggregatorV3Interface',
+        type: 'address',
+      },
     ],
     stateMutability: 'view',
   },
@@ -686,7 +698,7 @@ export const futuresAbi = [
       },
       {
         name: '_hashrateOracle',
-        internalType: 'contract HashrateOracle',
+        internalType: 'contract AggregatorV3Interface',
         type: 'address',
       },
       { name: '_validatorAddress', internalType: 'address', type: 'address' },
@@ -1244,6 +1256,120 @@ export const multicall3Abi = [
       },
     ],
     stateMutability: 'payable',
+  },
+] as const
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// PriceFeedMock
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+export const priceFeedMockAbi = [
+  {
+    type: 'constructor',
+    inputs: [
+      { name: 'decimals_', internalType: 'uint8', type: 'uint8' },
+      { name: 'description_', internalType: 'string', type: 'string' },
+    ],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'answer',
+        internalType: 'int256',
+        type: 'int256',
+        indexed: false,
+      },
+      {
+        name: 'roundId',
+        internalType: 'uint80',
+        type: 'uint80',
+        indexed: false,
+      },
+      {
+        name: 'updatedAt',
+        internalType: 'uint256',
+        type: 'uint256',
+        indexed: false,
+      },
+    ],
+    name: 'PriceUpdated',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'decimals',
+    outputs: [{ name: '', internalType: 'uint8', type: 'uint8' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'description',
+    outputs: [{ name: '', internalType: 'string', type: 'string' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: '', internalType: 'uint80', type: 'uint80' }],
+    name: 'getRoundData',
+    outputs: [
+      { name: '', internalType: 'uint80', type: 'uint80' },
+      { name: '', internalType: 'int256', type: 'int256' },
+      { name: '', internalType: 'uint256', type: 'uint256' },
+      { name: '', internalType: 'uint256', type: 'uint256' },
+      { name: '', internalType: 'uint80', type: 'uint80' },
+    ],
+    stateMutability: 'pure',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'latestRoundData',
+    outputs: [
+      { name: 'roundId', internalType: 'uint80', type: 'uint80' },
+      { name: 'answer', internalType: 'int256', type: 'int256' },
+      { name: 'startedAt', internalType: 'uint256', type: 'uint256' },
+      { name: 'updatedAt', internalType: 'uint256', type: 'uint256' },
+      { name: 'answeredInRound', internalType: 'uint80', type: 'uint80' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'newDecimals', internalType: 'uint8', type: 'uint8' }],
+    name: 'setDecimals',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'price', internalType: 'int256', type: 'int256' }],
+    name: 'setPrice',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'roundId_', internalType: 'uint80', type: 'uint80' },
+      { name: 'answer_', internalType: 'int256', type: 'int256' },
+      { name: 'startedAt_', internalType: 'uint256', type: 'uint256' },
+      { name: 'updatedAt_', internalType: 'uint256', type: 'uint256' },
+      { name: 'answeredInRound_', internalType: 'uint80', type: 'uint80' },
+    ],
+    name: 'setRound',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'version',
+    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
+    stateMutability: 'pure',
   },
 ] as const
 
