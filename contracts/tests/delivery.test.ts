@@ -1,7 +1,7 @@
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { deployFuturesFixture } from "./fixtures";
 import { Client, parseEventLogs, parseUnits } from "viem";
-import { quantizePrice } from "./utils";
+import { quantizePrice, refreshHashprice } from "./utils";
 import { catchError } from "../lib/lib";
 
 describe("Futures Delivery", () => {
@@ -63,6 +63,7 @@ describe("Futures Delivery", () => {
     await tc.setNextBlockTimestamp({
       timestamp: position.deliveryDate + BigInt(config.deliveryDurationSeconds) / 2n,
     });
+    await refreshHashprice(contracts.hashrateOracle);
     await futures.write.closeDelivery([position.positionId, true], {
       account: validator.account,
     });

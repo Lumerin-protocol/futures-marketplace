@@ -2,6 +2,7 @@ import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { deployFuturesFixture } from "./fixtures";
 import { catchError } from "../lib/lib";
+import { refreshHashprice } from "./utils";
 
 describe("Delivery Date Management", function () {
   it("should return correct delivery dates array", async function () {
@@ -205,6 +206,7 @@ describe("Delivery Date Management", function () {
 
     await tc.setNextBlockTimestamp({ timestamp: config.firstFutureDeliveryDate + 1n });
     await tc.mine({ blocks: 1 });
+    await refreshHashprice(contracts.hashrateOracle);
 
     // in the past
     await catchError(futures.abi, "DeliveryDateShouldBeInTheFuture", async () => {

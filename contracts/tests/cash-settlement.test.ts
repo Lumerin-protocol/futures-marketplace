@@ -2,7 +2,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { deployFuturesFixture } from "./fixtures";
 import { parseEventLogs, parseUnits } from "viem";
 import { expect } from "chai";
-import { quantizePrice } from "./utils";
+import { quantizePrice, refreshHashprice } from "./utils";
 
 describe("Futures - Offset & Cash Settlement", () => {
   it("should handle position offset and settlement with contract balance correctly when buyer exits at profit", async () => {
@@ -86,6 +86,7 @@ describe("Futures - Offset & Cash Settlement", () => {
     );
 
     // Step 6: Move time forward to delivery date and settle the new position
+    await refreshHashprice(contracts.hashrateOracle, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
 
     // Get balances before settlement
@@ -179,6 +180,7 @@ describe("Futures - Offset & Cash Settlement", () => {
     );
 
     // Step 6: Move time forward to delivery date and settle the new position
+    await refreshHashprice(contracts.hashrateOracle, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
 
     const sellerBalanceBeforeSettlement = await futures.read.balanceOf([seller.account.address]);
