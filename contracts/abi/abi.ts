@@ -62,6 +62,7 @@ export const futuresAbi = [
   { type: 'error', inputs: [], name: 'FailedCall' },
   { type: 'error', inputs: [], name: 'InsufficientMarginBalance' },
   { type: 'error', inputs: [], name: 'InvalidInitialization' },
+  { type: 'error', inputs: [], name: 'InvalidOracle' },
   { type: 'error', inputs: [], name: 'InvalidPrice' },
   { type: 'error', inputs: [], name: 'InvalidQty' },
   { type: 'error', inputs: [], name: 'MaxOrdersPerParticipantReached' },
@@ -70,6 +71,7 @@ export const futuresAbi = [
   { type: 'error', inputs: [], name: 'OnlyPositionBuyer' },
   { type: 'error', inputs: [], name: 'OnlyValidator' },
   { type: 'error', inputs: [], name: 'OnlyValidatorOrPositionParticipant' },
+  { type: 'error', inputs: [], name: 'OracleStale' },
   { type: 'error', inputs: [], name: 'OrderNotBelongToSender' },
   {
     type: 'error',
@@ -412,6 +414,13 @@ export const futuresAbi = [
     inputs: [],
     name: 'BREACH_PENALTY_DECIMALS',
     outputs: [{ name: '', internalType: 'uint8', type: 'uint8' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'MAX_ORACLE_STALENESS',
+    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
     stateMutability: 'view',
   },
   {
