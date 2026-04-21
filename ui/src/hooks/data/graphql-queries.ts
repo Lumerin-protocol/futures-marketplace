@@ -100,8 +100,13 @@ export const OrderBookQuery = gql`
 `;
 
 export const AggregateOrderBookQuery = gql`
-  query AggregateOrderBook($deliveryAt: BigInt!) {
-    deliveryDateOrders (where: { deliveryDate: $deliveryAt }) {
+  query AggregateOrderBook($deliveryAt: BigInt!, $first: Int!, $lastId: ID!) {
+    deliveryDateOrders(
+      first: $first
+      where: { deliveryDate: $deliveryAt, id_gt: $lastId }
+      orderBy: id
+      orderDirection: asc
+    ) {
       buyOrdersCount
       deliveryDate
       id
