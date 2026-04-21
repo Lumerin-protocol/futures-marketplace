@@ -4,6 +4,7 @@ import { parseEventLogs, parseUnits, getAddress, zeroAddress } from "viem";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { deployFuturesFixture } from "./fixtures";
 import { catchError } from "../lib/lib";
+import { refreshHashprice } from "./utils";
 
 describe("Order Creation", function () {
   it("should validate delivery date is in the future", async function () {
@@ -621,6 +622,7 @@ describe("Order Creation", function () {
 
     // Advance time past the old delivery date to make it outdated
     await tc.setNextBlockTimestamp({ timestamp: oldDeliveryDate + 1n });
+    await refreshHashprice(contracts.hashrateOracle);
 
     // Create a new order - this should automatically remove the outdated order
     const newOrderTxHash = await futures.write.createOrder([price, newDeliveryDate, "", 1], {

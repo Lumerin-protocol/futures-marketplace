@@ -3,6 +3,7 @@ import { deployFuturesFixture } from "./fixtures";
 import { parseEventLogs, parseUnits, getAddress } from "viem";
 import { expect } from "chai";
 import { catchError } from "../lib/lib";
+import { refreshHashprice } from "./utils";
 
 describe("Validator Functions", function () {
   it("should allow validator to close position after start time", async function () {
@@ -40,6 +41,7 @@ describe("Validator Functions", function () {
 
     // Move time to after start time but before expiration
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n }); // 1 day + 1 second
+    await refreshHashprice(contracts.hashrateOracle);
 
     // Close order as validator
     const closeTxHash = await futures.write.closeDelivery([positionId, true], {

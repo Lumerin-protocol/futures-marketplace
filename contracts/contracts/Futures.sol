@@ -69,11 +69,16 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     uint256 public hashpriceScalingDivisor;
 
     // constants
-    string public constant VERSION = "2.0.0";
+    string public constant VERSION = "2.1.0";
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     uint8 public constant BREACH_PENALTY_DECIMALS = 18;
     uint32 private constant SECONDS_PER_DAY = 3600 * 24;
     uint256 private constant MAX_BREACH_PENALTY_RATE_PER_DAY = 5 * 10 ** (BREACH_PENALTY_DECIMALS - 2); // 5%
+    /// @notice Maximum age of the hashprice oracle answer that is still considered fresh.
+    /// @dev Reads of `_getHashpriceUsd` revert with `OracleStale` once `block.timestamp - updatedAt`
+    ///      exceeds this value. Sized generously above the upstream feed's heartbeat so brief delays
+    ///      don't halt trading, while still preventing trades on multi-hour-old data.
+    uint256 public constant MAX_ORACLE_STALENESS = 3600; // 1 hour
 
     /// @notice Represents an order to buy or sell a futures contract
     /// @dev Created when a participant places an order
@@ -148,6 +153,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     error PositionDestURLNotSet();
     error NothingToWithdraw();
     error UnsupportedTokenDecimals(); // token decimals exceed oracle decimals
+    error OracleStale(); // hashprice oracle answer older than MAX_ORACLE_STALENESS
+    error InvalidOracle(); // hashprice oracle returned a non-positive answer
 
     constructor() {
         _disableInitializers();
@@ -493,6 +500,9 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     /// @dev Caches the oracle reference together with a precomputed scaling divisor based on its `decimals()`
     ///      and the wrapped token's decimals, so the hot-path `_getMarketPrice` avoids any extra storage reads.
     function _setHashrateOracle(AggregatorV3Interface _oracle) private {
+        if (address(_oracle) == address(0)) {
+            revert InvalidOracle();
+        }
         hashrateOracle = _oracle;
         uint8 oracleDecimals = _oracle.decimals();
         if (_decimals > oracleDecimals) {
@@ -909,8 +919,20 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         }
     }
 
+    /// @dev Reads the latest hashprice answer and rejects stale or non-positive values. Every code
+    ///      path that prices futures (matching, margin checks, liquidation, cash settlement) ultimately
+    ///      goes through here, so the oracle freshness contract is enforced uniformly.
     function _getHashpriceUsd() private view returns (uint256) {
-        (, int256 answer,,,) = hashrateOracle.latestRoundData();
+        (, int256 answer,, uint256 updatedAt,) = hashrateOracle.latestRoundData();
+
+        if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) {
+            revert OracleStale();
+        }
+
+        if (answer <= 0) {
+            revert InvalidOracle();
+        }
+
         return uint256(answer);
     }
 
