@@ -3,15 +3,18 @@ import { useQuery } from "@tanstack/react-query";
 import { backgroundRefetchOpts } from "./config";
 import { BtcPriceIndexQuery, AggregatedBtcPriceIndexQuery } from "./graphql-queries";
 import type { TimePeriod } from "./useHashRateIndexData";
+import btcUsdsSeed from "../../seed/btcUsds.json";
+import btcUsdCandlesHourSeed from "../../seed/btcUsdCandles-hour.json";
+import btcUsdCandlesDaySeed from "../../seed/btcUsdCandles-day.json";
 
 const PAGE_SIZE = 250;
 const PRICE_SCALE = 10 ** 8;
 
 type BtcPriceIndexItem = {
-  blockNumber: string;
+  blockNumber?: string;
   price: string;
   timestamp: string;
-  id: number;
+  id: string | number;
 };
 
 type BtcPriceIndexRes = {
@@ -28,6 +31,18 @@ type AggregatedBtcPriceIndexItem = {
 type AggregatedBtcPriceIndexRes = {
   btcUsdCandles: AggregatedBtcPriceIndexItem[];
 };
+
+function mergeById<T extends { id: string | number }>(primary: T[], seed: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const item of [...primary, ...seed]) {
+    const key = String(item.id);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
 
 export const BTC_PRICE_INDEX_QK = "btcPriceIndex";
 
@@ -53,6 +68,8 @@ async function fetchBtcPriceIndexData(timePeriod: TimePeriod) {
 async function fetchDayBtcPriceIndex() {
   const now = Math.floor(Date.now() / 1000);
   const startDate = now - 24 * 60 * 60; // 1 day
+  // Subgraph/seed timestamps are stored in microseconds
+  const startMicros = BigInt(startDate) * 1_000_000n;
 
   // Fetch all data using cursor-based pagination
   let allIndexes: BtcPriceIndexItem[] = [];
@@ -63,7 +80,7 @@ async function fetchDayBtcPriceIndex() {
     const req = await graphqlRequest<BtcPriceIndexRes>(
       BtcPriceIndexQuery,
       {
-        startDate,
+        startDate: startMicros.toString(),
         first: PAGE_SIZE,
         skip,
       },
@@ -78,6 +95,14 @@ async function fetchDayBtcPriceIndex() {
       skip += PAGE_SIZE;
     }
   }
+
+  const seedForRange = (btcUsdsSeed as BtcPriceIndexItem[]).filter(
+    (item) => BigInt(item.timestamp) >= startMicros,
+  );
+  allIndexes = mergeById(allIndexes, seedForRange).filter(
+    (item) => BigInt(item.timestamp) >= startMicros,
+  );
+  allIndexes.sort((a, b) => Number(BigInt(b.timestamp) - BigInt(a.timestamp)));
 
   const data = allIndexes.map((item) => {
     if (item.price === "0" || !item.price) {
@@ -135,6 +160,14 @@ async function fetchAggregatedBtcPriceIndex(timePeriod: "week" | "month") {
       skip += PAGE_SIZE;
     }
   }
+
+  const seed = interval === "hour" ? btcUsdCandlesHourSeed : btcUsdCandlesDaySeed;
+  const startMicros = BigInt(startTimestamp);
+  const seedForRange = (seed as AggregatedBtcPriceIndexItem[]).filter(
+    (item) => BigInt(item.timestamp) >= startMicros,
+  );
+  allCandles = mergeById(allCandles, seedForRange);
+  allCandles.sort((a, b) => Number(BigInt(b.timestamp) - BigInt(a.timestamp)));
 
   const data = allCandles.map((item) => {
     const count = Number(item.count);
