@@ -3,9 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { backgroundRefetchOpts } from "./config";
 import { BtcPriceIndexQuery, AggregatedBtcPriceIndexQuery } from "./graphql-queries";
 import type { TimePeriod } from "./useHashRateIndexData";
-import btcUsdsSeed from "../../seed/btcUsds.json";
-import btcUsdCandlesHourSeed from "../../seed/btcUsdCandles-hour.json";
-import btcUsdCandlesDaySeed from "../../seed/btcUsdCandles-day.json";
+
+const loadBtcUsdsSeed = () =>
+  import(/* webpackChunkName: "seed-btc-usds" */ "../../seed/btcUsds.json").then((m) => m.default);
+const loadBtcUsdCandlesHourSeed = () =>
+  import(/* webpackChunkName: "seed-btc-usd-candles-hour" */ "../../seed/btcUsdCandles-hour.json").then((m) => m.default);
+const loadBtcUsdCandlesDaySeed = () =>
+  import(/* webpackChunkName: "seed-btc-usd-candles-day" */ "../../seed/btcUsdCandles-day.json").then((m) => m.default);
 
 const PAGE_SIZE = 250;
 const PRICE_SCALE = 10 ** 8;
@@ -96,9 +100,8 @@ async function fetchDayBtcPriceIndex() {
     }
   }
 
-  const seedForRange = (btcUsdsSeed as BtcPriceIndexItem[]).filter(
-    (item) => BigInt(item.timestamp) >= startMicros,
-  );
+  const seed = (await loadBtcUsdsSeed()) as BtcPriceIndexItem[];
+  const seedForRange = seed.filter((item) => BigInt(item.timestamp) >= startMicros);
   allIndexes = mergeById(allIndexes, seedForRange).filter(
     (item) => BigInt(item.timestamp) >= startMicros,
   );
@@ -161,11 +164,11 @@ async function fetchAggregatedBtcPriceIndex(timePeriod: "week" | "month") {
     }
   }
 
-  const seed = interval === "hour" ? btcUsdCandlesHourSeed : btcUsdCandlesDaySeed;
+  const seed = (await (interval === "hour"
+    ? loadBtcUsdCandlesHourSeed()
+    : loadBtcUsdCandlesDaySeed())) as AggregatedBtcPriceIndexItem[];
   const startMicros = BigInt(startTimestamp);
-  const seedForRange = (seed as AggregatedBtcPriceIndexItem[]).filter(
-    (item) => BigInt(item.timestamp) >= startMicros,
-  );
+  const seedForRange = seed.filter((item) => BigInt(item.timestamp) >= startMicros);
   allCandles = mergeById(allCandles, seedForRange);
   allCandles.sort((a, b) => Number(BigInt(b.timestamp) - BigInt(a.timestamp)));
 
