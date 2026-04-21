@@ -2,9 +2,17 @@ import { graphqlRequest } from "./graphql";
 import { useQuery } from "@tanstack/react-query";
 import { backgroundRefetchOpts } from "./config";
 import { HashrateIndexQuery, AggregatedHashrateIndexQuery } from "./graphql-queries";
-import hashpriceUsdsSeed from "../../seed/hashpriceUsds.json";
-import hashpriceUsdCandlesHourSeed from "../../seed/hashpriceUsdCandles-hour.json";
-import hashpriceUsdCandlesDaySeed from "../../seed/hashpriceUsdCandles-day.json";
+
+const loadHashpriceUsdsSeed = () =>
+  import(/* webpackChunkName: "seed-hashprice-usds" */ "../../seed/hashpriceUsds.json").then((m) => m.default);
+const loadHashpriceUsdCandlesHourSeed = () =>
+  import(/* webpackChunkName: "seed-hashprice-usd-candles-hour" */ "../../seed/hashpriceUsdCandles-hour.json").then(
+    (m) => m.default,
+  );
+const loadHashpriceUsdCandlesDaySeed = () =>
+  import(/* webpackChunkName: "seed-hashprice-usd-candles-day" */ "../../seed/hashpriceUsdCandles-day.json").then(
+    (m) => m.default,
+  );
 
 export type TimePeriod = "day" | "week" | "month";
 
@@ -98,9 +106,8 @@ async function fetchDayHashrateIndex() {
     }
   }
 
-  const seedForRange = (hashpriceUsdsSeed as HashrateIndexItem[]).filter(
-    (item) => BigInt(item.timestamp) >= startMicros,
-  );
+  const seed = (await loadHashpriceUsdsSeed()) as HashrateIndexItem[];
+  const seedForRange = seed.filter((item) => BigInt(item.timestamp) >= startMicros);
   allIndexes = mergeById(allIndexes, seedForRange).filter(
     (item) => BigInt(item.timestamp) >= startMicros,
   );
@@ -162,11 +169,11 @@ async function fetchAggregatedHashrateIndex(timePeriod: "week" | "month") {
     }
   }
 
-  const seed = interval === "hour" ? hashpriceUsdCandlesHourSeed : hashpriceUsdCandlesDaySeed;
+  const seed = (await (interval === "hour"
+    ? loadHashpriceUsdCandlesHourSeed()
+    : loadHashpriceUsdCandlesDaySeed())) as AggregatedHashrateIndexItem[];
   const startMicros = BigInt(startTimestamp);
-  const seedForRange = (seed as AggregatedHashrateIndexItem[]).filter(
-    (item) => BigInt(item.timestamp) >= startMicros,
-  );
+  const seedForRange = seed.filter((item) => BigInt(item.timestamp) >= startMicros);
   allCandles = mergeById(allCandles, seedForRange);
   allCandles.sort((a, b) => Number(BigInt(b.timestamp) - BigInt(a.timestamp)));
 
