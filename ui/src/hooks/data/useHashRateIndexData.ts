@@ -2,16 +2,19 @@ import { graphqlRequest } from "./graphql";
 import { useQuery } from "@tanstack/react-query";
 import { backgroundRefetchOpts } from "./config";
 import { HashrateIndexQuery, AggregatedHashrateIndexQuery } from "./graphql-queries";
+import hashpriceUsdsSeed from "../../seed/hashpriceUsds.json";
+import hashpriceUsdCandlesHourSeed from "../../seed/hashpriceUsdCandles-hour.json";
+import hashpriceUsdCandlesDaySeed from "../../seed/hashpriceUsdCandles-day.json";
 
 export type TimePeriod = "day" | "week" | "month";
 
 const PAGE_SIZE = 250;
 
 type HashrateIndexItem = {
-  blockNumber: string;
+  blockNumber?: string;
   price: string;
   timestamp: string;
-  id: number;
+  id: string | number;
 };
 
 type HashrateIndexRes = {
@@ -28,6 +31,18 @@ type AggregatedHashrateIndexItem = {
 type AggregatedHashrateIndexRes = {
   hashpriceUsdCandles: AggregatedHashrateIndexItem[];
 };
+
+function mergeById<T extends { id: string | number }>(primary: T[], seed: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const item of [...primary, ...seed]) {
+    const key = String(item.id);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
 
 export const HASHRATE_INDEX_QK = "hashrateIndex";
 
@@ -55,6 +70,8 @@ async function fetchHashrateIndexData(timePeriod: TimePeriod) {
 async function fetchDayHashrateIndex() {
   const now = Math.floor(Date.now() / 1000);
   const startDate = now - 24 * 60 * 60; // 1 day
+  // Subgraph/seed timestamps are stored in microseconds
+  const startMicros = BigInt(startDate) * 1_000_000n;
 
   // Fetch all data using cursor-based pagination
   let allIndexes: HashrateIndexItem[] = [];
@@ -65,7 +82,7 @@ async function fetchDayHashrateIndex() {
     const req = await graphqlRequest<HashrateIndexRes>(
       HashrateIndexQuery,
       {
-        startDate,
+        startDate: startMicros.toString(),
         first: PAGE_SIZE,
         skip,
       },
@@ -80,6 +97,14 @@ async function fetchDayHashrateIndex() {
       skip += PAGE_SIZE;
     }
   }
+
+  const seedForRange = (hashpriceUsdsSeed as HashrateIndexItem[]).filter(
+    (item) => BigInt(item.timestamp) >= startMicros,
+  );
+  allIndexes = mergeById(allIndexes, seedForRange).filter(
+    (item) => BigInt(item.timestamp) >= startMicros,
+  );
+  allIndexes.sort((a, b) => Number(BigInt(b.timestamp) - BigInt(a.timestamp)));
 
   const data = allIndexes.map((item) => {
     if (item.price === "0") {
@@ -136,6 +161,14 @@ async function fetchAggregatedHashrateIndex(timePeriod: "week" | "month") {
       skip += PAGE_SIZE;
     }
   }
+
+  const seed = interval === "hour" ? hashpriceUsdCandlesHourSeed : hashpriceUsdCandlesDaySeed;
+  const startMicros = BigInt(startTimestamp);
+  const seedForRange = (seed as AggregatedHashrateIndexItem[]).filter(
+    (item) => BigInt(item.timestamp) >= startMicros,
+  );
+  allCandles = mergeById(allCandles, seedForRange);
+  allCandles.sort((a, b) => Number(BigInt(b.timestamp) - BigInt(a.timestamp)));
 
   const data = allCandles.map((item) => {
     const count = Number(item.count);
