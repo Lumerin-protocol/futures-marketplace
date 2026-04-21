@@ -20,26 +20,41 @@ export const useAggregateOrderBook = (
   return query;
 };
 
+const PAGE_SIZE = 100;
+
 const fetchAggregateOrderBookAsync = async (deliveryDate: number) => {
-  const variables = {
-    deliveryAt: deliveryDate,
-  };
+  const orders: AggregateOrderBookOrder[] = [];
+  let lastId = "";
+  let blockNumber = 0;
 
-  const response = await graphqlRequest<AggregateOrderBookResponse>(AggregateOrderBookQuery, variables);
+  while (true) {
+    const response = await graphqlRequest<AggregateOrderBookResponse>(AggregateOrderBookQuery, {
+      deliveryAt: deliveryDate,
+      first: PAGE_SIZE,
+      lastId,
+    });
 
-  const orders = response.deliveryDateOrders.map((order) => ({
-    id: order.id,
-    price: BigInt(order.price),
-    deliveryDate: BigInt(order.deliveryDate),
-    buyOrdersCount: order.buyOrdersCount,
-    sellOrdersCount: order.sellOrdersCount,
-  }));
+    blockNumber = response._meta.block.number;
+
+    for (const order of response.deliveryDateOrders) {
+      orders.push({
+        id: order.id,
+        price: BigInt(order.price),
+        deliveryDate: BigInt(order.deliveryDate),
+        buyOrdersCount: order.buyOrdersCount,
+        sellOrdersCount: order.sellOrdersCount,
+      });
+    }
+
+    if (response.deliveryDateOrders.length < PAGE_SIZE) break;
+    lastId = response.deliveryDateOrders[response.deliveryDateOrders.length - 1].id;
+  }
 
   const data: AggregateOrderBook = { orders };
 
   return {
     data,
-    blockNumber: response._meta.block.number,
+    blockNumber,
   };
 };
 
