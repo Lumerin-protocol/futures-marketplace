@@ -8,14 +8,14 @@ export type TimePeriod = "day" | "week" | "month";
 const PAGE_SIZE = 250;
 
 type HashrateIndexItem = {
-  hashesForBTC: string;
-  hashesForToken: string;
-  updatedAt: string;
+  blockNumber: string;
+  price: string;
+  timestamp: string;
   id: number;
 };
 
 type HashrateIndexRes = {
-  hashrateIndexes: HashrateIndexItem[];
+  hashpriceUsds: HashrateIndexItem[];
 };
 
 type AggregatedHashrateIndexItem = {
@@ -26,7 +26,7 @@ type AggregatedHashrateIndexItem = {
 };
 
 type AggregatedHashrateIndexRes = {
-  hashesForTokenCandles: AggregatedHashrateIndexItem[];
+  hashpriceUsdCandles: AggregatedHashrateIndexItem[];
 };
 
 export const HASHRATE_INDEX_QK = "hashrateIndex";
@@ -43,9 +43,7 @@ export const useHashrateIndexData = (props?: { refetch?: boolean; timePeriod?: T
   return query;
 };
 
-// for our contract on marketplace: 100 TH/s for 24 hours
-const contractHPS = 100n * 10n ** 12n;
-const contractDuration = 24n * 3600n;
+const PRICE_SCALE = 10 ** 8;
 
 async function fetchHashrateIndexData(timePeriod: TimePeriod) {
   if (timePeriod === "week" || timePeriod === "month") {
@@ -74,9 +72,9 @@ async function fetchDayHashrateIndex() {
       process.env.REACT_APP_SUBGRAPH_ORACLES_URL,
     );
 
-    allIndexes = [...allIndexes, ...req.hashrateIndexes];
+    allIndexes = [...allIndexes, ...req.hashpriceUsds];
 
-    if (req.hashrateIndexes.length < PAGE_SIZE) {
+    if (req.hashpriceUsds.length < PAGE_SIZE) {
       hasMore = false;
     } else {
       skip += PAGE_SIZE;
@@ -84,20 +82,19 @@ async function fetchDayHashrateIndex() {
   }
 
   const data = allIndexes.map((item) => {
-    if (item.hashesForToken === "0") {
+    if (item.price === "0") {
       return {
-        updatedAt: item.updatedAt,
-        priceToken: 0n,
-        priceBTC: 0n,
+        updatedAt: item.timestamp,
+        priceToken: 0,
         id: item.id,
       };
     }
 
     return {
-      updatedAt: item.updatedAt,
-      updatedAtDate: new Date(+item.updatedAt * 1000),
+      updatedAt: +item.timestamp / 1000,
+      updatedAtDate: new Date(+item.timestamp / 1000),
       id: item.id,
-      ...hashrateIndexToCurrency(contractHPS, contractDuration, BigInt(item.hashesForBTC), BigInt(item.hashesForToken)),
+      priceToken: Number(item.price) / PRICE_SCALE,
     };
   });
   return data;
@@ -131,9 +128,9 @@ async function fetchAggregatedHashrateIndex(timePeriod: "week" | "month") {
       process.env.REACT_APP_SUBGRAPH_ORACLES_URL,
     );
 
-    allCandles = [...allCandles, ...req.hashesForTokenCandles];
+    allCandles = [...allCandles, ...req.hashpriceUsdCandles];
 
-    if (req.hashesForTokenCandles.length < PAGE_SIZE) {
+    if (req.hashpriceUsdCandles.length < PAGE_SIZE) {
       hasMore = false;
     } else {
       skip += PAGE_SIZE;
@@ -141,49 +138,25 @@ async function fetchAggregatedHashrateIndex(timePeriod: "week" | "month") {
   }
 
   const data = allCandles.map((item) => {
-    const count = BigInt(item.count);
-    const sum = BigInt(item.sum);
+    const count = Number(item.count);
+    const sum = Number(item.sum);
 
-    if (count === 0n || sum === 0n) {
+    if (count === 0 || sum === 0) {
       return {
         updatedAt: item.timestamp,
-        priceToken: 0n,
+        priceToken: 0,
         id: item.id,
       };
     }
 
-    // hashesForToken equivalent is sum / count
-    const hashesForToken = sum / count;
+    const avgPrice = sum / count;
 
     return {
       updatedAt: item.timestamp,
       updatedAtDate: new Date(+item.timestamp / 1000),
       id: item.id,
-      ...hashrateIndexToCurrencyToken(contractHPS, contractDuration, hashesForToken),
+      priceToken: avgPrice / PRICE_SCALE,
     };
   });
   return data;
-}
-
-function hashrateIndexToCurrencyToken(contractHPS: bigint, contractDurationSeconds: bigint, hashesForToken: bigint) {
-  const hashes = contractHPS * contractDurationSeconds;
-  const priceToken = hashes / hashesForToken;
-  return {
-    priceToken,
-  };
-}
-
-function hashrateIndexToCurrency(
-  contractHPS: bigint,
-  contractDurationSeconds: bigint,
-  hashesForBTC: bigint,
-  hashesForToken: bigint,
-) {
-  const hashes = contractHPS * contractDurationSeconds;
-  const priceToken = hashes / hashesForToken;
-  const priceBTC = hashes / hashesForBTC;
-  return {
-    priceToken,
-    priceBTC,
-  };
 }

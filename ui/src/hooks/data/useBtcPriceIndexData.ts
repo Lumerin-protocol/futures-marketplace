@@ -5,15 +5,17 @@ import { BtcPriceIndexQuery, AggregatedBtcPriceIndexQuery } from "./graphql-quer
 import type { TimePeriod } from "./useHashRateIndexData";
 
 const PAGE_SIZE = 250;
+const PRICE_SCALE = 10 ** 8;
 
 type BtcPriceIndexItem = {
+  blockNumber: string;
   price: string;
-  updatedAt: string;
+  timestamp: string;
   id: number;
 };
 
 type BtcPriceIndexRes = {
-  btcPriceIndexes: BtcPriceIndexItem[];
+  btcUsds: BtcPriceIndexItem[];
 };
 
 type AggregatedBtcPriceIndexItem = {
@@ -24,7 +26,7 @@ type AggregatedBtcPriceIndexItem = {
 };
 
 type AggregatedBtcPriceIndexRes = {
-  btcPriceCandles: AggregatedBtcPriceIndexItem[];
+  btcUsdCandles: AggregatedBtcPriceIndexItem[];
 };
 
 export const BTC_PRICE_INDEX_QK = "btcPriceIndex";
@@ -68,9 +70,9 @@ async function fetchDayBtcPriceIndex() {
       process.env.REACT_APP_SUBGRAPH_ORACLES_URL,
     );
 
-    allIndexes = [...allIndexes, ...req.btcPriceIndexes];
+    allIndexes = [...allIndexes, ...req.btcUsds];
 
-    if (req.btcPriceIndexes.length < PAGE_SIZE) {
+    if (req.btcUsds.length < PAGE_SIZE) {
       hasMore = false;
     } else {
       skip += PAGE_SIZE;
@@ -78,23 +80,20 @@ async function fetchDayBtcPriceIndex() {
   }
 
   const data = allIndexes.map((item) => {
-    // Handle zero or invalid price values (similar to fetchDayHashrateIndex)
     if (item.price === "0" || !item.price) {
       return {
-        updatedAt: item.updatedAt,
-        updatedAtDate: new Date(+item.updatedAt * 1000),
-        price: 0n,
+        updatedAt: +item.timestamp / 1000,
+        updatedAtDate: new Date(+item.timestamp / 1000),
+        price: 0,
         id: item.id,
       };
     }
 
-    const price = BigInt(item.price);
-
     return {
-      updatedAt: item.updatedAt,
-      updatedAtDate: new Date(+item.updatedAt * 1000),
+      updatedAt: +item.timestamp / 1000,
+      updatedAtDate: new Date(+item.timestamp / 1000),
       id: item.id,
-      price,
+      price: Number(item.price) / PRICE_SCALE,
     };
   });
   return data;
@@ -128,9 +127,9 @@ async function fetchAggregatedBtcPriceIndex(timePeriod: "week" | "month") {
       process.env.REACT_APP_SUBGRAPH_ORACLES_URL,
     );
 
-    allCandles = [...allCandles, ...req.btcPriceCandles];
+    allCandles = [...allCandles, ...req.btcUsdCandles];
 
-    if (req.btcPriceCandles.length < PAGE_SIZE) {
+    if (req.btcUsdCandles.length < PAGE_SIZE) {
       hasMore = false;
     } else {
       skip += PAGE_SIZE;
@@ -138,25 +137,24 @@ async function fetchAggregatedBtcPriceIndex(timePeriod: "week" | "month") {
   }
 
   const data = allCandles.map((item) => {
-    const count = BigInt(item.count);
-    const sum = BigInt(item.sum);
+    const count = Number(item.count);
+    const sum = Number(item.sum);
 
-    if (count === 0n || sum === 0n) {
+    if (count === 0 || sum === 0) {
       return {
         updatedAt: item.timestamp,
-        price: 0n,
+        price: 0,
         id: item.id,
       };
     }
 
-    // Average price is sum / count
-    const price = sum / count;
+    const avgPrice = sum / count;
 
     return {
       updatedAt: item.timestamp,
       updatedAtDate: new Date(+item.timestamp / 1000),
       id: item.id,
-      price,
+      price: avgPrice / PRICE_SCALE,
     };
   });
   return data;

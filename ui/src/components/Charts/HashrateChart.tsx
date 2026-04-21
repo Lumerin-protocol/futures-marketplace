@@ -59,12 +59,12 @@ interface HashrateChartProps {
   data: Array<{
     updatedAtDate?: Date;
     updatedAt?: string;
-    priceToken: bigint;
+    priceToken: number;
   }>;
   btcPriceData?: Array<{
     updatedAtDate?: Date;
     updatedAt?: string;
-    price: bigint;
+    price: number;
   }>;
   isLoading?: boolean;
   isBtcPriceLoading?: boolean;
@@ -115,13 +115,15 @@ export const HashrateChart: FC<HashrateChartProps> = ({
       return data;
     }
 
+    const marketPriceUsd = Number(marketPrice) / 1e6;
+
     // Check if marketPrice is different from the first item's price
-    if (firstItemPrice !== marketPrice) {
+    if (firstItemPrice !== marketPriceUsd) {
       // Add marketPrice as the latest value with the timestamp when it was fetched
       return [
         {
           updatedAtDate: marketPriceFetchedAt ?? new Date(),
-          priceToken: marketPrice,
+          priceToken: marketPriceUsd,
         },
         ...data,
       ];
@@ -133,12 +135,12 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   // Transform data for Highcharts
   const chartData = enhancedData
     .filter((item) => item.updatedAtDate || item.updatedAt) // Filter out items without date
-    .filter((item) => item.priceToken > 10000n)
+    .filter((item) => item.priceToken > 0.01)
     .map((item) => {
       const date = item.updatedAtDate || new Date(Number(item.updatedAt) * 1000);
       return [
         date.getTime(), // X-axis: timestamp
-        Number(Number(item.priceToken) / 10 ** 6), // Y-axis: priceToken divided by 10^6
+        item.priceToken, // Y-axis: hashprice in USD
       ];
     });
 
@@ -148,12 +150,12 @@ export const HashrateChart: FC<HashrateChartProps> = ({
 
     return btcPriceData
       .filter((item) => item.updatedAtDate || item.updatedAt)
-      .filter((item) => item.price > 0n)
+      .filter((item) => item.price > 0)
       .map((item) => {
         const date = item.updatedAtDate || new Date(Number(item.updatedAt) * 1000);
         return [
           date.getTime(), // X-axis: timestamp
-          Number(item.price) / 10 ** 8, // Y-axis: BTC price (assuming 8 decimals)
+          item.price, // Y-axis: BTC price (USD)
         ];
       });
   }, [btcPriceData]);
