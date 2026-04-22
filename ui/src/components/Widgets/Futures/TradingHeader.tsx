@@ -4,7 +4,7 @@ import EastIcon from "@mui/icons-material/East";
 import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
 import { DetailedSpecsModal } from "./DetailedSpecsModal";
-import { formatHashrateTHPS } from "../../../lib/units";
+import { formatHashrateTHPS, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
@@ -20,7 +20,7 @@ interface TradingHeaderProps {
 }
 
 const formatVolume = (raw: string): string => {
-  const num = Number(raw) / 1e6;
+  const num = Number(raw) / PAYMENT_TOKEN_SCALE_NUM;
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
   if (num >= 1_000) return `${(num / 1_000).toFixed(2)}K`;
   return `${num.toFixed(2)}`;

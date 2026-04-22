@@ -12,6 +12,7 @@ import { GenericCompletedContent } from "./Shared/GenericCompletedContent";
 import { memo } from "react";
 import { useEditContractTerms } from "../../hooks/data/useEditContractTerms";
 import { useContractDurationInterval } from "../../hooks/data/useContractDurationInterval";
+import { HASHRATE_TH_SCALE_NUM } from "../../lib/units";
 
 export interface EditFormProps {
   contract: HashRentalContract;
@@ -34,7 +35,7 @@ export const EditForm: React.FC<EditFormProps> = memo(
       defaultValues: {
         walletAddress: contract.seller,
         durationHours: Number.parseInt(contract.length) / 3600,
-        speedTHPS: Number.parseInt(contract.speed) / 10 ** 12,
+        speedTHPS: Number.parseInt(contract.speed) / HASHRATE_TH_SCALE_NUM,
         profitTargetPercent: Number(contract.profitTargetPercent),
       },
     });
@@ -66,7 +67,7 @@ export const EditForm: React.FC<EditFormProps> = memo(
               const data = form.getValues();
 
               const durationSeconds = Number(data.durationHours) * 3600;
-              const speedHPS = Number(data.speedTHPS) * 10 ** 12;
+              const speedHPS = Number(data.speedTHPS) * HASHRATE_TH_SCALE_NUM;
 
               const txhash = await editContractTermsAsync({
                 contractAddress: contract.id,

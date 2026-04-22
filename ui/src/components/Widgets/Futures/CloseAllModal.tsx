@@ -10,6 +10,7 @@ import type { PositionSession } from "../../../hooks/data/perps/useUserPositionS
 import { readContract } from "@wagmi/core";
 import { PerpsABI } from "../../../abi/Perps";
 import { useConfig } from "wagmi";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 
 interface SimulationResult {
   sessionId: string;
@@ -46,10 +47,10 @@ export const CloseAllModal = ({ open, onClose, positionSessions, marketPrice, on
     }, 0n);
   }, [openPositions]);
 
-  const formatPrice = (price: bigint) => (Number(price) / 1e6).toFixed(2);
+  const formatPrice = (price: bigint) => (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   const formatQuantity = (qty: bigint) => {
     const abs = qty < 0n ? -qty : qty;
-    return (Number(abs) / 1e6).toFixed(6);
+    return (Number(abs) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
   };
 
   const handleConfirm = useCallback(async () => {

@@ -1,5 +1,6 @@
 import { useReadContracts } from "wagmi";
 import { PerpsABI } from "../../../abi/Perps";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 
 export function usePerpsContractConstants() {
   const perpsAddress = process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`;
@@ -60,7 +61,7 @@ export function usePerpsContractConstants() {
     fundingRateMaxBpsFormatted: fundingRateMaxBps ? Number(fundingRateMaxBps) : null,
     maxOrdersPerParticipant,
     liquidationFee,
-    liquidationFeeFormatted: liquidationFee ? Number(liquidationFee) / 1e6 : null,
+    liquidationFeeFormatted: liquidationFee ? Number(liquidationFee) / PAYMENT_TOKEN_SCALE_NUM : null,
     maxPriceLevelsPerSide: maxPriceLevelsPerSide ? Number(maxPriceLevelsPerSide) : null,
     lastFundingUpdateTime: lastFundingUpdateTime ? Number(lastFundingUpdateTime) : null,
   };

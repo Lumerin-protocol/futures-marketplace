@@ -15,6 +15,7 @@ import { handleNumericDecimalInput } from "./Shared/AmountInputForm";
 import { getMinMarginForPositionManual } from "../../hooks/data/getMinMarginForPositionManual";
 import { useOrderFee } from "../../hooks/data/useOrderFee";
 import type { AccountBalance, ContractMode } from "../../types/types";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -78,7 +79,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
       mode: "onBlur",
       reValidateMode: "onBlur",
       defaultValues: {
-        price: (Number(order.pricePerDay) / 1e6).toFixed(2),
+        price: (Number(order.pricePerDay) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2),
         quantity: currentQuantity,
       },
     });
@@ -98,14 +99,14 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
       }
 
       const values = form.getValues();
-      if (values.quantity == currentQuantity && values.price == (Number(order.pricePerDay) / 1e6).toFixed(2)) {
+      if (values.quantity == currentQuantity && values.price == (Number(order.pricePerDay) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)) {
         alert("Please change order terms");
         return false;
       }
 
       // Validate balance for modified order
       const newPrice = parseFloat(values.price);
-      const newPriceInWei = BigInt(Math.round(newPrice * 1e6));
+      const newPriceInWei = BigInt(Math.round(newPrice * PAYMENT_TOKEN_SCALE_NUM));
       const newQuantity = values.quantity;
       const totalBalance = balanceQuery.data ?? 0n;
       const lockedBalance = minMargin ?? 0n;
@@ -131,14 +132,14 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
       const totalRequired = requiredMargin + orderFee;
 
       if (totalRequired > availableBalance) {
-        const requiredMarginFormatted = (Number(requiredMargin) / 1e6).toFixed(2);
-        const orderFeeFormatted = (Number(orderFee) / 1e6).toFixed(2);
-        const totalRequiredFormatted = (Number(totalRequired) / 1e6).toFixed(2);
-        const totalBalanceFormatted = (Number(totalBalance) / 1e6).toFixed(2);
-        const lockedBalanceFormatted = (Number(lockedBalance) / 1e6).toFixed(2);
-        const availableBalanceFormatted = (Number(availableBalance) / 1e6).toFixed(2);
+        const requiredMarginFormatted = (Number(requiredMargin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+        const orderFeeFormatted = (Number(orderFee) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+        const totalRequiredFormatted = (Number(totalRequired) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+        const totalBalanceFormatted = (Number(totalBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+        const lockedBalanceFormatted = (Number(lockedBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+        const availableBalanceFormatted = (Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
         const accountBalance = accountBalanceQuery.data ?? 0n;
-        const accountBalanceFormatted = (Number(accountBalance) / 1e6).toFixed(2);
+        const accountBalanceFormatted = (Number(accountBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
         alert(
           `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${requiredMarginFormatted} USDC\nOrder fee: ${orderFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
         );
@@ -213,7 +214,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-300">Price:</span>
-                  <span className="text-white">{Number(order.pricePerDay) / 1e6} USDC</span>
+                  <span className="text-white">{Number(order.pricePerDay) / PAYMENT_TOKEN_SCALE_NUM} USDC</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-300">Quantity:</span>
@@ -259,7 +260,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
             label: "Modify Order",
             action: async () => {
               const formValues = form.getValues();
-              const newPriceBigInt = BigInt(Math.round(parseFloat(formValues.price) * 1e6));
+              const newPriceBigInt = BigInt(Math.round(parseFloat(formValues.price) * PAYMENT_TOKEN_SCALE_NUM));
               const newSignedQuantity = getSignedQuantity();
 
               // Determine old quantity with sign

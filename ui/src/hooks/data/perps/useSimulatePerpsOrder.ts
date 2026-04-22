@@ -1,5 +1,6 @@
 import { useReadContract } from "wagmi";
 import { PerpsABI } from "../../../abi/Perps";
+import { QUANTITY_SCALE_NUM } from "../../../lib/units";
 
 interface SimulatePerpsOrderProps {
   price: bigint | undefined;
@@ -22,7 +23,7 @@ export interface SimulatePerpsOrderResult {
  */
 export function useSimulatePerpsOrder({ price, quantity, enabled: externalEnabled = true }: SimulatePerpsOrderProps) {
   const quantityBigInt =
-    quantity !== undefined ? BigInt(Math.round(quantity * 1e6)) : undefined;
+    quantity !== undefined ? BigInt(Math.round(quantity * QUANTITY_SCALE_NUM)) : undefined;
 
   // Args are always wired up when data is available so that refetch() works even when
   // auto-fetching is disabled via externalEnabled = false.

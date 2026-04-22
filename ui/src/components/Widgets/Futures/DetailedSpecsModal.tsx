@@ -1,7 +1,7 @@
 import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import { useMemo } from "react";
-import { formatHashrateTHPS } from "../../../lib/units";
+import { formatHashrateTHPS, HASHRATE_TH_SCALE_NUM, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { useGetDeliveryDates } from "../../../hooks/data/useGetDeliveryDates";
 import { useFuturesContractConstants } from "../../../hooks/data/useFuturesContractConstants";
 import { useFuturesTokenInfo } from "../../../hooks/data/useFuturesTokenInfo";
@@ -49,9 +49,9 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
     return formatHashrateTHPS(speedHps).full;
   };
 
-  // Calculate TH/s (speedHps / 10^12)
+  // Calculate TH/s (speedHps / HASHRATE_TH_SCALE_NUM)
   const formatSpeedTHs = (speedHps: bigint) => {
-    const thps = Number(speedHps) / 10 ** 12;
+    const thps = Number(speedHps) / HASHRATE_TH_SCALE_NUM;
     return thps.toFixed(0);
   };
 
@@ -83,7 +83,7 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
   const docsUrl = process.env.REACT_APP_FUTURES_DOCS_URL;
 
   // Calculate tick value: minimumPriceIncrement * deliveryDurationDays
-  const tickSize = Number(contractSpecs.minimumPriceIncrement) / 1e6;
+  const tickSize = Number(contractSpecs.minimumPriceIncrement) / PAYMENT_TOKEN_SCALE_NUM;
   const tickValue = tickSize * contractSpecs.deliveryDurationDays;
 
   // Calculate total coverage days
@@ -215,8 +215,8 @@ const PerpetualStatistics = () => {
   const contractAddress = process.env.REACT_APP_PERPS_TOKEN_ADDRESS;
   const docsUrl = process.env.REACT_APP_FUTURES_DOCS_URL;
 
-  const tickSize = perpsCollection ? perpsCollection.minimumPriceIncrement / 1e6 : null;
-  const minMarginPerOrder = perpsCollection ? perpsCollection.minimumMarginPerOrder / 1e6 : null;
+  const tickSize = perpsCollection ? perpsCollection.minimumPriceIncrement / PAYMENT_TOKEN_SCALE_NUM : null;
+  const minMarginPerOrder = perpsCollection ? perpsCollection.minimumMarginPerOrder / PAYMENT_TOKEN_SCALE_NUM : null;
 
   const formatFundingPeriod = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
