@@ -15,6 +15,7 @@ import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginF
 import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { ContractMode } from "../../../types/types";
 import { DateTimeCell } from "../../DateTimeCell";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -82,12 +83,12 @@ export const PositionsListWidget = ({
   };
 
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2); // Convert from wei to USDC
+    return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2); // Convert from wei to USDC
   };
 
 
   // Get latest price from market price hook
-  const latestPrice = marketPrice ? Number(marketPrice) / 1e6 : null;
+  const latestPrice = marketPrice ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
   const latestPriceBigInt = marketPrice ?? null;
 
   // Get contract specs
@@ -103,7 +104,7 @@ export const PositionsListWidget = ({
 
   const formatMargin = (margin: bigint | null): string => {
     if (margin === null) return "-";
-    return `${(Number(margin) / 1e6).toFixed(2)} USDC`;
+    return `${(Number(margin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} USDC`;
   };
 
   // Calculate PnL for a position
@@ -114,7 +115,7 @@ export const PositionsListWidget = ({
   ): { pnl: number | null; percentage: number | null } => {
     if (!latestPrice) return { pnl: null, percentage: null };
 
-    const entryPriceNum = Number(entryPrice) / 1e6;
+    const entryPriceNum = Number(entryPrice) / PAYMENT_TOKEN_SCALE_NUM;
     const priceDiff = latestPrice - entryPriceNum;
 
     // Long: profit when price goes up (current > entry)

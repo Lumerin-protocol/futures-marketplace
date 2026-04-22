@@ -4,6 +4,7 @@ import HighchartsReact from "highcharts-react-official";
 import styled from "@mui/material/styles/styled";
 import type { TimePeriod } from "../../hooks/data/useHashRateIndexData";
 import { tokens } from "../../styles/tokens";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 
 const PeriodSwitch = styled("div")`
   display: flex;
@@ -115,7 +116,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
       return data;
     }
 
-    const marketPriceUsd = Number(marketPrice) / 1e6;
+    const marketPriceUsd = Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM;
 
     // Check if marketPrice is different from the first item's price
     if (firstItemPrice !== marketPriceUsd) {

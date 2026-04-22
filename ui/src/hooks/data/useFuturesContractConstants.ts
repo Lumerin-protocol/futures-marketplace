@@ -1,5 +1,6 @@
 import { useReadContracts } from "wagmi";
 import { FuturesABI } from "../../abi/Futures";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 
 /**
  * Hook to get additional futures contract constants
@@ -50,6 +51,6 @@ export function useFuturesContractConstants() {
     deliveryIntervalDays,
     maxOrdersPerParticipant,
     orderFee,
-    orderFeeFormatted: orderFee ? Number(orderFee) / 1e6 : null,
+    orderFeeFormatted: orderFee ? Number(orderFee) / PAYMENT_TOKEN_SCALE_NUM : null,
   };
 }
