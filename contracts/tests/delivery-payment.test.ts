@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { parseEventLogs, parseUnits, getAddress, maxUint256 } from "viem";
+import { parseEventLogs, parseUnits, getAddress } from "viem";
 import { deployFuturesFixture } from "./fixtures";
 import { catchError } from "../lib/lib";
 
@@ -126,10 +126,6 @@ describe("Futures Delivery Payment", () => {
       await futures.write.addMargin([marginAmount], { account: buyer.account });
       await futures.write.addMargin([marginAmount], { account: buyer2.account });
 
-      await futures.write.approve([futures.address, maxUint256], {
-        account: buyer.account,
-      });
-
       const createPosition = async (sellerAccount: typeof seller.account, destURL: string) => {
         await futures.write.createOrder([price, deliveryDate, "", -1], { account: sellerAccount });
         const txHash = await futures.write.createOrder([price, deliveryDate, destURL, 1], {
@@ -246,10 +242,6 @@ describe("Futures Delivery Payment", () => {
       await futures.write.addMargin([marginAmount], { account: seller.account });
       await futures.write.addMargin([marginAmount], { account: buyer.account });
 
-      await futures.write.approve([futures.address, maxUint256], {
-        account: buyer.account,
-      });
-
       await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
       const txHash = await futures.write.createOrder([price, deliveryDate, "https://dest.com", 1], {
         account: buyer.account,
@@ -284,10 +276,6 @@ describe("Futures Delivery Payment", () => {
 
       await futures.write.addMargin([marginAmount], { account: seller.account });
       await futures.write.addMargin([marginAmount], { account: buyer.account });
-
-      await futures.write.approve([futures.address, maxUint256], {
-        account: buyer.account,
-      });
 
       await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
       const txHash = await futures.write.createOrder([price, deliveryDate, "", 1], {

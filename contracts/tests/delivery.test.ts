@@ -28,9 +28,6 @@ describe("Futures Delivery", () => {
       account: buyer.account,
     });
 
-    logBalance(seller, "seller");
-    logBalance(buyer, "buyer");
-
     // Create matching orders to form a position
     const dst = "https://destination-url.com";
     await futures.write.createOrder([price, deliveryDate, "", -1], {
@@ -66,8 +63,6 @@ describe("Futures Delivery", () => {
     await futures.write.closeDelivery([position.positionId, true], {
       account: validator.account,
     });
-    await logBalance(seller, "seller after close");
-    await logBalance(buyer, "buyer after close");
   });
 
   it("should handle expired positions", async () => {

@@ -143,7 +143,7 @@ describe("Futures - getMinMargin", () => {
     expect(effectiveMargin < 0n).to.be.true;
 
     const balance = await futures.read.balanceOf([seller.account.address]);
-    await catchError(futures.abi, "ERC20InsufficientBalance", async () => {
+    await catchError(contracts.collateralVault.abi, "ERC20InsufficientBalance", async () => {
       await futures.write.removeMargin([balance + 1n], { account: seller.account });
     });
 
@@ -334,7 +334,7 @@ describe("Futures - margin management", () => {
     });
 
     // Try to remove more than balance
-    await catchError(futures.abi, "ERC20InsufficientBalance", async () => {
+    await catchError(contracts.collateralVault.abi, "ERC20InsufficientBalance", async () => {
       await futures.write.removeMargin([removeAmount], {
         account: seller.account,
       });

@@ -92,7 +92,7 @@ export async function deployOnlyFuturesFixture(
       encodeFunctionData({
         abi: portfolioMarginEngineImpl.abi,
         functionName: "initialize",
-        args: [collateralVault.address, perpsDEXMock.address, optionsEngineMock.address],
+        args: [collateralVault.address],
       }),
     ],
     { account: owner.account },

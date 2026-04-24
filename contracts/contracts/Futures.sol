@@ -20,7 +20,7 @@ import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/in
 // TODO:
 // 6. Do we need to batch same price and delivery date orders/positions so it is a single entry?
 
-contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, MulticallUpgradeable, Versionable {
+contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, Versionable {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableSet for EnumerableSet.Bytes32Set;
@@ -34,6 +34,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     mapping(address => EnumerableSet.Bytes32Set) private participantPositionIdsIndex; // index of  positions by participant
     mapping(address => EnumerableSet.Bytes32Set) private participantOrderIdsIndex; // index of orders by participant
     mapping(address => mapping(uint256 => EnumerableSet.Bytes32Set)) private participantDeliveryDatePositionIdsIndex; // index of positions by participant and delivery date
+    mapping(address => mapping(uint256 => int256)) private participantDeliveryDateNetDelta; // net delta per participant per delivery date (pre-scaled by deliveryDurationDays, without 1e18)
+    mapping(address => mapping(uint256 => int256)) private participantDeliveryDateNetEntryValue; // sum of qty_i * entryPrice_i * durationDays per participant per delivery date (token decimals)
     mapping(address => mapping(uint256 => mapping(uint256 => EnumerableSet.Bytes32Set))) private
         participantDeliveryDatePriceOrderIdsIndex;
 
@@ -170,7 +172,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     ) public initializer {
         __Ownable_init(_msgSender());
         __UUPSUpgradeable_init();
-        _initializeFuturesToken(_token);
         hashrateOracle = _hashrateOracle;
         validatorAddress = _validatorAddress;
         liquidationMarginPercent = _liquidationMarginPercent;
@@ -181,11 +182,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         deliveryIntervalDays = _deliveryIntervalDays;
         setFutureDeliveryDatesCount(_futureDeliveryDatesCount);
         firstFutureDeliveryDate = _firstFutureDeliveryDate;
-    }
-
-    function _initializeFuturesToken(IERC20Metadata _token) private {
-        __ERC20_init(string.concat("Lumerin Futures ", _token.symbol()), string.concat("w", _token.symbol()));
-        _decimals = _token.decimals();
         token = IERC20(address(_token));
     }
 
@@ -408,6 +404,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         participantPositionIdsIndex[_temp.buyer].add(positionId);
         participantDeliveryDatePositionIdsIndex[_temp.seller][order.deliveryAt].add(positionId);
         participantDeliveryDatePositionIdsIndex[_temp.buyer][order.deliveryAt].add(positionId);
+        int256 _delta = int256(uint256(deliveryDurationDays));
+        participantDeliveryDateNetDelta[_temp.seller][order.deliveryAt] -= _delta;
+        participantDeliveryDateNetDelta[_temp.buyer][order.deliveryAt] += _delta;
+        participantDeliveryDateNetEntryValue[_temp.seller][order.deliveryAt] -= int256(_temp.sellPricePerDay) * _delta;
+        participantDeliveryDateNetEntryValue[_temp.buyer][order.deliveryAt] += int256(_temp.buyPricePerDay) * _delta;
         emit PositionCreated(
             positionId,
             _temp.seller,
@@ -769,6 +770,13 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         participantDeliveryDatePositionIdsIndex[position.buyer][position.deliveryAt].remove(_positionId);
         participantPositionIdsIndex[position.seller].remove(_positionId);
         participantPositionIdsIndex[position.buyer].remove(_positionId);
+        int256 _delta = int256(uint256(deliveryDurationDays));
+        participantDeliveryDateNetDelta[position.seller][position.deliveryAt] += _delta;
+        participantDeliveryDateNetDelta[position.buyer][position.deliveryAt] -= _delta;
+        participantDeliveryDateNetEntryValue[position.seller][position.deliveryAt] +=
+            int256(position.sellPricePerDay) * _delta;
+        participantDeliveryDateNetEntryValue[position.buyer][position.deliveryAt] -=
+            int256(position.buyPricePerDay) * _delta;
         delete positions[_positionId];
         emit PositionClosed(_positionId);
     }
@@ -804,6 +812,64 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         int256 effectiveMargin = getMinMargin(_participant);
         uint256 balance = balanceOf(_participant);
         return int256(effectiveMargin) - int256(balance);
+    }
+
+    // ── Portfolio-margin view functions (used by PortfolioMarginEngine) ──────
+
+    /// @notice Net linear delta of all active *positions* in WAD (1e18) units.
+    ///         Each long contract contributes +deliveryDurationDays * WAD delta;
+    ///         each short contract contributes -deliveryDurationDays * WAD delta.
+    ///         Resting orders are excluded — their margin is reported separately
+    ///         via `getFuturesOrderMargin`.
+    function getNetPositionDelta(address _participant) external view returns (int256) {
+        int256 netDelta = 0;
+        uint256 currentIndex = _getCurrentDeliveryDateIndex();
+        uint256 interval = deliveryIntervalSeconds();
+        for (uint256 i = 0; i < futureDeliveryDatesCount; i++) {
+            uint256 date = firstFutureDeliveryDate + interval * (currentIndex + i);
+            netDelta += participantDeliveryDateNetDelta[_participant][date];
+        }
+        return netDelta * 1e18;
+    }
+
+    /// @notice Minimum margin locked by resting orders (token decimals).
+    ///         Computed as max(0, maintenanceMargin − unrealizedPnL) per order,
+    ///         mirroring how `getMinMargin` handles the order book component.
+    function getFuturesOrderMargin(address _participant) external view returns (uint256) {
+        EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[_participant];
+        uint256 len = _orders.length();
+        if (len == 0) return 0;
+        uint256 total = 0;
+        uint256 marketPricePerDay = getMarketPrice();
+        int256 durationDays = int256(uint256(deliveryDurationDays));
+        uint256 marginPct = getMarginPercent();
+        for (uint256 i = 0; i < len; i++) {
+            Order memory order = orders[_orders.at(i)];
+            if (order.deliveryAt < block.timestamp) continue;
+            int256 qty = order.isBuy ? int256(1) : int256(-1);
+            uint256 maintenanceMargin = order.pricePerDay * uint256(durationDays) * marginPct / 100;
+            int256 pnl = (int256(marketPricePerDay) - int256(order.pricePerDay)) * durationDays * qty;
+            total += clamp(int256(maintenanceMargin) - pnl);
+        }
+        return total;
+    }
+
+    /// @notice Aggregate unrealized PnL across active positions (token decimals).
+    ///         Positive = mark-to-market gain; negative = mark-to-market loss.
+    function getFuturesUnrealizedPnl(address _participant) external view returns (int256) {
+        uint256 currentIndex = _getCurrentDeliveryDateIndex();
+        uint256 interval = deliveryIntervalSeconds();
+        int256 totalNetDelta = 0;
+        int256 totalNetEntryValue = 0;
+        for (uint256 i = 0; i < futureDeliveryDatesCount; i++) {
+            uint256 date = firstFutureDeliveryDate + interval * (currentIndex + i);
+            totalNetDelta += participantDeliveryDateNetDelta[_participant][date];
+            totalNetEntryValue += participantDeliveryDateNetEntryValue[_participant][date];
+        }
+        // totalPnl = Σ(marketPrice - entryPrice_i) * durationDays * qty_i
+        //          = marketPrice * Σ(qty_i * durationDays) - Σ(qty_i * entryPrice_i * durationDays)
+        //          = marketPrice * totalNetDelta - totalNetEntryValue
+        return int256(getMarketPrice()) * totalNetDelta - totalNetEntryValue;
     }
 
     function getDeliveryDates() external view returns (uint256[] memory) {
@@ -1006,31 +1072,26 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         collateralVault.internalTransfer(from, to, amount);
     }
 
-    /// @inheritdoc ERC20Upgradeable
     /// @custom:deprecated Prefer `getCollateralBalance` or `collateralVault.getBalance(account)`.
     ///                 For `address(this)` this is a **fallback**: fee escrow plus `insuranceFund`
     ///                 (same as `getCollateralBalance(address(this))`). Other `account` values are raw vault balance.
-    function balanceOf(address account) public view override returns (uint256) {
+    function balanceOf(address account) public view returns (uint256) {
         return collateralVault.balanceOf(account);
     }
 
-    /// @inheritdoc ERC20Upgradeable
-    function totalSupply() public view override returns (uint256) {
+    function totalSupply() public view returns (uint256) {
         return collateralVault.totalSupply();
     }
 
-    /// @inheritdoc ERC20Upgradeable
-    function decimals() public view override returns (uint8) {
+    function decimals() public view returns (uint8) {
         return IERC20Metadata(address(collateralVault.collateralToken())).decimals();
     }
 
-    /// @inheritdoc ERC20Upgradeable
-    function transfer(address, uint256) public pure override returns (bool) {
+    function transfer(address, uint256) public pure returns (bool) {
         revert TransferDisabled();
     }
 
-    /// @inheritdoc ERC20Upgradeable
-    function transferFrom(address, address, uint256) public pure override returns (bool) {
+    function transferFrom(address, address, uint256) public pure returns (bool) {
         revert TransferDisabled();
     }
 

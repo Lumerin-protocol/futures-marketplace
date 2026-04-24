@@ -36,18 +36,11 @@ describe("Futures - Initialization", () => {
     expect(breachPenaltyRate).to.equal(0n);
   });
 
-  it("should have correct ERC20 token details", async () => {
+  it("should have correct decimals", async () => {
     const { contracts } = await loadFixture(deployFuturesFixture);
-    const { futures, usdcMock } = contracts;
+    const { futures } = contracts;
 
-    const usdcSymbol = await usdcMock.read.symbol();
-
-    const name = await futures.read.name();
-    const symbol = await futures.read.symbol();
     const decimals = await futures.read.decimals();
-
-    expect(name).to.equal(`Lumerin Futures ${usdcSymbol}`);
-    expect(symbol).to.equal(`w${usdcSymbol}`);
     expect(decimals).to.equal(6);
   });
 });
