@@ -12,6 +12,8 @@ import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableS
 import { HashrateOracle } from "hashprice-oracle/contracts/contracts/HashrateOracle.sol";
 import { StructuredLinkedList } from "solidity-linked-list/contracts/StructuredLinkedList.sol";
 import { Versionable } from "./Versionable.sol";
+import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
+import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/interfaces/IPortfolioMarginEngine.sol";
 
 // import { console } from "hardhat/console.sol";
 
@@ -56,8 +58,13 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     uint256 public reservePoolBalance;
     mapping(address => uint8) private addressFeeDiscountPercent;
 
+    /// @dev Unified collateral vault (Titan `CollateralVault` or compatible). Baked into the implementation via constructor.
+    ICollateralVault public immutable collateralVault;
+
+    IPortfolioMarginEngine public marginEngine;
+
     // constants
-    string public constant VERSION = "1.2.0";
+    string public constant VERSION = "2.0.0";
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     uint8 public constant BREACH_PENALTY_DECIMALS = 18;
     uint32 private constant SECONDS_PER_DAY = 3600 * 24;
@@ -135,8 +142,17 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     error PositionAlreadyPaid();
     error PositionDestURLNotSet();
     error NothingToWithdraw();
+    error CollateralTokenMismatch();
+    error ZeroVaultAddress();
+    error InsufficientContractReserve(uint256 reserve, uint256 required);
+    error InsuranceFundNotConfigured();
+    error TransferDisabled();
 
-    constructor() {
+    /// @param _collateralVault Must use the same underlying ERC20 as `token` passed to `initialize`.
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor(ICollateralVault _collateralVault) {
+        if (address(_collateralVault) == address(0)) revert ZeroVaultAddress();
+        collateralVault = _collateralVault;
         _disableInitializers();
     }
 
@@ -170,7 +186,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     function _initializeFuturesToken(IERC20Metadata _token) private {
         __ERC20_init(string.concat("Lumerin Futures ", _token.symbol()), string.concat("w", _token.symbol()));
         _decimals = _token.decimals();
-        token = _token;
+        token = IERC20(address(_token));
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
@@ -228,7 +244,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         uint256 fee = getOrderFee(_participant);
         collectedFeesBalance += fee;
         if (fee > 0) {
-            _transfer(_participant, address(this), fee);
+            _internalTransfer(_participant, address(this), fee);
         }
     }
 
@@ -364,13 +380,13 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
             }
             int256 pnl = pnlPerDay * int256(uint256(deliveryDurationDays));
 
-            _transferPnl(order.participant, address(this), pnl);
+            _transferPnl(order.participant, _insuranceFundAccount(), pnl);
             emit PositionExited(existingPositionId, order.participant, -pnl);
 
             if (_temp.buyer == _temp.seller) {
                 // both parties exiting the position
                 emit PositionExited(existingPositionId, _temp.buyer, pnl);
-                _transferPnl(address(this), _temp.buyer, pnl);
+                _transferPnl(_insuranceFundAccount(), _temp.buyer, pnl);
                 return;
             }
         }
@@ -438,14 +454,16 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         emit OrderClosed(orderId, order.participant);
     }
 
+    /// @notice Convenience wrapper that pulls underlying into `collateralVault` for the caller.
+    /// @custom:deprecated Prefer `ICollateralVault.deposit` on `collateralVault` (after approving the vault).
     function addMargin(uint256 _amount) external {
-        _mint(_msgSender(), _amount);
-        token.safeTransferFrom(_msgSender(), address(this), _amount);
+        collateralVault.depositFor(_msgSender(), _msgSender(), _amount);
     }
 
-    function removeMargin(uint256 _amount) external enoughMarginBalance(_msgSender(), _amount) {
-        _burn(_msgSender(), _amount);
-        token.safeTransfer(_msgSender(), _amount);
+    /// @notice Convenience wrapper that withdraws underlying from the caller's vault balance.
+    /// @custom:deprecated Prefer `ICollateralVault.withdraw` on `collateralVault` (respects vault margin gating).
+    function removeMargin(uint256 _amount) external {
+        collateralVault.withdrawTo(_msgSender(), _msgSender(), _amount);
     }
 
     // Admin functions
@@ -488,6 +506,10 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     /// @dev Limits access to the functions with onlyValidator modifier
     function setValidatorAddress(address _validatorAddress) external onlyOwner {
         validatorAddress = _validatorAddress;
+    }
+
+    function setMarginEngine(address _marginEngine) external onlyOwner {
+        marginEngine = IPortfolioMarginEngine(_marginEngine);
     }
 
     /// @notice Gets the maintenance margin of a position, the minimum amount of effective margin that is required to avoid a margin call
@@ -647,13 +669,13 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
                 position.sellPricePerDay * deliveryDurationDays,
                 position.deliveryAt + deliveryDurationSeconds() - block.timestamp
             );
-            _transfer(position.seller, position.buyer, breachPenalty);
+            _internalTransfer(position.seller, position.buyer, breachPenalty);
         } else {
             uint256 breachPenalty = _calculateBreachPenalty(
                 position.buyPricePerDay * deliveryDurationDays,
                 position.deliveryAt + deliveryDurationSeconds() - block.timestamp
             );
-            _transfer(position.buyer, position.seller, breachPenalty);
+            _internalTransfer(position.buyer, position.seller, breachPenalty);
         }
         _closeAndCashSettleDelivery(_positionId, position);
         emit PositionDeliveryClosed(_positionId, _msgSender());
@@ -681,19 +703,19 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
                 position.buyPricePerDay * deliveryDurationDays * positionElapsedTime / deliveryDurationSeconds();
             uint256 contractPaysToSeller =
                 uint256(priceDifference) * deliveryDurationDays * positionElapsedTime / deliveryDurationSeconds();
-            _transfer(address(this), position.seller, contractPaysToSeller);
-            _transfer(position.buyer, position.seller, buyerPaysToSeller);
+            _internalTransfer(_insuranceFundAccount(), position.seller, contractPaysToSeller);
+            _internalTransfer(position.buyer, position.seller, buyerPaysToSeller);
         } else if (priceDifference < 0) {
             uint256 buyerPaysToSeller =
                 position.sellPricePerDay * deliveryDurationDays * positionElapsedTime / deliveryDurationSeconds();
             uint256 buyerPaysToContract =
                 uint256(-priceDifference) * deliveryDurationDays * positionElapsedTime / deliveryDurationSeconds();
-            _transfer(address(this), position.buyer, buyerPaysToContract);
-            _transfer(position.buyer, position.seller, buyerPaysToSeller);
+            _internalTransfer(_insuranceFundAccount(), position.buyer, buyerPaysToContract);
+            _internalTransfer(position.buyer, position.seller, buyerPaysToSeller);
         } else {
             uint256 buyerPaysToSeller =
                 position.buyPricePerDay * deliveryDurationDays * positionElapsedTime / deliveryDurationSeconds();
-            _transfer(position.buyer, position.seller, buyerPaysToSeller);
+            _internalTransfer(position.buyer, position.seller, buyerPaysToSeller);
         }
 
         // Payment for the remaining portion of the hashrate
@@ -707,8 +729,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         emit PositionExited(_positionId, position.seller, -sellerPnl);
         emit PositionExited(_positionId, position.buyer, -buyerPnl);
 
-        _transferPnl(address(this), position.seller, sellerPnl);
-        _transferPnl(address(this), position.buyer, buyerPnl);
+        _transferPnl(_insuranceFundAccount(), position.seller, sellerPnl);
+        _transferPnl(_insuranceFundAccount(), position.buyer, buyerPnl);
 
         // remove position
         _removePosition(_positionId, position);
@@ -848,7 +870,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
             Position storage position = positions[positionId];
             if (position.seller == _msgSender() && position.paid) {
                 uint256 totalPayment = position.sellPricePerDay * deliveryDurationDays;
-                _transfer(address(this), position.seller, totalPayment);
+                _internalTransfer(address(this), position.seller, totalPayment);
                 position.paid = false;
                 withdrew = true;
                 emit PositionPaymentReceived(positionId);
@@ -949,92 +971,74 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     }
 
     function ensureNoCollateralDeficit(address _participant) private view {
-        int256 collateralDeficit = getCollateralDeficit(_participant);
-        if (collateralDeficit > 0) {
-            revert InsufficientMarginBalance();
-        }
-    }
-
-    /// @notice Deposits collateral into the contract to credit participant when position is exited
-    /// @param _amount The amount of collateral to deposit
-    function depositReservePool(uint256 _amount) external {
-        reservePoolBalance += _amount;
-        _mint(address(this), _amount);
-        token.safeTransferFrom(_msgSender(), address(this), _amount);
-    }
-
-    /// @notice Withdraws collateral from the contract to the sender
-    /// @param _amount The amount of collateral to withdraw
-    function withdrawReservePool(uint256 _amount) external onlyOwner {
-        if (_amount > reservePoolBalance) {
-            revert ERC20InsufficientBalance(address(this), reservePoolBalance, _amount);
-        }
-        reservePoolBalance -= _amount;
-        _burn(address(this), _amount);
-        token.safeTransfer(_msgSender(), _amount);
+        uint256 required = marginEngine.computePortfolioIM(_participant);
+        if (balanceOf(_participant) < required) revert InsufficientMarginBalance();
     }
 
     function withdrawCollectedFees() external onlyOwner {
         uint256 amount = collectedFeesBalance;
         collectedFeesBalance = 0;
-        _burn(address(this), amount);
-        token.safeTransfer(owner(), amount);
+        collateralVault.withdrawTo(address(this), owner(), amount);
     }
 
     function _transferPnl(address _from, address _to, int256 _pnl) private {
         if (_pnl > 0) {
-            _transfer(_from, _to, uint256(_pnl));
+            collateralVault.internalTransfer(_from, _to, uint256(_pnl));
         } else if (_pnl < 0) {
-            _transfer(_to, _from, uint256(-_pnl));
+            collateralVault.internalTransfer(_to, _from, uint256(-_pnl));
         }
     }
 
-    // ERC20 functions
+    /// @dev Shared reserve / PnL pool: vault `insuranceFund` receipt account.
+    function _insuranceFundAccount() private view returns (address) {
+        address fund = collateralVault.INSURANCE_FUND_ADDR();
+        if (fund == address(0)) revert InsuranceFundNotConfigured();
+        return fund;
+    }
 
+    /// @notice Collateral balance for `account` held in `collateralVault` (same as `balanceOf` for all accounts).
+    function getCollateralBalance(address account) external view returns (uint256) {
+        return balanceOf(account);
+    }
+
+    function _internalTransfer(address from, address to, uint256 amount) private {
+        if (amount == 0) return;
+        collateralVault.internalTransfer(from, to, amount);
+    }
+
+    /// @inheritdoc ERC20Upgradeable
+    /// @custom:deprecated Prefer `getCollateralBalance` or `collateralVault.getBalance(account)`.
+    ///                 For `address(this)` this is a **fallback**: fee escrow plus `insuranceFund`
+    ///                 (same as `getCollateralBalance(address(this))`). Other `account` values are raw vault balance.
+    function balanceOf(address account) public view override returns (uint256) {
+        return collateralVault.balanceOf(account);
+    }
+
+    /// @inheritdoc ERC20Upgradeable
+    function totalSupply() public view override returns (uint256) {
+        return collateralVault.totalSupply();
+    }
+
+    /// @inheritdoc ERC20Upgradeable
     function decimals() public view override returns (uint8) {
-        return _decimals;
+        return IERC20Metadata(address(collateralVault.collateralToken())).decimals();
     }
 
-    function transfer(address _to, uint256 _amount)
-        public
-        override
-        enoughMarginBalance(_msgSender(), _amount)
-        returns (bool)
-    {
-        return super.transfer(_to, _amount);
+    /// @inheritdoc ERC20Upgradeable
+    function transfer(address, uint256) public pure override returns (bool) {
+        revert TransferDisabled();
     }
 
-    function _transferEnsureMarginBalance(address _from, address _to, uint256 _amount)
-        private
-        enoughMarginBalance(_from, _amount)
-        returns (bool)
-    {
-        _transfer(_from, _to, _amount);
-        return true;
+    /// @inheritdoc ERC20Upgradeable
+    function transferFrom(address, address, uint256) public pure override returns (bool) {
+        revert TransferDisabled();
     }
 
-    function transferFrom(address _from, address _to, uint256 _amount)
-        public
-        override
-        enoughMarginBalance(_from, _amount)
-        returns (bool)
-    {
-        return super.transferFrom(_from, _to, _amount);
+    function _transferEnsureMarginBalance(address _from, address _to, uint256 _amount) private {
+        collateralVault.internalTransferWithMarginCheck(_from, _to, _amount);
     }
 
     // Modifiers
-
-    modifier enoughMarginBalance(address _from, uint256 _amount) {
-        uint256 depositedCollateral = balanceOf(_from);
-        if (depositedCollateral < _amount) {
-            revert ERC20InsufficientBalance(_from, depositedCollateral, _amount);
-        }
-
-        if (int256(_amount) > int256(depositedCollateral) - getMinMargin(_from)) {
-            revert InsufficientMarginBalance();
-        }
-        _;
-    }
 
     modifier onlyValidator() {
         if (_msgSender() != validatorAddress) {

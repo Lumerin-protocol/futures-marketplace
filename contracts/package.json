@@ -5,7 +5,7 @@
   "author": "Oleksandr Shevchuk <shev@titan.io>",
   "license": "MIT",
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "scripts": {
     "format:sol": "forge fmt ./contracts/**/*.sol",
@@ -60,6 +60,7 @@
     "solidity-linked-list": "^6.5.0",
     "viem": "^2.42.1",
     "wait-on": "^7.2.0",
-    "web3": "^1.7.4"
+    "web3": "^1.7.4",
+    "collateral-margin": "file:../../collateral-margin"
   }
 }

@@ -2,8 +2,8 @@ import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { getAddress } from "viem";
 import { deployFuturesFixture } from "./fixtures";
-describe("Futures - Initialization", function () {
-  it("should initialize with correct parameters", async function () {
+describe("Futures - Initialization", () => {
+  it("should initialize with correct parameters", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
 
@@ -36,7 +36,7 @@ describe("Futures - Initialization", function () {
     expect(breachPenaltyRate).to.equal(0n);
   });
 
-  it("should have correct ERC20 token details", async function () {
+  it("should have correct ERC20 token details", async () => {
     const { contracts } = await loadFixture(deployFuturesFixture);
     const { futures, usdcMock } = contracts;
 

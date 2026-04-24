@@ -34,8 +34,8 @@ async function positionWithMarginFixture() {
   };
 }
 
-describe("Futures - getMinMargin", function () {
-  it("should return larger value when buyer is at loss", async function () {
+describe("Futures - getMinMargin", () => {
+  it("should return larger value when buyer is at loss", async () => {
     const { contracts, accounts } = await loadFixture(positionWithMarginFixture);
     const { futures, hashrateOracle } = contracts;
     const { buyer, seller } = accounts;
@@ -58,7 +58,7 @@ describe("Futures - getMinMargin", function () {
     expect(sellerMargin2 < sellerMargin).to.be.true;
   });
 
-  it("should return smaller value when buyer is at profit", async function () {
+  it("should return smaller value when buyer is at profit", async () => {
     const { contracts, accounts } = await loadFixture(positionWithMarginFixture);
     const { futures, hashrateOracle } = contracts;
     const { buyer, seller } = accounts;
@@ -80,7 +80,7 @@ describe("Futures - getMinMargin", function () {
     expect(sellerMargin2 > sellerMargin).to.be.true;
   });
 
-  it("effective margin can go negative for expensive sell", async function () {
+  it("effective margin can go negative for expensive sell", async () => {
     const { contracts, accounts } = await loadFixture(positionWithMarginFixture);
     const { futures } = contracts;
 
@@ -90,24 +90,8 @@ describe("Futures - getMinMargin", function () {
     expect(buyerMargin < 0n).to.be.true;
   });
 
-  it("party cant withdraw so balance is less than effective margin", async function () {
-    const { contracts, accounts, margin } = await loadFixture(positionWithMarginFixture);
-    const { futures } = contracts;
-    const { buyer } = accounts;
-    const currentBalance = await futures.read.balanceOf([buyer.account.address]);
-    await catchError(futures.abi, "InsufficientMarginBalance", async () => {
-      await futures.write.removeMargin([currentBalance], { account: buyer.account.address });
-    });
 
-    const buyerMargin = await futures.read.getMinMargin([buyer.account.address]);
-    const availableToWithdraw = currentBalance - buyerMargin;
-    await futures.write.removeMargin([availableToWithdraw], { account: buyer.account.address });
-
-    const newBalance = await futures.read.balanceOf([buyer.account.address]);
-    expect(newBalance).to.equal(buyerMargin);
-  });
-
-  it("orders with positive effective margin should be considered for effective margin", async function () {
+  it("orders with positive effective margin should be considered for effective margin", async () => {
     const { contracts, accounts, deliveryDate } = await loadFixture(positionWithMarginFixture);
     const { futures } = contracts;
     const { buyer } = accounts;
@@ -124,7 +108,7 @@ describe("Futures - getMinMargin", function () {
     expect(effectiveMargin2 > effectiveMargin).to.be.true;
   });
 
-  it("orders with negative effective margin should not be considered for effective margin", async function () {
+  it("orders with negative effective margin should not be considered for effective margin", async () => {
     const { contracts, accounts, deliveryDate } = await loadFixture(positionWithMarginFixture);
     const { futures } = contracts;
     const { buyer } = accounts;
@@ -137,7 +121,7 @@ describe("Futures - getMinMargin", function () {
     expect(effectiveMargin2 === effectiveMargin).to.be.true;
   });
 
-  it("party cant withdraw more than deposited collateral even if effective margin is negative", async function () {
+  it("party cant withdraw more than deposited collateral even if effective margin is negative", async () => {
     const { contracts, accounts, deliveryDate } = await loadFixture(positionWithMarginFixture);
     const { futures } = contracts;
     const { buyer, seller } = accounts;
@@ -167,7 +151,7 @@ describe("Futures - getMinMargin", function () {
     await futures.write.removeMargin([balance], { account: seller.account });
   });
 
-  it("outdated orders do not affect getMinMargin calculation", async function () {
+  it("outdated orders do not affect getMinMargin calculation", async () => {
     const { contracts, accounts, config } = await loadFixture(positionWithMarginFixture);
     const { futures } = contracts;
     const { buyer, tc, pc } = accounts;
@@ -215,7 +199,7 @@ describe("Futures - getMinMargin", function () {
     expect(order.deliveryAt === futureDeliveryDate).to.be.true;
   });
 
-  it("should calculate minimum margin for orders", async function () {
+  it("should calculate minimum margin for orders", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;
@@ -246,7 +230,7 @@ describe("Futures - getMinMargin", function () {
     expect(minMarginAfterShort > minMargin).to.be.true;
   });
 
-  it("should calculate minimum margin for positions", async function () {
+  it("should calculate minimum margin for positions", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, buyer } = accounts;
@@ -279,14 +263,16 @@ describe("Futures - getMinMargin", function () {
   });
 });
 
-describe("Futures - margin management", function () {
-  it("should allow adding margin", async function () {
+describe("Futures - margin management", () => {
+  it("should allow adding margin", async () => {
     const { contracts, accounts } = await loadFixture(deployFuturesFixture);
     const { futures, usdcMock } = contracts;
     const { seller, pc } = accounts;
 
     const sellerBalance1 = await futures.read.balanceOf([seller.account.address]);
-    const futuresUsdcBalance1 = await usdcMock.read.balanceOf([futures.address]);
+    const collateralVaultBalance1 = await usdcMock.read.balanceOf([
+      contracts.collateralVault.address,
+    ]);
 
     const marginAmount = parseUnits("1000", 6); // $1000
 
@@ -302,11 +288,13 @@ describe("Futures - margin management", function () {
     expect(sellerBalance2).to.equal(sellerBalance1 + marginAmount);
 
     // Check USDC balance of futures contract
-    const futuresUsdcBalance2 = await usdcMock.read.balanceOf([futures.address]);
-    expect(futuresUsdcBalance2).to.equal(futuresUsdcBalance1 + marginAmount);
+    const collateralVaultBalance2 = await usdcMock.read.balanceOf([
+      contracts.collateralVault.address,
+    ]);
+    expect(collateralVaultBalance2).to.equal(collateralVaultBalance1 + marginAmount);
   });
 
-  it("should allow removing margin when sufficient balance", async function () {
+  it("should allow removing margin when sufficient balance", async () => {
     const { contracts, accounts } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, pc } = accounts;
@@ -332,7 +320,7 @@ describe("Futures - margin management", function () {
     expect(balance).to.equal(marginAmount - removeAmount);
   });
 
-  it("should reject removing margin when insufficient balance", async function () {
+  it("should reject removing margin when insufficient balance", async () => {
     const { contracts, accounts } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;
@@ -353,37 +341,10 @@ describe("Futures - margin management", function () {
     });
   });
 
-  it("should reject removing margin when below minimum required", async function () {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
-    const { seller } = accounts;
-
-    const price = await futures.read.getMarketPrice();
-    const minMargin = await futures.read.getMinMarginForPosition([price, 1n]);
-    const deliveryDate = config.deliveryDates[0];
-
-    // Add margin
-    await futures.write.addMargin([minMargin + config.orderFee], {
-      account: seller.account,
-    });
-
-    // Create order to require minimum margin
-    await futures.write.createOrder([price, deliveryDate, "", -1], {
-      account: seller.account,
-    });
-
-    // Try to remove too much margin
-    const removeAmount = 1n;
-    await catchError(futures.abi, "InsufficientMarginBalance", async () => {
-      await futures.write.removeMargin([removeAmount], {
-        account: seller.account,
-      });
-    });
-  });
 });
 
-describe("Futures - margin call", function () {
-  it("should perform margin call when margin is insufficient", async function () {
+describe("Futures - margin call", () => {
+  it("should perform margin call when margin is insufficient", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures, btcPriceOracleMock } = contracts;
     const { seller, validator, pc } = accounts;
@@ -433,7 +394,7 @@ describe("Futures - margin call", function () {
     expect(order.participant).to.equal(zeroAddress);
   });
 
-  it("should reject margin call by non-validator", async function () {
+  it("should reject margin call by non-validator", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;

@@ -2,8 +2,8 @@ import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { deployFuturesFixture } from "./fixtures";
 import { catchError } from "../lib/lib";
 
-describe("Get Positions", function () {
-  it("should get positions by participant and delivery date", async function () {
+describe("Get Positions", () => {
+  it("should get positions by participant and delivery date", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, buyer } = accounts;

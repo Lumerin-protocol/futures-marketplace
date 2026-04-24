@@ -1,0 +1,4 @@
+@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/
+@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/
+hashprice-oracle/=node_modules/hashprice-oracle/
+collateral-margin/=node_modules/collateral-margin/

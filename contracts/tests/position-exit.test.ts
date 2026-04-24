@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { deployFuturesFixture } from "./fixtures";
 
-it("should handle exiting positions from both parties at the same time", async function () {
+it("should handle exiting positions from both parties at the same time", async () => {
   const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
   const { futures } = contracts;
   const { seller: partA, buyer: partB, buyer2: partC, owner } = accounts;

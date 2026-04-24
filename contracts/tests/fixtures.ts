@@ -29,8 +29,27 @@ export async function deployOnlyFuturesFixture(
   const collateralAmount = parseUnits("10000", 6);
   const validatorURL = "//shev8.validator:anything@stratum.braiins.com:3333";
 
+  const vaultImpl = await viem.deployContract(
+    "collateral-margin/contracts/contracts/CollateralVault.sol:CollateralVault",
+    [],
+  );
+  const collateralVaultInit = encodeFunctionData({
+    abi: vaultImpl.abi,
+    functionName: "initialize",
+    args: [usdcMock.address],
+  });
+  const collateralVaultProxy = await viem.deployContract(
+    "ERC1967Proxy",
+    [vaultImpl.address, collateralVaultInit],
+    { account: owner.account },
+  );
+  const collateralVault = await viem.getContractAt(
+    "collateral-margin/contracts/contracts/CollateralVault.sol:CollateralVault",
+    collateralVaultProxy.address,
+  );
+
   // Deploy Futures contract
-  const futuresImpl = await viem.deployContract("contracts/Futures.sol:Futures", []);
+  const futuresImpl = await viem.deployContract("contracts/Futures.sol:Futures", [collateralVault.address]);
   const futuresProxy = await viem.deployContract("ERC1967Proxy", [
     futuresImpl.address,
     encodeFunctionData({
@@ -51,17 +70,56 @@ export async function deployOnlyFuturesFixture(
     }),
   ]);
   const futures = await viem.getContractAt("Futures", futuresProxy.address);
+  await collateralVault.write.setAuthorizedCaller([futures.address, true], { account: owner.account });
+
+  // Deploy portfolio margin engine with stub mocks for the non-futures products
+  const perpsDEXMock = await viem.deployContract(
+    "collateral-margin/contracts/contracts/mocks/PerpsDEXMock.sol:PerpsDEXMock",
+    [],
+  );
+  const optionsEngineMock = await viem.deployContract(
+    "collateral-margin/contracts/contracts/mocks/OptionsEngineMock.sol:OptionsEngineMock",
+    [],
+  );
+  const portfolioMarginEngineImpl = await viem.deployContract(
+    "collateral-margin/contracts/contracts/PortfolioMarginEngine.sol:PortfolioMarginEngine",
+    [],
+  );
+  const portfolioMarginEngineProxy = await viem.deployContract(
+    "ERC1967Proxy",
+    [
+      portfolioMarginEngineImpl.address,
+      encodeFunctionData({
+        abi: portfolioMarginEngineImpl.abi,
+        functionName: "initialize",
+        args: [collateralVault.address, perpsDEXMock.address, optionsEngineMock.address],
+      }),
+    ],
+    { account: owner.account },
+  );
+  const portfolioMarginEngine = await viem.getContractAt(
+    "collateral-margin/contracts/contracts/PortfolioMarginEngine.sol:PortfolioMarginEngine",
+    portfolioMarginEngineProxy.address,
+  );
+
+  // Seed the perps mock's market price so the PM engine stress scenarios have a price reference
+  const marketPrice = await futures.read.getMarketPrice();
+  await perpsDEXMock.write.setMarketPrice([marketPrice]);
+
+  await futures.write.setMarginEngine([portfolioMarginEngine.address], { account: owner.account });
+  await collateralVault.write.setMarginEngine([portfolioMarginEngine.address], { account: owner.account });
+
   await futures.write.setOrderFee([orderFee], { account: owner.account });
   await futures.write.setValidatorURL([validatorURL], { account: owner.account });
   const deliveryDates = await futures.read.getDeliveryDates();
-  // Approve futures contract to spend USDC for all accounts
-  await usdcMock.write.approve([futures.address, maxUint256], { account: seller.account });
-  await usdcMock.write.approve([futures.address, maxUint256], { account: buyer.account });
-  await usdcMock.write.approve([futures.address, maxUint256], { account: buyer2.account });
-  await usdcMock.write.approve([futures.address, maxUint256], { account: validator.account });
-  await usdcMock.write.approve([futures.address, maxUint256], { account: owner.account });
+  // `depositFor` pulls USDC via the vault — approve the vault, not Futures.
+  await usdcMock.write.approve([collateralVault.address, maxUint256], { account: seller.account });
+  await usdcMock.write.approve([collateralVault.address, maxUint256], { account: buyer.account });
+  await usdcMock.write.approve([collateralVault.address, maxUint256], { account: buyer2.account });
+  await usdcMock.write.approve([collateralVault.address, maxUint256], { account: validator.account });
+  await usdcMock.write.approve([collateralVault.address, maxUint256], { account: owner.account });
 
-  await futures.write.depositReservePool([collateralAmount], { account: owner.account });
+  await collateralVault.write.depositInsuranceFund([owner.account.address, collateralAmount], { account: owner.account });
 
   return {
     config: {
@@ -83,6 +141,10 @@ export async function deployOnlyFuturesFixture(
       btcPriceOracleMock,
       hashrateOracle,
       futures,
+      collateralVault,
+      portfolioMarginEngine,
+      perpsDEXMock,
+      optionsEngineMock,
     },
     accounts: {
       owner,
@@ -113,7 +175,7 @@ export async function deployOnlyFuturesWithDummyData(
   await futures.write.addMargin([marginAmount], { account: buyer2.account });
 
   // create positions
-  let d = config.deliveryDates[0];
+  const d = config.deliveryDates[0];
   const dst = "//shev8.contract:anything@stratum.braiins.com:3333";
   // sell orders
   await futures.write.createOrder([mp + inc, d, "", -1], { account: seller.account });

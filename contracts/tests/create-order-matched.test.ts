@@ -2,9 +2,19 @@ import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { parseEventLogs, parseUnits, getAddress } from "viem";
 import { deployFuturesFixture } from "./fixtures";
+import type { deployOnlyFuturesFixture } from "./fixtures";
 
-describe("Futures - createOrder - Order Matching and Position Creation", function () {
-  it("should match sell and buy orders and create a position", async function () {
+async function totalContractBalance(contracts: Awaited<ReturnType<typeof deployOnlyFuturesFixture>>["contracts"]) {
+  const { futures, collateralVault } = contracts;
+  const insuranceFundAddr = await collateralVault.read.INSURANCE_FUND_ADDR();
+  return (
+    await futures.read.balanceOf([futures.address]) +
+    await futures.read.balanceOf([insuranceFundAddr])
+  );
+}
+
+describe("Futures - createOrder - Order Matching and Position Creation", () => {
+  it("should match sell and buy orders and create a position", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, buyer, pc } = accounts;
@@ -47,7 +57,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", functio
     }
   });
 
-  it("should match sell and buy orders and create an position", async function () {
+  it("should match sell and buy orders and create an position", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, buyer, pc } = accounts;
@@ -91,7 +101,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", functio
     }
   });
 
-  it("should exit position when matching order with opposite direction", async function () {
+  it("should exit position when matching order with opposite direction", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller: account1, buyer: account2, buyer2: account3, pc } = accounts;
@@ -193,7 +203,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", functio
     expect(account2Profit + orderFee).to.equal(expectedProfit);
   });
 
-  it("should exit position with loss and verify accounting is correct", async function () {
+  it("should exit position with loss and verify accounting is correct", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller: account1, buyer: account2, buyer2: account3, pc } = accounts;
@@ -247,7 +257,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", functio
     });
 
     // Get contract balance after account2 creates exit order (includes order fee from exit order)
-    const contractBalanceBefore = await futures.read.balanceOf([futures.address]);
+    const contractBalanceBefore = await totalContractBalance(contracts);
 
     // Step 3: account2's sell order matches with account3's buy order, exiting the original position
     const exitTxHash = await futures.write.createOrder([exitPrice, deliveryDate, "", 1], {
@@ -258,7 +268,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", functio
 
     // Get account2's balance after exit
     const account2BalanceAfter = await futures.read.balanceOf([account2.account.address]);
-    const contractBalanceAfter = await futures.read.balanceOf([futures.address]);
+    const contractBalanceAfter = await totalContractBalance(contracts);
 
     // Verify PositionClosed event for the original position
     const [positionClosedEvent] = parseEventLogs({
@@ -306,7 +316,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", functio
     expect(contractBalanceAfter - contractBalanceBefore).to.equal(expectedContractBalanceChange);
   });
 
-  it("should handle exiting positions", async function () {
+  it("should handle exiting positions", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, buyer, buyer2, pc } = accounts;

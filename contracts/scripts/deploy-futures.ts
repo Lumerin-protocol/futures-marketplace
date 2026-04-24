@@ -11,6 +11,7 @@ async function main() {
 
   const env = requireEnvsSet(
     "USDC_TOKEN_ADDRESS",
+    "COLLATERAL_VAULT_ADDRESS",
     "HASHRATE_ORACLE_ADDRESS",
     "VALIDATOR_ADDRESS",
     "LIQUIDATION_MARGIN_PERCENT",
@@ -51,7 +52,9 @@ async function main() {
 
   // Deploy Futures implementation
   console.log("Deploying Futures implementation...");
-  const futuresImpl = await viem.deployContract("contracts/Futures.sol:Futures", []);
+  const futuresImpl = await viem.deployContract("contracts/Futures.sol:Futures", [
+    env.COLLATERAL_VAULT_ADDRESS as `0x${string}`,
+  ]);
   console.log("Deployed at:", futuresImpl.address);
   await verifyContract(futuresImpl.address, []);
 

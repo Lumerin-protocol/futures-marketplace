@@ -3,77 +3,63 @@ import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { deployFuturesFixture } from "./fixtures";
 import { catchError } from "../lib/lib";
 
-describe("Reserve Pool", function () {
-  it("should not allow withdrawal of user funds from reserve pool", async function () {
+describe("Reserve Pool", () => {
+  it("should not allow withdrawal of more than the insurance fund balance", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
-    const { seller, owner } = accounts;
+    const { collateralVault } = contracts;
+    const { owner } = accounts;
 
-    await futures.write.withdrawReservePool([config.collateralAmount], {
-      account: owner.account,
-    });
+    const balance = await collateralVault.read.insuranceFundBalance();
 
-    const price = await futures.read.getMarketPrice();
-    const margin = price * 10n;
-
-    await futures.write.addMargin([margin], {
-      account: seller.account,
-    });
-
-    await catchError(futures.abi, "ERC20InsufficientBalance", async () => {
-      await futures.write.withdrawReservePool([margin], {
+    await catchError(collateralVault.abi, "ERC20InsufficientBalance", async () => {
+      await collateralVault.write.withdrawInsuranceFund([owner.account.address, balance + 1n], {
         account: owner.account,
       });
     });
   });
 
-  it("should increase reserve pool balance and mint wToken when deposited", async function () {
+  it("should increase insurance fund balance when deposited", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-    const { futures, usdcMock } = contracts;
+    const { collateralVault, usdcMock } = contracts;
     const { owner } = accounts;
 
-    const reserveBefore = await futures.read.reservePoolBalance();
-    const wrappedBefore = await futures.read.balanceOf([futures.address]);
-    const ownerBalanceBefore = await usdcMock.read.balanceOf([owner.account.address]);
+    const balanceBefore = await collateralVault.read.insuranceFundBalance();
+    const ownerUsdcBefore = await usdcMock.read.balanceOf([owner.account.address]);
 
-    await futures.write.depositReservePool([config.collateralAmount], {
+    await collateralVault.write.depositInsuranceFund([owner.account.address, config.collateralAmount], {
       account: owner.account,
     });
 
-    const reserveAfter = await futures.read.reservePoolBalance();
-    const wrappedAfter = await futures.read.balanceOf([futures.address]);
-    const ownerBalanceAfter = await usdcMock.read.balanceOf([owner.account.address]);
+    const balanceAfter = await collateralVault.read.insuranceFundBalance();
+    const ownerUsdcAfter = await usdcMock.read.balanceOf([owner.account.address]);
 
-    expect(reserveAfter - reserveBefore).to.equal(config.collateralAmount);
-    expect(wrappedAfter - wrappedBefore).to.equal(config.collateralAmount);
-    expect(ownerBalanceBefore - ownerBalanceAfter).to.equal(config.collateralAmount);
+    expect(balanceAfter - balanceBefore).to.equal(config.collateralAmount);
+    expect(ownerUsdcBefore - ownerUsdcAfter).to.equal(config.collateralAmount);
   });
 
-  it("should allow only owner to withdraw and update balances", async function () {
+  it("should allow only owner to withdraw and update balances", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-    const { futures, usdcMock } = contracts;
+    const { collateralVault, usdcMock } = contracts;
     const { owner, seller } = accounts;
 
-    await catchError(futures.abi, "OwnableUnauthorizedAccount", async () => {
-      await futures.write.withdrawReservePool([1n], {
+    await catchError(collateralVault.abi, "OwnableUnauthorizedAccount", async () => {
+      await collateralVault.write.withdrawInsuranceFund([seller.account.address, 1n], {
         account: seller.account,
       });
     });
 
     const withdrawAmount = config.collateralAmount / 2n;
-    const reserveBefore = await futures.read.reservePoolBalance();
-    const ownerBalanceBefore = await usdcMock.read.balanceOf([owner.account.address]);
+    const balanceBefore = await collateralVault.read.insuranceFundBalance();
+    const ownerUsdcBefore = await usdcMock.read.balanceOf([owner.account.address]);
 
-    await futures.write.withdrawReservePool([withdrawAmount], {
+    await collateralVault.write.withdrawInsuranceFund([owner.account.address, withdrawAmount], {
       account: owner.account,
     });
 
-    const reserveAfter = await futures.read.reservePoolBalance();
-    const ownerBalanceAfter = await usdcMock.read.balanceOf([owner.account.address]);
-    const wrappedAfter = await futures.read.balanceOf([futures.address]);
+    const balanceAfter = await collateralVault.read.insuranceFundBalance();
+    const ownerUsdcAfter = await usdcMock.read.balanceOf([owner.account.address]);
 
-    expect(reserveBefore - reserveAfter).to.equal(withdrawAmount);
-    expect(ownerBalanceAfter - ownerBalanceBefore).to.equal(withdrawAmount);
-    expect(wrappedAfter).to.equal(reserveAfter);
+    expect(balanceBefore - balanceAfter).to.equal(withdrawAmount);
+    expect(ownerUsdcAfter - ownerUsdcBefore).to.equal(withdrawAmount);
   });
 });

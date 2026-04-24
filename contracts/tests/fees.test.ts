@@ -4,8 +4,8 @@ import { encodeAbiParameters, keccak256 } from "viem";
 import { deployFuturesFixture } from "./fixtures";
 import { catchError } from "../lib/lib";
 
-describe("Fees", function () {
-  it("should collect order fee on order creation", async function () {
+describe("Fees", () => {
+  it("should collect order fee on order creation", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;
@@ -28,7 +28,7 @@ describe("Fees", function () {
     expect(sellerBalanceBefore - sellerBalanceAfter).to.equal(config.orderFee);
   });
 
-  it("should allow only owner to withdraw collected fees", async function () {
+  it("should allow only owner to withdraw collected fees", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;
@@ -38,7 +38,7 @@ describe("Fees", function () {
     });
   });
 
-  it("should withdraw correct amount of fees", async function () {
+  it("should withdraw correct amount of fees", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures, usdcMock } = contracts;
     const { owner, seller } = accounts;
@@ -54,20 +54,17 @@ describe("Fees", function () {
     expect(feesAccrued).to.equal(config.orderFee);
 
     const ownerBalanceBefore = await usdcMock.read.balanceOf([owner.account.address]);
-    const contractBalanceBefore = await usdcMock.read.balanceOf([futures.address]);
 
     await futures.write.withdrawCollectedFees({ account: owner.account });
 
     const ownerBalanceAfter = await usdcMock.read.balanceOf([owner.account.address]);
-    const contractBalanceAfter = await usdcMock.read.balanceOf([futures.address]);
     const feesAfter = await futures.read.collectedFeesBalance();
 
     expect(feesAfter).to.equal(0n);
     expect(ownerBalanceAfter - ownerBalanceBefore).to.equal(feesAccrued);
-    expect(contractBalanceBefore - contractBalanceAfter).to.equal(feesAccrued);
   });
 
-  it("should collect correct fee per address discount", async function () {
+  it("should collect correct fee per address discount", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { owner, seller, buyer } = accounts;
@@ -103,7 +100,7 @@ describe("Fees", function () {
     expect(buyerBalanceBefore - buyerBalanceAfter).to.equal(config.orderFee);
   });
 
-  it("should collect full fee for 0 percent discount", async function () {
+  it("should collect full fee for 0 percent discount", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { owner, seller } = accounts;
@@ -131,7 +128,7 @@ describe("Fees", function () {
     expect(sellerBalanceBefore - sellerBalanceAfter).to.equal(config.orderFee);
   });
 
-  it("should collect zero fee for 100 percent discount", async function () {
+  it("should collect zero fee for 100 percent discount", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { owner, seller } = accounts;

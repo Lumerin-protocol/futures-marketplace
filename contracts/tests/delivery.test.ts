@@ -1,6 +1,6 @@
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { deployFuturesFixture } from "./fixtures";
-import { Client, parseEventLogs, parseUnits } from "viem";
+import { type Client, parseEventLogs, parseUnits } from "viem";
 import { quantizePrice } from "./utils";
 import { catchError } from "../lib/lib";
 
@@ -70,7 +70,7 @@ describe("Futures Delivery", () => {
     await logBalance(buyer, "buyer after close");
   });
 
-  it("should handle expired positions", async function () {
+  it("should handle expired positions", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, buyer, pc, tc } = accounts;
@@ -115,8 +115,8 @@ describe("Futures Delivery", () => {
     });
   });
 });
-describe("Position Management", function () {
-  it("should not allow buyer to close position before start time", async function () {
+describe("Position Management", () => {
+  it("should not allow buyer to close position before start time", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, buyer, pc } = accounts;
@@ -157,7 +157,7 @@ describe("Position Management", function () {
     });
   });
 
-  it("should not allow seller to close position before start time", async function () {
+  it("should not allow seller to close position before start time", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, buyer, pc } = accounts;
@@ -199,7 +199,7 @@ describe("Position Management", function () {
     });
   });
 
-  it("should reject closing position by non-participant", async function () {
+  it("should reject closing position by non-participant", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, buyer, buyer2, pc } = accounts;

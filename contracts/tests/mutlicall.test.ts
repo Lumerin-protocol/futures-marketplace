@@ -3,8 +3,8 @@ import { deployFuturesFixture } from "./fixtures";
 import { encodeFunctionData, getAddress, parseEventLogs } from "viem";
 import { expect } from "chai";
 
-describe("Futures - multicall write", function () {
-  it("should perform multicall write", async function () {
+describe("Futures - multicall write", () => {
+  it("should perform multicall write", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, pc } = accounts;

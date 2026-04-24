@@ -59,7 +59,7 @@ async function main() {
       }
 
       const sign = match[1] === "-" ? -1 : 1;
-      const percent = parseFloat(match[2]) * sign;
+      const percent = Number.parseFloat(match[2]) * sign;
 
       // Calculate new price
       const newPrice = currentPrice * (1 + percent / 100);
@@ -76,7 +76,7 @@ async function main() {
         const [, newAnswer] = await btcPriceOracleMock.read.latestRoundData();
         currentPrice = Number(formatUnits(newAnswer, decimals));
 
-        console.log(`✓ Transaction confirmed!`);
+        console.log("✓ Transaction confirmed!");
         console.log(`✓ New oracle price: $${currentPrice.toLocaleString()}`);
       } catch (error) {
         console.error("Transaction failed:", error);

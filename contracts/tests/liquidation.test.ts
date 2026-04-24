@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { parseEventLogs, parseUnits, getAddress, Account } from "viem";
+import { parseEventLogs, parseUnits, getAddress, type Account } from "viem";
 import { deployFuturesFixture } from "./fixtures";
 import { catchError } from "../lib/lib";
 import { viem } from "hardhat";
@@ -61,9 +61,9 @@ async function getMarginDeficit(
   return marginDeficit;
 }
 
-describe("Futures - Liquidation", function () {
-  describe("Margin Call - Position Liquidation", function () {
-    it("should liquidate buyer position when buyer is at loss and margin insufficient", async function () {
+describe("Futures - Liquidation", () => {
+  describe("Margin Call - Position Liquidation", () => {
+    it("should liquidate buyer position when buyer is at loss and margin insufficient", async () => {
       const { contracts, accounts, entryPricePerDay, deliveryDate, positionId } = await loadFixture(
         positionWithMarginFixture
       );
@@ -136,7 +136,7 @@ describe("Futures - Liquidation", function () {
       }
     });
 
-    it("should liquidate seller position when seller is at loss and margin insufficient", async function () {
+    it("should liquidate seller position when seller is at loss and margin insufficient", async () => {
       const { contracts, accounts, entryPricePerDay, deliveryDate, positionId } = await loadFixture(
         positionWithMarginFixture
       );
@@ -203,7 +203,7 @@ describe("Futures - Liquidation", function () {
       }
     });
 
-    it("should close orders first, then positions during margin call", async function () {
+    it("should close orders first, then positions during margin call", async () => {
       const { contracts, accounts, entryPricePerDay, deliveryDate, config } = await loadFixture(
         positionWithMarginFixture
       );
@@ -278,7 +278,7 @@ describe("Futures - Liquidation", function () {
       // Verify orders and position are closed (events confirm this)
     });
 
-    it("should liquidate multiple positions if needed", async function () {
+    it("should liquidate multiple positions if needed", async () => {
       const data = await loadFixture(deployFuturesFixture);
       const { contracts, accounts, config } = data;
 
@@ -335,7 +335,7 @@ describe("Futures - Liquidation", function () {
       expect(sellerMarginDeficit2 <= 0n).to.be.true;
     });
 
-    it("should not liquidate if margin is sufficient", async function () {
+    it("should not liquidate if margin is sufficient", async () => {
       const { contracts, accounts, entryPricePerDay } = await loadFixture(
         positionWithMarginFixture
       );
@@ -368,7 +368,7 @@ describe("Futures - Liquidation", function () {
       // Verify position still exists (no PositionClosed event was emitted)
     });
 
-    it("should only allow validator to call marginCall", async function () {
+    it("should only allow validator to call marginCall", async () => {
       const { contracts, accounts } = await loadFixture(positionWithMarginFixture);
       const { futures } = contracts;
       const { buyer, seller } = accounts;
@@ -380,7 +380,7 @@ describe("Futures - Liquidation", function () {
       });
     });
 
-    it("should correctly calculate and transfer PnL when buyer profits", async function () {
+    it("should correctly calculate and transfer PnL when buyer profits", async () => {
       const { contracts, accounts, entryPricePerDay } = await loadFixture(
         positionWithMarginFixture
       );
@@ -434,7 +434,7 @@ describe("Futures - Liquidation", function () {
       }
     });
 
-    it("should create counterparty order when buyer is liquidated", async function () {
+    it("should create counterparty order when buyer is liquidated", async () => {
       const { contracts, accounts, positionId } = await loadFixture(positionWithMarginFixture);
       const { futures, hashrateOracle } = contracts;
       const { seller, buyer, validator, pc } = accounts;
@@ -495,7 +495,7 @@ describe("Futures - Liquidation", function () {
       expect(order.isBuy).to.equal(false);
     });
 
-    it("should create counterparty order when seller is liquidated", async function () {
+    it("should create counterparty order when seller is liquidated", async () => {
       const { contracts, accounts, positionId } = await loadFixture(positionWithMarginFixture);
       const { futures, hashrateOracle } = contracts;
       const { seller, buyer, validator, pc } = accounts;

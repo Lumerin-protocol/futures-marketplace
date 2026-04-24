@@ -3,6 +3,17 @@ import { deployFuturesFixture } from "./fixtures";
 import { parseEventLogs, parseUnits } from "viem";
 import { expect } from "chai";
 import { quantizePrice } from "./utils";
+import type { deployOnlyFuturesFixture } from "./fixtures";
+
+// Combined balance: PnL flows through INSURANCE_FUND_ADDR, fees accumulate at futures.address.
+async function totalContractBalance(contracts: Awaited<ReturnType<typeof deployOnlyFuturesFixture>>["contracts"]) {
+  const { futures, collateralVault } = contracts;
+  const insuranceFundAddr = await collateralVault.read.INSURANCE_FUND_ADDR();
+  return (
+    await futures.read.balanceOf([futures.address]) +
+    await futures.read.balanceOf([insuranceFundAddr])
+  );
+}
 
 describe("Futures - Offset & Cash Settlement", () => {
   it("should handle position offset and settlement with contract balance correctly when buyer exits at profit", async () => {
@@ -21,7 +32,7 @@ describe("Futures - Offset & Cash Settlement", () => {
     await futures.write.addMargin([marginAmount], { account: buyer2.account });
 
     // Get initial balances
-    const contractBalanceBefore = await futures.read.balanceOf([futures.address]);
+    const contractBalanceBefore = await totalContractBalance(contracts);
     const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
 
     // Step 2: Party A (buyer) enters into position with Party B (seller) at price 100
@@ -68,7 +79,7 @@ describe("Futures - Offset & Cash Settlement", () => {
     // Step 5: Verify buyer was credited from contract balance (profit scenario)
     // When buyer exits at higher price, they profit, so contract pays them
     const buyerBalanceAfterOffset = await futures.read.balanceOf([buyer.account.address]);
-    const contractBalanceAfterOffset = await futures.read.balanceOf([futures.address]);
+    const contractBalanceAfterOffset = await totalContractBalance(contracts);
 
     // Calculate expected PnL: (exitPrice - initialPrice) * deliveryDurationDays
     const expectedPnL = (exitPrice - initialPrice) * BigInt(config.deliveryDurationDays);
@@ -88,16 +99,13 @@ describe("Futures - Offset & Cash Settlement", () => {
     // Step 6: Move time forward to delivery date and settle the new position
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
 
-    // Get balances before settlement
-    const contractBalanceBeforeSettlement = await futures.read.balanceOf([futures.address]);
-
     // Close delivery for the new position
     await futures.write.closeDelivery([newPositionId, false], {
       account: validator.account,
     });
 
     // Step 7: Verify funds are returned to contract balance during settlement
-    const contractBalanceAfterSettlement = await futures.read.balanceOf([futures.address]);
+    const contractBalanceAfterSettlement = await totalContractBalance(contracts);
     expect(contractBalanceBefore + totalOrderFees).to.equal(contractBalanceAfterSettlement);
   });
 
@@ -117,7 +125,7 @@ describe("Futures - Offset & Cash Settlement", () => {
     await futures.write.addMargin([marginAmount], { account: buyer2.account });
 
     // Get initial balances
-    const contractBalanceBefore = await futures.read.balanceOf([futures.address]);
+    const contractBalanceBefore = await totalContractBalance(contracts);
     const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
 
     // Step 2: Party A (buyer) enters into position with Party B (seller) at price 100
@@ -162,7 +170,7 @@ describe("Futures - Offset & Cash Settlement", () => {
 
     // Step 5: Verify buyer was debited from contract balance (loss scenario)
     const buyerBalanceAfterOffset = await futures.read.balanceOf([buyer.account.address]);
-    const contractBalanceAfterOffset = await futures.read.balanceOf([futures.address]);
+    const contractBalanceAfterOffset = await totalContractBalance(contracts);
 
     // Calculate expected PnL: (exitPrice - initialPrice) * deliveryDurationDays
     const expectedPnL = (exitPrice - initialPrice) * BigInt(config.deliveryDurationDays);
@@ -190,7 +198,7 @@ describe("Futures - Offset & Cash Settlement", () => {
     });
 
     // Step 7: Verify funds are returned to contract balance during settlement
-    const contractBalanceAfterSettlement = await futures.read.balanceOf([futures.address]);
+    const contractBalanceAfterSettlement = await totalContractBalance(contracts);
     expect(contractBalanceBefore + totalOrderFees).to.equal(contractBalanceAfterSettlement);
     const marketPrice = await futures.read.getMarketPrice();
 

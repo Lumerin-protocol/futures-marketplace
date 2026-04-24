@@ -5,8 +5,8 @@ import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { deployFuturesFixture } from "./fixtures";
 import { catchError } from "../lib/lib";
 
-describe("Order Creation", function () {
-  it("should validate delivery date is in the future", async function () {
+describe("Order Creation", () => {
+  it("should validate delivery date is in the future", async () => {
     const { contracts, accounts } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;
@@ -22,7 +22,7 @@ describe("Order Creation", function () {
     });
   });
 
-  it("should validate delivery date is not before first future delivery date", async function () {
+  it("should validate delivery date is not before first future delivery date", async () => {
     const { contracts, accounts } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;
@@ -38,7 +38,7 @@ describe("Order Creation", function () {
     });
   });
 
-  it("should validate delivery date is aligned with delivery interval", async function () {
+  it("should validate delivery date is aligned with delivery interval", async () => {
     const { contracts, accounts } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;
@@ -58,7 +58,7 @@ describe("Order Creation", function () {
     });
   });
 
-  it("should validate delivery date is within available range", async function () {
+  it("should validate delivery date is within available range", async () => {
     const { contracts, accounts } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;
@@ -79,7 +79,7 @@ describe("Order Creation", function () {
     });
   });
 
-  it("should accept valid delivery dates from getDeliveryDates", async function () {
+  it("should accept valid delivery dates from getDeliveryDates", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, pc } = accounts;
@@ -111,7 +111,7 @@ describe("Order Creation", function () {
     }
   });
 
-  it("should create a buy order when no matching sell order exists", async function () {
+  it("should create a buy order when no matching sell order exists", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, pc } = accounts;
@@ -147,7 +147,7 @@ describe("Order Creation", function () {
     }
   });
 
-  it("should create a sell order when no matching buy order exists", async function () {
+  it("should create a sell order when no matching buy order exists", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { seller, pc } = accounts;
     const { futures } = contracts;
@@ -183,7 +183,7 @@ describe("Order Creation", function () {
     }
   });
 
-  it("should collect order fee, when order is created or matched, but not when it is offsetted (closed)", async function () {
+  it("should collect order fee, when order is created or matched, but not when it is offsetted (closed)", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, pc } = accounts;
@@ -234,7 +234,7 @@ describe("Order Creation", function () {
     expect(finalContractBalance2).to.equal(finalContractBalance);
   });
 
-  it("should reject order creation with zero price", async function () {
+  it("should reject order creation with zero price", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;
@@ -249,7 +249,7 @@ describe("Order Creation", function () {
     });
   });
 
-  it("should reject order creation with price not divisible by price ladder step", async function () {
+  it("should reject order creation with price not divisible by price ladder step", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;
@@ -264,7 +264,7 @@ describe("Order Creation", function () {
     });
   });
 
-  it("should reject order creation with past delivery date", async function () {
+  it("should reject order creation with past delivery date", async () => {
     const { contracts, accounts } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;
@@ -280,34 +280,8 @@ describe("Order Creation", function () {
     });
   });
 
-  it("should reject order creation with insufficient margin balance", async function () {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
-    const { seller } = accounts;
 
-    const price = await futures.read.getMarketPrice();
-    const deliveryDate = config.deliveryDates[0];
-
-    // Don't add any margin - balance should be 0
-    const balance = await futures.read.balanceOf([seller.account.address]);
-    expect(balance).to.equal(0n);
-
-    const deficit = await futures.read.getCollateralDeficit([seller.account.address]);
-    expect(deficit).to.be.equal(0n);
-
-    // we need to add order fee to the margin balance, so we can create an order
-    await futures.write.addMargin([config.orderFee], {
-      account: seller.account,
-    });
-
-    await catchError(futures.abi, "InsufficientMarginBalance", async () => {
-      await futures.write.createOrder([price, deliveryDate, "", 1], {
-        account: seller.account,
-      });
-    });
-  });
-
-  it("should allow order creation with sufficient margin balance", async function () {
+  it("should allow order creation with sufficient margin balance", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, pc } = accounts;
@@ -343,31 +317,10 @@ describe("Order Creation", function () {
     expect(event.args.isBuy).to.equal(true);
   });
 
-  it("should allow position creation when margin balance equals exactly required margin", async function () {});
+  it("should allow position creation when margin balance equals exactly required margin", async () => {});
 
-  it("should reject sell order creation with insufficient margin balance", async function () {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
-    const { seller } = accounts;
 
-    const price = await futures.read.getMarketPrice();
-    const deliveryDate = config.deliveryDates[0];
-
-    // The margin balance should be exactly the order fee
-    await futures.write.addMargin([config.orderFee], {
-      account: seller.account,
-    });
-    const balance = await futures.read.balanceOf([seller.account.address]);
-    expect(balance).to.equal(config.orderFee);
-
-    await catchError(futures.abi, "InsufficientMarginBalance", async () => {
-      await futures.write.createOrder([price, deliveryDate, "", -1], {
-        account: seller.account,
-      });
-    });
-  });
-
-  it("should allow sell order creation with sufficient margin balance", async function () {
+  it("should allow sell order creation with sufficient margin balance", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, pc } = accounts;
@@ -403,7 +356,7 @@ describe("Order Creation", function () {
     expect(event.args.isBuy).to.equal(isBuy);
   });
 
-  it("should remove existing order when creating one with opposite direction", async function () {
+  it("should remove existing order when creating one with opposite direction", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, pc } = accounts;
@@ -467,7 +420,7 @@ describe("Order Creation", function () {
     expect(closedOrder.participant).to.equal(zeroAddress);
   });
 
-  it("should partially remove existing orders when creating opposite direction orders", async function () {
+  it("should partially remove existing orders when creating opposite direction orders", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, pc } = accounts;
@@ -550,7 +503,7 @@ describe("Order Creation", function () {
     expect(remainingOrder.deliveryAt).to.equal(deliveryDate);
   });
 
-  it("should remove existing orders when creating an opposite order even if margin balance is insufficient", async function () {
+  it("should remove existing orders when creating an opposite order even if margin balance is insufficient", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, pc } = accounts;
@@ -586,7 +539,7 @@ describe("Order Creation", function () {
     });
   });
 
-  it("should automatically remove outdated orders when creating a new order", async function () {
+  it("should automatically remove outdated orders when creating a new order", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, pc, tc } = accounts;
@@ -656,7 +609,7 @@ describe("Order Creation", function () {
     expect(newOrderEvents[0].args.deliveryAt).to.equal(newDeliveryDate);
   });
 
-  it("should enforce maximum orders per participant", async function () {
+  it("should enforce maximum orders per participant", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;

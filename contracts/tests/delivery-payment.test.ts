@@ -4,9 +4,9 @@ import { parseEventLogs, parseUnits, getAddress, maxUint256 } from "viem";
 import { deployFuturesFixture } from "./fixtures";
 import { catchError } from "../lib/lib";
 
-describe("Futures Delivery Payment", function () {
-  describe("depositDeliveryPayment", function () {
-    it("should allow buyer to deposit delivery payment before delivery date", async function () {
+describe("Futures Delivery Payment", () => {
+  describe("depositDeliveryPayment", () => {
+    it("should allow buyer to deposit delivery payment before delivery date", async () => {
       const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
       const { futures, usdcMock } = contracts;
       const { seller, buyer, pc } = accounts;
@@ -65,7 +65,7 @@ describe("Futures Delivery Payment", function () {
       expect(position.paid).to.equal(true);
     });
 
-    it("should reject deposit after delivery date has passed", async function () {
+    it("should reject deposit after delivery date has passed", async () => {
       const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
       const { futures } = contracts;
       const { seller, buyer, pc, tc } = accounts;
@@ -111,8 +111,8 @@ describe("Futures Delivery Payment", function () {
     });
   });
 
-  describe("depositDeliveryPayment (position ids)", function () {
-    it("should allow buyer to deposit delivery payment for specific positions", async function () {
+  describe("depositDeliveryPayment (position ids)", () => {
+    it("should allow buyer to deposit delivery payment for specific positions", async () => {
       const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
       const { futures } = contracts;
       const { seller, buyer, buyer2, pc } = accounts;
@@ -170,7 +170,7 @@ describe("Futures Delivery Payment", function () {
       expect(position2.paid).to.equal(true);
     });
 
-    it("should revert if delivery date already passed for a position", async function () {
+    it("should revert if delivery date already passed for a position", async () => {
       const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
       const { futures } = contracts;
       const { seller, buyer, pc, tc } = accounts;
@@ -203,7 +203,7 @@ describe("Futures Delivery Payment", function () {
       });
     });
 
-    it("should revert when caller is not the position buyer", async function () {
+    it("should revert when caller is not the position buyer", async () => {
       const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
       const { futures } = contracts;
       const { seller, buyer, pc } = accounts;
@@ -234,7 +234,7 @@ describe("Futures Delivery Payment", function () {
       });
     });
 
-    it("should revert if position was already paid", async function () {
+    it("should revert if position was already paid", async () => {
       const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
       const { futures } = contracts;
       const { seller, buyer, pc } = accounts;
@@ -273,7 +273,7 @@ describe("Futures Delivery Payment", function () {
       });
     });
 
-    it("should revert when position destination URL is not set", async function () {
+    it("should revert when position destination URL is not set", async () => {
       const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
       const { futures } = contracts;
       const { seller, buyer, pc } = accounts;
@@ -309,8 +309,8 @@ describe("Futures Delivery Payment", function () {
     });
   });
 
-  describe("withdrawDeliveryPayment", function () {
-    it("should allow seller to withdraw delivery payment after delivery finished", async function () {
+  describe("withdrawDeliveryPayment", () => {
+    it("should allow seller to withdraw delivery payment after delivery finished", async () => {
       const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
       const { futures } = contracts;
       const { seller, buyer, pc, tc } = accounts;
@@ -378,7 +378,7 @@ describe("Futures Delivery Payment", function () {
       expect(position.paid).to.equal(false);
     });
 
-    it("should reject withdrawal before delivery is finished", async function () {
+    it("should reject withdrawal before delivery is finished", async () => {
       const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
       const { futures } = contracts;
       const { seller, buyer, pc, tc } = accounts;
@@ -428,7 +428,7 @@ describe("Futures Delivery Payment", function () {
       });
     });
 
-    it("should only allow seller to withdraw their own positions", async function () {
+    it("should only allow seller to withdraw their own positions", async () => {
       const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
       const { futures } = contracts;
       const { seller, buyer, buyer2, pc, tc } = accounts;
@@ -513,7 +513,7 @@ describe("Futures Delivery Payment", function () {
       expect(buyer2BalanceAfter).to.equal(buyer2BalanceBefore + totalPayment);
     });
 
-    it("should only withdraw positions that are marked as paid", async function () {
+    it("should only withdraw positions that are marked as paid", async () => {
       const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
       const { futures } = contracts;
       const { seller, buyer, buyer2, pc, tc } = accounts;
@@ -593,8 +593,8 @@ describe("Futures Delivery Payment", function () {
     });
   });
 
-  describe("Cash Settlement when buyer doesn't deposit", function () {
-    it("should allow cash settlement via closeDelivery when buyer didn't deposit", async function () {
+  describe("Cash Settlement when buyer doesn't deposit", () => {
+    it("should allow cash settlement via closeDelivery when buyer didn't deposit", async () => {
       const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
       const { futures } = contracts;
       const { seller, buyer, validator, pc, tc } = accounts;
@@ -662,7 +662,7 @@ describe("Futures Delivery Payment", function () {
         .to.be.true;
     });
 
-    it("should allow buyer to close delivery via cash settlement when they didn't deposit", async function () {
+    it("should allow buyer to close delivery via cash settlement when they didn't deposit", async () => {
       const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
       const { futures } = contracts;
       const { seller, buyer, pc, tc } = accounts;
@@ -716,7 +716,7 @@ describe("Futures Delivery Payment", function () {
       expect(getAddress(closeEvent.args.closedBy)).to.equal(getAddress(buyer.account.address));
     });
 
-    it("should allow seller to close delivery via cash settlement when buyer didn't deposit", async function () {
+    it("should allow seller to close delivery via cash settlement when buyer didn't deposit", async () => {
       const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
       const { futures } = contracts;
       const { seller, buyer, pc, tc } = accounts;

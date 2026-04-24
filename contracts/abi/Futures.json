@@ -1,6 +1,12 @@
 [
   {
-    "inputs": [],
+    "inputs": [
+      {
+        "internalType": "contract ICollateralVault",
+        "name": "_collateralVault",
+        "type": "address"
+      }
+    ],
     "stateMutability": "nonpayable",
     "type": "constructor"
   },
@@ -13,6 +19,11 @@
       }
     ],
     "name": "AddressEmptyCode",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "CollateralTokenMismatch",
     "type": "error"
   },
   {
@@ -143,8 +154,29 @@
     "type": "error"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "reserve",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "required",
+        "type": "uint256"
+      }
+    ],
+    "name": "InsufficientContractReserve",
+    "type": "error"
+  },
+  {
     "inputs": [],
     "name": "InsufficientMarginBalance",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InsuranceFundNotConfigured",
     "type": "error"
   },
   {
@@ -245,14 +277,8 @@
     "type": "error"
   },
   {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "token",
-        "type": "address"
-      }
-    ],
-    "name": "SafeERC20FailedOperation",
+    "inputs": [],
+    "name": "TransferDisabled",
     "type": "error"
   },
   {
@@ -285,6 +311,11 @@
       }
     ],
     "name": "ValueOutOfRange",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroVaultAddress",
     "type": "error"
   },
   {
@@ -773,6 +804,19 @@
   },
   {
     "inputs": [],
+    "name": "collateralVault",
+    "outputs": [
+      {
+        "internalType": "contract ICollateralVault",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "collectedFeesBalance",
     "outputs": [
       {
@@ -878,19 +922,6 @@
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "depositReservePool",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
     "inputs": [],
     "name": "firstFutureDeliveryDate",
     "outputs": [
@@ -911,6 +942,25 @@
         "internalType": "uint8",
         "name": "",
         "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "getCollateralBalance",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -1258,6 +1308,19 @@
   },
   {
     "inputs": [],
+    "name": "marginEngine",
+    "outputs": [
+      {
+        "internalType": "contract IPortfolioMarginEngine",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "minimumPriceIncrement",
     "outputs": [
       {
@@ -1453,6 +1516,19 @@
     "inputs": [
       {
         "internalType": "address",
+        "name": "_marginEngine",
+        "type": "address"
+      }
+    ],
+    "name": "setMarginEngine",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
         "name": "addr",
         "type": "address"
       }
@@ -1557,12 +1633,12 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "_to",
+        "name": "",
         "type": "address"
       },
       {
         "internalType": "uint256",
-        "name": "_amount",
+        "name": "",
         "type": "uint256"
       }
     ],
@@ -1574,24 +1650,24 @@
         "type": "bool"
       }
     ],
-    "stateMutability": "nonpayable",
+    "stateMutability": "pure",
     "type": "function"
   },
   {
     "inputs": [
       {
         "internalType": "address",
-        "name": "_from",
+        "name": "",
         "type": "address"
       },
       {
         "internalType": "address",
-        "name": "_to",
+        "name": "",
         "type": "address"
       },
       {
         "internalType": "uint256",
-        "name": "_amount",
+        "name": "",
         "type": "uint256"
       }
     ],
@@ -1603,7 +1679,7 @@
         "type": "bool"
       }
     ],
-    "stateMutability": "nonpayable",
+    "stateMutability": "pure",
     "type": "function"
   },
   {
@@ -1679,19 +1755,6 @@
       }
     ],
     "name": "withdrawDeliveryPayment",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "withdrawReservePool",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

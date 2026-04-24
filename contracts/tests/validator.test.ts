@@ -4,8 +4,8 @@ import { parseEventLogs, parseUnits, getAddress } from "viem";
 import { expect } from "chai";
 import { catchError } from "../lib/lib";
 
-describe("Validator Functions", function () {
-  it("should allow validator to close position after start time", async function () {
+describe("Validator Functions", () => {
+  it("should allow validator to close position after start time", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, buyer, validator, pc, tc } = accounts;
@@ -57,7 +57,7 @@ describe("Validator Functions", function () {
     expect(getAddress(closeEvent.args.closedBy)).to.equal(getAddress(validator.account.address));
   });
 
-  it("should reject validator closing position before start time", async function () {
+  it("should reject validator closing position before start time", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, buyer, validator, pc } = accounts;
@@ -97,7 +97,7 @@ describe("Validator Functions", function () {
     });
   });
 
-  it("should reject non-validator from calling validator functions", async function () {
+  it("should reject non-validator from calling validator functions", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, buyer, buyer2, pc, tc } = accounts;

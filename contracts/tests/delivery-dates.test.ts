@@ -3,8 +3,8 @@ import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { deployFuturesFixture } from "./fixtures";
 import { catchError } from "../lib/lib";
 
-describe("Delivery Date Management", function () {
-  it("should return correct delivery dates array", async function () {
+describe("Delivery Date Management", () => {
+  it("should return correct delivery dates array", async () => {
     const { contracts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
 
@@ -17,7 +17,7 @@ describe("Delivery Date Management", function () {
     }
   });
 
-  it("should calculate delivery dates correctly based on interval", async function () {
+  it("should calculate delivery dates correctly based on interval", async () => {
     const { contracts } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
 
@@ -36,7 +36,7 @@ describe("Delivery Date Management", function () {
     }
   });
 
-  it("should allow owner to update future delivery dates count", async function () {
+  it("should allow owner to update future delivery dates count", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { owner, pc } = accounts;
@@ -67,7 +67,7 @@ describe("Delivery Date Management", function () {
     }
   });
 
-  it("should reject updating future delivery dates count to zero", async function () {
+  it("should reject updating future delivery dates count to zero", async () => {
     const { contracts, accounts } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { owner } = accounts;
@@ -79,7 +79,7 @@ describe("Delivery Date Management", function () {
     });
   });
 
-  it("should reject non-owner from updating future delivery dates count", async function () {
+  it("should reject non-owner from updating future delivery dates count", async () => {
     const { contracts, accounts } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;
@@ -91,7 +91,7 @@ describe("Delivery Date Management", function () {
     });
   });
 
-  it("should correctly read firstFutureDeliveryDate", async function () {
+  it("should correctly read firstFutureDeliveryDate", async () => {
     const { contracts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
 
@@ -102,7 +102,7 @@ describe("Delivery Date Management", function () {
     expect(firstFutureDeliveryDate).to.equal(config.firstFutureDeliveryDate);
   });
 
-  it("should correctly read delivery interval days", async function () {
+  it("should correctly read delivery interval days", async () => {
     const { contracts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
 
@@ -111,7 +111,7 @@ describe("Delivery Date Management", function () {
     expect(deliveryIntervalDays).to.equal(config.deliveryIntervalDays);
   });
 
-  it("should correctly read delivery duration days", async function () {
+  it("should correctly read delivery duration days", async () => {
     const { contracts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
 
@@ -119,7 +119,7 @@ describe("Delivery Date Management", function () {
     expect(deliveryDurationDays).to.equal(config.deliveryDurationDays);
   });
 
-  it("should update delivery dates when count is increased", async function () {
+  it("should update delivery dates when count is increased", async () => {
     const { contracts, accounts } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { owner } = accounts;
@@ -147,7 +147,7 @@ describe("Delivery Date Management", function () {
     }
   });
 
-  it("should update delivery dates when count is decreased", async function () {
+  it("should update delivery dates when count is decreased", async () => {
     const { contracts, accounts } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { owner } = accounts;
@@ -177,7 +177,7 @@ describe("Delivery Date Management", function () {
     }
   });
 
-  it("should return correct delivery dates array when time has passed", async function () {
+  it("should return correct delivery dates array when time has passed", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { tc, pc } = accounts;
@@ -195,7 +195,7 @@ describe("Delivery Date Management", function () {
     }
   });
 
-  it("should validate delivery date correctly", async function () {
+  it("should validate delivery date correctly", async () => {
     const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { tc, seller } = accounts;
