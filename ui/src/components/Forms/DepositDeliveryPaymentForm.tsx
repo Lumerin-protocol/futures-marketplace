@@ -4,7 +4,7 @@ import { useAccount } from "wagmi";
 import { useDepositDeliveryPayment } from "../../hooks/data/useDepositDeliveryPayment";
 import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpecs";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
-import { formatValue, paymentToken } from "../../lib/units";
+import { formatValue, PAYMENT_TOKEN_SCALE_NUM, paymentToken } from "../../lib/units";
 import { parseUnits, type TransactionReceipt } from "viem";
 import type { PositionBookPosition } from "../../hooks/data/usePositionBook";
 import { POSITION_BOOK_QK, waitForBlockNumberPositionBook } from "../../hooks/data/usePositionBook";
@@ -64,7 +64,7 @@ export const DepositDeliveryPaymentForm: FC<DepositDeliveryPaymentFormProps> = (
 
   // Calculate total amount based on price * quantity * deliveryDurationDays
   const calculatedAmount = useMemo(() => {
-    const pricePerDayNum = Number(pricePerDay) / 1e6; // Convert from wei to USDC
+    const pricePerDayNum = Number(pricePerDay) / PAYMENT_TOKEN_SCALE_NUM; // Convert from wei to USDC
     const totalAmount = pricePerDayNum * quantity * deliveryDurationDays;
     return totalAmount.toFixed(2);
   }, [pricePerDay, quantity, deliveryDurationDays]);
@@ -72,9 +72,9 @@ export const DepositDeliveryPaymentForm: FC<DepositDeliveryPaymentFormProps> = (
   // Calculate max quantity based on available balance
   const maxQuantity = useMemo(() => {
     if (!futureBalance.data) return unpaidPositions.length;
-    const pricePerDayNum = Number(pricePerDay) / 1e6;
+    const pricePerDayNum = Number(pricePerDay) / PAYMENT_TOKEN_SCALE_NUM;
     const totalCostPerContract = pricePerDayNum * deliveryDurationDays;
-    const balanceNum = Number(futureBalance.data) / 1e6;
+    const balanceNum = Number(futureBalance.data) / PAYMENT_TOKEN_SCALE_NUM;
     const maxAffordable = Math.floor(balanceNum / totalCostPerContract);
     return Math.min(maxAffordable, unpaidPositions.length);
   }, [futureBalance.data, pricePerDay, deliveryDurationDays, unpaidPositions.length]);
@@ -175,28 +175,6 @@ export const DepositDeliveryPaymentForm: FC<DepositDeliveryPaymentFormProps> = (
             Available: {maxQuantity} of {unpaidPositions.length} unpaid positions (limited by balance)
           </p>
         </div>
-        {/* <div className="p-4 rounded-lg bg-gray-800/50 border border-gray-700">
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-300">Price per day:</span>
-              <span className="text-white text-sm">{(Number(pricePerDay) / 1e6).toFixed(2)} USDC</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-300">Delivery duration:</span>
-              <span className="text-white text-sm">{deliveryDurationDays} days</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-300">Price per contract:</span>
-              <span className="text-white text-sm">
-                {((Number(pricePerDay) / 1e6) * deliveryDurationDays).toFixed(2)} USDC
-              </span>
-            </div>
-            <div className="flex justify-between pt-2 border-t border-gray-700">
-              <span className="text-sm font-medium text-gray-300">Total amount:</span>
-              <span className="text-white font-semibold">{calculatedAmount} USDC</span>
-            </div>
-          </div>
-        </div> */}
       </div>
     ),
     [
@@ -280,7 +258,7 @@ export const DepositDeliveryPaymentForm: FC<DepositDeliveryPaymentFormProps> = (
               <div className="flex justify-between items-center">
                 <span className="text-gray-300">Price per contract:</span>
                 <span className="text-white font-medium">
-                  {((Number(pricePerDay) / 1e6) * deliveryDurationDays).toFixed(2)} USDC
+                  {((Number(pricePerDay) / PAYMENT_TOKEN_SCALE_NUM) * deliveryDurationDays).toFixed(2)} USDC
                 </span>
               </div>
               <div className="flex justify-between items-center">

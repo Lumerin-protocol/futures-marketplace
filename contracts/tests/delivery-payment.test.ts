@@ -3,6 +3,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { parseEventLogs, parseUnits, getAddress, maxUint256 } from "viem";
 import { deployFuturesFixture } from "./fixtures";
 import { catchError } from "../lib/lib";
+import { refreshHashprice } from "./utils";
 
 describe("Futures Delivery Payment", function () {
   describe("depositDeliveryPayment", function () {
@@ -635,6 +636,7 @@ describe("Futures Delivery Payment", function () {
 
       // Move time to during delivery
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
+      await refreshHashprice(contracts.hashrateOracle);
 
       // Close delivery via cash settlement (validator blames seller)
       const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
@@ -699,6 +701,7 @@ describe("Futures Delivery Payment", function () {
       // Buyer does NOT deposit payment
       // Move time to during delivery
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
+      await refreshHashprice(contracts.hashrateOracle);
 
       // Buyer closes delivery via cash settlement (blames seller)
       const closeTxHash = await futures.write.closeDelivery([positionId, true], {
@@ -753,6 +756,7 @@ describe("Futures Delivery Payment", function () {
       // Buyer does NOT deposit payment
       // Move time to during delivery
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
+      await refreshHashprice(contracts.hashrateOracle);
 
       // Seller closes delivery via cash settlement (blames buyer)
       const closeTxHash = await futures.write.closeDelivery([positionId, false], {

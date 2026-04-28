@@ -11,6 +11,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { ContractMode } from "../../../types/types";
+import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE_NUM } from "../../../lib/units";
 
 interface OrderBookTableProps {
   onRowClick?: (price: string, amount: number | null) => void;
@@ -91,8 +92,8 @@ export const OrderBookTable = ({
         const key = level.price.toString();
         const existing = priceLevelMap.get(key) || { buyOrdersCount: 0, sellOrdersCount: 0, price: level.price };
         
-        // Divide by 10^6 to get actual quantity with 6 decimals
-        const quantity = Number(level.totalQuantity) / 1e6;
+        // Divide by QUANTITY_SCALE_NUM to get actual quantity with QUANTITY_DECIMALS
+        const quantity = Number(level.totalQuantity) / QUANTITY_SCALE_NUM;
         
         if (level.isBid) {
           existing.buyOrdersCount = quantity;
@@ -132,7 +133,7 @@ export const OrderBookTable = ({
   const currentOrderBookState = useMemo(() => {
     const state = new Map<number, { bidUnits: number; askUnits: number }>();
     const minimumPriceIncrement = contractSpecsQuery.data?.data?.minimumPriceIncrement
-      ? Number(contractSpecsQuery.data.data.minimumPriceIncrement) / 1e6
+      ? Number(contractSpecsQuery.data.data.minimumPriceIncrement) / PAYMENT_TOKEN_SCALE_NUM
       : null;
 
     if (!orderBookData || orderBookData.length <= 0) {
@@ -141,7 +142,7 @@ export const OrderBookTable = ({
 
     // Data is already aggregated with buyOrdersCount and sellOrdersCount
     for (const order of orderBookData) {
-      const rawPrice = Number(order.price) / 1e6;
+      const rawPrice = Number(order.price) / PAYMENT_TOKEN_SCALE_NUM;
       const price = normalizePrice(rawPrice, minimumPriceIncrement);
       state.set(price, {
         bidUnits: order.buyOrdersCount,
@@ -385,11 +386,19 @@ export const OrderBookTable = ({
                   }}
                 >
                   <BidCell $isHighlighted={row.highlightBid}>
-                    {row.bidUnits ? (row.bidUnits * row.price).toFixed(2) : ""}
+                    {row.bidUnits
+                      ? contractMode === "perpetual"
+                        ? (row.bidUnits * row.price).toFixed(2)
+                        : `${row.bidUnits} (${(row.bidUnits * row.price).toFixed(2)})`
+                      : ""}
                   </BidCell>
                   <PriceCell $isLastHashprice={row.isLastHashprice}>{row.price.toFixed(2)}</PriceCell>
                   <AskCell $isHighlighted={row.highlightAsk}>
-                    {row.askUnits ? (row.askUnits * row.price).toFixed(2) : ""}
+                    {row.askUnits
+                      ? contractMode === "perpetual"
+                        ? (row.askUnits * row.price).toFixed(2)
+                        : `${row.askUnits} (${(row.askUnits * row.price).toFixed(2)})`
+                      : ""}
                   </AskCell>
                 </TableRow>
               );

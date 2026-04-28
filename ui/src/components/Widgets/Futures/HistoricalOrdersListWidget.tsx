@@ -2,6 +2,8 @@ import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import type { HistoricalOrder } from "../../../hooks/data/useHistoricalOrders";
+import { DateTimeCell } from "../../DateTimeCell";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 
 interface HistoricalOrdersListWidgetProps {
   orders: HistoricalOrder[];
@@ -10,29 +12,7 @@ interface HistoricalOrdersListWidgetProps {
 
 export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrdersListWidgetProps) => {
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2);
-  };
-
-  const formatDeliveryDate = (deliveryDate: bigint) => {
-    const date = new Date(Number(deliveryDate) * 1000);
-    return date.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(Number(timestamp) * 1000);
-    return date.toLocaleString("en-US", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
   // Group orders by type, pricePerDay, and deliveryAt
@@ -100,7 +80,7 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
           <tbody>
             {groupedOrdersArray.map((groupedOrder, index) => (
               <TableRow key={`${groupedOrder.isBuy}-${groupedOrder.pricePerDay}-${groupedOrder.deliveryAt}-${index}`}>
-                <td>{formatDeliveryDate(groupedOrder.deliveryAt)}</td>
+                <td><DateTimeCell timestamp={groupedOrder.deliveryAt} /></td>
                 <td>
                   <TypeBadge $type={groupedOrder.isBuy ? "Long" : "Short"}>
                     {groupedOrder.isBuy ? "Long" : "Short"}
@@ -108,8 +88,8 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
                 </td>
                 <td>{formatPrice(groupedOrder.pricePerDay)}</td>
                 <td>{groupedOrder.amount}</td>
-                <td>{formatTimestamp(groupedOrder.timestamp)}</td>
-                <td>{groupedOrder.closedAt ? formatTimestamp(groupedOrder.closedAt) : "-"}</td>
+                <td><DateTimeCell timestamp={groupedOrder.timestamp} /></td>
+                <td>{groupedOrder.closedAt ? <DateTimeCell timestamp={groupedOrder.closedAt} /> : "-"}</td>
               </TableRow>
             ))}
           </tbody>
@@ -174,8 +154,8 @@ const Table = styled("table")`
     white-space: nowrap;
     
     &:first-child {
-      width: 200px;
-      min-width: 200px;
+      width: 130px;
+      min-width: 130px;
     }
   }
   
@@ -186,8 +166,8 @@ const Table = styled("table")`
     border-bottom: 1px solid ${tokens.overlay.white05};
     
     &:first-child {
-      width: 200px;
-      min-width: 200px;
+      width: 130px;
+      min-width: 130px;
     }
   }
 `;

@@ -1,10 +1,14 @@
 import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import { useMemo } from "react";
-import { formatHashrateTHPS } from "../../../lib/units";
+import { formatHashrateTHPS, HASHRATE_TH_SCALE_NUM, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { useGetDeliveryDates } from "../../../hooks/data/useGetDeliveryDates";
 import { useFuturesContractConstants } from "../../../hooks/data/useFuturesContractConstants";
 import { useFuturesTokenInfo } from "../../../hooks/data/useFuturesTokenInfo";
+import { usePerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
+import { usePerpsContractConstants } from "../../../hooks/data/perps/usePerpsContractConstants";
+import { usePerpsTokenInfo } from "../../../hooks/data/perps/usePerpsTokenInfo";
+import { useFundingRate } from "../../../hooks/data/perps/useFundingRate";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { ContractMode } from "../../../types/types";
 
@@ -45,9 +49,9 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
     return formatHashrateTHPS(speedHps).full;
   };
 
-  // Calculate TH/s (speedHps / 10^12)
+  // Calculate TH/s (speedHps / HASHRATE_TH_SCALE_NUM)
   const formatSpeedTHs = (speedHps: bigint) => {
-    const thps = Number(speedHps) / 10 ** 12;
+    const thps = Number(speedHps) / HASHRATE_TH_SCALE_NUM;
     return thps.toFixed(0);
   };
 
@@ -60,63 +64,7 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
     );
   }
   if (contractMode === "perpetual") {
-    return (
-      <ModalContainer>
-        <h2>Statistics</h2>
-
-        {/* MARKET STATISTICS */}
-        <SpecSection>
-          <SectionTitle>MARKET STATISTICS</SectionTitle>
-          <SpecItem>
-            <SpecLabel>Total Volume</SpecLabel>
-            <SpecValue>1,234,567 USDC</SpecValue>
-          </SpecItem>
-
-          <SpecItem>
-            <SpecLabel>Total Order Count</SpecLabel>
-            <SpecValue>8,523</SpecValue>
-          </SpecItem>
-
-          <SpecItem>
-            <SpecLabel>24h Volume</SpecLabel>
-            <SpecValue>456,789 USDC</SpecValue>
-          </SpecItem>
-
-          <SpecItem>
-            <SpecLabel>24h Trades</SpecLabel>
-            <SpecValue>3,241</SpecValue>
-          </SpecItem>
-        </SpecSection>
-
-        {/* FUNDING */}
-        <SpecSection>
-          <SectionTitle>FUNDING</SectionTitle>
-          <SpecItem>
-            <SpecLabel>Current Funding Rate</SpecLabel>
-            <SpecValue>0%</SpecValue>
-          </SpecItem>
-
-          <SpecItem>
-            <SpecLabel>Next Funding</SpecLabel>
-            <SpecValue>In 7h 23m</SpecValue>
-          </SpecItem>
-        </SpecSection>
-
-        {/* LIQUIDITY */}
-        <SpecSection>
-          <SectionTitle>LIQUIDITY</SectionTitle>
-          <SpecItem>
-            <SpecLabel>Open Interest</SpecLabel>
-            <SpecValue>2,345,678 USDC</SpecValue>
-          </SpecItem>
-
-          <SpecItem>
-            <SpecLabel>Active Orders</SpecLabel>
-            <SpecValue>1,256</SpecValue>
-          </SpecItem>
-        </SpecSection>
-      </ModalContainer>
-    );
+    return <PerpetualStatistics />;
   }
 
   // For futures mode, check if contractSpecs exist
@@ -135,7 +83,7 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
   const docsUrl = process.env.REACT_APP_FUTURES_DOCS_URL;
 
   // Calculate tick value: minimumPriceIncrement * deliveryDurationDays
-  const tickSize = Number(contractSpecs.minimumPriceIncrement) / 1e6;
+  const tickSize = Number(contractSpecs.minimumPriceIncrement) / PAYMENT_TOKEN_SCALE_NUM;
   const tickValue = tickSize * contractSpecs.deliveryDurationDays;
 
   // Calculate total coverage days
@@ -256,7 +204,206 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
   );
 };
 
+const PerpetualStatistics = () => {
+  const { data: perpsCollectionData } = usePerpsCollection();
+  const perpsConstants = usePerpsContractConstants();
+  const perpsTokenInfo = usePerpsTokenInfo();
+  const fundingRateQuery = useFundingRate();
+  const perpsCollection = perpsCollectionData?.data;
+  const tokenSymbol = perpsTokenInfo.symbol || "USDC";
+  const tokenName = perpsTokenInfo.name || "USD Coin";
+  const contractAddress = process.env.REACT_APP_PERPS_TOKEN_ADDRESS;
+  const docsUrl = process.env.REACT_APP_FUTURES_DOCS_URL;
+
+  const tickSize = perpsCollection ? perpsCollection.minimumPriceIncrement / PAYMENT_TOKEN_SCALE_NUM : null;
+  const minMarginPerOrder = perpsCollection ? perpsCollection.minimumMarginPerOrder / PAYMENT_TOKEN_SCALE_NUM : null;
+
+  const formatFundingPeriod = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+    if (hours > 0) return `${hours}h`;
+    return `${minutes}m`;
+  };
+
+  const nextFundingCountdown = useMemo(() => {
+    if (!perpsConstants.lastFundingUpdateTime || !perpsConstants.fundingPeriodSeconds) return null;
+    const nextFundingTime = perpsConstants.lastFundingUpdateTime + perpsConstants.fundingPeriodSeconds;
+    const now = Math.floor(Date.now() / 1000);
+    const remaining = nextFundingTime - now;
+    if (remaining <= 0) return "Now";
+    const hours = Math.floor(remaining / 3600);
+    const minutes = Math.floor((remaining % 3600) / 60);
+    if (hours > 0 && minutes > 0) return `In ${hours}h ${minutes}m`;
+    if (hours > 0) return `In ${hours}h`;
+    return `In ${minutes}m`;
+  }, [perpsConstants.lastFundingUpdateTime, perpsConstants.fundingPeriodSeconds]);
+
+  if (!perpsCollection) {
+    return (
+      <ModalContainer>
+        <h2>Contract Specifications</h2>
+        <LoadingText>Loading contract specifications...</LoadingText>
+      </ModalContainer>
+    );
+  }
+
+  return (
+    <ModalContainer>
+      <h2>Contract Specifications</h2>
+
+      {/* CONTRACT SPECIFICATIONS */}
+      <SpecSection>
+        <SectionTitle>CONTRACT SPECIFICATIONS</SectionTitle>
+        <SpecItem>
+          <SpecLabel>Contract Type</SpecLabel>
+          <SpecValue>Perpetual</SpecValue>
+        </SpecItem>
+
+        {perpsCollection && (
+          <SpecItem>
+            <SpecLabel>Initial Margin</SpecLabel>
+            <SpecValue>{perpsCollection.marginPercent}%</SpecValue>
+          </SpecItem>
+        )}
+
+        {perpsCollection && (
+          <SpecItem>
+            <SpecLabel>Maintenance Margin</SpecLabel>
+            <SpecValue>{perpsCollection.maintenanceMarginPercent}%</SpecValue>
+          </SpecItem>
+        )}
+
+        {minMarginPerOrder !== null && (
+          <SpecItem>
+            <SpecLabel>Min Margin Per Order</SpecLabel>
+            <SpecValue>
+              {minMarginPerOrder.toFixed(2)} {tokenSymbol}
+            </SpecValue>
+          </SpecItem>
+        )}
+
+        {contractAddress && (
+          <SpecItem>
+            <SpecLabel>Contract Address</SpecLabel>
+            <SpecValueMono>{contractAddress}</SpecValueMono>
+          </SpecItem>
+        )}
+      </SpecSection>
+
+      {/* PRICING & SETTLEMENT */}
+      <SpecSection>
+        <SectionTitle>PRICING & SETTLEMENT</SectionTitle>
+        <SpecItem>
+          <SpecLabel>Settlement Currency</SpecLabel>
+          <SpecValue>
+            {tokenName} ({tokenSymbol})
+          </SpecValue>
+        </SpecItem>
+
+        {tickSize !== null && (
+          <SpecItem>
+            <SpecLabel>Tick Size</SpecLabel>
+            <SpecValue>
+              {tickSize.toFixed(2)} {tokenSymbol}
+            </SpecValue>
+          </SpecItem>
+        )}
+
+      </SpecSection>
+
+      {/* FUNDING */}
+      <SpecSection>
+        <SectionTitle>FUNDING</SectionTitle>
+        <SpecItem>
+          <SpecLabel>Current Funding Rate</SpecLabel>
+          <SpecValue>{fundingRateQuery.data?.formattedRate ?? "0%"}</SpecValue>
+        </SpecItem>
+
+        {perpsConstants.fundingPeriodSeconds !== null && (
+          <SpecItem>
+            <SpecLabel>Funding Period</SpecLabel>
+            <SpecValue>{formatFundingPeriod(perpsConstants.fundingPeriodSeconds)}</SpecValue>
+          </SpecItem>
+        )}
+
+        {nextFundingCountdown && (
+          <SpecItem>
+            <SpecLabel>Next Funding</SpecLabel>
+            <SpecValue>{nextFundingCountdown}</SpecValue>
+          </SpecItem>
+        )}
+
+        {perpsConstants.fundingRateMaxBpsFormatted !== null && (
+          <SpecItem>
+            <SpecLabel>Max Funding Rate</SpecLabel>
+            <SpecValue>{perpsConstants.fundingRateMaxBpsFormatted} bps</SpecValue>
+          </SpecItem>
+        )}
+      </SpecSection>
+
+      {/* FEES & LIMITS */}
+      <SpecSection>
+        <SectionTitle>FEES & LIMITS</SectionTitle>
+        {perpsCollection && (
+          <SpecItem>
+            <SpecLabel>Taker Fee</SpecLabel>
+            <SpecValue>{perpsCollection.takerFeeBps} bps</SpecValue>
+          </SpecItem>
+        )}
+
+        {perpsCollection && (
+          <SpecItem>
+            <SpecLabel>Maker Fee</SpecLabel>
+            <SpecValue>{perpsCollection.makerFeeBps} bps</SpecValue>
+          </SpecItem>
+        )}
+
+        {perpsConstants.liquidationFeeFormatted !== null && (
+          <SpecItem>
+            <SpecLabel>Liquidation Fee</SpecLabel>
+            <SpecValue>
+              {perpsConstants.liquidationFeeFormatted.toFixed(2)} {tokenSymbol}
+            </SpecValue>
+          </SpecItem>
+        )}
+
+        {perpsConstants.maxOrdersPerParticipant !== undefined && (
+          <SpecItem>
+            <SpecLabel>Max Open Orders</SpecLabel>
+            <SpecValue>{perpsConstants.maxOrdersPerParticipant}</SpecValue>
+          </SpecItem>
+        )}
+
+        {perpsConstants.maxPriceLevelsPerSide !== null && (
+          <SpecItem>
+            <SpecLabel>Max Price Levels Per Side</SpecLabel>
+            <SpecValue>{perpsConstants.maxPriceLevelsPerSide}</SpecValue>
+          </SpecItem>
+        )}
+      </SpecSection>
+
+      {/* MORE DETAILS */}
+      {docsUrl && (
+        <SpecSection>
+          <SectionTitle>MORE DETAILS</SectionTitle>
+          <SpecItem>
+            <SpecLabel>Documentation</SpecLabel>
+            <SpecLink href={docsUrl} target="_blank" rel="noopener noreferrer">
+              View Documentation ↗
+            </SpecLink>
+          </SpecItem>
+        </SpecSection>
+      )}
+    </ModalContainer>
+  );
+};
+
 const ModalContainer = styled("div")`
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 0 1rem;
+
   h2 {
     font-size: 1.5rem;
     font-weight: 600;
@@ -308,7 +455,7 @@ const SpecLabel = styled("span")`
 const SpecValue = styled("span")`
   font-size: 0.875rem;
   font-weight: 500;
-  color: ${tokens.trading.long};
+  color: ${tokens.text.onDark};
   text-align: right;
   margin-left: 1rem;
 `;
@@ -323,7 +470,7 @@ const SpecValueMono = styled(SpecValue)`
 const SpecLink = styled("a")`
   font-size: 0.875rem;
   font-weight: 500;
-  color: ${tokens.trading.long};
+  color: ${tokens.text.onDark};
   text-decoration: none;
   transition: opacity 0.2s;
 

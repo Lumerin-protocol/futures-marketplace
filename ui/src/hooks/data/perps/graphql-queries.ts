@@ -1,8 +1,13 @@
 import { gql } from "graphql-request";
 
 export const PerpsOrderBookQuery = gql`
-  query PerpsOrderBookQuery{
-    priceLevels {
+  query PerpsOrderBookQuery($first: Int!, $lastId: ID!) {
+    priceLevels(
+      first: $first
+      where: { id_gt: $lastId, orderCount_gte: 1 }
+      orderBy: id
+      orderDirection: asc
+    ) {
       id
       isBid
       orderCount
@@ -229,6 +234,7 @@ export const PerpsCollectionQuery = gql`
       minimumPriceIncrement
       marginPercent
       maintenanceMarginPercent
+      totalVolume
     }
   }
 `

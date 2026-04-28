@@ -13,6 +13,8 @@ import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginF
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { AccountBalance, ContractMode } from "../../../types/types";
+import { DateTimeCell } from "../../DateTimeCell";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -66,19 +68,9 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   };
 
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2); // Convert from wei to USDC
+    return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2); // Convert from wei to USDC
   };
 
-  const formatDeliveryDate = (deliveryDate: bigint) => {
-    const date = new Date(Number(deliveryDate) * 1000);
-    return date.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
 
   // Get latest price from market price hook
   const latestPrice = marketPrice ?? null;
@@ -88,7 +80,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   const deliveryDurationDays = contractSpecsQuery.data?.data?.deliveryDurationDays ?? 7;
 
   // Get newest item price for high price validation
-  const newestItemPrice = marketPrice ? Number(marketPrice) / 1e6 : null;
+  const newestItemPrice = marketPrice ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
 
   // Calculate margin for an order
   const calculateMargin = (pricePerDay: bigint, amount: number, isBuy: boolean): bigint | null => {
@@ -99,7 +91,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
 
   const formatMargin = (margin: bigint | null): string => {
     if (margin === null) return "-";
-    return `${(Number(margin) / 1e6).toFixed(2)} USDC`;
+    return `${(Number(margin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} USDC`;
   };
 
   const handleCloseOrder = (groupedOrder: {
@@ -131,8 +123,9 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
           amount: 0,
           isActive: order.isActive,
           closedAt: order.closedAt,
+          timestamp: order.timestamp,
           orderIds: [] as string[],
-          firstOrder: order, // Store reference to first order for modify form
+          firstOrder: order,
         };
       }
 
@@ -151,6 +144,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
         amount: number;
         isActive: boolean;
         closedAt: string | null;
+        timestamp: string;
         orderIds: string[];
         firstOrder: ParticipantOrder;
       }
@@ -184,13 +178,14 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
               <th>Quantity</th>
               <th>Margin</th>
               <th>Destination</th>
+              <th>Time</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {groupedOrdersArray.map((groupedOrder, index) => (
               <TableRow key={`${groupedOrder.isBuy}-${groupedOrder.pricePerDay}-${groupedOrder.deliveryAt}-${index}`}>
-                <td>{formatDeliveryDate(groupedOrder.deliveryAt)}</td>
+                <td><DateTimeCell timestamp={groupedOrder.deliveryAt} /></td>
                 <td>
                   <TypeBadge $type={groupedOrder.isBuy ? "Long" : "Short"}>
                     {groupedOrder.isBuy ? "Long" : "Short"}
@@ -212,6 +207,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
                     <span>---</span>
                   )}
                 </td>
+                <td><DateTimeCell timestamp={groupedOrder.timestamp} /></td>
                 <td>
                   {groupedOrder.isActive && !groupedOrder.closedAt && (
                     <ActionButtons>
@@ -329,8 +325,8 @@ const Table = styled("table")`
     white-space: nowrap;
     
     &:first-child {
-      width: 200px;
-      min-width: 200px;
+      width: 130px;
+      min-width: 130px;
     }
   }
   
@@ -341,8 +337,8 @@ const Table = styled("table")`
     border-bottom: 1px solid ${tokens.overlay.white05};
     
     &:first-child {
-      width: 200px;
-      min-width: 200px;
+      width: 130px;
+      min-width: 130px;
     }
   }
 `;

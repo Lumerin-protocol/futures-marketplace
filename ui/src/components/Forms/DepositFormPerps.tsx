@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import type { AccountBalance } from "../../types/types";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import { AmountInputForm } from "./Shared/AmountInputForm";
-import { formatValue, paymentToken } from "../../lib/units";
+import { formatValue, PAYMENT_TOKEN_SCALE_NUM, paymentToken } from "../../lib/units";
 import { parseUnits } from "viem";
 import {
   usePermitPerps,
@@ -55,7 +55,7 @@ export const DepositFormPerps: FC<DepositFormProps> = ({ closeForm, accountBalan
 
   const handleMaxClick = useCallback(() => {
     if (paymentTokenBalance.data) {
-      const numValue = Number(paymentTokenBalance.data) / 1e6; // Convert from wei to USDC
+      const numValue = Number(paymentTokenBalance.data) / PAYMENT_TOKEN_SCALE_NUM; // Convert from wei to USDC
       const floored = Math.floor(numValue * 100) / 100; // Round down to 2 decimals
       const maxAmount = floored.toFixed(2);
       form.setValue("amount", maxAmount);
@@ -123,7 +123,7 @@ export const DepositFormPerps: FC<DepositFormProps> = ({ closeForm, accountBalan
                   <>
                     {paymentTokenBalance.data
                       ? (() => {
-                          const numValue = Number(paymentTokenBalance.data) / 1e6; // Convert from wei to USDC
+                          const numValue = Number(paymentTokenBalance.data) / PAYMENT_TOKEN_SCALE_NUM; // Convert from wei to USDC
                           const floored = Math.floor(numValue * 100) / 100; // Round down to 2 decimals
                           return floored.toFixed(2);
                         })()
@@ -146,13 +146,13 @@ export const DepositFormPerps: FC<DepositFormProps> = ({ closeForm, accountBalan
       async action() {
         const amount = form.getValues("amount");
         if (!amount) throw new Error("Amount not set");
+        if (!signPermit) throw new Error("Permit not ready. Please wait for wallet to connect and try again.");
         const amountBigInt = parseUnits(amount, paymentToken.decimals);
-        const result = await signPermit?.({
+        const result = await signPermit({
           value: amountBigInt,
         });
-        console.log("result", result);
         setSignature(result);
-        return result ? { isSkipped: false, state: result } : { isSkipped: false };
+        return { isSkipped: false, state: result };
       },
     },
     {

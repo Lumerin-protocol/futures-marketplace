@@ -4,7 +4,7 @@ import { useAccount } from "wagmi";
 import { useRemoveMargin } from "../../hooks/data/useRemoveMargin";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import { AmountInputForm } from "./Shared/AmountInputForm";
-import { formatValue, paymentToken } from "../../lib/units";
+import { formatValue, PAYMENT_TOKEN_SCALE_NUM, paymentToken } from "../../lib/units";
 import { parseUnits } from "viem";
 
 interface BalanceQueryResult {
@@ -71,7 +71,7 @@ export const WithdrawalForm: FC<WithdrawalFormProps> = ({ closeForm, minMargin, 
 
   const handleMaxClick = useCallback(() => {
     if (availableBalance !== undefined) {
-      const numValue = Number(availableBalance) / 1e6; // Convert from wei to USDC
+      const numValue = Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM; // Convert from wei to USDC
       const floored = Math.floor(numValue * 100) / 100; // Round down to 2 decimals
       const maxAmount = floored.toFixed(2);
       form.setValue("amount", maxAmount);
@@ -107,7 +107,7 @@ export const WithdrawalForm: FC<WithdrawalFormProps> = ({ closeForm, minMargin, 
             <span className="text-white font-medium">
               {availableBalance !== undefined
                 ? (() => {
-                    const numValue = Number(availableBalance) / 1e6; // Convert from wei to USDC
+                    const numValue = Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM; // Convert from wei to USDC
                     const floored = Math.floor(numValue * 100) / 100; // Round down to 2 decimals
                     return floored.toFixed(2);
                   })()

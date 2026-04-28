@@ -25,6 +25,7 @@ import {
   ModalCancelButton,
   ModalConfirmButton,
 } from "./PerpsOrderFormFields";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 
 interface ModifyPerpsOrderModalProps {
   open: boolean;
@@ -57,13 +58,13 @@ export const ModifyPerpsOrderModal = ({
   const remainingQtyBig = order
     ? order.originalQuantity - order.filledQuantity
     : 0n;
-  const maxQuantity = Number(remainingQtyBig) / 1e6;
+  const maxQuantity = Number(remainingQtyBig) / PAYMENT_TOKEN_SCALE_NUM;
 
   const form = usePerpsOrderForm({ maxQuantity, priceStep });
 
   useEffect(() => {
     if (!open || !order) return;
-    const initPrice = (Number(order.price) / 1e6).toFixed(2);
+    const initPrice = (Number(order.price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
     form.reset(initPrice, 100);
     setSubmitError(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -92,7 +93,7 @@ export const ModifyPerpsOrderModal = ({
       }
 
       // 2. Place a new order with the updated price & quantity (same side)
-      const newPriceBig = BigInt(Math.round(form.currentPrice * 1e6));
+      const newPriceBig = BigInt(Math.round(form.currentPrice * PAYMENT_TOKEN_SCALE_NUM));
       // Positive quantity = Buy (Long), negative = Sell (Short)
       const signedQty = order.isBuy ? newQty : -newQty;
       const createHash = await createOrderAsync({ price: newPriceBig, quantity: signedQty });
@@ -121,7 +122,7 @@ export const ModifyPerpsOrderModal = ({
   if (!order) return null;
 
   const side = order.isBuy ? "Long" : "Short";
-  const formatPrice = (p: bigint) => (Number(p) / 1e6).toFixed(2);
+  const formatPrice = (p: bigint) => (Number(p) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   const newQtyDisplay = form.getCurrentQuantity();
   const newSizeDisplay = form.getCurrentSize();
 
@@ -148,9 +149,9 @@ export const ModifyPerpsOrderModal = ({
           <InfoRow>
             <InfoLabel>Filled / Original Qty</InfoLabel>
             <InfoValue>
-              {(Number(order.filledQuantity) / 1e6).toFixed(6)}
+              {(Number(order.filledQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6)}
               {" / "}
-              {(Number(order.originalQuantity) / 1e6).toFixed(6)}
+              {(Number(order.originalQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6)}
             </InfoValue>
           </InfoRow>
           {marketPrice !== undefined && (

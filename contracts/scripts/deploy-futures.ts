@@ -41,11 +41,13 @@ async function main() {
   console.log();
 
   const hashrateOracle = await viem.getContractAt(
-    "HashrateOracle",
+    "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol:AggregatorV3Interface",
     env.HASHRATE_ORACLE_ADDRESS as `0x${string}`,
   );
-  console.log("Hashrate oracle:", hashrateOracle.address);
-  console.log("Num hashes to find to earn 1 satoshi:", await hashrateOracle.read.getHashesForBTC());
+  console.log("Hashprice oracle:", hashrateOracle.address);
+  console.log("Hashprice oracle decimals:", await hashrateOracle.read.decimals());
+  const [, hashpriceAnswer] = await hashrateOracle.read.latestRoundData();
+  console.log("Hashprice oracle latest answer:", hashpriceAnswer);
 
   console.log();
 
@@ -68,7 +70,7 @@ async function main() {
     functionName: "initialize",
     args: [
       env.USDC_TOKEN_ADDRESS as `0x${string}`, // payment token
-      env.HASHRATE_ORACLE_ADDRESS as `0x${string}`, // hashrate oracle
+      env.HASHRATE_ORACLE_ADDRESS as `0x${string}`, // hashprice oracle (AggregatorV3Interface)
       env.VALIDATOR_ADDRESS as `0x${string}`, // validator address
       Number(env.LIQUIDATION_MARGIN_PERCENT), // seller liquidation margin percent
       BigInt(env.SPEED_HPS), // speed HPS

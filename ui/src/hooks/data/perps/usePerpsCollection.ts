@@ -30,6 +30,7 @@ const fetchPerpsCollectionAsync = async () => {
     minimumPriceIncrement: parseInt(data.minimumPriceIncrement),
     marginPercent: data.marginPercent,
     maintenanceMarginPercent: data.maintenanceMarginPercent,
+    totalVolume: data.totalVolume,
   };
 
   return {
@@ -44,6 +45,7 @@ export type PerpsCollection = {
   minimumPriceIncrement: number;
   marginPercent: number;
   maintenanceMarginPercent: number;
+  totalVolume: string;
 };
 
 type PerpsCollectionResponse = {
@@ -54,6 +56,7 @@ type PerpsCollectionResponse = {
     minimumPriceIncrement: string;
     marginPercent: number;
     maintenanceMarginPercent: number;
+    totalVolume: string;
   }[];
 };
 

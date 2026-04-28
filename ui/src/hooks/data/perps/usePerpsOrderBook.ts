@@ -16,26 +16,41 @@ export const usePerpsOrderBook = (props?: { refetch?: boolean; interval?: number
   return query;
 };
 
-const fetchPerpsOrderBookAsync = async () => {
-  const response = await graphqlRequest<PerpsOrderBookResponse>(
-    PerpsOrderBookQuery,
-    {},
-    process.env.REACT_APP_SUBGRAPH_PERPS_URL,
-  );
+const PAGE_SIZE = 100;
 
-  const priceLevels = response.priceLevels.map((level) => ({
-    id: level.id,
-    price: BigInt(level.price),
-    isBid: level.isBid,
-    orderCount: level.orderCount,
-    totalQuantity: BigInt(level.totalQuantity),
-  }));
+const fetchPerpsOrderBookAsync = async () => {
+  const priceLevels: PerpsPriceLevel[] = [];
+  let lastId = "";
+  let blockNumber = 0;
+
+  while (true) {
+    const response = await graphqlRequest<PerpsOrderBookResponse>(
+      PerpsOrderBookQuery,
+      { first: PAGE_SIZE, lastId },
+      process.env.REACT_APP_SUBGRAPH_PERPS_URL,
+    );
+
+    blockNumber = response._meta.block.number;
+
+    for (const level of response.priceLevels) {
+      priceLevels.push({
+        id: level.id,
+        price: BigInt(level.price),
+        isBid: level.isBid,
+        orderCount: level.orderCount,
+        totalQuantity: BigInt(level.totalQuantity),
+      });
+    }
+
+    if (response.priceLevels.length < PAGE_SIZE) break;
+    lastId = response.priceLevels[response.priceLevels.length - 1].id;
+  }
 
   const data: PerpsOrderBook = { priceLevels };
 
   return {
     data,
-    blockNumber: response._meta.block.number,
+    blockNumber,
   };
 };
 

@@ -4,12 +4,13 @@ import { parseEventLogs, parseUnits, getAddress, Account } from "viem";
 import { deployFuturesFixture } from "./fixtures";
 import { catchError } from "../lib/lib";
 import { viem } from "hardhat";
+import { scaleHashprice } from "./utils";
 
 async function positionWithMarginFixture() {
   const data = await loadFixture(deployFuturesFixture);
   const { contracts, accounts, config } = data;
-  const { futures, hashrateOracle } = contracts;
-  const { seller, buyer, validator, pc } = accounts;
+  const { futures } = contracts;
+  const { seller, buyer, pc } = accounts;
 
   const entryPricePerDay = await futures.read.getMarketPrice();
   // Use smaller margin to ensure liquidation can be triggered
@@ -53,7 +54,7 @@ function getFuturesContract(address: `0x${string}`) {
 
 async function getMarginDeficit(
   futures: Awaited<ReturnType<typeof getFuturesContract>>,
-  party: Account
+  party: Account,
 ) {
   const partyCollateral = await futures.read.balanceOf([party.address]);
   const partyMinMargin = await futures.read.getMinMargin([party.address]);
@@ -65,7 +66,7 @@ describe("Futures - Liquidation", function () {
   describe("Margin Call - Position Liquidation", function () {
     it("should liquidate buyer position when buyer is at loss and margin insufficient", async function () {
       const { contracts, accounts, entryPricePerDay, deliveryDate, positionId } = await loadFixture(
-        positionWithMarginFixture
+        positionWithMarginFixture,
       );
       const { futures, hashrateOracle } = contracts;
       const { seller, buyer, validator, pc } = accounts;
@@ -77,11 +78,8 @@ describe("Futures - Liquidation", function () {
       // Position ID is already in the fixture
       expect(positionId).to.not.be.null;
 
-      // Move market price down significantly (buyer is at loss)
-      const hashesForBTC = await hashrateOracle.read.getHashesForBTC();
-      // Increase hashes significantly (lower price) - buyer loses more
-      // Use 150% to ensure margin becomes insufficient
-      await hashrateOracle.write.setHashesForBTC([(hashesForBTC.value * 150n) / 100n]);
+      // Drop hashprice ~33% so margin becomes insufficient and buyer is at loss.
+      await scaleHashprice(hashrateOracle, 100n, 150n);
       const newMarketPrice = await futures.read.getMarketPrice();
       expect(newMarketPrice < entryPricePerDay).to.be.true;
 
@@ -138,7 +136,7 @@ describe("Futures - Liquidation", function () {
 
     it("should liquidate seller position when seller is at loss and margin insufficient", async function () {
       const { contracts, accounts, entryPricePerDay, deliveryDate, positionId } = await loadFixture(
-        positionWithMarginFixture
+        positionWithMarginFixture,
       );
       const { futures, hashrateOracle } = contracts;
       const { seller, buyer, validator, pc } = accounts;
@@ -150,10 +148,8 @@ describe("Futures - Liquidation", function () {
       // Position ID is already in the fixture
       expect(positionId).to.not.be.null;
 
-      // Move market price up (seller is at loss)
-      const hashesForBTC = await hashrateOracle.read.getHashesForBTC();
-      // Decrease hashes (higher price) - seller loses
-      await hashrateOracle.write.setHashesForBTC([(hashesForBTC.value * 80n) / 100n]);
+      // Raise hashprice ~25% so seller is at loss.
+      await scaleHashprice(hashrateOracle, 100n, 80n);
       const newMarketPrice = await futures.read.getMarketPrice();
       expect(newMarketPrice > entryPricePerDay).to.be.true;
 
@@ -205,7 +201,7 @@ describe("Futures - Liquidation", function () {
 
     it("should close orders first, then positions during margin call", async function () {
       const { contracts, accounts, entryPricePerDay, deliveryDate, config } = await loadFixture(
-        positionWithMarginFixture
+        positionWithMarginFixture,
       );
       const { futures, hashrateOracle } = contracts;
       const { seller, buyer, validator, pc } = accounts;
@@ -243,8 +239,7 @@ describe("Futures - Liquidation", function () {
       expect(orders1.length + orders2.length).to.be.greaterThanOrEqual(2);
 
       // Move market price down to trigger margin call
-      const hashesForBTC = await hashrateOracle.read.getHashesForBTC();
-      await hashrateOracle.write.setHashesForBTC([(hashesForBTC.value * 150n) / 100n]);
+      await scaleHashprice(hashrateOracle, 100n, 150n);
 
       const marginDeficit = await getMarginDeficit(futures, buyer.account);
 
@@ -309,8 +304,7 @@ describe("Futures - Liquidation", function () {
       expect(positionCreatedEvents.length).to.equal(2);
 
       // Move market price up (seller loses on both positions)
-      const hashesForBTC = await hashrateOracle.read.getHashesForBTC();
-      await hashrateOracle.write.setHashesForBTC([(hashesForBTC.value * 90n) / 100n]);
+      await scaleHashprice(hashrateOracle, 100n, 90n);
 
       // Check margin is insufficient
       const sellerMarginDeficit = await getMarginDeficit(futures, seller.account);
@@ -337,14 +331,13 @@ describe("Futures - Liquidation", function () {
 
     it("should not liquidate if margin is sufficient", async function () {
       const { contracts, accounts, entryPricePerDay } = await loadFixture(
-        positionWithMarginFixture
+        positionWithMarginFixture,
       );
       const { futures, hashrateOracle } = contracts;
       const { buyer, validator, pc } = accounts;
 
       // Move market price slightly (small loss)
-      const hashesForBTC = await hashrateOracle.read.getHashesForBTC();
-      await hashrateOracle.write.setHashesForBTC([(hashesForBTC.value * 105n) / 100n]);
+      await scaleHashprice(hashrateOracle, 100n, 105n);
 
       // Check margin is still sufficient
       const buyerMinMargin = await futures.read.getMinMargin([buyer.account.address]);
@@ -382,7 +375,7 @@ describe("Futures - Liquidation", function () {
 
     it("should correctly calculate and transfer PnL when buyer profits", async function () {
       const { contracts, accounts, entryPricePerDay } = await loadFixture(
-        positionWithMarginFixture
+        positionWithMarginFixture,
       );
       const { futures, hashrateOracle } = contracts;
       const { seller, buyer, validator, pc } = accounts;
@@ -390,9 +383,8 @@ describe("Futures - Liquidation", function () {
       const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
       const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
 
-      // Move market price up (buyer profits)
-      const hashesForBTC = await hashrateOracle.read.getHashesForBTC();
-      await hashrateOracle.write.setHashesForBTC([(hashesForBTC.value * 80n) / 100n]);
+      // Raise hashprice ~25% so buyer profits.
+      await scaleHashprice(hashrateOracle, 100n, 80n);
       const newMarketPrice = await futures.read.getMarketPrice();
       expect(newMarketPrice > entryPricePerDay).to.be.true;
 
@@ -447,9 +439,8 @@ describe("Futures - Liquidation", function () {
       const positionDeliveryDate = position.deliveryAt;
       const positionDestURL = position.destURL;
 
-      // Move market price down significantly (buyer is at loss)
-      const hashesForBTC = await hashrateOracle.read.getHashesForBTC();
-      await hashrateOracle.write.setHashesForBTC([(hashesForBTC.value * 150n) / 100n]);
+      // Drop hashprice ~33% so buyer is at loss.
+      await scaleHashprice(hashrateOracle, 100n, 150n);
 
       // Verify buyer has insufficient margin
       const buyerMinMargin = await futures.read.getMinMargin([buyer.account.address]);
@@ -508,9 +499,8 @@ describe("Futures - Liquidation", function () {
       const positionDeliveryDate = position.deliveryAt;
       const positionDestURL = position.destURL;
 
-      // Move market price up (seller is at loss)
-      const hashesForBTC = await hashrateOracle.read.getHashesForBTC();
-      await hashrateOracle.write.setHashesForBTC([(hashesForBTC.value * 80n) / 100n]);
+      // Raise hashprice ~25% so seller is at loss.
+      await scaleHashprice(hashrateOracle, 100n, 80n);
 
       // Verify seller has insufficient margin
       const sellerMinMargin = await futures.read.getMinMargin([seller.account.address]);

@@ -4,16 +4,25 @@ import { backgroundRefetchOpts } from "./config";
 import { BtcPriceIndexQuery, AggregatedBtcPriceIndexQuery } from "./graphql-queries";
 import type { TimePeriod } from "./useHashRateIndexData";
 
+const loadBtcUsdsSeed = () =>
+  import(/* webpackChunkName: "seed-btc-usds" */ "../../seed/btcUsds.json").then((m) => m.default);
+const loadBtcUsdCandlesHourSeed = () =>
+  import(/* webpackChunkName: "seed-btc-usd-candles-hour" */ "../../seed/btcUsdCandles-hour.json").then((m) => m.default);
+const loadBtcUsdCandlesDaySeed = () =>
+  import(/* webpackChunkName: "seed-btc-usd-candles-day" */ "../../seed/btcUsdCandles-day.json").then((m) => m.default);
+
 const PAGE_SIZE = 250;
+const PRICE_SCALE = 10 ** 8;
 
 type BtcPriceIndexItem = {
+  blockNumber?: string;
   price: string;
-  updatedAt: string;
-  id: number;
+  timestamp: string;
+  id: string | number;
 };
 
 type BtcPriceIndexRes = {
-  btcPriceIndexes: BtcPriceIndexItem[];
+  btcUsds: BtcPriceIndexItem[];
 };
 
 type AggregatedBtcPriceIndexItem = {
@@ -24,8 +33,20 @@ type AggregatedBtcPriceIndexItem = {
 };
 
 type AggregatedBtcPriceIndexRes = {
-  btcPriceCandles: AggregatedBtcPriceIndexItem[];
+  btcUsdCandles: AggregatedBtcPriceIndexItem[];
 };
+
+function mergeById<T extends { id: string | number }>(primary: T[], seed: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const item of [...primary, ...seed]) {
+    const key = String(item.id);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
 
 export const BTC_PRICE_INDEX_QK = "btcPriceIndex";
 
@@ -51,6 +72,8 @@ async function fetchBtcPriceIndexData(timePeriod: TimePeriod) {
 async function fetchDayBtcPriceIndex() {
   const now = Math.floor(Date.now() / 1000);
   const startDate = now - 24 * 60 * 60; // 1 day
+  // Subgraph/seed timestamps are stored in microseconds
+  const startMicros = BigInt(startDate) * 1_000_000n;
 
   // Fetch all data using cursor-based pagination
   let allIndexes: BtcPriceIndexItem[] = [];
@@ -61,40 +84,44 @@ async function fetchDayBtcPriceIndex() {
     const req = await graphqlRequest<BtcPriceIndexRes>(
       BtcPriceIndexQuery,
       {
-        startDate,
+        startDate: startMicros.toString(),
         first: PAGE_SIZE,
         skip,
       },
       process.env.REACT_APP_SUBGRAPH_ORACLES_URL,
     );
 
-    allIndexes = [...allIndexes, ...req.btcPriceIndexes];
+    allIndexes = [...allIndexes, ...req.btcUsds];
 
-    if (req.btcPriceIndexes.length < PAGE_SIZE) {
+    if (req.btcUsds.length < PAGE_SIZE) {
       hasMore = false;
     } else {
       skip += PAGE_SIZE;
     }
   }
 
+  const seed = (await loadBtcUsdsSeed()) as BtcPriceIndexItem[];
+  const seedForRange = seed.filter((item) => BigInt(item.timestamp) >= startMicros);
+  allIndexes = mergeById(allIndexes, seedForRange).filter(
+    (item) => BigInt(item.timestamp) >= startMicros,
+  );
+  allIndexes.sort((a, b) => Number(BigInt(b.timestamp) - BigInt(a.timestamp)));
+
   const data = allIndexes.map((item) => {
-    // Handle zero or invalid price values (similar to fetchDayHashrateIndex)
     if (item.price === "0" || !item.price) {
       return {
-        updatedAt: item.updatedAt,
-        updatedAtDate: new Date(+item.updatedAt * 1000),
-        price: 0n,
+        updatedAt: +item.timestamp / 1000,
+        updatedAtDate: new Date(+item.timestamp / 1000),
+        price: 0,
         id: item.id,
       };
     }
 
-    const price = BigInt(item.price);
-
     return {
-      updatedAt: item.updatedAt,
-      updatedAtDate: new Date(+item.updatedAt * 1000),
+      updatedAt: +item.timestamp / 1000,
+      updatedAtDate: new Date(+item.timestamp / 1000),
       id: item.id,
-      price,
+      price: Number(item.price) / PRICE_SCALE,
     };
   });
   return data;
@@ -128,35 +155,42 @@ async function fetchAggregatedBtcPriceIndex(timePeriod: "week" | "month") {
       process.env.REACT_APP_SUBGRAPH_ORACLES_URL,
     );
 
-    allCandles = [...allCandles, ...req.btcPriceCandles];
+    allCandles = [...allCandles, ...req.btcUsdCandles];
 
-    if (req.btcPriceCandles.length < PAGE_SIZE) {
+    if (req.btcUsdCandles.length < PAGE_SIZE) {
       hasMore = false;
     } else {
       skip += PAGE_SIZE;
     }
   }
 
-  const data = allCandles.map((item) => {
-    const count = BigInt(item.count);
-    const sum = BigInt(item.sum);
+  const seed = (await (interval === "hour"
+    ? loadBtcUsdCandlesHourSeed()
+    : loadBtcUsdCandlesDaySeed())) as AggregatedBtcPriceIndexItem[];
+  const startMicros = BigInt(startTimestamp);
+  const seedForRange = seed.filter((item) => BigInt(item.timestamp) >= startMicros);
+  allCandles = mergeById(allCandles, seedForRange);
+  allCandles.sort((a, b) => Number(BigInt(b.timestamp) - BigInt(a.timestamp)));
 
-    if (count === 0n || sum === 0n) {
+  const data = allCandles.map((item) => {
+    const count = Number(item.count);
+    const sum = Number(item.sum);
+
+    if (count === 0 || sum === 0) {
       return {
         updatedAt: item.timestamp,
-        price: 0n,
+        price: 0,
         id: item.id,
       };
     }
 
-    // Average price is sum / count
-    const price = sum / count;
+    const avgPrice = sum / count;
 
     return {
       updatedAt: item.timestamp,
       updatedAtDate: new Date(+item.timestamp / 1000),
       id: item.id,
-      price,
+      price: avgPrice / PRICE_SCALE,
     };
   });
   return data;

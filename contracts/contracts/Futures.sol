@@ -9,7 +9,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import { ERC20Upgradeable } from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import { HashrateOracle } from "hashprice-oracle/contracts/contracts/HashrateOracle.sol";
+import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import { StructuredLinkedList } from "solidity-linked-list/contracts/StructuredLinkedList.sol";
 import { Versionable } from "./Versionable.sol";
 
@@ -37,13 +37,20 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
 
     uint256 public breachPenaltyRatePerDay; // penalty for breaching the contract either by seller or buyer
     uint256 public firstFutureDeliveryDate; // timestamp of the first future delivery date
-    uint256 public speedHps; // speed of the one unit of futures in hashes/second, constant for all positions
+    /// @notice Hashes/second represented by one unit of futures. As of v2 the contract assumes one unit equals
+    ///         100 TH/s per day (matching the hashprice oracle's quote unit), so this value is informational only
+    ///         and no longer participates in market-price calculation. Retained as state for ABI back-compat.
+    uint256 public speedHps;
     uint256 public minimumPriceIncrement; // difference between two closest prices in the order table
     uint256 public orderFee; // fee for creating an order in tokens
     uint256 private nonce = 0; // nonce for the order id
 
     IERC20 public token;
-    HashrateOracle public hashrateOracle;
+    /// @notice Hashprice oracle returning the price of 100 TH/s per day denominated in the same currency as `token`
+    /// @dev Chainlink-compatible aggregator (e.g. HashpriceUSD when `token` is a USD stablecoin).
+    ///      Variable name retained from v1.x for storage / ABI backwards compatibility; semantically this is a
+    ///      hashprice (not hashrate) feed.
+    AggregatorV3Interface public hashrateOracle;
     address public validatorAddress; // address of the validator that can close orders that are not delivered and regularly calls marginCall function
 
     uint8 public deliveryDurationDays; // duration of the delivery in seconds
@@ -55,13 +62,23 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     uint256 public collectedFeesBalance;
     uint256 public reservePoolBalance;
     mapping(address => uint8) private addressFeeDiscountPercent;
+    /// @notice Precomputed divisor used to rebase oracle answers from `oracle.decimals()` to the wrapped
+    ///         token's decimals. Recomputed whenever the oracle is set.
+    /// @dev Equals 10^(oracle.decimals() - token.decimals()). Reverts on `setOracle` if the oracle has
+    ///      fewer decimals than the token.
+    uint256 public hashpriceScalingDivisor;
 
     // constants
-    string public constant VERSION = "1.2.0";
+    string public constant VERSION = "2.1.0";
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     uint8 public constant BREACH_PENALTY_DECIMALS = 18;
     uint32 private constant SECONDS_PER_DAY = 3600 * 24;
     uint256 private constant MAX_BREACH_PENALTY_RATE_PER_DAY = 5 * 10 ** (BREACH_PENALTY_DECIMALS - 2); // 5%
+    /// @notice Maximum age of the hashprice oracle answer that is still considered fresh.
+    /// @dev Reads of `_getHashpriceUsd` revert with `OracleStale` once `block.timestamp - updatedAt`
+    ///      exceeds this value. Sized generously above the upstream feed's heartbeat so brief delays
+    ///      don't halt trading, while still preventing trades on multi-hour-old data.
+    uint256 public constant MAX_ORACLE_STALENESS = 3600; // 1 hour
 
     /// @notice Represents an order to buy or sell a futures contract
     /// @dev Created when a participant places an order
@@ -135,6 +152,9 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     error PositionAlreadyPaid();
     error PositionDestURLNotSet();
     error NothingToWithdraw();
+    error UnsupportedTokenDecimals(); // token decimals exceed oracle decimals
+    error OracleStale(); // hashprice oracle answer older than MAX_ORACLE_STALENESS
+    error InvalidOracle(); // hashprice oracle returned a non-positive answer
 
     constructor() {
         _disableInitializers();
@@ -142,7 +162,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
 
     function initialize(
         IERC20Metadata _token,
-        HashrateOracle _hashrateOracle,
+        AggregatorV3Interface _hashrateOracle,
         address _validatorAddress,
         uint8 _liquidationMarginPercent,
         uint256 _speedHps,
@@ -155,7 +175,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         __Ownable_init(_msgSender());
         __UUPSUpgradeable_init();
         _initializeFuturesToken(_token);
-        hashrateOracle = _hashrateOracle;
+        _setHashrateOracle(_hashrateOracle);
         validatorAddress = _validatorAddress;
         liquidationMarginPercent = _liquidationMarginPercent;
         breachPenaltyRatePerDay = 0;
@@ -474,7 +494,21 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     }
 
     function setOracle(address addr) external onlyOwner {
-        hashrateOracle = HashrateOracle(addr);
+        _setHashrateOracle(AggregatorV3Interface(addr));
+    }
+
+    /// @dev Caches the oracle reference together with a precomputed scaling divisor based on its `decimals()`
+    ///      and the wrapped token's decimals, so the hot-path `_getMarketPrice` avoids any extra storage reads.
+    function _setHashrateOracle(AggregatorV3Interface _oracle) private {
+        if (address(_oracle) == address(0)) {
+            revert InvalidOracle();
+        }
+        hashrateOracle = _oracle;
+        uint8 oracleDecimals = _oracle.decimals();
+        if (_decimals > oracleDecimals) {
+            revert UnsupportedTokenDecimals();
+        }
+        hashpriceScalingDivisor = 10 ** uint256(oracleDecimals - _decimals);
     }
 
     /// @notice Sets the validator URL
@@ -697,8 +731,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         }
 
         // Payment for the remaining portion of the hashrate
-        uint256 hashesForToken = _getHashesForToken();
-        uint256 currentPrice = _getMarketPrice(hashesForToken);
+        uint256 hashpriceUsd = _getHashpriceUsd();
+        uint256 currentPrice = _getMarketPrice(hashpriceUsd);
         uint256 mult = uint256(deliveryDurationDays) * positionRemainingTime / uint256(deliveryDurationSeconds());
 
         int256 sellerPnl = (int256(position.sellPricePerDay) - int256(currentPrice)) * int256(mult);
@@ -752,11 +786,14 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     }
 
     function getMarketPrice() public view returns (uint256) {
-        return _getMarketPrice(_getHashesForToken());
+        return _getMarketPrice(_getHashpriceUsd());
     }
 
-    function _getMarketPrice(uint256 _hashesForToken) private view returns (uint256) {
-        return _roundToNearest(SECONDS_PER_DAY * speedHps / _hashesForToken, minimumPriceIncrement);
+    /// @dev `_hashpriceUsd` is the latest oracle answer (price of 100 TH/s per day expressed in
+    ///      `oracle.decimals()`). One unit of futures equals 100 TH/s per day, so the only conversion needed is
+    ///      rebasing the answer from `oracle.decimals()` to the token's decimals via `hashpriceScalingDivisor`.
+    function _getMarketPrice(uint256 _hashpriceUsd) private view returns (uint256) {
+        return _roundToNearest(_hashpriceUsd / hashpriceScalingDivisor, minimumPriceIncrement);
     }
 
     function getOrderById(bytes32 _orderId) external view returns (Order memory) {
@@ -882,8 +919,21 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         }
     }
 
-    function _getHashesForToken() private view returns (uint256) {
-        return hashrateOracle.getHashesforToken();
+    /// @dev Reads the latest hashprice answer and rejects stale or non-positive values. Every code
+    ///      path that prices futures (matching, margin checks, liquidation, cash settlement) ultimately
+    ///      goes through here, so the oracle freshness contract is enforced uniformly.
+    function _getHashpriceUsd() private view returns (uint256) {
+        (, int256 answer,, uint256 updatedAt,) = hashrateOracle.latestRoundData();
+
+        if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) {
+            revert OracleStale();
+        }
+
+        if (answer <= 0) {
+            revert InvalidOracle();
+        }
+
+        return uint256(answer);
     }
 
     function _roundToNearest(uint256 _value, uint256 _increment) private pure returns (uint256) {

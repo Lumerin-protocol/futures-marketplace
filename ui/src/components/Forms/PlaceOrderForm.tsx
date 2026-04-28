@@ -26,6 +26,7 @@ import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
 import { useOrderFee } from "../../hooks/data/useOrderFee";
 import type { PerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
+import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE, QUANTITY_SCALE_NUM } from "../../lib/units";
 
 interface PoolFormValues {
   predefinedPoolIndex: number | "";
@@ -93,7 +94,7 @@ export const PlaceOrderForm: FC<Props> = ({
       // For perps: calculate margin based on leverage
       // Formula: (price * quantity) * (1 / leverage)
       // Example: 10x leverage = 10% margin, 5x leverage = 20% margin
-      const positionValue = price * BigInt(Math.round(absoluteQuantity * 1e6)) / 1000000n;
+      const positionValue = price * BigInt(Math.round(absoluteQuantity * QUANTITY_SCALE_NUM)) / QUANTITY_SCALE;
       const marginPercent = BigInt(Math.round((1 / leverage) * 100)); // Convert leverage to margin %
       margin = (positionValue * marginPercent) / 100n;
     } else {
@@ -202,7 +203,7 @@ export const PlaceOrderForm: FC<Props> = ({
               <div className="flex justify-between">
                 <span className="text-gray-300">{contractMode === "futures" ? "Price Per Day:" : "Price:"}</span>
                 <span className="text-white">
-                  {isMarketOrder ? "Market" : `${Number(price) / 1e6} USDC`}
+                  {isMarketOrder ? "Market" : `${Number(price) / PAYMENT_TOKEN_SCALE_NUM} USDC`}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -212,7 +213,7 @@ export const PlaceOrderForm: FC<Props> = ({
               <div className="flex justify-between">
                 <span className="text-gray-300">Size:</span>
                 <span className="text-white">
-                  {((Number(price) / 1e6) * absoluteQuantity).toFixed(2)} USDC
+                  {((Number(price) / PAYMENT_TOKEN_SCALE_NUM) * absoluteQuantity).toFixed(2)} USDC
                 </span>
               </div>
               {contractMode === "futures" && (
@@ -231,7 +232,7 @@ export const PlaceOrderForm: FC<Props> = ({
                 <span className="text-gray-300">Required Margin:</span>
                 <span className="text-white">
                   {requiredMargin !== null
-                    ? `${(Math.abs(Number(requiredMargin)) / 1e6).toFixed(2)} USDC`
+                    ? `${(Math.abs(Number(requiredMargin)) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} USDC`
                     : isLoadingMargin
                       ? "Loading..."
                       : "N/A"}
@@ -299,7 +300,7 @@ export const PlaceOrderForm: FC<Props> = ({
             // Check for conflicting order before proceeding (unless bypassed)
             if (!bypassConflictCheck && hasConflictingOrder()) {
               const oppositeAction = isBuy ? "Ask" : "Bid";
-              const priceInUSDC = Number(price) / 1e6;
+              const priceInUSDC = Number(price) / PAYMENT_TOKEN_SCALE_NUM;
               throw new Error(
                 `Cannot create ${isBuy ? "Bid" : "Ask"} order at price ${priceInUSDC} USDC. You already have an active ${oppositeAction} order at the same price and delivery date. Please close or modify the existing order first.`,
               );

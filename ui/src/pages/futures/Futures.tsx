@@ -32,6 +32,7 @@ import { SmallWidget } from "../../components/Cards/Cards.styled";
 import type { PositionBookPosition } from "../../hooks/data/usePositionBook";
 import type { ContractMode } from "../../types/types";
 import styled from "@mui/material/styles/styled";
+import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE } from "../../lib/units";
 
 interface TradingPageProps {
   defaultMode?: ContractMode;
@@ -141,6 +142,9 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // Fetch user position sessions for perpetual contracts
   const positionSessionsQuery = useUserPositionSessions(address);
 
+  // Active delivery date selected in the order book (used for futures entry price line)
+  const [selectedDeliveryDate, setSelectedDeliveryDate] = useState<number | undefined>();
+
   // Read maintenanceMarginPercent from contract once (cached indefinitely)
   const { data: maintenanceMarginPercentRaw } = useMaintenanceMarginPercent();
   const maintenanceMarginPercent = maintenanceMarginPercentRaw !== undefined ? BigInt(maintenanceMarginPercentRaw) : undefined;
@@ -158,12 +162,23 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   }, [contractMode, positionSessionsQuery.data?.positionSessions]);
 
   const openPositionEntryPrice = useMemo(() => {
-    if (contractMode !== "perpetual") return null;
-    const sessions = positionSessionsQuery.data?.positionSessions || [];
-    const openSession = sessions.find((s) => s.status === "OPEN");
-    if (!openSession) return null;
-    return Number(openSession.entryPrice) / 1e6;
-  }, [contractMode, positionSessionsQuery.data?.positionSessions]);
+    if (contractMode === "perpetual") {
+      const sessions = positionSessionsQuery.data?.positionSessions || [];
+      const openSession = sessions.find((s) => s.status === "OPEN");
+      if (!openSession) return null;
+      return Number(openSession.entryPrice) / PAYMENT_TOKEN_SCALE_NUM;
+    } else {
+      if (!address || !positionBookData?.data?.positions || !selectedDeliveryDate) return null;
+      const activePositions = positionBookData.data.positions
+        .filter((p) => p.isActive && !p.closedAt && p.deliveryAt === String(selectedDeliveryDate))
+        .sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
+      if (activePositions.length === 0) return null;
+      const position = activePositions[0];
+      const isLong = position.buyer.address.toLowerCase() === address.toLowerCase();
+      const entryPrice = isLong ? position.buyPricePerDay : position.sellPricePerDay;
+      return Number(entryPrice) / PAYMENT_TOKEN_SCALE_NUM;
+    }
+  }, [contractMode, positionSessionsQuery.data?.positionSessions, positionBookData?.data?.positions, address, selectedDeliveryDate]);
 
   const openPositionLiquidationPrice = useMemo(() => {
     if (contractMode !== "perpetual") return null;
@@ -182,7 +197,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       maintenanceMarginPercent,
       6n,
     );
-    return liquidationPrice > 0n ? Number(liquidationPrice) / 1e6 : null;
+    return liquidationPrice > 0n ? Number(liquidationPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
   }, [contractMode, positionSessionsQuery.data?.positionSessions, marketPrice, balanceQuery.data, minMargin, maintenanceMarginPercent]);
 
   // Calculate total unrealized PnL based on contract mode
@@ -198,7 +213,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
         const netQuantity = session.user.netQuantity;
         if (netQuantity === 0n) return;
         const priceDiff = marketPrice - session.entryPrice;
-        const unrealizedPnL = (priceDiff * netQuantity) / 1_000_000n;
+        const unrealizedPnL = (priceDiff * netQuantity) / QUANTITY_SCALE;
         totalPnL += unrealizedPnL;
       });
 
@@ -255,7 +270,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // State for order book selection
   const [selectedPrice, setSelectedPrice] = useState<string | undefined>();
   const [selectedAmount, setSelectedAmount] = useState<number | undefined>();
-  const [selectedDeliveryDate, setSelectedDeliveryDate] = useState<number | undefined>();
   const [selectedIsBuy, setSelectedIsBuy] = useState<boolean | undefined>();
   const [highlightMode, setHighlightMode] = useState<"inputs" | "buttons" | undefined>();
   const [highlightTrigger, setHighlightTrigger] = useState(0);
@@ -294,7 +308,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     setSelectedDeliveryDate(deliveryDate);
   };
 
-  const currentPriceFormatted = marketPrice ? (Number(marketPrice) / 1e6).toFixed(2) : null;
+  const currentPriceFormatted = marketPrice ? (Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2) : null;
 
   return (
     <FuturesContainer>
@@ -306,6 +320,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
           contractSpecsQuery={contractSpecsQuery}
           currentPrice={currentPriceFormatted}
           fundingRate={fundingRateQuery.data?.formattedRate ?? "0%"}
+          totalVolume={perpsCollectionQuery.data?.data?.totalVolume}
         />
       </TradingHeaderArea>
 

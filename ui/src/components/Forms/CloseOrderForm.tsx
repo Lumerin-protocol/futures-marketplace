@@ -11,6 +11,7 @@ import { PARTICIPANT_QK } from "../../hooks/data/useParticipant";
 import { POSITION_BOOK_QK } from "../../hooks/data/usePositionBook";
 import type { FC } from "react";
 import type { ContractMode } from "../../types/types";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 
 export interface CloseOrderFormProps {
   isBuy: boolean;
@@ -36,7 +37,7 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, de
   const oppositeQuantity = isBuy ? -amount : amount;
 
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2);
+    return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
   const formatDeliveryDate = (deliveryDate: bigint) => {
