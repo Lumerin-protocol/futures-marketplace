@@ -16,6 +16,7 @@ import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractS
 import type { ContractMode } from "../../../types/types";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { FuturesTradesModal, type FuturesTradesModalSelection } from "./FuturesTradesModal";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -52,6 +53,7 @@ export const PositionsListWidget = ({
   const [selectedPricePerDay, setSelectedPricePerDay] = useState<bigint | null>(null);
   const [selectedTotalContracts, setSelectedTotalContracts] = useState<number | null>(null);
   const [selectedPositions, setSelectedPositions] = useState<PositionBookPosition[]>([]);
+  const [tradesSelection, setTradesSelection] = useState<FuturesTradesModalSelection | null>(null);
 
   const getStatusColor = (isActive: boolean, closedAt: string | null) => {
     if (closedAt) {
@@ -355,6 +357,18 @@ export const PositionsListWidget = ({
                         Close
                       </CloseButton>
                     )}
+                    <TradesButton
+                      onClick={() =>
+                        setTradesSelection({
+                          pricePerDay: groupedPosition.pricePerDay,
+                          deliveryAt: groupedPosition.deliveryAt,
+                          positionType: groupedPosition.positionType as "Long" | "Short",
+                        })
+                      }
+                      title="View matching trades from the last 30 days"
+                    >
+                      Trades
+                    </TradesButton>
                   </ActionButtons>
                 </td>
               </TableRow>
@@ -390,6 +404,15 @@ export const PositionsListWidget = ({
             />
           )}
       </ModalItem>
+
+      <FuturesTradesModal
+        open={tradesSelection !== null}
+        onClose={() => setTradesSelection(null)}
+        selection={tradesSelection}
+        participantAddress={participantAddress}
+        activePositions={positions}
+        contractMode={contractMode}
+      />
     </PositionsContainer>
   );
 };
@@ -570,6 +593,33 @@ const CloseButton = styled("button")`
     transform: translateY(-1px);
   }
   
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    background: ${tokens.text.muted};
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+`;
+
+const TradesButton = styled("button")`
+  padding: 0.5rem 0.875rem;
+  background: ${tokens.neutralButton.bg};
+  color: ${tokens.text.onDark};
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+
+  &:hover:not(:disabled) {
+    background: ${tokens.neutralButton.hover};
+    transform: translateY(-1px);
+  }
+
   &:active:not(:disabled) {
     transform: translateY(0);
   }

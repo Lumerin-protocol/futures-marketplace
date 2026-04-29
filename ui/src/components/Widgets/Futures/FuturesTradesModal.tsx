@@ -1,0 +1,402 @@
+import styled from "@mui/material/styles/styled";
+import Modal from "@mui/material/Modal";
+import CloseIcon from "@mui/icons-material/Close";
+import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
+import { useMemo } from "react";
+import { tokens } from "../../../styles/tokens";
+import { ModalCard } from "../../Modal.styled";
+import { DateTimeCell } from "../../DateTimeCell";
+import { useHistoricalPositions } from "../../../hooks/data/useHistoricalPositions";
+import type { PositionBookPosition } from "../../../hooks/data/usePositionBook";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import type { ContractMode } from "../../../types/types";
+
+export interface FuturesTradesModalSelection {
+  pricePerDay: bigint;
+  deliveryAt: string;
+  positionType: "Long" | "Short";
+}
+
+interface FuturesTradesModalProps {
+  open: boolean;
+  onClose: () => void;
+  selection: FuturesTradesModalSelection | null;
+  participantAddress?: `0x${string}`;
+  activePositions?: PositionBookPosition[];
+  contractMode?: ContractMode;
+}
+
+interface TradeRow {
+  id: string;
+  timestamp: string;
+  closedAt: string | null;
+  pricePerDay: bigint;
+  positionType: "Long" | "Short";
+  realizedPnl: number;
+  counterparty: `0x${string}` | null;
+  quantity: number;
+  hasActive: boolean;
+}
+
+// Internal shape that unifies active (PositionBookPosition) and historical
+// (HistoricalPosition) positions so they can be processed by the same grouping
+// pipeline.
+interface UnifiedPosition {
+  id: string;
+  transactionHash: `0x${string}`;
+  timestamp: string;
+  deliveryAt: string;
+  sellPricePerDay: bigint;
+  buyPricePerDay: bigint;
+  isActive: boolean;
+  closedAt: string | null;
+  buyerAddress: `0x${string}`;
+  sellerAddress: `0x${string}`;
+  buyerPnl: number;
+  sellerPnl: number;
+}
+
+const truncateAddress = (address: string) => {
+  if (!address || address.length < 10) return address;
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+};
+
+export const FuturesTradesModal = ({
+  open,
+  onClose,
+  selection,
+  participantAddress,
+  activePositions,
+  contractMode = "futures",
+}: FuturesTradesModalProps) => {
+  // Lazily fetch historical positions when the modal is opened. The query is
+  // cached by react-query so re-using it elsewhere on the page does not
+  // trigger a refetch.
+  const historicalPositionsQuery = useHistoricalPositions(participantAddress, open);
+
+  const matchingTrades = useMemo<TradeRow[]>(() => {
+    if (!selection) return [];
+
+    // Side determination follows the same approach as `HistoricalPositionsListWidget`
+    // for visual consistency. In futures mode the data is stored against the
+    // simulate account, but on this page `participantAddress` resolves to that
+    // same address, so either works for display.
+    const sideLookupAddress = participantAddress?.toLowerCase();
+
+    const historical = historicalPositionsQuery.data?.data ?? [];
+    const active = activePositions ?? [];
+
+    const unified: UnifiedPosition[] = [
+      ...active.map<UnifiedPosition>((p) => ({
+        id: p.id,
+        transactionHash: p.transactionHash,
+        timestamp: p.timestamp,
+        deliveryAt: p.deliveryAt,
+        sellPricePerDay: p.sellPricePerDay,
+        buyPricePerDay: p.buyPricePerDay,
+        isActive: p.isActive,
+        closedAt: p.closedAt,
+        buyerAddress: p.buyer.address,
+        sellerAddress: p.seller.address,
+        buyerPnl: 0,
+        sellerPnl: 0,
+      })),
+      ...historical.map<UnifiedPosition>((p) => ({
+        id: p.id,
+        transactionHash: p.transactionHash,
+        timestamp: p.timestamp,
+        deliveryAt: p.deliveryAt,
+        sellPricePerDay: p.sellPricePerDay,
+        buyPricePerDay: p.buyPricePerDay,
+        isActive: p.isActive,
+        closedAt: p.closedAt,
+        buyerAddress: p.buyer.address,
+        sellerAddress: p.seller.address,
+        buyerPnl: p.buyerPnl,
+        sellerPnl: p.sellerPnl,
+      })),
+    ];
+
+    // Group by (transactionHash, deliveryAt, price) and aggregate the matching
+    // positions into a single trade row. A single transaction can produce
+    // multiple Position entities (e.g. one taker order matched against several
+    // maker orders), so we merge them here and sum the resulting quantity.
+    const groups = new Map<string, TradeRow>();
+
+    for (const p of unified) {
+      if (p.deliveryAt !== selection.deliveryAt) continue;
+
+      const isLong = sideLookupAddress
+        ? p.buyerAddress.toLowerCase() === sideLookupAddress
+        : false;
+      const positionType: "Long" | "Short" = isLong ? "Long" : "Short";
+      if (positionType !== selection.positionType) continue;
+
+      const sidePrice = isLong ? p.buyPricePerDay : p.sellPricePerDay;
+      if (sidePrice !== selection.pricePerDay) continue;
+
+      const realizedPnl = isLong ? p.buyerPnl : p.sellerPnl;
+      const counterparty = isLong ? p.sellerAddress : p.buyerAddress;
+      const key = `${p.transactionHash}-${p.deliveryAt}-${sidePrice}`;
+
+      const existing = groups.get(key);
+      if (!existing) {
+        groups.set(key, {
+          id: key,
+          timestamp: p.timestamp,
+          closedAt: p.isActive ? null : p.closedAt,
+          pricePerDay: sidePrice,
+          positionType,
+          realizedPnl,
+          counterparty,
+          quantity: 1,
+          hasActive: p.isActive,
+        });
+        continue;
+      }
+
+      existing.quantity += 1;
+      existing.realizedPnl += realizedPnl;
+      if (p.isActive) {
+        existing.hasActive = true;
+        existing.closedAt = null;
+      } else if (!existing.hasActive && p.closedAt) {
+        // Keep the latest closedAt across all closed positions in the group.
+        if (!existing.closedAt || Number(p.closedAt) > Number(existing.closedAt)) {
+          existing.closedAt = p.closedAt;
+        }
+      }
+      if (existing.counterparty && existing.counterparty !== counterparty) {
+        existing.counterparty = null;
+      }
+    }
+
+    const rows = Array.from(groups.values());
+    rows.sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
+    return rows;
+  }, [
+    selection,
+    historicalPositionsQuery.data?.data,
+    activePositions,
+    participantAddress,
+    contractMode,
+  ]);
+
+  const formatPrice = (price: bigint) => (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+  const formatPnl = (pnlRaw: number) => {
+    const value = pnlRaw / PAYMENT_TOKEN_SCALE_NUM;
+    return `${value >= 0 ? "+" : ""}${value.toFixed(2)} USDC`;
+  };
+
+  const isLoading = open && historicalPositionsQuery.isLoading;
+
+  return (
+    <Modal open={open} onClose={onClose}>
+      <TradesModalCard>
+        <IconButton className="close" sx={{ color: "white" }} onClick={onClose}>
+          <CloseIcon />
+        </IconButton>
+
+        <h2>Trades ({matchingTrades.length})</h2>
+
+        <TradesTableContainer>
+          {isLoading ? (
+            <LoadingState>Loading trades...</LoadingState>
+          ) : matchingTrades.length === 0 ? (
+            <EmptyState>
+              <p>No matching trades found in the last 30 days</p>
+            </EmptyState>
+          ) : (
+            <TradesTable>
+              <thead>
+                <tr>
+                  <th>Created</th>
+                  <th>Side</th>
+                  <th>Price (USDC)</th>
+                  <th>Quantity</th>
+                  {/* <th>Counterparty</th> */}
+                  <th>Closed</th>
+                  <th>Realized PnL</th>
+                </tr>
+              </thead>
+              <tbody>
+                {matchingTrades.map((trade) => (
+                  <TableRow key={trade.id}>
+                    <td>
+                      <DateTimeCell timestamp={trade.timestamp} showSeconds />
+                    </td>
+                    <td>
+                      <TypeBadge $type={trade.positionType}>{trade.positionType}</TypeBadge>
+                    </td>
+                    <td>{formatPrice(trade.pricePerDay)}</td>
+                    <td>{trade.quantity}</td>
+                    {/* <td>
+                      {trade.counterparty ? (
+                        <Tooltip title={trade.counterparty}>
+                          <CounterpartyAddress>{truncateAddress(trade.counterparty)}</CounterpartyAddress>
+                        </Tooltip>
+                      ) : (
+                        <CounterpartyAddress>Multiple</CounterpartyAddress>
+                      )}
+                    </td> */}
+                    <td>
+                      {trade.closedAt ? <DateTimeCell timestamp={trade.closedAt} showSeconds /> : "-"}
+                    </td>
+                    <td>
+                      <PnLCell
+                        $isPositive={trade.realizedPnl >= 0}
+                        $isZero={trade.realizedPnl === 0}
+                      >
+                        {formatPnl(trade.realizedPnl)}
+                      </PnLCell>
+                    </td>
+                  </TableRow>
+                ))}
+              </tbody>
+            </TradesTable>
+          )}
+        </TradesTableContainer>
+      </TradesModalCard>
+    </Modal>
+  );
+};
+
+const TradesModalCard = styled(ModalCard)`
+  max-width: 1000px;
+
+  h2 {
+    font-size: 2rem;
+    font-weight: 500;
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+
+    @media (max-width: 600px) {
+      font-size: 1.5rem;
+    }
+  }
+`;
+
+const SelectionSummary = styled("div")`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  padding: 0.75rem 1rem;
+  background: ${tokens.overlay.white05};
+  border-radius: 8px;
+  margin-bottom: 1rem;
+`;
+
+const SummaryItem = styled("div")`
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+`;
+
+const SummaryLabel = styled("span")`
+  color: ${tokens.text.secondary};
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+`;
+
+const SummaryValue = styled("span")`
+  color: ${tokens.text.onDark};
+  font-size: 0.875rem;
+  font-weight: 600;
+`;
+
+const TradesTableContainer = styled("div")`
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 0.5rem;
+
+  &::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: ${tokens.overlay.white10};
+    border-radius: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: ${tokens.overlay.white30};
+    border-radius: 4px;
+  }
+`;
+
+const TradesTable = styled("table")`
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 700px;
+
+  th {
+    text-align: left;
+    padding: 0.75rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: ${tokens.text.secondary};
+    border-bottom: 1px solid ${tokens.overlay.white20};
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 0.75rem 0.5rem;
+    font-size: 0.875rem;
+    color: ${tokens.text.onDark};
+    border-bottom: 1px solid ${tokens.overlay.white10};
+  }
+
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  tbody tr:hover {
+    background-color: ${tokens.overlay.white05};
+  }
+`;
+
+const TableRow = styled("tr")``;
+
+const TypeBadge = styled("span")<{ $type: string }>`
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background-color: ${(props) =>
+    props.$type === "Long" ? tokens.trading.longRowBg : tokens.trading.shortRowBg};
+  color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
+`;
+
+const CounterpartyAddress = styled("span")`
+  font-family: monospace;
+  font-size: 0.8125rem;
+  color: ${tokens.text.secondary};
+  cursor: help;
+`;
+
+const PnLCell = styled("span")<{ $isPositive: boolean; $isZero: boolean }>`
+  color: ${(props) =>
+    props.$isZero ? tokens.text.onDark : props.$isPositive ? tokens.trading.long : tokens.trading.short};
+  font-weight: 600;
+`;
+
+const EmptyState = styled("div")`
+  text-align: center;
+  padding: 2rem;
+  color: ${tokens.text.muted};
+
+  p {
+    margin: 0;
+    font-size: 0.875rem;
+  }
+`;
+
+const LoadingState = styled("div")`
+  text-align: center;
+  padding: 2rem;
+  color: ${tokens.text.muted};
+  font-size: 0.875rem;
+`;
