@@ -4,7 +4,7 @@ import { network } from "hardhat";
 import { parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture, type FuturesFixture } from "./fixtures.ts";
 import { quantizePrice } from "./utils.ts";
-
+import { refreshHashprice } from "./utils.ts";
 const { networkHelpers } = await network.getOrCreate();
 
 // Combined balance: PnL flows through INSURANCE_FUND_ADDR, fees accumulate at futures.address.
@@ -84,6 +84,7 @@ describe("Futures - Offset & Cash Settlement", () => {
     const expectedContractBalanceChange = expectedPnL - totalOrderFees;
     assert.equal(contractBalanceBefore - contractBalanceAfterOffset, expectedContractBalanceChange);
 
+    await refreshHashprice(contracts.hashrateOracle, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
 
     await futures.write.closeDelivery([newPositionId, false], { account: validator.account });
@@ -153,6 +154,8 @@ describe("Futures - Offset & Cash Settlement", () => {
     const expectedContractBalanceChange = expectedPnL - totalOrderFees;
     assert.equal(contractBalanceBefore - contractBalanceAfterOffset, expectedContractBalanceChange);
 
+    // Step 6: Move time forward to delivery date and settle the new position
+    await refreshHashprice(contracts.hashrateOracle, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
 
     const sellerBalanceBeforeSettlement = await futures.read.balanceOf([seller.account.address]);

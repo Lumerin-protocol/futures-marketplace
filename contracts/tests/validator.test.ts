@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { getAddress, parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
+import { refreshHashprice } from "./utils.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -32,7 +33,9 @@ describe("Validator Functions", () => {
     });
     const { positionId } = orderEvent.args;
 
-    await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
+    // Move time to after start time but before expiration
+    await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n }); // 1 day + 1 second
+    await refreshHashprice(contracts.hashrateOracle);
 
     const closeTxHash = await futures.write.closeDelivery([positionId, true], {
       account: validator.account,

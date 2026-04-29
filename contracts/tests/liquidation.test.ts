@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { type Account, getAddress, parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
+import { scaleHashprice } from "./utils.ts";
+import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -33,9 +35,8 @@ async function positionWithMarginFixture() {
     abi: futures.abi,
     eventName: "PositionCreated",
   });
-  const positionId = positionCreatedEvents.length > 0
-    ? positionCreatedEvents[0].args.positionId
-    : null;
+  const positionId =
+    positionCreatedEvents.length > 0 ? positionCreatedEvents[0].args.positionId : null;
 
   return {
     ...data,
@@ -46,9 +47,7 @@ async function positionWithMarginFixture() {
   };
 }
 
-type FuturesContract = Awaited<
-  ReturnType<typeof networkHelpers.loadFixture<typeof deployFuturesFixture>>
->["contracts"]["futures"];
+type FuturesContract = ContractReturnType<"Futures">;
 
 async function getMarginDeficit(futures: FuturesContract, party: Account) {
   const partyCollateral = await futures.read.balanceOf([party.address]);
@@ -56,11 +55,11 @@ async function getMarginDeficit(futures: FuturesContract, party: Account) {
   return partyMinMargin - partyCollateral;
 }
 
-describe("Futures - Liquidation", () => {
-  describe("Margin Call - Position Liquidation", () => {
-    it("should liquidate buyer position when buyer is at loss and margin insufficient", async () => {
-      const { contracts, accounts, entryPricePerDay, positionId } =
-        await positionWithMarginFixture();
+describe("Futures - Liquidation", function () {
+  describe("Margin Call - Position Liquidation", function () {
+    it("should liquidate buyer position when buyer is at loss and margin insufficient", async function () {
+      const { contracts, accounts, entryPricePerDay, deliveryDate, positionId } =
+        await networkHelpers.loadFixture(positionWithMarginFixture);
       const { futures, hashrateOracle } = contracts;
       const { seller, buyer, validator, pc } = accounts;
 
@@ -69,9 +68,8 @@ describe("Futures - Liquidation", () => {
 
       assert.notEqual(positionId, null);
 
-      // Increase hashes by 150% so margin becomes insufficient (price drops, buyer loses).
-      const hashesForBTC = await hashrateOracle.read.getHashesForBTC();
-      await hashrateOracle.write.setHashesForBTC([(hashesForBTC.value * 150n) / 100n]);
+      // Drop hashprice ~33% so margin becomes insufficient and buyer is at loss.
+      await scaleHashprice(hashrateOracle, 100n, 150n);
       const newMarketPrice = await futures.read.getMarketPrice();
       assert.ok(newMarketPrice < entryPricePerDay);
 
@@ -100,20 +98,22 @@ describe("Futures - Liquidation", () => {
       if (buyerPnL < 0n) {
         const expectedBuyerBalance = buyerBalanceBefore + buyerPnL;
         const tolerance = parseUnits("1", 6);
-        const buyerDiff = buyerBalanceAfter > expectedBuyerBalance
-          ? buyerBalanceAfter - expectedBuyerBalance
-          : expectedBuyerBalance - buyerBalanceAfter;
-        const sellerDiff = sellerBalanceAfter > sellerBalanceBefore - buyerPnL
-          ? sellerBalanceAfter - (sellerBalanceBefore - buyerPnL)
-          : sellerBalanceBefore - buyerPnL - sellerBalanceAfter;
+        const buyerDiff =
+          buyerBalanceAfter > expectedBuyerBalance
+            ? buyerBalanceAfter - expectedBuyerBalance
+            : expectedBuyerBalance - buyerBalanceAfter;
+        const sellerDiff =
+          sellerBalanceAfter > sellerBalanceBefore - buyerPnL
+            ? sellerBalanceAfter - (sellerBalanceBefore - buyerPnL)
+            : sellerBalanceBefore - buyerPnL - sellerBalanceAfter;
         assert.ok(buyerDiff <= tolerance);
         assert.ok(sellerDiff <= tolerance);
       }
     });
 
-    it("should liquidate seller position when seller is at loss and margin insufficient", async () => {
-      const { contracts, accounts, entryPricePerDay, positionId } =
-        await positionWithMarginFixture();
+    it("should liquidate seller position when seller is at loss and margin insufficient", async function () {
+      const { contracts, accounts, entryPricePerDay, deliveryDate, positionId } =
+        await networkHelpers.loadFixture(positionWithMarginFixture);
       const { futures, hashrateOracle } = contracts;
       const { seller, buyer, validator, pc } = accounts;
 
@@ -122,8 +122,8 @@ describe("Futures - Liquidation", () => {
 
       assert.notEqual(positionId, null);
 
-      const hashesForBTC = await hashrateOracle.read.getHashesForBTC();
-      await hashrateOracle.write.setHashesForBTC([(hashesForBTC.value * 80n) / 100n]);
+      // Raise hashprice ~25% so seller is at loss.
+      await scaleHashprice(hashrateOracle, 100n, 80n);
       const newMarketPrice = await futures.read.getMarketPrice();
       assert.ok(newMarketPrice > entryPricePerDay);
 
@@ -151,19 +151,22 @@ describe("Futures - Liquidation", () => {
 
       if (buyerPnL > 0n) {
         const tolerance = parseUnits("1", 6);
-        const sellerDiff = sellerBalanceAfter > sellerBalanceBefore - buyerPnL
-          ? sellerBalanceAfter - (sellerBalanceBefore - buyerPnL)
-          : sellerBalanceBefore - buyerPnL - sellerBalanceAfter;
-        const buyerDiff = buyerBalanceAfter > buyerBalanceBefore + buyerPnL
-          ? buyerBalanceAfter - (buyerBalanceBefore + buyerPnL)
-          : buyerBalanceBefore + buyerPnL - buyerBalanceAfter;
+        const sellerDiff =
+          sellerBalanceAfter > sellerBalanceBefore - buyerPnL
+            ? sellerBalanceAfter - (sellerBalanceBefore - buyerPnL)
+            : sellerBalanceBefore - buyerPnL - sellerBalanceAfter;
+        const buyerDiff =
+          buyerBalanceAfter > buyerBalanceBefore + buyerPnL
+            ? buyerBalanceAfter - (buyerBalanceBefore + buyerPnL)
+            : buyerBalanceBefore + buyerPnL - buyerBalanceAfter;
         assert.ok(sellerDiff <= tolerance);
         assert.ok(buyerDiff <= tolerance);
       }
     });
 
-    it("should close orders first, then positions during margin call", async () => {
-      const { contracts, accounts, deliveryDate, config } = await positionWithMarginFixture();
+    it("should close orders first, then positions during margin call", async function () {
+      const { contracts, accounts, entryPricePerDay, deliveryDate, config } =
+        await networkHelpers.loadFixture(positionWithMarginFixture);
       const { futures, hashrateOracle } = contracts;
       const { buyer, validator, pc } = accounts;
 
@@ -196,8 +199,8 @@ describe("Futures - Liquidation", () => {
       });
       assert.ok(orders1.length + orders2.length >= 2);
 
-      const hashesForBTC = await hashrateOracle.read.getHashesForBTC();
-      await hashrateOracle.write.setHashesForBTC([(hashesForBTC.value * 150n) / 100n]);
+      // Move market price down to trigger margin call
+      await scaleHashprice(hashrateOracle, 100n, 150n);
 
       const marginDeficit = await getMarginDeficit(futures, buyer.account);
       assert.ok(marginDeficit > 0n);
@@ -251,8 +254,8 @@ describe("Futures - Liquidation", () => {
       });
       assert.equal(positionCreatedEvents.length, 2);
 
-      const hashesForBTC = await hashrateOracle.read.getHashesForBTC();
-      await hashrateOracle.write.setHashesForBTC([(hashesForBTC.value * 90n) / 100n]);
+      // Move market price up (seller loses on both positions)
+      await scaleHashprice(hashrateOracle, 100n, 90n);
 
       const sellerMarginDeficit = await getMarginDeficit(futures, seller.account);
       assert.ok(sellerMarginDeficit > 0n);
@@ -273,13 +276,14 @@ describe("Futures - Liquidation", () => {
       assert.ok(sellerMarginDeficit2 <= 0n);
     });
 
-    it("should not liquidate if margin is sufficient", async () => {
-      const { contracts, accounts } = await positionWithMarginFixture();
+    it("should not liquidate if margin is sufficient", async function () {
+      const { contracts, accounts, entryPricePerDay } =
+        await networkHelpers.loadFixture(positionWithMarginFixture);
       const { futures, hashrateOracle } = contracts;
       const { buyer, validator, pc } = accounts;
 
-      const hashesForBTC = await hashrateOracle.read.getHashesForBTC();
-      await hashrateOracle.write.setHashesForBTC([(hashesForBTC.value * 105n) / 100n]);
+      // Move market price slightly (small loss)
+      await scaleHashprice(hashrateOracle, 100n, 105n);
 
       const buyerMinMargin = await futures.read.getMinMargin([buyer.account.address]);
       const buyerCollateral = await futures.read.balanceOf([buyer.account.address]);
@@ -310,16 +314,17 @@ describe("Futures - Liquidation", () => {
       );
     });
 
-    it("should correctly calculate and transfer PnL when buyer profits", async () => {
-      const { contracts, accounts, entryPricePerDay } = await positionWithMarginFixture();
+    it("should correctly calculate and transfer PnL when buyer profits", async function () {
+      const { contracts, accounts, entryPricePerDay } =
+        await networkHelpers.loadFixture(positionWithMarginFixture);
       const { futures, hashrateOracle } = contracts;
       const { seller, buyer, validator } = accounts;
 
       const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
       const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
 
-      const hashesForBTC = await hashrateOracle.read.getHashesForBTC();
-      await hashrateOracle.write.setHashesForBTC([(hashesForBTC.value * 80n) / 100n]);
+      // Raise hashprice ~25% so buyer profits.
+      await scaleHashprice(hashrateOracle, 100n, 80n);
       const newMarketPrice = await futures.read.getMarketPrice();
       assert.ok(newMarketPrice > entryPricePerDay);
 
@@ -339,12 +344,14 @@ describe("Futures - Liquidation", () => {
 
       if (buyerPnL > 0n) {
         const tolerance = parseUnits("1", 6);
-        const buyerDiff = buyerBalanceAfter > buyerBalanceBefore + buyerPnL
-          ? buyerBalanceAfter - (buyerBalanceBefore + buyerPnL)
-          : buyerBalanceBefore + buyerPnL - buyerBalanceAfter;
-        const sellerDiff = sellerBalanceAfter > sellerBalanceBefore - buyerPnL
-          ? sellerBalanceAfter - (sellerBalanceBefore - buyerPnL)
-          : sellerBalanceBefore - buyerPnL - sellerBalanceAfter;
+        const buyerDiff =
+          buyerBalanceAfter > buyerBalanceBefore + buyerPnL
+            ? buyerBalanceAfter - (buyerBalanceBefore + buyerPnL)
+            : buyerBalanceBefore + buyerPnL - buyerBalanceAfter;
+        const sellerDiff =
+          sellerBalanceAfter > sellerBalanceBefore - buyerPnL
+            ? sellerBalanceAfter - (sellerBalanceBefore - buyerPnL)
+            : sellerBalanceBefore - buyerPnL - sellerBalanceAfter;
         assert.ok(buyerDiff <= tolerance);
         assert.ok(sellerDiff <= tolerance);
       }
@@ -363,8 +370,8 @@ describe("Futures - Liquidation", () => {
       const positionDeliveryDate = position.deliveryAt;
       const positionDestURL = position.destURL;
 
-      const hashesForBTC = await hashrateOracle.read.getHashesForBTC();
-      await hashrateOracle.write.setHashesForBTC([(hashesForBTC.value * 150n) / 100n]);
+      // Drop hashprice ~33% so buyer is at loss.
+      await scaleHashprice(hashrateOracle, 100n, 150n);
 
       const buyerMinMargin = await futures.read.getMinMargin([buyer.account.address]);
       const buyerCollateral = await futures.read.balanceOf([buyer.account.address]);
@@ -418,8 +425,8 @@ describe("Futures - Liquidation", () => {
       const positionDeliveryDate = position.deliveryAt;
       const positionDestURL = position.destURL;
 
-      const hashesForBTC = await hashrateOracle.read.getHashesForBTC();
-      await hashrateOracle.write.setHashesForBTC([(hashesForBTC.value * 80n) / 100n]);
+      // Raise hashprice ~25% so seller is at loss.
+      await scaleHashprice(hashrateOracle, 100n, 80n);
 
       const sellerMinMargin = await futures.read.getMinMargin([seller.account.address]);
       const sellerCollateral = await futures.read.balanceOf([seller.account.address]);

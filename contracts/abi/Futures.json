@@ -100,6 +100,11 @@
   },
   {
     "inputs": [],
+    "name": "InvalidOracle",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "InvalidPrice",
     "type": "error"
   },
@@ -136,6 +141,11 @@
   {
     "inputs": [],
     "name": "OnlyValidatorOrPositionParticipant",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OracleStale",
     "type": "error"
   },
   {
@@ -209,6 +219,11 @@
       }
     ],
     "name": "UUPSUnsupportedProxiableUUID",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "UnsupportedTokenDecimals",
     "type": "error"
   },
   {
@@ -511,6 +526,19 @@
         "internalType": "uint8",
         "name": "",
         "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_ORACLE_STALENESS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -1084,10 +1112,23 @@
   },
   {
     "inputs": [],
+    "name": "hashpriceScalingDivisor",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "hashrateOracle",
     "outputs": [
       {
-        "internalType": "contract HashrateOracle",
+        "internalType": "contract AggregatorV3Interface",
         "name": "",
         "type": "address"
       }
@@ -1103,7 +1144,7 @@
         "type": "address"
       },
       {
-        "internalType": "contract HashrateOracle",
+        "internalType": "contract AggregatorV3Interface",
         "name": "_hashrateOracle",
         "type": "address"
       },

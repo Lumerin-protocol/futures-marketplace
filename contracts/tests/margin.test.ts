@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { getAddress, parseEventLogs, parseUnits, zeroAddress } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
+import { scaleHashprice } from "./utils.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -46,8 +47,7 @@ describe("Futures - getMinMargin", () => {
     assert.equal(sellerMargin, buyerMargin); // at market price only
 
     const marketPricePerDay = await futures.read.getMarketPrice();
-    const hashesForBTC = await hashrateOracle.read.getHashesForBTC();
-    await hashrateOracle.write.setHashesForBTC([(hashesForBTC.value * 110n) / 100n]);
+    await scaleHashprice(hashrateOracle, 100n, 110n); // drop ~9.09%
     const newMarketPricePerDay = await futures.read.getMarketPrice();
 
     assert.ok(newMarketPricePerDay < marketPricePerDay);
@@ -69,8 +69,7 @@ describe("Futures - getMinMargin", () => {
     assert.equal(sellerMargin, buyerMargin); // at market price only
 
     const marketPricePerDay = await futures.read.getMarketPrice();
-    const hashesForBTC = await hashrateOracle.read.getHashesForBTC();
-    await hashrateOracle.write.setHashesForBTC([(hashesForBTC.value * 90n) / 100n]);
+    await scaleHashprice(hashrateOracle, 100n, 90n); // raise ~11.11%
     const newMarketPricePerDay = await futures.read.getMarketPrice();
 
     assert.ok(newMarketPricePerDay > marketPricePerDay);
@@ -292,10 +291,10 @@ describe("Futures - margin management", () => {
   });
 });
 
-describe("Futures - margin call", () => {
-  it("should perform margin call when margin is insufficient", async () => {
+describe("Futures - margin call", function () {
+  it("should perform margin call when margin is insufficient", async function () {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, btcPriceOracleMock } = contracts;
+    const { futures, hashrateOracle } = contracts;
     const { seller, validator, pc } = accounts;
 
     const price = await futures.read.getMarketPrice();
@@ -315,7 +314,9 @@ describe("Futures - margin call", () => {
     });
     const { orderId } = createdEvent.args;
 
-    await btcPriceOracleMock.write.setPrice([config.oracle.btcPrice / 2n, 8]);
+    // Halve the hashprice so the buy order is now collateral-deficient (equivalent
+    // to halving BTC price in the legacy oracle setup).
+    await scaleHashprice(hashrateOracle, 1n, 2n);
 
     const txHash = await futures.write.marginCall([seller.account.address], {
       account: validator.account,

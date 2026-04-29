@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { deployFuturesFixture } from "./fixtures.ts";
+import { refreshHashprice } from "./utils.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -176,6 +177,7 @@ describe("Delivery Date Management", () => {
 
     await tc.setNextBlockTimestamp({ timestamp: config.firstFutureDeliveryDate + 1n });
     await tc.mine({ blocks: 1 });
+    await refreshHashprice(contracts.hashrateOracle);
 
     // in the past
     await viem.assertions.revertWithCustomError(

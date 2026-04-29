@@ -39,6 +39,7 @@ import { useOrderFee } from "../../../hooks/data/useOrderFee";
 import { ModeToggle, ModeButton, type AmountMode } from "./PerpsOrderFormFields";
 import { useSimulatePerpsOrder } from "../../../hooks/data/perps/useSimulatePerpsOrder";
 import { useGetPerpsInitialMargin } from "../../../hooks/data/perps/useGetPerpsInitialMargin";
+import { PAYMENT_TOKEN_SCALE, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -121,7 +122,7 @@ export const PlaceOrderWidget = ({
 
   // Calculate price step from contract specs
   const priceStep = contractSpecsQuery.data?.data?.minimumPriceIncrement
-    ? Number(contractSpecsQuery.data.data.minimumPriceIncrement) / 1e6
+    ? Number(contractSpecsQuery.data.data.minimumPriceIncrement) / PAYMENT_TOKEN_SCALE_NUM
     : null;
 
   // Get delivery duration days from contract specs
@@ -130,7 +131,7 @@ export const PlaceOrderWidget = ({
 
 
   // Get market price for validation and default price
-  const newestItemPrice = marketPrice ? Number(marketPrice) / 1e6 : null;
+  const newestItemPrice = marketPrice ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
 
   const [orderType, setOrderType] = useState<"limit" | "market">("limit");
   const [price, setPrice] = useState("5.00"); // Will be updated when hashrate data loads
@@ -283,7 +284,7 @@ export const PlaceOrderWidget = ({
     const currentPrice = parseFloat(price) || 0;
     if (currentPrice <= 0 || !latestPrice) return 0;
 
-    const priceInWei = BigInt(Math.round(currentPrice * 1e6));
+    const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance =
       contractMode === "perpetual"
@@ -293,9 +294,9 @@ export const PlaceOrderWidget = ({
 
     // For perpetual mode, return max size (notional) or max quantity depending on amountMode
     if (contractMode === "perpetual") {
-      const buffer = 100_000n; // 0.1 USDC in base units (6 decimals)
+      const buffer = PAYMENT_TOKEN_SCALE / 10n; // 0.1 USDC in base units
       const effectiveBalance = availableBalance > buffer ? availableBalance - buffer : 0n;
-      const maxSize = (Number(effectiveBalance) / 1e6) * leverage;
+      const maxSize = (Number(effectiveBalance) / PAYMENT_TOKEN_SCALE_NUM) * leverage;
       if (amountMode === "quantity") {
         const priceNum = parseFloat(price) || 0;
         return priceNum > 0 ? maxSize / priceNum : 0;
@@ -369,7 +370,7 @@ export const PlaceOrderWidget = ({
 
   // Simulation hooks for market orders in perps mode.
   // Must be called unconditionally here, before the early loading return below.
-  const simMarketPriceDecimal = marketPrice ? Number(marketPrice) / 1e6 : 0;
+  const simMarketPriceDecimal = marketPrice ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : 0;
   const simNumericAmount = (() => {
     const parsed = typeof amount === "string" ? parseFloat(amount) : amount;
     return isNaN(parsed) || parsed <= 0 ? 0 : parsed;
@@ -379,9 +380,9 @@ export const PlaceOrderWidget = ({
       ? (amountMode === "quantity" ? simNumericAmount : simNumericAmount / simMarketPriceDecimal)
       : 0;
   // Slippage-adjusted sim prices mirror what getEffectivePrice() produces for each side.
-  // Snap a bigint price (1e6 units) to the nearest price-step boundary.
+  // Snap a bigint price (PAYMENT_TOKEN_SCALE units) to the nearest price-step boundary.
   // priceStep may be null here (before the early return), so fall back to 1 unit = no snap.
-  const stepUnits = priceStep ? Math.round(priceStep * 1e6) : 1;
+  const stepUnits = priceStep ? Math.round(priceStep * PAYMENT_TOKEN_SCALE_NUM) : 1;
   const snapBigInt = (raw: number) => BigInt(Math.round(raw / stepUnits) * stepUnits);
 
   const simBuyPriceArg =
@@ -497,9 +498,9 @@ export const PlaceOrderWidget = ({
           if (!filledQty || filledQty === 0n) {
             alert("There is no liquidity in order book");
           } else {
-            const filled = (Number(filledQty) / 1e6).toFixed(6);
-            const remaining = (Number(remainingQty) / 1e6).toFixed(6);
-            const total = ((Number(filledQty) + Number(remainingQty)) / 1e6).toFixed(6);
+            const filled = (Number(filledQty) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
+            const remaining = (Number(remainingQty) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
+            const total = ((Number(filledQty) + Number(remainingQty)) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
             alert(
               `Order would only be partially filled.\n\nRequested: ${total}\nWill be filled: ${filled}\nUnfilled: ${remaining}\n\nNot enough liquidity to fill the full order.`,
             );
@@ -514,7 +515,7 @@ export const PlaceOrderWidget = ({
 
     // Validate minimum margin
     const currentPrice = getEffectivePrice("buy");
-    const priceInWei = BigInt(Math.round(currentPrice * 1e6));
+    const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance = getPerpsLockedBalanceForSide(
       minMargin,
@@ -527,15 +528,15 @@ export const PlaceOrderWidget = ({
     // Required margin = effectiveSize / leverage (effectiveSize accounts for amountMode)
     const effectiveSizeBuy = getEffectiveSize();
     const requiredMargin = effectiveSizeBuy / leverage;
-    const marginInWei = BigInt(Math.round(requiredMargin * 1e6));
+    const marginInWei = BigInt(Math.round(requiredMargin * PAYMENT_TOKEN_SCALE_NUM));
 
     if (marginInWei > availableBalance) {
       const marginFormatted = requiredMargin.toFixed(2);
-      const totalBalanceFormatted = (Number(totalBalance) / 1e6).toFixed(2);
-      const lockedBalanceFormatted = (Number(lockedBalance) / 1e6).toFixed(2);
-      const availableBalanceFormatted = (Number(availableBalance) / 1e6).toFixed(2);
+      const totalBalanceFormatted = (Number(totalBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+      const lockedBalanceFormatted = (Number(lockedBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+      const availableBalanceFormatted = (Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const accountBalance = accountBalanceQuery.data ?? 0n;
-      const accountBalanceFormatted = (Number(accountBalance) / 1e6).toFixed(2);
+      const accountBalanceFormatted = (Number(accountBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       alert(
         `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${marginFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
       );
@@ -587,9 +588,9 @@ export const PlaceOrderWidget = ({
           if (!filledQty || filledQty === 0n) {
             alert("There is no liquidity in order book");
           } else {
-            const filled = (Number(filledQty) / 1e6).toFixed(6);
-            const remaining = (Number(remainingQty) / 1e6).toFixed(6);
-            const total = ((Number(filledQty) + Number(remainingQty)) / 1e6).toFixed(6);
+            const filled = (Number(filledQty) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
+            const remaining = (Number(remainingQty) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
+            const total = ((Number(filledQty) + Number(remainingQty)) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
             alert(
               `Order would only be partially filled.\n\nRequested: ${total}\nWill be filled: ${filled}\nUnfilled: ${remaining}\n\nNot enough liquidity to fill the full order.`,
             );
@@ -603,7 +604,7 @@ export const PlaceOrderWidget = ({
     }
 
     const currentPrice = getEffectivePrice("sell");
-    const priceInWei = BigInt(Math.round(currentPrice * 1e6));
+    const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance = getPerpsLockedBalanceForSide(
       minMargin,
@@ -616,15 +617,15 @@ export const PlaceOrderWidget = ({
     // Required margin = effectiveSize / leverage (effectiveSize accounts for amountMode)
     const effectiveSizeSell = getEffectiveSize();
     const requiredMargin = effectiveSizeSell / leverage;
-    const marginInWei = BigInt(Math.round(requiredMargin * 1e6));
+    const marginInWei = BigInt(Math.round(requiredMargin * PAYMENT_TOKEN_SCALE_NUM));
 
     if (marginInWei > availableBalance) {
       const marginFormatted = requiredMargin.toFixed(2);
-      const totalBalanceFormatted = (Number(totalBalance) / 1e6).toFixed(2);
-      const lockedBalanceFormatted = (Number(lockedBalance) / 1e6).toFixed(2);
-      const availableBalanceFormatted = (Number(availableBalance) / 1e6).toFixed(2);
+      const totalBalanceFormatted = (Number(totalBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+      const lockedBalanceFormatted = (Number(lockedBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+      const availableBalanceFormatted = (Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const accountBalance = accountBalanceQuery.data ?? 0n;
-      const accountBalanceFormatted = (Number(accountBalance) / 1e6).toFixed(2);
+      const accountBalanceFormatted = (Number(accountBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       alert(
         `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${marginFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
       );
@@ -673,7 +674,7 @@ export const PlaceOrderWidget = ({
 
     // Validate balance for buy orders using getMinMarginForPositionManual
     const currentPrice = getEffectivePrice("buy");
-    const priceInWei = BigInt(Math.round(currentPrice * 1e6));
+    const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance = minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
@@ -696,14 +697,14 @@ export const PlaceOrderWidget = ({
     const totalRequired = requiredMargin + orderFee;
 
     if (totalRequired > availableBalance) {
-      const requiredMarginFormatted = (Number(requiredMargin) / 1e6).toFixed(2);
-      const orderFeeFormatted = (Number(orderFee) / 1e6).toFixed(2);
-      const totalRequiredFormatted = (Number(totalRequired) / 1e6).toFixed(2);
-      const totalBalanceFormatted = (Number(totalBalance) / 1e6).toFixed(2);
-      const lockedBalanceFormatted = (Number(lockedBalance) / 1e6).toFixed(2);
-      const availableBalanceFormatted = (Number(availableBalance) / 1e6).toFixed(2);
+      const requiredMarginFormatted = (Number(requiredMargin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+      const orderFeeFormatted = (Number(orderFee) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+      const totalRequiredFormatted = (Number(totalRequired) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+      const totalBalanceFormatted = (Number(totalBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+      const lockedBalanceFormatted = (Number(lockedBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+      const availableBalanceFormatted = (Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const accountBalance = accountBalanceQuery.data ?? 0n;
-      const accountBalanceFormatted = (Number(accountBalance) / 1e6).toFixed(2);
+      const accountBalanceFormatted = (Number(accountBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       alert(
         `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${requiredMarginFormatted} USDC\nOrder fee: ${orderFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
       );
@@ -766,7 +767,7 @@ export const PlaceOrderWidget = ({
 
     // Validate balance for sell orders using getMinMarginForPositionManual
     const currentPrice = getEffectivePrice("sell");
-    const priceInWei = BigInt(Math.round(currentPrice * 1e6));
+    const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance = minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
@@ -789,14 +790,14 @@ export const PlaceOrderWidget = ({
     const totalRequired = requiredMargin + orderFee;
 
     if (totalRequired > availableBalance) {
-      const requiredMarginFormatted = (Number(requiredMargin) / 1e6).toFixed(2);
-      const orderFeeFormatted = (Number(orderFee) / 1e6).toFixed(2);
-      const totalRequiredFormatted = (Number(totalRequired) / 1e6).toFixed(2);
-      const totalBalanceFormatted = (Number(totalBalance) / 1e6).toFixed(2);
-      const lockedBalanceFormatted = (Number(lockedBalance) / 1e6).toFixed(2);
-      const availableBalanceFormatted = (Number(availableBalance) / 1e6).toFixed(2);
+      const requiredMarginFormatted = (Number(requiredMargin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+      const orderFeeFormatted = (Number(orderFee) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+      const totalRequiredFormatted = (Number(totalRequired) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+      const totalBalanceFormatted = (Number(totalBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+      const lockedBalanceFormatted = (Number(lockedBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+      const availableBalanceFormatted = (Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const accountBalance = accountBalanceQuery.data ?? 0n;
-      const accountBalanceFormatted = (Number(accountBalance) / 1e6).toFixed(2);
+      const accountBalanceFormatted = (Number(accountBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       alert(
         `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${requiredMarginFormatted} USDC\nOrder fee: ${orderFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
       );
@@ -1106,7 +1107,7 @@ export const PlaceOrderWidget = ({
           }}
         >
           <PlaceOrderForm
-            price={BigInt(Math.round(pendingOrder.price * 1e6))}
+            price={BigInt(Math.round(pendingOrder.price * PAYMENT_TOKEN_SCALE_NUM))}
             deliveryDate={BigInt(externalDeliveryDate)}
             quantity={pendingOrder.quantity}
             participantData={participantData}

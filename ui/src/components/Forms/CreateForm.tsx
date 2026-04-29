@@ -13,6 +13,7 @@ import { truncateAddress } from "../../utils/formatters";
 import { useGetPublicKey } from "../../hooks/data/usePublicKey";
 import { useCreateNewRentalContract } from "../../hooks/data/useCreateNewRentalContract";
 import { useContractDurationInterval } from "../../hooks/data/useContractDurationInterval";
+import { HASHRATE_TH_SCALE_NUM } from "../../lib/units";
 
 export interface InputValuesCreateForm {
   walletAddress: string;
@@ -90,7 +91,7 @@ export const CreateContract: FC<CreateFormProps> = memo(({ closeForm }) => {
           action: async () => {
             const data = form.getValues();
             const durationSeconds = Number(data.durationHours) * 3600;
-            const speedHPS = Number(data.speedTHPS) * 10 ** 12;
+            const speedHPS = Number(data.speedTHPS) * HASHRATE_TH_SCALE_NUM;
 
             const receipt = await createNewRentalContractAsync({
               profitTargetPercent: Number(data.profitTargetPercent),

@@ -1,11 +1,19 @@
 import hre from "hardhat";
-import { deployOnlyFuturesWithDummyData, deployTokenOraclesAndMulticall3 } from "../tests/fixtures.ts";
+import {
+  deployOnlyFuturesWithDummyData,
+  deployTokenOraclesAndMulticall3,
+} from "../tests/fixtures.ts";
 import { logInfo, logSuccess, logTitle } from "../lib/log.ts";
 
 async function main() {
   logTitle("Local deployment with dummy data");
 
-  const conn = await hre.network.getOrCreate();
+  console.log("Starting local deployment...");
+  await hre.tasks.getTask("compile").run();
+
+  const run = hre.tasks.getTask("node").run({ hostname: "0.0.0.0" });
+
+  const conn = await hre.network.getOrCreate("hardhat");
   const base = await deployTokenOraclesAndMulticall3(conn);
   const futures = await deployOnlyFuturesWithDummyData(conn, base);
 
@@ -22,7 +30,6 @@ async function main() {
   logInfo("contracts", {
     Multicall3: base.contracts.multicall3.address,
     USDCMock: base.contracts.usdcMock.address,
-    BTCPriceOracleMock: base.contracts.btcPriceOracleMock.address,
     HashrateOracle: base.contracts.hashrateOracle.address,
     Futures: futures.contracts.futures.address,
     CollateralVault: futures.contracts.collateralVault.address,
@@ -30,6 +37,8 @@ async function main() {
   });
 
   logSuccess("Local deployment complete. Run `hardhat node` separately to keep the network alive.");
+
+  await run;
 }
 
 main().catch((error) => {

@@ -100,8 +100,13 @@ export const OrderBookQuery = gql`
 `;
 
 export const AggregateOrderBookQuery = gql`
-  query AggregateOrderBook($deliveryAt: BigInt!) {
-    deliveryDateOrders (where: { deliveryDate: $deliveryAt }) {
+  query AggregateOrderBook($deliveryAt: BigInt!, $first: Int!, $lastId: ID!) {
+    deliveryDateOrders(
+      first: $first
+      where: { deliveryDate: $deliveryAt, id_gt: $lastId }
+      orderBy: id
+      orderDirection: asc
+    ) {
       buyOrdersCount
       deliveryDate
       id
@@ -139,24 +144,24 @@ export const ContractSpecsQuery = gql`
 
 export const HashrateIndexQuery = gql`
   query HashpriceIndex($startDate: BigInt!, $first: Int!, $skip: Int!) {
-    hashrateIndexes(
-      where: { updatedAt_gte: $startDate }
-      orderBy: updatedAt
+    hashpriceUsds(
+      where: { timestamp_gte: $startDate }
+      orderBy: timestamp
       orderDirection: desc
       first: $first
       skip: $skip
     ) {
+      blockNumber
       id
-      hashesForBTC
-      hashesForToken
-      updatedAt
+      price
+      timestamp
     }
   }
 `;
 
 export const AggregatedHashrateIndexQuery = gql`
   query AggregatedHashrateIndexQuery($interval: String!, $first: Int!, $skip: Int!, $startTimestamp: BigInt!) {
-  hashesForTokenCandles(interval: $interval, first: $first, skip: $skip, where: { timestamp_gte: $startTimestamp }) {
+  hashpriceUsdCandles(interval: $interval, first: $first, skip: $skip, where: { timestamp_gte: $startTimestamp }) {
     count
     id
     sum
@@ -220,6 +225,7 @@ export const HistoricalPositionsQuery = gql`
       sellerPnl
       isActive
       closedAt
+      transactionHash
       buyer {
         address
       }
@@ -273,23 +279,24 @@ export const HistoricalOrdersQuery = gql`
 // BTC Price Oracle queries (similar to Hashrate Index)
 export const BtcPriceIndexQuery = gql`
   query BtcPriceIndex($startDate: BigInt!, $first: Int!, $skip: Int!) {
-    btcPriceIndexes(
-      where: { updatedAt_gte: $startDate }
-      orderBy: updatedAt
+    btcUsds(
+      where: { timestamp_gte: $startDate }
+      orderBy: timestamp
       orderDirection: desc
       first: $first
       skip: $skip
     ) {
+      blockNumber
       id
       price
-      updatedAt
+      timestamp
     }
   }
 `;
 
 export const AggregatedBtcPriceIndexQuery = gql`
   query AggregatedBtcPriceIndexQuery($interval: String!, $first: Int!, $skip: Int!, $startTimestamp: BigInt!) {
-    btcPriceCandles(interval: $interval, first: $first, skip: $skip, where: { timestamp_gte: $startTimestamp }) {
+    btcUsdCandles(interval: $interval, first: $first, skip: $skip, where: { timestamp_gte: $startTimestamp }) {
       count
       id
       sum

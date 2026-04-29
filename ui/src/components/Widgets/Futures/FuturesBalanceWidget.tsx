@@ -4,7 +4,7 @@ import { useAccount } from "wagmi";
 import { useMemo } from "react";
 import { useModal } from "../../../hooks/useModal";
 import { Spinner } from "../../Spinner.styled";
-import { formatValue, paymentToken } from "../../../lib/units";
+import { formatValue, PAYMENT_TOKEN_SCALE_NUM, paymentToken } from "../../../lib/units";
 import { UsdcIcon } from "../../../images";
 import { PrimaryButton } from "../../Forms/FormButtons/Buttons.styled";
 import { ModalItem } from "../../Modal";
@@ -82,7 +82,7 @@ export const FuturesBalanceWidget = ({
       : realizedPnL30D && realizedPnL30D < 0
       ? tokens.trading.short
       : tokens.text.onDark;
-  const realizedPnL30DFormatted = realizedPnL30D !== null ? (realizedPnL30D / 1e6).toFixed(2) : "-";
+  const realizedPnL30DFormatted = realizedPnL30D !== null ? (realizedPnL30D / PAYMENT_TOKEN_SCALE_NUM).toFixed(2) : "-";
 
   const lockedBalanceThreshold = Number(
     process.env.REACT_APP_MARGIN_UTILIZATION_WARNING_PERCENT || "80",

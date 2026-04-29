@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { getAddress, parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
+import { refreshHashprice } from "./utils.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -544,6 +545,7 @@ describe("Futures Delivery Payment", () => {
       assert.equal(positionBefore.paid, false);
 
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
+      await refreshHashprice(contracts.hashrateOracle);
 
       const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
       const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
@@ -597,6 +599,7 @@ describe("Futures Delivery Payment", () => {
       const { positionId } = positionEvent.args;
 
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
+      await refreshHashprice(contracts.hashrateOracle);
 
       const closeTxHash = await futures.write.closeDelivery([positionId, true], {
         account: buyer.account,
@@ -641,6 +644,7 @@ describe("Futures Delivery Payment", () => {
       const { positionId } = positionEvent.args;
 
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
+      await refreshHashprice(contracts.hashrateOracle);
 
       const closeTxHash = await futures.write.closeDelivery([positionId, false], {
         account: seller.account,

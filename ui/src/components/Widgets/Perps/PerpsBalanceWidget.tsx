@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { useModal } from "../../../hooks/useModal";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { Spinner } from "../../Spinner.styled";
-import { formatValue, paymentToken } from "../../../lib/units";
+import { formatValue, PAYMENT_TOKEN_SCALE_NUM, paymentToken } from "../../../lib/units";
 import { UsdcIcon } from "../../../images";
 import { PrimaryButton } from "../../Forms/FormButtons/Buttons.styled";
 import { ModalItem } from "../../Modal";
@@ -79,7 +79,7 @@ export const PerpsBalanceWidget = ({
       : realizedPnL30D && realizedPnL30D < 0
       ? tokens.trading.short
       : tokens.text.onDark;
-  const realizedPnL30DFormatted = realizedPnL30D !== null ? (realizedPnL30D / 1e6).toFixed(2) : "-";
+  const realizedPnL30DFormatted = realizedPnL30D !== null ? (realizedPnL30D / PAYMENT_TOKEN_SCALE_NUM).toFixed(2) : "-";
 
   // Check if locked amount is at or above threshold percentage of balance
   const lockedBalanceThreshold = Number(

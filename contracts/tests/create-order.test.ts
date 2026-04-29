@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { getAddress, parseEventLogs, parseUnits, zeroAddress } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
+import { refreshHashprice } from "./utils.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -366,10 +367,7 @@ describe("Order Creation", () => {
     });
 
     assert.equal(orderClosedEvent.args.orderId, buyOrderId);
-    assert.equal(
-      getAddress(orderClosedEvent.args.participant),
-      getAddress(seller.account.address),
-    );
+    assert.equal(getAddress(orderClosedEvent.args.participant), getAddress(seller.account.address));
 
     const newOrderCreatedEvents = parseEventLogs({
       logs: sellOrderReceipt.logs,
@@ -505,6 +503,7 @@ describe("Order Creation", () => {
     assert.equal(oldOrder.deliveryAt, oldDeliveryDate);
 
     await tc.setNextBlockTimestamp({ timestamp: oldDeliveryDate + 1n });
+    await refreshHashprice(contracts.hashrateOracle);
 
     const newOrderTxHash = await futures.write.createOrder([price, newDeliveryDate, "", 1], {
       account: seller.account,

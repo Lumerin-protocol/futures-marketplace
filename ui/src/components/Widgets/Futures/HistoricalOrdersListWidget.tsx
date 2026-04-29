@@ -3,6 +3,7 @@ import styled from "@mui/material/styles/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import type { HistoricalOrder } from "../../../hooks/data/useHistoricalOrders";
 import { DateTimeCell } from "../../DateTimeCell";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 
 interface HistoricalOrdersListWidgetProps {
   orders: HistoricalOrder[];
@@ -11,7 +12,7 @@ interface HistoricalOrdersListWidgetProps {
 
 export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrdersListWidgetProps) => {
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2);
+    return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
   // Group orders by type, pricePerDay, and deliveryAt

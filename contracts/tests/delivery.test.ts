@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import { network } from "hardhat";
 import { type Client, parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
-import { quantizePrice } from "./utils.ts";
+import { quantizePrice, refreshHashprice } from "./utils.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -56,6 +56,7 @@ describe("Futures Delivery", () => {
     await tc.setNextBlockTimestamp({
       timestamp: position.deliveryDate + BigInt(config.deliveryDurationSeconds) / 2n,
     });
+    await refreshHashprice(contracts.hashrateOracle);
     await futures.write.closeDelivery([position.positionId, true], {
       account: validator.account,
     });

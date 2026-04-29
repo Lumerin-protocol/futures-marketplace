@@ -3,6 +3,7 @@ import styled from "@mui/material/styles/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import type { HistoricalPosition } from "../../../hooks/data/useHistoricalPositions";
 import { DateTimeCell } from "../../DateTimeCell";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 
 interface HistoricalPositionsListWidgetProps {
   positions: HistoricalPosition[];
@@ -31,11 +32,11 @@ export const HistoricalPositionsListWidget = ({
   };
 
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2);
+    return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
   const formatPnl = (pnl: number) => {
-    const pnlValue = pnl / 1e6;
+    const pnlValue = pnl / PAYMENT_TOKEN_SCALE_NUM;
     return `${pnlValue.toFixed(2)}`;
   };
 

@@ -1,5 +1,6 @@
 import { useReadContract } from "wagmi";
 import { FuturesABI } from "../../abi/Futures";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 
 /**
  * Hook to get order fee from Futures contract for a specific participant
@@ -23,8 +24,8 @@ export function useOrderFee(participantAddress: `0x${string}` | undefined) {
 
   return {
     ...result,
-    // Convert bigint to number in USDC (divide by 1e6)
-    orderFeeUSDC: result.data ? Number(result.data) / 1e6 : null,
+    // Convert bigint to number in USDC (divide by payment-token scale)
+    orderFeeUSDC: result.data ? Number(result.data) / PAYMENT_TOKEN_SCALE_NUM : null,
     dataFetchedAt: result.dataUpdatedAt ? new Date(result.dataUpdatedAt) : undefined,
   };
 }

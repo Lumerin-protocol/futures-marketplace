@@ -6,6 +6,11 @@ export const contractErrors = [
   },
   {
     "inputs": [],
+    "name": "OracleStale",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "MaxOrdersPerParticipantReached",
     "type": "error"
   },
@@ -58,11 +63,6 @@ export const contractErrors = [
     "type": "error"
   },
   {
-    "inputs": [],
-    "name": "ZeroAmount",
-    "type": "error"
-  },
-  {
     "inputs": [
       {
         "internalType": "uint256",
@@ -81,6 +81,11 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "DeliveryDateExpired",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "UnsupportedTokenDecimals",
     "type": "error"
   },
   {
@@ -116,17 +121,6 @@ export const contractErrors = [
     "type": "error"
   },
   {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "token",
-        "type": "address"
-      }
-    ],
-    "name": "SafeERC20FailedOperation",
-    "type": "error"
-  },
-  {
     "inputs": [],
     "name": "PositionDeliveryExpired",
     "type": "error"
@@ -144,11 +138,6 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "Unauthorized",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "MarginBreach",
     "type": "error"
   },
   {
@@ -180,6 +169,11 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "CollateralTokenMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidOracle",
     "type": "error"
   },
   {
@@ -263,6 +257,11 @@ export const contractErrors = [
   },
   {
     "inputs": [],
+    "name": "NotImplemented",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "FailedCall",
     "type": "error"
   },
@@ -274,11 +273,6 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "InsufficientMarginBalance",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "ZeroAddress",
     "type": "error"
   },
   {
@@ -316,11 +310,6 @@ export const contractErrors = [
       }
     ],
     "name": "ERC20InvalidApprover",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "NotAuthorized",
     "type": "error"
   },
   {

@@ -1,5 +1,6 @@
 import type { AggregateOrderBookOrder } from "../../../hooks/data/useAggregateOrderBook";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 
 export interface OrderBookData {
   bidUnits: number | null;
@@ -23,12 +24,12 @@ export const createFinalOrderBookData = (
   contractSpecs: FuturesContractSpecs | undefined,
 ): OrderBookData[] => {
   // Calculate minimumPriceIncrement once for reuse
-  const minimumPriceIncrement = contractSpecs ? Number(contractSpecs.minimumPriceIncrement) / 1e6 : null; // Convert from wei to USDC
+  const minimumPriceIncrement = contractSpecs ? Number(contractSpecs.minimumPriceIncrement) / PAYMENT_TOKEN_SCALE_NUM : null; // Convert from wei to USDC
 
   // Calculate basePrice from market price (used for highlighting and calculating order book)
   let basePrice: number | null = null;
   if (marketPrice && minimumPriceIncrement !== null) {
-    const rawPrice = Number(marketPrice) / 1e6; // Convert from wei to USDC
+    const rawPrice = Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM; // Convert from wei to USDC
     // Round to the nearest multiple of minimumPriceIncrement
     basePrice = Math.round(rawPrice / minimumPriceIncrement) * minimumPriceIncrement;
   }
@@ -87,7 +88,7 @@ export const createFinalOrderBookData = (
 
   if (orderBookData && orderBookData.length > 0) {
     for (const order of orderBookData) {
-      const rawPrice = Number(order.price) / 1e6; // Convert from wei to USDC
+      const rawPrice = Number(order.price) / PAYMENT_TOKEN_SCALE_NUM; // Convert from wei to USDC
       const price = normalizePrice(rawPrice); // Normalize to consistent precision
 
       // Data is already aggregated with buyOrdersCount and sellOrdersCount

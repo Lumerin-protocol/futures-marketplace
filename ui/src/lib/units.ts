@@ -45,6 +45,23 @@ const terahashPerSecond: Unit = {
   name: "Terahash per second",
 } as const;
 
+// Scaling factors for on-chain values. Payment-token values (USDC, prices,
+// margins, balances, PnL, fees) and quantities are both stored with 6 decimals
+// of precision on-chain. These constants should be used instead of hardcoded
+// `1e6` / `1000000n` / `10 ** 6` literals.
+export const PAYMENT_TOKEN_DECIMALS = paymentToken.decimals;
+export const PAYMENT_TOKEN_SCALE = 10n ** BigInt(PAYMENT_TOKEN_DECIMALS);
+export const PAYMENT_TOKEN_SCALE_NUM = 10 ** PAYMENT_TOKEN_DECIMALS;
+
+export const QUANTITY_DECIMALS = 6;
+export const QUANTITY_DECIMALS_BIGINT = BigInt(QUANTITY_DECIMALS);
+export const QUANTITY_SCALE = 10n ** QUANTITY_DECIMALS_BIGINT;
+export const QUANTITY_SCALE_NUM = 10 ** QUANTITY_DECIMALS;
+
+// Hashrate scaling: raw hashes/sec -> TH/s.
+export const HASHRATE_TH_DECIMALS = terahashPerSecond.decimals;
+export const HASHRATE_TH_SCALE_NUM = 10 ** HASHRATE_TH_DECIMALS;
+
 export const formatPaymentPrice = (priceUnits: string | bigint): Value => {
   return formatValue(priceUnits, paymentToken);
 };

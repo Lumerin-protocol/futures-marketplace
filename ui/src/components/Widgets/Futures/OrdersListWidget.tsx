@@ -14,6 +14,7 @@ import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { AccountBalance, ContractMode } from "../../../types/types";
 import { DateTimeCell } from "../../DateTimeCell";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -67,7 +68,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   };
 
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2); // Convert from wei to USDC
+    return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2); // Convert from wei to USDC
   };
 
 
@@ -79,7 +80,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   const deliveryDurationDays = contractSpecsQuery.data?.data?.deliveryDurationDays ?? 7;
 
   // Get newest item price for high price validation
-  const newestItemPrice = marketPrice ? Number(marketPrice) / 1e6 : null;
+  const newestItemPrice = marketPrice ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
 
   // Calculate margin for an order
   const calculateMargin = (pricePerDay: bigint, amount: number, isBuy: boolean): bigint | null => {
@@ -90,7 +91,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
 
   const formatMargin = (margin: bigint | null): string => {
     if (margin === null) return "-";
-    return `${(Number(margin) / 1e6).toFixed(2)} USDC`;
+    return `${(Number(margin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} USDC`;
   };
 
   const handleCloseOrder = (groupedOrder: {

@@ -22,6 +22,7 @@
     "@biomejs/biome": "^2.4.10",
     "@nomicfoundation/hardhat-toolbox-viem": "^5.0.0",
     "@nomicfoundation/hardhat-verify": "^3.0.0",
+    "@nomicfoundation/hardhat-viem": "^3.0.6",
     "@types/node": "^22.0.0",
     "hardhat": "^3.2",
     "typescript": "^5.8.0"
@@ -43,9 +44,9 @@
     "@safe-global/api-kit": "^3.0.1",
     "@safe-global/protocol-kit": "^6.0.3",
     "@safe-global/types-kit": "^2.0.1",
-    "collateral-margin": "git+ssh://git@github.com/Lumerin-protocol/collateral-margin.git#main",
+    "collateral-margin": "git+ssh://git@github.com/Lumerin-protocol/collateral-margin.git#dev",
     "dotenv": "^16.4.1",
-    "hashprice-oracle": "git+ssh://git@github.com/Lumerin-protocol/hashprice-oracle.git#main",
+    "hashprice-oracle": "git+ssh://git@github.com/Lumerin-protocol/hashprice-oracle.git#dev",
     "multicall3": "github:mds1/multicall3",
     "solidity-linked-list": "^6.5.0",
     "viem": "^2.42.1"

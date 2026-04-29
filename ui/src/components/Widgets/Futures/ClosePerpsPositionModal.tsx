@@ -28,6 +28,7 @@ import {
 } from "./PerpsOrderFormFields";
 import { useState } from "react";
 import styled from "@mui/material/styles/styled";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 
 const MARKET_SLIPPAGE = 0.05;
 
@@ -60,7 +61,7 @@ export const ClosePerpsPositionModal = ({
   const netQty = session?.user.netQuantity ?? 0n;
   const isLong = netQty > 0n;
   const absNetQty = netQty < 0n ? -netQty : netQty;
-  const maxQuantity = Number(absNetQty) / 1e6;
+  const maxQuantity = Number(absNetQty) / PAYMENT_TOKEN_SCALE_NUM;
   const closeSide = isLong ? "Short" : "Long";
 
   const form = usePerpsOrderForm({ maxQuantity, priceStep });
@@ -74,7 +75,7 @@ export const ClosePerpsPositionModal = ({
   // closing a long = sell order → price 5% below market
   // closing a short = buy order → price 5% above market
   // Snap to the minimum price increment (priceStep, default 0.01) to avoid contract errors.
-  const stepUnits = Math.round(priceStep * 1e6);
+  const stepUnits = Math.round(priceStep * PAYMENT_TOKEN_SCALE_NUM);
   const snapBigInt = (raw: number) => BigInt(Math.round(raw / stepUnits) * stepUnits);
   const simMarketPrice =
     marketPrice !== undefined
@@ -90,8 +91,8 @@ export const ClosePerpsPositionModal = ({
   useEffect(() => {
     if (!open || !session) return;
     const initPrice = marketPrice
-      ? (Number(marketPrice) / 1e6).toFixed(2)
-      : (Number(session.entryPrice) / 1e6).toFixed(2);
+      ? (Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)
+      : (Number(session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
     form.reset(initPrice, 100);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, session]);
@@ -117,9 +118,9 @@ export const ClosePerpsPositionModal = ({
           if (!filledQty || filledQty === 0n) {
             alert("There is no liquidity in order book");
           } else {
-            const filled = (Number(filledQty) / 1e6).toFixed(6);
-            const remaining = (Number(remainingQty) / 1e6).toFixed(6);
-            const total = ((Number(filledQty) + Number(remainingQty)) / 1e6).toFixed(6);
+            const filled = (Number(filledQty) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
+            const remaining = (Number(remainingQty) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
+            const total = ((Number(filledQty) + Number(remainingQty)) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
             alert(
               `Order would only be partially filled. Requested: ${total} | Will fill: ${filled} | Unfilled: ${remaining}`,
             );
@@ -140,9 +141,9 @@ export const ClosePerpsPositionModal = ({
       // Snap to the minimum price increment to avoid contract errors.
       const effectivePrice =
         orderType === "market" && marketPrice
-          ? Number(snapBigInt(Number(marketPrice) * (isLong ? 1 - MARKET_SLIPPAGE : 1 + MARKET_SLIPPAGE))) / 1e6
+          ? Number(snapBigInt(Number(marketPrice) * (isLong ? 1 - MARKET_SLIPPAGE : 1 + MARKET_SLIPPAGE))) / PAYMENT_TOKEN_SCALE_NUM
           : form.currentPrice;
-      const closePriceBig = BigInt(Math.round(effectivePrice * 1e6));
+      const closePriceBig = BigInt(Math.round(effectivePrice * PAYMENT_TOKEN_SCALE_NUM));
       const signedQty = isLong ? -closeQty : closeQty;
 
       const txHash = await createOrderAsync({ price: closePriceBig, quantity: signedQty });
@@ -171,14 +172,14 @@ export const ClosePerpsPositionModal = ({
 
   if (!session) return null;
 
-  const formatPrice = (p: bigint) => (Number(p) / 1e6).toFixed(2);
+  const formatPrice = (p: bigint) => (Number(p) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   const closeQtyDisplay = form.getCurrentQuantity();
   const closeSizeDisplay = form.getCurrentSize();
 
-  const entryPriceValue = Number(session.entryPrice) / 1e6;
+  const entryPriceValue = Number(session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM;
   const effectiveClosePrice =
     orderType === "market" && marketPrice
-      ? Number(snapBigInt(Number(marketPrice) * (isLong ? 1 - MARKET_SLIPPAGE : 1 + MARKET_SLIPPAGE))) / 1e6
+      ? Number(snapBigInt(Number(marketPrice) * (isLong ? 1 - MARKET_SLIPPAGE : 1 + MARKET_SLIPPAGE))) / PAYMENT_TOKEN_SCALE_NUM
       : form.currentPrice;
   const realizedPnl =
     effectiveClosePrice > 0 && closeQtyDisplay > 0
@@ -228,7 +229,7 @@ export const ClosePerpsPositionModal = ({
               onClick={() => {
                 setOrderType("market");
                 if (marketPrice) {
-                  form.handlePriceChange((Number(marketPrice) / 1e6).toFixed(2));
+                  form.handlePriceChange((Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2));
                 }
               }}
               disabled={isClosing || !marketPrice}

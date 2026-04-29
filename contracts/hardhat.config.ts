@@ -37,7 +37,6 @@ export default defineConfig({
       "collateral-margin/contracts/contracts/mocks/PerpsDEXMock.sol",
       "collateral-margin/contracts/contracts/mocks/OptionsEngineMock.sol",
       "hashprice-oracle/contracts/contracts/HashrateOracle.sol",
-      "hashprice-oracle/contracts/contracts/BTCPriceOracleMock.sol",
     ],
     compilers: [
       {

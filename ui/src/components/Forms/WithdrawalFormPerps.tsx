@@ -5,7 +5,7 @@ import Tooltip from "@mui/material/Tooltip";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import { AmountInputForm } from "./Shared/AmountInputForm";
-import { formatValue, paymentToken } from "../../lib/units";
+import { formatValue, PAYMENT_TOKEN_SCALE_NUM, paymentToken } from "../../lib/units";
 import { parseUnits } from "viem";
 import { usePerpsRemoveCollateral } from "../../hooks/data/perps/usePerpsRemoveCollateral";
 
@@ -78,7 +78,7 @@ export const WithdrawalFormPerps: FC<WithdrawalFormPerpsProps> = ({
 
   const handleMaxClick = useCallback(() => {
     if (availableBalance !== undefined) {
-      const numValue = Number(availableBalance) / 1e6;
+      const numValue = Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM;
       const floored = Math.floor(numValue * 100) / 100;
       form.setValue("amount", floored.toFixed(2));
     }
@@ -128,7 +128,7 @@ export const WithdrawalFormPerps: FC<WithdrawalFormPerpsProps> = ({
                   ? "—"
                   : "..."
                 : availableBalance !== undefined
-                  ? `${(Math.floor((Number(availableBalance) / 1e6) * 100) / 100).toFixed(2)}`
+                  ? `${(Math.floor((Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM) * 100) / 100).toFixed(2)}`
                   : "0"}{" "}
               {paymentToken.symbol}
             </span>

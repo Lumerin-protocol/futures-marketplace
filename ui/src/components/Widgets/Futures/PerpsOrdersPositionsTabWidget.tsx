@@ -23,6 +23,7 @@ import { ClosePerpsPositionModal } from "./ClosePerpsPositionModal";
 import { ModifyPerpsOrderModal } from "./ModifyPerpsOrderModal";
 import type { PerpsOrder } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { DateTimeCell } from "../../DateTimeCell";
+import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_DECIMALS_BIGINT, QUANTITY_SCALE } from "../../../lib/units";
 
 type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "POSITION_HISTORY" | "ORDER_HISTORY";
 
@@ -270,14 +271,14 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
   const [pendingCancelOrder, setPendingCancelOrder] = useState<OpenOrder | null>(null);
 
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2);
+    return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
   const formatQuantity = (quantity: bigint) => {
     if(quantity === 0n) {
       return "0";
     }
-    return (Number(quantity) / 1e6).toFixed(6);
+    return (Number(quantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
   };
 
   const formatStatus = (status: string) => {
@@ -356,9 +357,9 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
               </td>
               <td>{formatPrice(order.price)}</td>
               <td>
-                {((Number(order.price) / 1e6) * (Number(order.filledQuantity) / 1e6)).toFixed(2)}
+                {((Number(order.price) / PAYMENT_TOKEN_SCALE_NUM) * (Number(order.filledQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}
                 {" / "}
-                {((Number(order.price) / 1e6) * (Number(order.originalQuantity) / 1e6)).toFixed(2)}
+                {((Number(order.price) / PAYMENT_TOKEN_SCALE_NUM) * (Number(order.originalQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}
               </td>
               <td>
                 <StatusBadge $status={order.status} $color={getStatusColor(order.status)}>
@@ -417,10 +418,10 @@ interface CancelOrderConfirmModalProps {
 }
 
 const CancelOrderConfirmModal = ({ open, order, onClose, onConfirm, isCancelling }: CancelOrderConfirmModalProps) => {
-  const formatPrice = (price: bigint) => (Number(price) / 1e6).toFixed(2);
+  const formatPrice = (price: bigint) => (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
 
-  const filledValue = ((Number(order.price) / 1e6) * (Number(order.filledQuantity) / 1e6)).toFixed(2);
-  const totalValue = ((Number(order.price) / 1e6) * (Number(order.originalQuantity) / 1e6)).toFixed(2);
+  const filledValue = ((Number(order.price) / PAYMENT_TOKEN_SCALE_NUM) * (Number(order.filledQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2);
+  const totalValue = ((Number(order.price) / PAYMENT_TOKEN_SCALE_NUM) * (Number(order.originalQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2);
 
   return (
     <Modal open={open} onClose={onClose}>
@@ -488,14 +489,14 @@ interface PerpsOrderHistoryTableProps {
 
 const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }: PerpsOrderHistoryTableProps) => {
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2);
+    return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
   const formatQuantity = (quantity: bigint) => {
     if(quantity === 0n) {
       return "0";
     }
-    return (Number(quantity) / 1e6).toFixed(6);
+    return (Number(quantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
   };
 
   const formatStatus = (status: string) => {
@@ -578,9 +579,9 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }:
               </td>
               <td>{formatPrice(order.price)}</td>
               <td>
-                {((Number(order.price) / 1e6) * (Number(order.filledQuantity) / 1e6)).toFixed(2)}
+                {((Number(order.price) / PAYMENT_TOKEN_SCALE_NUM) * (Number(order.filledQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}
                 {" / "}
-                {((Number(order.price) / 1e6) * (Number(order.originalQuantity) / 1e6)).toFixed(2)}
+                {((Number(order.price) / PAYMENT_TOKEN_SCALE_NUM) * (Number(order.originalQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}
               </td>
               <td>
                 <StatusBadge $status={order.status} $color={getStatusColor(order.status)}>
@@ -612,13 +613,11 @@ interface PerpsPositionsTableProps {
   onClosePosition?: (session: PositionSession) => void;
 }
 
-const QUANTITY_DECIMALS = 6n;
-
 const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collateral, totalMaintenanceMargin, maintenanceMarginPercent, onClosePosition }: PerpsPositionsTableProps) => {
   const [selectedSession, setSelectedSession] = useState<PositionSession | null>(null);
 
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2);
+    return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
   const formatQuantity = (quantity: bigint) => {
@@ -626,12 +625,12 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
       return "0";
     }
     const absQuantity = quantity < 0n ? -quantity : quantity;
-    return (Number(absQuantity) / 1e6).toFixed(6);
+    return (Number(absQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
   };
 
   const formatFees = (fundingFees: bigint, tradingFees: bigint) => {
-    const funding = (Number(fundingFees) / 1e6).toFixed(2);
-    const trading = (Number(tradingFees) / 1e6).toFixed(2);
+    const funding = (Number(fundingFees) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+    const trading = (Number(tradingFees) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
     return `${funding} / ${trading}`;
   };
 
@@ -639,7 +638,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
   const calculateUnrealizedPnL = (entryPrice: bigint, netQuantity: bigint): bigint => {
     if (!marketPrice || netQuantity === 0n) return 0n;
     const priceDiff = marketPrice - entryPrice;
-    return priceDiff * netQuantity / 1_000_000n; // Adjust for precision
+    return priceDiff * netQuantity / QUANTITY_SCALE; // Adjust for precision
   };
 
   const calculateLiquidationPrice = (entryPrice: bigint, netQuantity: bigint): bigint | null => {
@@ -652,7 +651,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
       totalMaintenanceMargin ?? 0n,
       marketPrice,
       maintenanceMarginPercent,
-      QUANTITY_DECIMALS,
+      QUANTITY_DECIMALS_BIGINT,
     );
     return liquidationPrice;
   };
@@ -700,9 +699,9 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
               // For status OPEN, use netQuantity from user object
               const displayQuantity = session.user.netQuantity;
               const isLong = displayQuantity > 0n || (displayQuantity === 0n && session.maxQuantity > 0n);
-              const realizedPnlValue = Number(session.realizedPnl) / 1e6;
+              const realizedPnlValue = Number(session.realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
               const unrealizedPnl = calculateUnrealizedPnL(session.entryPrice, displayQuantity);
-              const unrealizedPnlValue = Number(unrealizedPnl) / 1e6;
+              const unrealizedPnlValue = Number(unrealizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
               const liquidationPrice = calculateLiquidationPrice(session.entryPrice, displayQuantity);
 
               return (
@@ -715,11 +714,11 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
                   </td>
                   <td>{formatPrice(session.entryPrice)}</td>
                   <td>
-                    {((Number(session.entryPrice) / 1e6) * (Number(displayQuantity < 0n ? -displayQuantity : displayQuantity) / 1e6)).toFixed(2)}
+                    {((Number(session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(displayQuantity < 0n ? -displayQuantity : displayQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}
                     {" / "}
-                    {((Number(session.entryPrice) / 1e6) * (Number(session.maxQuantity) / 1e6)).toFixed(2)}
+                    {((Number(session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(session.maxQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}
                   </td>
-                  <td>{(Number(displayQuantity < 0n ? -displayQuantity : displayQuantity) / 1e6).toFixed(6)}</td>
+                  <td>{(Number(displayQuantity < 0n ? -displayQuantity : displayQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6)}</td>
                   <td>{formatFees(session.fundingFees, session.tradingFees)}</td>
                   <td>
                     <PnLText $isPositive={unrealizedPnlValue >= 0}>
@@ -776,7 +775,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, 
   const [selectedSession, setSelectedSession] = useState<PositionSession | null>(null);
 
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2);
+    return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
   const formatQuantity = (quantity: bigint) => {
@@ -784,12 +783,12 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, 
       return "0";
     }
     const absQuantity = quantity < 0n ? -quantity : quantity;
-    return (Number(absQuantity) / 1e6).toFixed(6);
+    return (Number(absQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
   };
 
   const formatFees = (fundingFees: bigint, tradingFees: bigint) => {
-    const funding = (Number(fundingFees) / 1e6).toFixed(2);
-    const trading = (Number(tradingFees) / 1e6).toFixed(2);
+    const funding = (Number(fundingFees) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+    const trading = (Number(tradingFees) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
     return `${funding} / ${trading}`;
   };
 
@@ -849,7 +848,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, 
           <tbody>
             {displayedPositions.map((session) => {
               const isLong = session.maxQuantity > 0n;
-              const realizedPnlValue = Number(session.realizedPnl) / 1e6;
+              const realizedPnlValue = Number(session.realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
 
               return (
                 <TableRow key={session.id}>
@@ -866,7 +865,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, 
                   </td>
                   <td>{formatPrice(session.entryPrice)}</td>
                   <td>{session.closePrice ? formatPrice(session.closePrice) : "-"}</td>
-                  <td>{((Number(session.closePrice ?? session.entryPrice) / 1e6) * (Number(session.closedQuantity < 0n ? -session.closedQuantity : session.closedQuantity) / 1e6)).toFixed(2)}</td>
+                  <td>{((Number(session.closePrice ?? session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(session.closedQuantity < 0n ? -session.closedQuantity : session.closedQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}</td>
                   <td>{formatFees(session.fundingFees, session.tradingFees)}</td>
                   <td>
                     <PnLText $isPositive={realizedPnlValue >= 0}>
@@ -914,7 +913,7 @@ interface PerpsTradesTableProps {
 
 const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoadMore }: PerpsTradesTableProps) => {
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2);
+    return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
   const formatQuantity = (quantity: bigint) => {
@@ -922,11 +921,11 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoad
       return "0";
     }
     const absQuantity = quantity < 0n ? -quantity : quantity;
-    return (Number(absQuantity) / 1e6).toFixed(6);
+    return (Number(absQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
   };
 
   const formatPnL = (pnl: bigint) => {
-    const value = Number(pnl) / 1e6;
+    const value = Number(pnl) / PAYMENT_TOKEN_SCALE_NUM;
     return `${value >= 0 ? "+" : ""}${value.toFixed(2)} USDC`;
   };
 
@@ -977,7 +976,7 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoad
                 </TypeBadge>
               </td>
               <td>{formatPrice(trade.tradePrice)}</td>
-              <td>{((Number(trade.tradePrice) / 1e6) * (Number(trade.tradeQuantity < 0n ? -trade.tradeQuantity : trade.tradeQuantity) / 1e6)).toFixed(2)}</td>
+              <td>{((Number(trade.tradePrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(trade.tradeQuantity < 0n ? -trade.tradeQuantity : trade.tradeQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}</td>
               <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
               <td>{formatPrice(trade.tradingFee)}</td>
               <td>
@@ -1016,7 +1015,7 @@ interface TradeDetailsModalProps {
 
 const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2);
+    return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
   const formatQuantity = (quantity: bigint) => {
@@ -1024,11 +1023,11 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
       return "0";
     }
     const absQuantity = quantity < 0n ? -quantity : quantity;
-    return (Number(absQuantity) / 1e6).toFixed(6);
+    return (Number(absQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
   };
 
   const formatPnL = (pnl: bigint) => {
-    const value = Number(pnl) / 1e6;
+    const value = Number(pnl) / PAYMENT_TOKEN_SCALE_NUM;
     return `${value >= 0 ? "+" : ""}${value.toFixed(2)} USDC`;
   };
 
@@ -1076,7 +1075,7 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
                     </TypeBadge>
                   </td>
                   <td>{formatPrice(trade.tradePrice)}</td>
-                  <td>{((Number(trade.tradePrice) / 1e6) * (Number(trade.tradeQuantity < 0n ? -trade.tradeQuantity : trade.tradeQuantity) / 1e6)).toFixed(2)}</td>
+                  <td>{((Number(trade.tradePrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(trade.tradeQuantity < 0n ? -trade.tradeQuantity : trade.tradeQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}</td>
                   <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
                   <td>{formatPrice(trade.tradingFee)}</td>
                   <td>
