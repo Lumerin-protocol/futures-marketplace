@@ -1,7 +1,7 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { getContract, encodeFunctionData } from "viem";
 import { multicall3Abi } from "contracts-js/dist/abi/abi";
-import { FuturesABI } from "../../abi/Futures";
+import { FuturesAbi } from "../../abi/Futures";
 import { chain } from "../../config/chains";
 
 interface WithdrawDeliveryPaymentBatchProps {
@@ -37,7 +37,7 @@ export function useWithdrawDeliveryPaymentBatch() {
           target: futuresContractAddress,
           allowFailure: false,
           callData: encodeFunctionData({
-            abi: FuturesABI,
+            abi: FuturesAbi,
             functionName: "withdrawDeliveryPayment",
             args: [deliveryDate],
           }),

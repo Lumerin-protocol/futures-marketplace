@@ -1,5 +1,5 @@
 import { useReadContract } from "wagmi";
-import { FuturesABI } from "../../abi/Futures";
+import { FuturesAbi } from "../../abi/Futures";
 
 /**
  * Hook to get current market price from Futures contract
@@ -8,7 +8,7 @@ import { FuturesABI } from "../../abi/Futures";
 export function useGetMarketPrice() {
   const result = useReadContract({
     address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS,
-    abi: FuturesABI,
+    abi: FuturesAbi,
     functionName: "getMarketPrice",
     query: {
       refetchInterval: 10000, // Poll every 10 seconds

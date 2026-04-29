@@ -1,12 +1,12 @@
 import { usdcMockAbi } from "contracts-js/dist/abi/abi";
-import { FuturesABI } from "../../abi/Futures";
+import { FuturesAbi } from "../../abi/Futures";
 import { useReadContract } from "wagmi";
 import { backgroundRefetchOpts } from "./config";
 
 function usePaymentTokenAddress() {
   return useReadContract({
     address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS,
-    abi: FuturesABI,
+    abi: FuturesAbi,
     functionName: "token",
     query: {
       staleTime: Number.POSITIVE_INFINITY,

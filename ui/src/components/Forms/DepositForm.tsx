@@ -4,6 +4,7 @@ import { useAccount } from "wagmi";
 import { useAddMargin, useApproveAddMargin } from "../../hooks/data/useAddMargin";
 import { usePerpsAddCollateral, useApprovePerpsAddCollateral } from "../../hooks/data/perps/usePerpsAddCollateral";
 import { useApproveERC20 } from "../../hooks/data/useApproveERC20";
+import { useFuturesCollateralVault } from "../../hooks/data/useFuturesCollateralVault";
 import type { AccountBalance, ContractMode } from "../../types/types";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import { AmountInputForm } from "./Shared/AmountInputForm";
@@ -31,9 +32,14 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance, c
   
   const approveAsync = contractMode === "perpetual" ? perpsApproveAsync : futuresApproveAsync;
   const depositAsync = contractMode === "perpetual" ? addCollateralAsync : addMarginAsync;
-  const contractAddress = contractMode === "perpetual" 
+
+  // Futures `addMargin` proxies to `collateralVault.depositFor`, which pulls the underlying token
+  // from the caller into the vault — so for futures mode the ERC20 spender must be the vault, not
+  // the Futures contract. Perps still pulls directly into the perps engine.
+  const { data: futuresVaultAddress } = useFuturesCollateralVault();
+  const spenderAddress = contractMode === "perpetual"
     ? (process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`)
-    : (process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`);
+    : (futuresVaultAddress as `0x${string}` | undefined);
 
   const paymentTokenBalance = accountBalance ?? { data: undefined, isLoading: false };
 
@@ -153,9 +159,12 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance, c
       async action() {
         const amount = form.getValues("amount");
         if (!amount) throw new Error("Amount not set");
+        if (!spenderAddress) {
+          throw new Error("Collateral vault address not loaded yet. Please try again.");
+        }
         const amountBigInt = parseUnits(amount, paymentToken.decimals);
         const result = await approveAsync({
-          spender: contractAddress,
+          spender: spenderAddress,
           amount: amountBigInt,
         });
         return result ? { isSkipped: false, txhash: result } : { isSkipped: true };

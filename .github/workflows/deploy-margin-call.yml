@@ -92,29 +92,31 @@ jobs:
               ;;
           esac
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'yarn'
-          cache-dependency-path: margin-call/yarn.lock
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: margin-call/pnpm-lock.yaml
 
       - name: Install dependencies
         working-directory: ./margin-call
         run: |
           echo "📦 Installing dependencies..."
-          yarn install --frozen-lockfile
+          pnpm install --frozen-lockfile
 
       - name: Build Lambda package
         working-directory: ./margin-call
         run: |
           echo "📦 Building Lambda deployment package with esbuild..."
-          
-          # Install all dependencies (including devDependencies for build)
-          yarn install --frozen-lockfile
-          
+
           # Run esbuild to bundle everything
-          yarn build
+          pnpm build
           
           # Copy production dependencies for runtime
           mkdir -p dist/node_modules

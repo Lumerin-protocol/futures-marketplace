@@ -1,5 +1,5 @@
 import { useReadContracts } from "wagmi";
-import { FuturesABI } from "../../abi/Futures";
+import { FuturesAbi } from "../../abi/Futures";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 
 /**
@@ -13,22 +13,22 @@ export function useFuturesContractConstants() {
     contracts: [
       {
         address: futuresAddress,
-        abi: FuturesABI,
+        abi: FuturesAbi,
         functionName: "futureDeliveryDatesCount",
       },
       {
         address: futuresAddress,
-        abi: FuturesABI,
+        abi: FuturesAbi,
         functionName: "deliveryIntervalDays",
       },
       {
         address: futuresAddress,
-        abi: FuturesABI,
+        abi: FuturesAbi,
         functionName: "MAX_ORDERS_PER_PARTICIPANT",
       },
       {
         address: futuresAddress,
-        abi: FuturesABI,
+        abi: FuturesAbi,
         functionName: "orderFee",
       },
     ],

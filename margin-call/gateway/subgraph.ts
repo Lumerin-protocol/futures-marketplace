@@ -25,7 +25,6 @@ export const ParticipantQuery = gql`
   {
     participants {
       address
-      balance
     }
   }
 `;
@@ -33,6 +32,5 @@ export const ParticipantQuery = gql`
 type ParticipantsRes = {
   participants: {
     address: `0x${string}`;
-    balance: string;
   }[];
 };

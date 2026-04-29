@@ -1,6 +1,12 @@
-export const FuturesABI = [
+export const FuturesAbi = [
   {
-    "inputs": [],
+    "inputs": [
+      {
+        "internalType": "contract ICollateralVault",
+        "name": "_collateralVault",
+        "type": "address"
+      }
+    ],
     "stateMutability": "nonpayable",
     "type": "constructor"
   },
@@ -13,6 +19,11 @@ export const FuturesABI = [
       }
     ],
     "name": "AddressEmptyCode",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "CollateralTokenMismatch",
     "type": "error"
   },
   {
@@ -52,94 +63,24 @@ export const FuturesABI = [
     "type": "error"
   },
   {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "spender",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "allowance",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "needed",
-        "type": "uint256"
-      }
-    ],
-    "name": "ERC20InsufficientAllowance",
-    "type": "error"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "sender",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "balance",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "needed",
-        "type": "uint256"
-      }
-    ],
-    "name": "ERC20InsufficientBalance",
-    "type": "error"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "approver",
-        "type": "address"
-      }
-    ],
-    "name": "ERC20InvalidApprover",
-    "type": "error"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "receiver",
-        "type": "address"
-      }
-    ],
-    "name": "ERC20InvalidReceiver",
-    "type": "error"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "sender",
-        "type": "address"
-      }
-    ],
-    "name": "ERC20InvalidSender",
-    "type": "error"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "spender",
-        "type": "address"
-      }
-    ],
-    "name": "ERC20InvalidSpender",
-    "type": "error"
-  },
-  {
     "inputs": [],
     "name": "FailedCall",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "reserve",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "required",
+        "type": "uint256"
+      }
+    ],
+    "name": "InsufficientContractReserve",
     "type": "error"
   },
   {
@@ -149,7 +90,17 @@ export const FuturesABI = [
   },
   {
     "inputs": [],
+    "name": "InsuranceFundNotConfigured",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "InvalidInitialization",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidOracle",
     "type": "error"
   },
   {
@@ -190,6 +141,11 @@ export const FuturesABI = [
   {
     "inputs": [],
     "name": "OnlyValidatorOrPositionParticipant",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OracleStale",
     "type": "error"
   },
   {
@@ -245,14 +201,8 @@ export const FuturesABI = [
     "type": "error"
   },
   {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "token",
-        "type": "address"
-      }
-    ],
-    "name": "SafeERC20FailedOperation",
+    "inputs": [],
+    "name": "TransferDisabled",
     "type": "error"
   },
   {
@@ -272,6 +222,11 @@ export const FuturesABI = [
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "UnsupportedTokenDecimals",
+    "type": "error"
+  },
+  {
     "inputs": [
       {
         "internalType": "int256",
@@ -288,29 +243,9 @@ export const FuturesABI = [
     "type": "error"
   },
   {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "owner",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "spender",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "value",
-        "type": "uint256"
-      }
-    ],
-    "name": "Approval",
-    "type": "event"
+    "inputs": [],
+    "name": "ZeroVaultAddress",
+    "type": "error"
   },
   {
     "anonymous": false,
@@ -563,31 +498,6 @@ export const FuturesABI = [
       {
         "indexed": true,
         "internalType": "address",
-        "name": "from",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "to",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "value",
-        "type": "uint256"
-      }
-    ],
-    "name": "Transfer",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
         "name": "implementation",
         "type": "address"
       }
@@ -616,6 +526,19 @@ export const FuturesABI = [
         "internalType": "uint8",
         "name": "",
         "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_ORACLE_STALENESS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -677,54 +600,6 @@ export const FuturesABI = [
     "inputs": [
       {
         "internalType": "address",
-        "name": "owner",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "spender",
-        "type": "address"
-      }
-    ],
-    "name": "allowance",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "spender",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "value",
-        "type": "uint256"
-      }
-    ],
-    "name": "approve",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
         "name": "account",
         "type": "address"
       }
@@ -769,6 +644,19 @@ export const FuturesABI = [
     "name": "closeDelivery",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "collateralVault",
+    "outputs": [
+      {
+        "internalType": "contract ICollateralVault",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -867,36 +755,12 @@ export const FuturesABI = [
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "_amount",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_deliveryDate",
-        "type": "uint256"
+        "internalType": "bytes32",
+        "name": "positionId",
+        "type": "bytes32"
       }
     ],
-    "name": "depositDeliveryPayment",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "depositReservePool",
+    "name": "depositDeliveryPaymentV2",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -931,6 +795,25 @@ export const FuturesABI = [
     "inputs": [
       {
         "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "getCollateralBalance",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
         "name": "_participant",
         "type": "address"
       }
@@ -954,6 +837,44 @@ export const FuturesABI = [
         "internalType": "uint256[]",
         "name": "",
         "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      }
+    ],
+    "name": "getFuturesOrderMargin",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      }
+    ],
+    "name": "getFuturesUnrealizedPnl",
+    "outputs": [
+      {
+        "internalType": "int256",
+        "name": "",
+        "type": "int256"
       }
     ],
     "stateMutability": "view",
@@ -1005,6 +926,25 @@ export const FuturesABI = [
       }
     ],
     "name": "getMinMarginForPosition",
+    "outputs": [
+      {
+        "internalType": "int256",
+        "name": "",
+        "type": "int256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      }
+    ],
+    "name": "getNetPositionDelta",
     "outputs": [
       {
         "internalType": "int256",
@@ -1172,10 +1112,23 @@ export const FuturesABI = [
   },
   {
     "inputs": [],
+    "name": "hashpriceScalingDivisor",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "hashrateOracle",
     "outputs": [
       {
-        "internalType": "contract HashrateOracle",
+        "internalType": "contract AggregatorV3Interface",
         "name": "",
         "type": "address"
       }
@@ -1191,7 +1144,7 @@ export const FuturesABI = [
         "type": "address"
       },
       {
-        "internalType": "contract HashrateOracle",
+        "internalType": "contract AggregatorV3Interface",
         "name": "_hashrateOracle",
         "type": "address"
       },
@@ -1269,6 +1222,19 @@ export const FuturesABI = [
   },
   {
     "inputs": [],
+    "name": "marginEngine",
+    "outputs": [
+      {
+        "internalType": "contract IPortfolioMarginEngine",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "minimumPriceIncrement",
     "outputs": [
       {
@@ -1297,19 +1263,6 @@ export const FuturesABI = [
       }
     ],
     "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "name",
-    "outputs": [
-      {
-        "internalType": "string",
-        "name": "",
-        "type": "string"
-      }
-    ],
-    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -1419,9 +1372,9 @@ export const FuturesABI = [
   {
     "inputs": [
       {
-        "internalType": "bytes32",
-        "name": "_hashedAddress",
-        "type": "bytes32"
+        "internalType": "address",
+        "name": "_address",
+        "type": "address"
       },
       {
         "internalType": "uint8",
@@ -1456,6 +1409,19 @@ export const FuturesABI = [
       }
     ],
     "name": "setLiquidationMarginPercent",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_marginEngine",
+        "type": "address"
+      }
+    ],
+    "name": "setMarginEngine",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1527,19 +1493,6 @@ export const FuturesABI = [
   },
   {
     "inputs": [],
-    "name": "symbol",
-    "outputs": [
-      {
-        "internalType": "string",
-        "name": "",
-        "type": "string"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
     "name": "token",
     "outputs": [
       {
@@ -1568,12 +1521,12 @@ export const FuturesABI = [
     "inputs": [
       {
         "internalType": "address",
-        "name": "_to",
+        "name": "",
         "type": "address"
       },
       {
         "internalType": "uint256",
-        "name": "_amount",
+        "name": "",
         "type": "uint256"
       }
     ],
@@ -1585,24 +1538,24 @@ export const FuturesABI = [
         "type": "bool"
       }
     ],
-    "stateMutability": "nonpayable",
+    "stateMutability": "pure",
     "type": "function"
   },
   {
     "inputs": [
       {
         "internalType": "address",
-        "name": "_from",
+        "name": "",
         "type": "address"
       },
       {
         "internalType": "address",
-        "name": "_to",
+        "name": "",
         "type": "address"
       },
       {
         "internalType": "uint256",
-        "name": "_amount",
+        "name": "",
         "type": "uint256"
       }
     ],
@@ -1614,7 +1567,7 @@ export const FuturesABI = [
         "type": "bool"
       }
     ],
-    "stateMutability": "nonpayable",
+    "stateMutability": "pure",
     "type": "function"
   },
   {
@@ -1690,19 +1643,6 @@ export const FuturesABI = [
       }
     ],
     "name": "withdrawDeliveryPayment",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "withdrawReservePool",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

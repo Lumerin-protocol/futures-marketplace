@@ -42,12 +42,6 @@ type Participant @entity(immutable: false) {
   positionCount: Int!
   orderCount: Int!
   totalVolume: BigInt!
-
-  # Balance tracking
-  balance: BigInt!
-  totalDeposited: BigInt!
-  totalWithdrawn: BigInt!
-  lastBalanceUpdate: BigInt!
 }
 
 type Order @entity(immutable: false) {

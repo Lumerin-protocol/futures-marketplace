@@ -51,12 +51,8 @@ const fetchParticipantAsync = async (
 
   const data: Participant = {
     address: response.participant.address,
-    balance: BigInt(response.participant.balance),
-    lastBalanceUpdate: response.participant.lastBalanceUpdate,
     orderCount: response.participant.orderCount,
-    totalDeposited: BigInt(response.participant.totalDeposited),
     totalVolume: BigInt(response.participant.totalVolume),
-    totalWithdrawn: BigInt(response.participant.totalWithdrawn),
     orders: response.participant.orders.map((order) => ({
       closedAt: order.closedAt,
       closedBy: order.closedBy,
@@ -101,12 +97,8 @@ export const waitForBlockNumber = async (blockNumber: bigint, participantAddress
 
 export type Participant = {
   address: `0x${string}`;
-  balance: bigint;
-  lastBalanceUpdate: string;
   orderCount: number;
-  totalDeposited: bigint;
   totalVolume: bigint;
-  totalWithdrawn: bigint;
   orders: ParticipantOrder[];
 };
 
@@ -134,12 +126,8 @@ type ParticipantResponse = {
   };
   participant: {
     address: `0x${string}`;
-    balance: string;
-    lastBalanceUpdate: string;
     orderCount: number;
-    totalDeposited: string;
     totalVolume: string;
-    totalWithdrawn: string;
     orders: {
       closedAt: string | null;
       closedBy: string | null;

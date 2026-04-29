@@ -42,8 +42,6 @@ dataSources:
           handler: handleOrderCreated
         - event: OrderClosed(indexed bytes32,indexed address)
           handler: handleOrderClosed
-        - event: Transfer(indexed address,indexed address,uint256)
-          handler: handleTransfer
         - event: OrderFeeUpdated(uint256)
           handler: handleOrderFeeUpdated
         - event: PositionPaid(indexed bytes32)
