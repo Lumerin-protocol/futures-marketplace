@@ -1,6 +1,6 @@
-import type { Account, Chain, PublicClient, Transport, WalletClient } from "viem";
+import type { Account, Chain, Transport, WalletClient } from "viem";
 import { getAddress } from "viem/utils";
-import { sepolia, mainnet, arbitrum } from "viem/chains";
+import { sepolia, mainnet, arbitrum, baseSepolia, base } from "viem/chains";
 import SafeApiKit from "@safe-global/api-kit";
 import Safe from "@safe-global/protocol-kit";
 import type { MetaTransactionData } from "@safe-global/types-kit";
@@ -81,4 +81,6 @@ const chainIdSafePrefixMap = {
   [sepolia.id]: "sep",
   [mainnet.id]: "eth",
   [arbitrum.id]: "arb1",
+  [base.id]: "base",
+  [baseSepolia.id]: "base-sep",
 } as Record<number, string>;
