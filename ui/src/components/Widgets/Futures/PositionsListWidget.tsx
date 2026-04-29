@@ -348,15 +348,6 @@ export const PositionsListWidget = ({
                           Deposit
                         </DepositButton>
                       )}
-                    {groupedPosition.isActive && !groupedPosition.closedAt && (
-                      <CloseButton
-                        onClick={() => handleClosePosition(groupedPosition)}
-                        disabled={isPending}
-                        title="By creating opposite order"
-                      >
-                        Close
-                      </CloseButton>
-                    )}
                     <TradesButton
                       onClick={() =>
                         setTradesSelection({
@@ -369,6 +360,15 @@ export const PositionsListWidget = ({
                     >
                       Trades
                     </TradesButton>
+                    {groupedPosition.isActive && !groupedPosition.closedAt && (
+                      <CloseButton
+                        onClick={() => handleClosePosition(groupedPosition)}
+                        disabled={isPending}
+                        title="By creating opposite order"
+                      >
+                        Close
+                      </CloseButton>
+                    )}
                   </ActionButtons>
                 </td>
               </TableRow>

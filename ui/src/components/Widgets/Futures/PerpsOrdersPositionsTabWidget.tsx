@@ -737,11 +737,11 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
                   </td>
                   <td>
                     <ActionButtons>
-                      <DetailsButton onClick={() => onClosePosition?.(session)}>
-                        Close
-                      </DetailsButton>
                       <DetailsButton onClick={() => setSelectedSession(session)}>
                         Trades
+                      </DetailsButton>
+                      <DetailsButton onClick={() => onClosePosition?.(session)}>
+                        Close
                       </DetailsButton>
                     </ActionButtons>
                   </td>
