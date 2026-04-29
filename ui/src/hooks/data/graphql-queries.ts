@@ -225,6 +225,7 @@ export const HistoricalPositionsQuery = gql`
       sellerPnl
       isActive
       closedAt
+      transactionHash
       buyer {
         address
       }

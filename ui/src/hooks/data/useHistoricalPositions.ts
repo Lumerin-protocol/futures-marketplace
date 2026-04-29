@@ -17,6 +17,7 @@ export type HistoricalPosition = {
   sellerPnl: number;
   isActive: boolean;
   closedAt: string | null;
+  transactionHash: `0x${string}`;
   buyer: {
     address: `0x${string}`;
   };
@@ -42,6 +43,7 @@ type HistoricalPositionsResponse = {
     sellerPnl: string;
     isActive: boolean;
     closedAt: string | null;
+    transactionHash: `0x${string}`;
     buyer: {
       address: `0x${string}`;
     };
@@ -87,6 +89,7 @@ const fetchAllHistoricalPositions = async (
       sellerPnl: Number(position.sellerPnl),
       isActive: position.isActive,
       closedAt: position.closedAt,
+      transactionHash: position.transactionHash,
       buyer: {
         address: position.buyer.address,
       },
