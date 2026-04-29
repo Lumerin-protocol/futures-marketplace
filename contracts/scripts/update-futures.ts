@@ -34,7 +34,7 @@ async function main() {
   console.log();
 
   console.log("Deploying new Futures implementation...");
-  const futuresImpl = await viem.deployContract("Futures", []);
+  const futuresImpl = await viem.deployContract("Futures", [], { confirmations: 5 });
   console.log("Deployed at:", futuresImpl.address);
   await verifyContract(futuresImpl.address, []);
   const newVersion = await futuresImpl.read.VERSION();
