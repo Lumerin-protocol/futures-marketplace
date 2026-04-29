@@ -1,9 +1,12 @@
-import { expect } from "chai";
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { deployFuturesFixture } from "./fixtures";
+import { it } from "node:test";
+import assert from "node:assert/strict";
+import { network } from "hardhat";
+import { deployFuturesFixture } from "./fixtures.ts";
+
+const { networkHelpers } = await network.getOrCreate();
 
 it("should handle exiting positions from both parties at the same time", async () => {
-  const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
+  const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
   const { futures } = contracts;
   const { seller: partA, buyer: partB, buyer2: partC, owner } = accounts;
 
@@ -14,7 +17,6 @@ it("should handle exiting positions from both parties at the same time", async (
 
   await futures.write.setOrderFee([0n], { account: owner.account });
 
-  // setup margin for all participants
   await futures.write.addMargin([margin], { account: partA.account });
   await futures.write.addMargin([margin], { account: partB.account });
   await futures.write.addMargin([margin], { account: partC.account });
@@ -22,39 +24,27 @@ it("should handle exiting positions from both parties at the same time", async (
   // Step 1: A sells and B buys at price, creating initial positions
   //   - A is short (owes delivery)
   //   - B is long (expects delivery)
-  await futures.write.createOrder([price, deliveryDate, "", -1], {
-    account: partA.account,
-  });
-  await futures.write.createOrder([price, deliveryDate, "", 1], {
-    account: partB.account,
-  });
+  await futures.write.createOrder([price, deliveryDate, "", -1], { account: partA.account });
+  await futures.write.createOrder([price, deliveryDate, "", 1], { account: partB.account });
 
   // Step 2: Both parties want to exit, so they place opposite orders at price2
   //   - A places a buy order to close short
   //   - B places a sell order to close long
   //   - Orders match, offsetting both positions
-  await futures.write.createOrder([price2, deliveryDate, "", -1], {
-    account: partB.account,
-  });
-  await futures.write.createOrder([price2, deliveryDate, "", 1], {
-    account: partA.account,
-  });
+  await futures.write.createOrder([price2, deliveryDate, "", -1], { account: partB.account });
+  await futures.write.createOrder([price2, deliveryDate, "", 1], { account: partA.account });
 
-  // Step 3: Verify positions are closed
-  //   - A should have no positions left
-  //   - B should have no positions left
   const partAPositions = await futures.read.getPositionsByParticipantDeliveryDate([
     partA.account.address,
     deliveryDate,
   ]);
-  expect(partAPositions.length).to.equal(0);
+  assert.equal(partAPositions.length, 0);
   const partBPositions = await futures.read.getPositionsByParticipantDeliveryDate([
     partB.account.address,
     deliveryDate,
   ]);
-  expect(partBPositions.length).to.equal(0);
+  assert.equal(partBPositions.length, 0);
 
-  // Step 4: Verify pnl is credited to the parties
   const expPartApnl = (price - price2) * BigInt(config.deliveryDurationDays);
   const expPartBpnl = (price2 - price) * BigInt(config.deliveryDurationDays);
 
@@ -63,5 +53,5 @@ it("should handle exiting positions from both parties at the same time", async (
 
   const partADelta = partABalance - margin;
   const partBDelta = partBBalance - margin;
-  expect([partADelta, partBDelta]).to.deep.equal([expPartApnl, expPartBpnl]);
+  assert.deepEqual([partADelta, partBDelta], [expPartApnl, expPartBpnl]);
 });

@@ -1,41 +1,31 @@
-import { viem } from "hardhat";
+import { createInterface } from "node:readline";
+import hre from "hardhat";
 import { formatUnits, parseUnits } from "viem";
-import { createInterface } from "readline";
+import { requireAddress } from "../lib/env.ts";
 
 async function main() {
-  const oracleAddress = process.env.BTCUSDC_ORACLE_ADDRESS as `0x${string}`;
-  if (!oracleAddress) {
-    console.error("BTCUSDC_ORACLE_ADDRESS environment variable is required");
-    console.error(
-      "Usage: BTCUSDC_ORACLE_ADDRESS=0x... npx hardhat run scripts/set-bitcoin-price.ts --network localhost"
-    );
-    process.exit(1);
-  }
+  const { viem } = await hre.network.getOrCreate();
 
+  const oracleAddress = requireAddress("BTCUSDC_ORACLE_ADDRESS");
   console.log("Connecting to BTCPriceOracleMock at:", oracleAddress);
 
   const pc = await viem.getPublicClient();
 
-  const btcPriceOracleMock = await viem.getContractAt(
-    "contracts/mocks/BTCPriceOracleMock.sol:BTCPriceOracleMock",
-    oracleAddress
-  );
+  const btcPriceOracleMock = await viem.getContractAt("BTCPriceOracleMock", oracleAddress);
 
-  // Read current price from oracle
   const [, answer] = await btcPriceOracleMock.read.latestRoundData();
   const decimals = await btcPriceOracleMock.read.decimals();
   let currentPrice = Number(formatUnits(answer, decimals));
 
   console.log(`Current oracle price: $${currentPrice.toLocaleString()}`);
 
-  // Create readline interface for user input
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
   });
 
   const prompt = () => {
-    console.log("\n" + "=".repeat(50));
+    console.log(`\n${"=".repeat(50)}`);
     console.log(`Current BTC price: $${currentPrice.toLocaleString()}`);
     console.log("=".repeat(50));
     console.log('Enter price change (e.g., "+2" for +2%, "-5" for -5%)');
@@ -50,7 +40,6 @@ async function main() {
         process.exit(0);
       }
 
-      // Parse percentage change (e.g., "+2", "-5", "2", "-10")
       const match = trimmed.match(/^([+-])?(\d+(?:\.\d+)?)$/);
       if (!match) {
         console.error('Invalid input. Use format like "+2", "-5", "10", or "-0.5"');
@@ -61,7 +50,6 @@ async function main() {
       const sign = match[1] === "-" ? -1 : 1;
       const percent = Number.parseFloat(match[2]) * sign;
 
-      // Calculate new price
       const newPrice = currentPrice * (1 + percent / 100);
       const newPriceScaled = parseUnits(newPrice.toFixed(2), decimals);
 
@@ -72,12 +60,11 @@ async function main() {
         const hash = await btcPriceOracleMock.write.setPrice([newPriceScaled, decimals]);
         await pc.waitForTransactionReceipt({ hash });
 
-        // Verify the price was updated
         const [, newAnswer] = await btcPriceOracleMock.read.latestRoundData();
         currentPrice = Number(formatUnits(newAnswer, decimals));
 
-        console.log("✓ Transaction confirmed!");
-        console.log(`✓ New oracle price: $${currentPrice.toLocaleString()}`);
+        console.log("Transaction confirmed!");
+        console.log(`New oracle price: $${currentPrice.toLocaleString()}`);
       } catch (error) {
         console.error("Transaction failed:", error);
       }

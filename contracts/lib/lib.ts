@@ -1,15 +1,14 @@
 import crypto from "node:crypto";
-import type { PublicClient } from "@nomicfoundation/hardhat-viem/types";
 import {
   type Abi,
   BaseError,
   ContractFunctionRevertedError,
   InvalidInputRpcError,
+  type PublicClient,
+  type TestClient,
   UnknownRpcError,
 } from "viem";
 import { type DecodeErrorResultReturnType, decodeErrorResult, padHex } from "viem/utils";
-import type { HardhatRuntimeEnvironment } from "hardhat/types";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
 
 export async function getTxTimestamp(client: PublicClient, txHash: `0x${string}`): Promise<bigint> {
   const receipt = await client.waitForTransactionReceipt({
@@ -23,7 +22,7 @@ export async function getTxTimestamp(client: PublicClient, txHash: `0x${string}`
 export async function getTxDeltaTime(
   client: PublicClient,
   txHash: `0x${string}`,
-  txHash2: `0x${string}`
+  txHash2: `0x${string}`,
 ): Promise<bigint> {
   const timestamp1 = await getTxTimestamp(client, txHash);
   const timestamp2 = await getTxTimestamp(client, txHash2);
@@ -41,11 +40,11 @@ export async function catchError<const TAbi extends Abi | readonly unknown[]>(
   error:
     | DecodeErrorResultReturnType<TAbi>["errorName"]
     | DecodeErrorResultReturnType<TAbi>["errorName"][],
-  cb: () => Promise<unknown>
+  cb: () => Promise<unknown>,
 ) {
   try {
     await cb();
-    throw new Error(`No error was thrown, expected error "${error}"`);
+    throw new Error(`No error was thrown, expected error "${error as string}"`);
   } catch (err) {
     if (Array.isArray(error)) {
       return expectError(err, abi, error);
@@ -55,9 +54,9 @@ export async function catchError<const TAbi extends Abi | readonly unknown[]>(
 }
 
 export function expectError<const TAbi extends Abi | readonly unknown[]>(
-  err: any,
+  err: unknown,
   abi: TAbi | undefined,
-  errors: DecodeErrorResultReturnType<TAbi>["errorName"][]
+  errors: DecodeErrorResultReturnType<TAbi>["errorName"][],
 ) {
   for (const error of errors) {
     if (isErr(err, abi, error)) {
@@ -67,25 +66,24 @@ export function expectError<const TAbi extends Abi | readonly unknown[]>(
 
   throw new Error(
     `Expected one of blockchain custom errors "${errors.join(" | ")}" was not thrown\n\n${err}`,
-    { cause: err }
+    { cause: err },
   );
 }
 
 export function isErr<const TAbi extends Abi | readonly unknown[]>(
-  err: any,
+  err: unknown,
   abi: TAbi | undefined,
-  error: DecodeErrorResultReturnType<TAbi>["errorName"]
+  error: DecodeErrorResultReturnType<TAbi>["errorName"],
 ): boolean {
   if (err instanceof BaseError) {
-    const revertError = err.walk((err) => {
+    const revertError = err.walk((e) => {
       return (
-        err instanceof InvalidInputRpcError ||
-        err instanceof ContractFunctionRevertedError ||
-        err instanceof UnknownRpcError
+        e instanceof InvalidInputRpcError ||
+        e instanceof ContractFunctionRevertedError ||
+        e instanceof UnknownRpcError
       );
     });
 
-    // support for regular provider
     if (revertError instanceof ContractFunctionRevertedError) {
       const errorName = revertError.data?.errorName ?? "";
       if (errorName === error) {
@@ -93,21 +91,20 @@ export function isErr<const TAbi extends Abi | readonly unknown[]>(
       }
     }
 
-    // support for hardhat node
     let data: `0x${string}` = "0x";
     if (revertError instanceof InvalidInputRpcError) {
-      data = (revertError?.cause as any)?.data?.data;
+      data = (revertError?.cause as { data?: { data?: `0x${string}` } })?.data?.data ?? "0x";
     } else if (revertError instanceof UnknownRpcError) {
-      data = (revertError.cause as any)?.data;
+      data = (revertError.cause as { data?: `0x${string}` })?.data ?? "0x";
     }
 
-    if (data) {
+    if (data && data !== "0x") {
       try {
         const decodedError = decodeErrorResult({ abi, data });
         if (decodedError.errorName === error) {
           return true;
         }
-      } catch (e) {
+      } catch {
         return false;
       }
     }
@@ -134,7 +131,7 @@ export async function getTxDeltaBalance(
   pc: PublicClient,
   txHash: `0x${string}`,
   address: `0x${string}` | Account,
-  token: BalanceOf
+  token: BalanceOf,
 ): Promise<bigint> {
   const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
   const addressToUse = typeof address === "object" ? address.account.address : address;
@@ -165,8 +162,9 @@ export const now = (): bigint => {
   return BigInt(Math.floor(Date.now() / 1000));
 };
 
-export const nowChain = async (): Promise<bigint> => {
-  return BigInt(await time.latest());
+export const nowChain = async (pc: PublicClient): Promise<bigint> => {
+  const block = await pc.getBlock({ blockTag: "latest" });
+  return block.timestamp;
 };
 
 export const NewDate = (timestamp: bigint): Date => {
@@ -176,30 +174,14 @@ export const NewDate = (timestamp: bigint): Date => {
 export const PanicOutOfBoundsRegexp =
   /.*reverted with panic code 0x32 (Array accessed at an out-of-bounds or negative index)*/;
 
-// set hardhat automine
-export const setAutomine = async (
-  hre: HardhatRuntimeEnvironment,
-  enabled: boolean
-): Promise<boolean> => {
-  const pc = await hre.viem.getPublicClient();
-  return pc.request({ method: "evm_setAutomine", params: [!!enabled] } as any);
+export const setAutomine = async (tc: TestClient, enabled: boolean): Promise<void> => {
+  await tc.setAutomine(enabled);
 };
 
-export const setIntervalMining = async (
-  hre: HardhatRuntimeEnvironment,
-  interval: number
-): Promise<boolean> => {
-  const pc = await hre.viem.getPublicClient();
-  return pc.request({
-    method: "evm_setIntervalMining",
-    params: [interval],
-  } as any);
+export const setIntervalMining = async (tc: TestClient, interval: number): Promise<void> => {
+  await tc.setIntervalMining({ interval });
 };
 
-// mine new block
-export const mine = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
-  const pc = await hre.viem.getPublicClient();
-  return pc.request({
-    method: "evm_mine",
-  } as any);
+export const mine = async (tc: TestClient): Promise<void> => {
+  await tc.mine({ blocks: 1 });
 };

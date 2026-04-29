@@ -1,12 +1,13 @@
-import { expect } from "chai";
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { encodeAbiParameters, keccak256 } from "viem";
-import { deployFuturesFixture } from "./fixtures";
-import { catchError } from "../lib/lib";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { network } from "hardhat";
+import { deployFuturesFixture } from "./fixtures.ts";
+
+const { viem, networkHelpers } = await network.getOrCreate();
 
 describe("Fees", () => {
   it("should collect order fee on order creation", async () => {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;
 
@@ -24,22 +25,24 @@ describe("Fees", () => {
     const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
     const feesAfter = await futures.read.collectedFeesBalance();
 
-    expect(feesAfter - feesBefore).to.equal(config.orderFee);
-    expect(sellerBalanceBefore - sellerBalanceAfter).to.equal(config.orderFee);
+    assert.equal(feesAfter - feesBefore, config.orderFee);
+    assert.equal(sellerBalanceBefore - sellerBalanceAfter, config.orderFee);
   });
 
   it("should allow only owner to withdraw collected fees", async () => {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
+    const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;
 
-    await catchError(futures.abi, "OwnableUnauthorizedAccount", async () => {
-      await futures.write.withdrawCollectedFees({ account: seller.account });
-    });
+    await viem.assertions.revertWithCustomError(
+      futures.write.withdrawCollectedFees({ account: seller.account }),
+      futures,
+      "OwnableUnauthorizedAccount",
+    );
   });
 
   it("should withdraw correct amount of fees", async () => {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, usdcMock } = contracts;
     const { owner, seller } = accounts;
 
@@ -51,7 +54,7 @@ describe("Fees", () => {
     await futures.write.createOrder([price, deliveryDate, "", 1], { account: seller.account });
 
     const feesAccrued = await futures.read.collectedFeesBalance();
-    expect(feesAccrued).to.equal(config.orderFee);
+    assert.equal(feesAccrued, config.orderFee);
 
     const ownerBalanceBefore = await usdcMock.read.balanceOf([owner.account.address]);
 
@@ -60,12 +63,12 @@ describe("Fees", () => {
     const ownerBalanceAfter = await usdcMock.read.balanceOf([owner.account.address]);
     const feesAfter = await futures.read.collectedFeesBalance();
 
-    expect(feesAfter).to.equal(0n);
-    expect(ownerBalanceAfter - ownerBalanceBefore).to.equal(feesAccrued);
+    assert.equal(feesAfter, 0n);
+    assert.equal(ownerBalanceAfter - ownerBalanceBefore, feesAccrued);
   });
 
   it("should collect correct fee per address discount", async () => {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { owner, seller, buyer } = accounts;
 
@@ -95,18 +98,17 @@ describe("Fees", () => {
     const discountedFee = config.orderFee - (config.orderFee * BigInt(discountPercent)) / 100n;
     const expectedFees = discountedFee + config.orderFee;
 
-    expect(feesAfter - feesBefore).to.equal(expectedFees);
-    expect(sellerBalanceBefore - sellerBalanceAfter).to.equal(discountedFee);
-    expect(buyerBalanceBefore - buyerBalanceAfter).to.equal(config.orderFee);
+    assert.equal(feesAfter - feesBefore, expectedFees);
+    assert.equal(sellerBalanceBefore - sellerBalanceAfter, discountedFee);
+    assert.equal(buyerBalanceBefore - buyerBalanceAfter, config.orderFee);
   });
 
   it("should collect full fee for 0 percent discount", async () => {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { owner, seller } = accounts;
 
-    const discountPercent = 0;
-    await futures.write.setFeeDiscountPercent([seller.account.address, discountPercent], {
+    await futures.write.setFeeDiscountPercent([seller.account.address, 0], {
       account: owner.account,
     });
 
@@ -124,17 +126,16 @@ describe("Fees", () => {
     const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
     const feesAfter = await futures.read.collectedFeesBalance();
 
-    expect(feesAfter - feesBefore).to.equal(config.orderFee);
-    expect(sellerBalanceBefore - sellerBalanceAfter).to.equal(config.orderFee);
+    assert.equal(feesAfter - feesBefore, config.orderFee);
+    assert.equal(sellerBalanceBefore - sellerBalanceAfter, config.orderFee);
   });
 
   it("should collect zero fee for 100 percent discount", async () => {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { owner, seller } = accounts;
 
-    const discountPercent = 100;
-    await futures.write.setFeeDiscountPercent([seller.account.address, discountPercent], {
+    await futures.write.setFeeDiscountPercent([seller.account.address, 100], {
       account: owner.account,
     });
 
@@ -152,7 +153,7 @@ describe("Fees", () => {
     const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
     const feesAfter = await futures.read.collectedFeesBalance();
 
-    expect(feesAfter - feesBefore).to.equal(0n);
-    expect(sellerBalanceBefore - sellerBalanceAfter).to.equal(0n);
+    assert.equal(feesAfter - feesBefore, 0n);
+    assert.equal(sellerBalanceBefore - sellerBalanceAfter, 0n);
   });
 });

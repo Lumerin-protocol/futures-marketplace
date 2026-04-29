@@ -1,46 +1,33 @@
-import { expect } from "chai";
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { network } from "hardhat";
 import { getAddress } from "viem";
-import { deployFuturesFixture } from "./fixtures";
+import { deployFuturesFixture } from "./fixtures.ts";
+
+const { networkHelpers } = await network.getOrCreate();
+
 describe("Futures - Initialization", () => {
   it("should initialize with correct parameters", async () => {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
 
-    // Check token address
-    const tokenAddress = await futures.read.token();
-    expect(getAddress(tokenAddress)).to.equal(getAddress(contracts.usdcMock.address));
-
-    // Check hashrate oracle address
-    const oracleAddress = await futures.read.hashrateOracle();
-    expect(getAddress(oracleAddress)).to.equal(getAddress(contracts.hashrateOracle.address));
-
-    // Check validator address
-    const validatorAddress = await futures.read.validatorAddress();
-    expect(getAddress(validatorAddress)).to.equal(getAddress(accounts.validator.account.address));
-
-    // Check margin percentages
-    const liquidationMarginPercent = await futures.read.liquidationMarginPercent();
-    expect(liquidationMarginPercent).to.equal(config.liquidationMarginPercent);
-
-    // Check speed
-    const speed = await futures.read.speedHps();
-    expect(speed).to.equal(config.speedHps);
-
-    // Check delivery duration
-    const deliveryDuration = await futures.read.deliveryDurationDays();
-    expect(deliveryDuration).to.equal(config.deliveryDurationDays); // 7 days
-
-    // Check breach penalty rate
-    const breachPenaltyRate = await futures.read.breachPenaltyRatePerDay();
-    expect(breachPenaltyRate).to.equal(0n);
+    assert.equal(getAddress(await futures.read.token()), getAddress(contracts.usdcMock.address));
+    assert.equal(
+      getAddress(await futures.read.hashrateOracle()),
+      getAddress(contracts.hashrateOracle.address),
+    );
+    assert.equal(
+      getAddress(await futures.read.validatorAddress()),
+      getAddress(accounts.validator.account.address),
+    );
+    assert.equal(await futures.read.liquidationMarginPercent(), config.liquidationMarginPercent);
+    assert.equal(await futures.read.speedHps(), config.speedHps);
+    assert.equal(await futures.read.deliveryDurationDays(), config.deliveryDurationDays);
+    assert.equal(await futures.read.breachPenaltyRatePerDay(), 0n);
   });
 
   it("should have correct decimals", async () => {
-    const { contracts } = await loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
-
-    const decimals = await futures.read.decimals();
-    expect(decimals).to.equal(6);
+    const { contracts } = await networkHelpers.loadFixture(deployFuturesFixture);
+    assert.equal(await contracts.futures.read.decimals(), 6);
   });
 });

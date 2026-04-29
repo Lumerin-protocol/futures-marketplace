@@ -1,26 +1,13 @@
 [
   {
-    "inputs": [],
-    "name": "decimals",
-    "outputs": [
-      {
-        "internalType": "uint8",
-        "name": "",
-        "type": "uint8"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
         "internalType": "address",
-        "name": "participant",
+        "name": "user",
         "type": "address"
       }
     ],
-    "name": "getFuturesOrderMargin",
+    "name": "computePortfolioIM",
     "outputs": [
       {
         "internalType": "uint256",
@@ -35,24 +22,11 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "participant",
+        "name": "user",
         "type": "address"
       }
     ],
-    "name": "getFuturesUnrealizedPnl",
-    "outputs": [
-      {
-        "internalType": "int256",
-        "name": "",
-        "type": "int256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "getMarketPrice",
+    "name": "computePortfolioMM",
     "outputs": [
       {
         "internalType": "uint256",
@@ -64,19 +38,26 @@
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "participant",
-        "type": "address"
-      }
-    ],
-    "name": "getNetPositionDelta",
+    "inputs": [],
+    "name": "imSpotShock",
     "outputs": [
       {
-        "internalType": "int256",
+        "internalType": "uint256",
         "name": "",
-        "type": "int256"
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "mmSpotShock",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",

@@ -1,18 +1,21 @@
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { deployFuturesFixture } from "./fixtures";
+import { describe, it } from "node:test";
+import { network } from "hardhat";
 import { type Client, parseEventLogs, parseUnits } from "viem";
-import { quantizePrice } from "./utils";
-import { catchError } from "../lib/lib";
+import { deployFuturesFixture } from "./fixtures.ts";
+import { quantizePrice } from "./utils.ts";
+
+const { viem, networkHelpers } = await network.getOrCreate();
 
 describe("Futures Delivery", () => {
   async function positionFixture() {
-    const data = await loadFixture(deployFuturesFixture);
+    const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts, config } = data;
     const { futures } = contracts;
     const { seller, buyer, pc } = accounts;
 
     async function logBalance(client: Client, name: string) {
-      const balance = await futures.read.balanceOf([client!.account!.address]);
+      if (!client.account) return;
+      const balance = await futures.read.balanceOf([client.account.address]);
       console.log(`${name} balance`, balance);
     }
 
@@ -20,19 +23,11 @@ describe("Futures Delivery", () => {
     const marginAmount = parseUnits("1000", 6);
     const deliveryDate = config.deliveryDates[0];
 
-    // Add margin for both participants
-    await futures.write.addMargin([marginAmount], {
-      account: seller.account,
-    });
-    await futures.write.addMargin([marginAmount], {
-      account: buyer.account,
-    });
+    await futures.write.addMargin([marginAmount], { account: seller.account });
+    await futures.write.addMargin([marginAmount], { account: buyer.account });
 
-    // Create matching orders to form a position
     const dst = "https://destination-url.com";
-    await futures.write.createOrder([price, deliveryDate, "", -1], {
-      account: seller.account,
-    });
+    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
     const txHash = await futures.write.createOrder([price, deliveryDate, dst, 1], {
       account: buyer.account,
     });
@@ -51,10 +46,11 @@ describe("Futures Delivery", () => {
       logBalance,
     };
   }
+
   it("check behaviour when 50% is not delivered and price not changed", async () => {
-    const data = await loadFixture(positionFixture);
-    const { contracts, position, accounts, config, logBalance } = data;
-    const { seller, buyer, tc, validator } = accounts;
+    const data = await positionFixture();
+    const { contracts, position, accounts, config } = data;
+    const { tc, validator } = accounts;
     const { futures } = contracts;
 
     await tc.setNextBlockTimestamp({
@@ -66,7 +62,7 @@ describe("Futures Delivery", () => {
   });
 
   it("should handle expired positions", async () => {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, buyer, pc, tc } = accounts;
 
@@ -74,16 +70,9 @@ describe("Futures Delivery", () => {
     const margin = price * BigInt(config.deliveryDurationDays);
     const deliveryDate = config.deliveryDates[0];
 
-    // Create matching positions to form an order
-    await futures.write.addMargin([margin], {
-      account: seller.account,
-    });
-    await futures.write.addMargin([margin], {
-      account: buyer.account,
-    });
-    await futures.write.createOrder([price, deliveryDate, "", -1], {
-      account: seller.account,
-    });
+    await futures.write.addMargin([margin], { account: seller.account });
+    await futures.write.addMargin([margin], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
     const txHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
       account: buyer.account,
     });
@@ -97,22 +86,21 @@ describe("Futures Delivery", () => {
 
     const { positionId } = orderEvent.args;
 
-    // Move time to after order expiration (30 days + 1 second)
     await tc.setNextBlockTimestamp({
       timestamp: deliveryDate + BigInt(config.deliveryDurationSeconds) + 1n,
     });
 
-    // Try to close expired order
-    await catchError(futures.abi, "PositionDeliveryExpired", async () => {
-      await futures.write.closeDelivery([positionId, false], {
-        account: buyer.account,
-      });
-    });
+    await viem.assertions.revertWithCustomError(
+      futures.write.closeDelivery([positionId, false], { account: buyer.account }),
+      futures,
+      "PositionDeliveryExpired",
+    );
   });
 });
+
 describe("Position Management", () => {
   it("should not allow buyer to close position before start time", async () => {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, buyer, pc } = accounts;
 
@@ -120,18 +108,10 @@ describe("Position Management", () => {
     const deliveryDate = config.deliveryDates[0];
     const marginAmount = parseUnits("1000", 6);
 
-    // Add margin for both participants
-    await futures.write.addMargin([marginAmount], {
-      account: seller.account,
-    });
-    await futures.write.addMargin([marginAmount], {
-      account: buyer.account,
-    });
+    await futures.write.addMargin([marginAmount], { account: seller.account });
+    await futures.write.addMargin([marginAmount], { account: buyer.account });
 
-    // Create matching orders to form an position
-    await futures.write.createOrder([price, deliveryDate, "", -1], {
-      account: seller.account,
-    });
+    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
     const txHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
       account: buyer.account,
     });
@@ -145,15 +125,15 @@ describe("Position Management", () => {
 
     const { positionId } = positionEvent.args;
 
-    await catchError(futures.abi, "PositionDeliveryNotStartedYet", async () => {
-      await futures.write.closeDelivery([positionId, false], {
-        account: buyer.account,
-      });
-    });
+    await viem.assertions.revertWithCustomError(
+      futures.write.closeDelivery([positionId, false], { account: buyer.account }),
+      futures,
+      "PositionDeliveryNotStartedYet",
+    );
   });
 
   it("should not allow seller to close position before start time", async () => {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, buyer, pc } = accounts;
 
@@ -161,18 +141,10 @@ describe("Position Management", () => {
     const deliveryDate = config.deliveryDates[0];
     const marginAmount = parseUnits("1000", 6);
 
-    // Add margin for both participants
-    await futures.write.addMargin([marginAmount], {
-      account: seller.account,
-    });
-    await futures.write.addMargin([marginAmount], {
-      account: buyer.account,
-    });
+    await futures.write.addMargin([marginAmount], { account: seller.account });
+    await futures.write.addMargin([marginAmount], { account: buyer.account });
 
-    // Create matching orders to form an position
-    await futures.write.createOrder([price, deliveryDate, "", -1], {
-      account: seller.account,
-    });
+    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
     const txHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
       account: buyer.account,
     });
@@ -186,16 +158,15 @@ describe("Position Management", () => {
 
     const { positionId } = createdEvent.args;
 
-    // Close position as seller
-    await catchError(futures.abi, "PositionDeliveryNotStartedYet", async () => {
-      await futures.write.closeDelivery([positionId, false], {
-        account: seller.account,
-      });
-    });
+    await viem.assertions.revertWithCustomError(
+      futures.write.closeDelivery([positionId, false], { account: seller.account }),
+      futures,
+      "PositionDeliveryNotStartedYet",
+    );
   });
 
   it("should reject closing position by non-participant", async () => {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, buyer, buyer2, pc } = accounts;
 
@@ -203,16 +174,9 @@ describe("Position Management", () => {
     const margin = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
 
-    // Create matching orders
-    await futures.write.addMargin([margin], {
-      account: seller.account,
-    });
-    await futures.write.addMargin([margin], {
-      account: buyer.account,
-    });
-    await futures.write.createOrder([price, deliveryDate, "", -1], {
-      account: seller.account,
-    });
+    await futures.write.addMargin([margin], { account: seller.account });
+    await futures.write.addMargin([margin], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
     const txHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
       account: buyer.account,
     });
@@ -226,11 +190,10 @@ describe("Position Management", () => {
 
     const { positionId } = createdEvent.args;
 
-    // Try to close order with different account
-    await catchError(futures.abi, "OnlyValidatorOrPositionParticipant", async () => {
-      await futures.write.closeDelivery([positionId, false], {
-        account: buyer2.account,
-      });
-    });
+    await viem.assertions.revertWithCustomError(
+      futures.write.closeDelivery([positionId, false], { account: buyer2.account }),
+      futures,
+      "OnlyValidatorOrPositionParticipant",
+    );
   });
 });

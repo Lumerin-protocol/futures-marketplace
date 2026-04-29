@@ -1,4 +1,4 @@
-[
+export const BTCPriceOracleMockAbi = [
   {
     "inputs": [],
     "name": "decimals",
@@ -29,7 +29,7 @@
     "inputs": [
       {
         "internalType": "uint80",
-        "name": "_roundId",
+        "name": "",
         "type": "uint80"
       }
     ],
@@ -98,6 +98,24 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "int256",
+        "name": "price",
+        "type": "int256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "ndecimals",
+        "type": "uint8"
+      }
+    ],
+    "name": "setPrice",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "version",
     "outputs": [
@@ -110,4 +128,4 @@
     "stateMutability": "view",
     "type": "function"
   }
-]
+] as const;
