@@ -3,7 +3,7 @@
   "overrides": [
     {
       "includes": [
-        "./indexer/src/**"
+        "./indexer/**"
       ],
       "linter": {
         "enabled": true,
@@ -15,7 +15,8 @@
             "useImportType": "off"
           },
           "suspicious": {
-            "noShadowRestrictedNames": "off"
+            "noShadowRestrictedNames": "off",
+            "noDoubleEquals": "off"
           }
         }
       }

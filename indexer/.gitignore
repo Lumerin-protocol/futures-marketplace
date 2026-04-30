@@ -5,3 +5,5 @@ subgraph.yaml
 .env
 !.env.example
 node_modules
+tests/.bin
+tests/.latest.json

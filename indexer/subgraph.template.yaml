@@ -19,9 +19,17 @@ dataSources:
       language: wasm/assemblyscript
       entities:
         - Futures
-        - Participant
-        - Position
+        - User
         - Order
+        - OrderEntry
+        - Trade
+        - Fill
+        - Position
+        - PositionSession
+        - PriceLevel
+        - Liquidation
+        - BadDebtEvent
+        - UserDeliverySessionPointer
       abis:
         - name: Futures
           file: ../contracts/abi/Futures.json
@@ -30,7 +38,11 @@ dataSources:
           handler: handleInitialized
         - event: Upgraded(indexed address)
           handler: handleUpgraded
-        - event: PositionCreated(indexed bytes32,indexed address,indexed address,uint256,uint256,uint256,string,bytes32)
+        - event: OrderCreated(indexed bytes32,indexed address,string,uint256,uint256,bool)
+          handler: handleOrderCreated
+        - event: OrderClosed(indexed bytes32,indexed address)
+          handler: handleOrderClosed
+        - event: PositionCreated(indexed bytes32,indexed address,indexed address,uint256,uint256,uint256,string,bytes32,bytes32)
           handler: handlePositionCreated
         - event: PositionClosed(indexed bytes32)
           handler: handlePositionClosed
@@ -38,18 +50,18 @@ dataSources:
           handler: handlePositionExited
         - event: PositionDeliveryClosed(indexed bytes32,indexed address)
           handler: handlePositionDeliveryClosed
-        - event: OrderCreated(indexed bytes32,indexed address,string,uint256,uint256,bool)
-          handler: handleOrderCreated
-        - event: OrderClosed(indexed bytes32,indexed address)
-          handler: handleOrderClosed
-        - event: OrderFeeUpdated(uint256)
-          handler: handleOrderFeeUpdated
         - event: PositionPaid(indexed bytes32)
           handler: handlePositionPaid
         - event: PositionPaymentReceived(indexed bytes32)
           handler: handlePositionPaymentReceived
+        - event: OrderFeeUpdated(uint256)
+          handler: handleOrderFeeUpdated
         - event: ValidatorURLUpdated(string)
           handler: handleValidatorURLUpdated
+        - event: Liquidation(indexed address,indexed address,int256,int256)
+          handler: handleLiquidation
+        - event: BadDebt(indexed address,uint256)
+          handler: handleBadDebt
       file: ./src/futures.ts
 # Required when deploying with `goldsky subgraph deploy ... --graft-from <name>/<version>`
 features:

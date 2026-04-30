@@ -331,4 +331,76 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     const pnl = (newPrice - price) * BigInt(config.deliveryDurationDays);
     assert.equal(buyerRealizedProfitEvent.args.pnl, pnl);
   });
+
+  it("emits a paired OrderCreated+OrderClosed for the taker on an immediate fill", async () => {
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures, collateralVault } = contracts;
+    const { seller, buyer, pc } = accounts;
+
+    const price = parseUnits("100", 6);
+    const margin = parseUnits("10000", 6);
+    const deliveryDate = config.deliveryDates[0];
+
+    await collateralVault.write.deposit([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: buyer.account });
+
+    // Maker rests a sell order — emits a single OrderCreated for the maker.
+    const restTxHash = await futures.write.createOrder([price, deliveryDate, "u-maker", -1], {
+      account: seller.account,
+    });
+    const restReceipt = await pc.waitForTransactionReceipt({ hash: restTxHash });
+    const [makerCreated] = parseEventLogs({
+      logs: restReceipt.logs,
+      abi: futures.abi,
+      eventName: "OrderCreated",
+    });
+    assert.equal(getAddress(makerCreated.args.participant), getAddress(seller.account.address));
+
+    // Taker places the opposing buy order — fills immediately.
+    const takeTxHash = await futures.write.createOrder([price, deliveryDate, "u-taker", 1], {
+      account: buyer.account,
+    });
+    const takeReceipt = await pc.waitForTransactionReceipt({ hash: takeTxHash });
+
+    // The taker tx emits exactly one OrderCreated (for the taker), and two OrderCloseds
+    // (one for the taker, one for the maker that just got matched).
+    const ordersCreated = parseEventLogs({
+      logs: takeReceipt.logs,
+      abi: futures.abi,
+      eventName: "OrderCreated",
+    });
+    const ordersClosed = parseEventLogs({
+      logs: takeReceipt.logs,
+      abi: futures.abi,
+      eventName: "OrderClosed",
+    });
+    const [positionCreated] = parseEventLogs({
+      logs: takeReceipt.logs,
+      abi: futures.abi,
+      eventName: "PositionCreated",
+    });
+
+    assert.equal(ordersCreated.length, 1);
+    assert.equal(ordersClosed.length, 2);
+
+    const takerOrderCreated = ordersCreated[0];
+    assert.equal(
+      getAddress(takerOrderCreated.args.participant),
+      getAddress(buyer.account.address),
+    );
+    assert.equal(takerOrderCreated.args.destURL, "u-taker");
+    assert.equal(takerOrderCreated.args.pricePerDay, price);
+    assert.equal(takerOrderCreated.args.deliveryAt, BigInt(deliveryDate));
+    assert.equal(takerOrderCreated.args.isBuy, true);
+
+    // Both OrderCloseds should reference the taker (its own match-cancel) and the maker.
+    const closedIds = new Set(ordersClosed.map((e) => e.args.orderId));
+    assert.equal(closedIds.has(takerOrderCreated.args.orderId), true);
+    assert.equal(closedIds.has(makerCreated.args.orderId), true);
+
+    // PositionCreated wires both order ids together.
+    assert.equal(positionCreated.args.orderId, makerCreated.args.orderId);
+    assert.equal(positionCreated.args.takerOrderId, takerOrderCreated.args.orderId);
+    assert.notEqual(positionCreated.args.orderId, positionCreated.args.takerOrderId);
+  });
 });

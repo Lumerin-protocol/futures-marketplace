@@ -1,11 +1,16 @@
-# Futures Contract Root Entity
+# Root entity for contract-wide state and stats
 type Futures @entity(immutable: false) {
-  "Use id=0"
+  "Singleton entity, use id=0"
   id: Int8!
-  initializedBlockNumber: BigInt!
-  initializeTimestamp: BigInt!
 
-  "Contract configuration parameters"
+  # Contract addresses
+  contractAddress: Bytes!
+  collateralToken: Bytes!
+  hashrateOracleAddress: Bytes!
+  validatorAddress: Bytes!
+  validatorURL: String!
+
+  # Configuration
   minimumPriceIncrement: BigInt!
   orderFee: BigInt!
   liquidationMarginPercent: Int!
@@ -15,82 +20,254 @@ type Futures @entity(immutable: false) {
   futureDeliveryDatesCount: Int!
   firstFutureDeliveryDate: BigInt!
   breachPenaltyRatePerDay: BigInt!
-  validatorAddress: Bytes!
-  hashrateOracleAddress: Bytes!
-  tokenAddress: Bytes!
-  futuresAddress: Bytes!
-  validatorURL: String!
 
-  "Number of contracts including archived"
-  contractCount: Int!
-  "Number of not archived contracts"
-  contractActiveCount: Int!
-
-  # purchase stats
-  purchaseCount: Int!
-  closeoutCount: Int!
-}
-
-# Futures Contract Entities
-type Participant @entity(immutable: false) {
-  id: Bytes!
-  address: Bytes!
-  positions: [Position!]!
-  orders: [Order!]!
+  # Pool balances
+  reservePoolBalance: BigInt!
+  collectedFeesBalance: BigInt!
 
   # Stats
-  positionCount: Int!
-  orderCount: Int!
+  totalUsers: Int!
+  totalOrders: Int! # aggregate Order entities created
+  activeOrders: Int! # Order entities not yet fully filled/cancelled
+  totalTrades: Int!
+  totalFills: Int!
   totalVolume: BigInt!
+  totalLiquidations: Int!
+  totalBadDebt: BigInt!
+
+  # Timestamps
+  initializedAt: BigInt!
+  lastUpdatedAt: BigInt!
 }
 
+# User entity (replaces former Participant)
+type User @entity(immutable: false) {
+  id: Bytes! # user address
+  address: Bytes!
+
+  # Stats
+  orderCount: Int! # aggregate Orders ever created
+  activeOrderCount: Int! # Orders currently ACTIVE/PARTIAL
+  tradeCount: Int!
+  fillCount: Int!
+  realizedPnl: BigInt!
+
+  # Relations
+  orders: [Order!]! @derivedFrom(field: "user")
+  trades: [Trade!]! @derivedFrom(field: "user")
+  fills: [Fill!]! @derivedFrom(field: "user")
+  positionSessions: [PositionSession!]! @derivedFrom(field: "user")
+  "Per-(user, deliveryAt) running net qty + open-session pointers, one entry per delivery date the user has touched."
+  deliveryPointers: [UserDeliverySessionPointer!]! @derivedFrom(field: "user")
+  badDebts: [BadDebtEvent!]! @derivedFrom(field: "user")
+  liquidationsAsUser: [Liquidation!]! @derivedFrom(field: "user")
+  liquidationsAsLiquidator: [Liquidation!]! @derivedFrom(field: "liquidator")
+
+  # Timestamps
+  createdAt: BigInt!
+  lastActivityAt: BigInt!
+}
+
+# Aggregate of OrderCreated events for one (user, price, deliveryAt, side) within a single tx.
+# A `createOrder(price, deliveryAt, dest, qty=N)` call emits N qty=1 OrderCreated events,
+# all collapsed here into a single Order with `quantity = N`.
 type Order @entity(immutable: false) {
-  id: Bytes!
-  participant: Participant!
-  pricePerDay: BigInt!
+  id: Bytes! # tx hash + user + price + deliveryAt + side
+  user: User!
+  price: BigInt! # pricePerDay
   deliveryAt: BigInt!
   isBuy: Boolean!
-  timestamp: BigInt!
+
+  # Counts (each unit = one on-chain orderId)
+  quantity: Int! # ACTIVE entries (open units)
+  originalQuantity: Int! # initial qty across all entries
+  filledQuantity: Int! # entries that became Fills
+  cancelledQuantity: Int! # entries closed without matching
+
+  status: OrderStatus!
+  entries: [OrderEntry!]! @derivedFrom(field: "order")
+
+  # Metadata
+  createdAt: BigInt!
+  updatedAt: BigInt!
+  closedAt: BigInt
   blockNumber: BigInt!
   transactionHash: Bytes!
-  destURL: String!
+}
 
-  # Status
-  isActive: Boolean!
+enum OrderStatus {
+  ACTIVE
+  PARTIAL
+  FILLED
+  CANCELLED
+}
+
+# One per on-chain orderId. Mutable: status flips when OrderClosed fires.
+type OrderEntry @entity(immutable: false) {
+  id: Bytes! # on-chain orderId
+  order: Order!
+  destURL: String!
+  status: OrderEntryStatus!
   closedAt: BigInt
   closedBy: Bytes
 }
 
+enum OrderEntryStatus {
+  ACTIVE
+  MATCHED
+  CANCELLED
+}
+
+# Aggregate of all fills (across counterparties) in a single tx for one user.
+# Mirrors perps' Trade entity.
+type Trade @entity(immutable: false) {
+  id: Bytes! # tx hash + user address
+  user: User!
+  positionSession: PositionSession!
+  deliveryAt: BigInt!
+
+  tradePrice: BigInt! # qty-weighted average fill price
+  tradeQuantity: Int! # signed sum of fill quantities
+  tradingFee: BigInt!
+  realizedPnl: BigInt!
+  netQuantityAfter: Int!
+  fillCount: Int!
+
+  fills: [Fill!]! @derivedFrom(field: "trade")
+
+  # Metadata
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+# Aggregate of qty=1 PositionCreated/PositionExited events with the same (user, counterparty) in one tx.
+type Fill @entity(immutable: false) {
+  id: Bytes! # tx hash + user + counterparty
+  trade: Trade!
+  user: User!
+  counterparty: User!
+  positionSession: PositionSession!
+  deliveryAt: BigInt!
+
+  fillPrice: BigInt! # weighted-average match price across the aggregated units
+  fillQuantity: Int! # signed: + buy / - sell, summed across underlying positions
+  netQuantityAfter: Int! # signed (user, deliveryAt) net qty after this fill
+  realizedPnl: BigInt! # accumulated pnl (from PositionExited offsets and forced cash-settle)
+
+  # On-chain positions where the user is the buyer / seller and that were OPENED via this Fill
+  # (i.e. PositionCreated in the same tx with this counterparty).
+  positionsAsBuyer: [Position!]! @derivedFrom(field: "buyerFill")
+  positionsAsSeller: [Position!]! @derivedFrom(field: "sellerFill")
+  # On-chain positions that were EXITED in this fill (PositionExited offset by this user's opposing trade).
+  positionsExitedAsBuyer: [Position!]! @derivedFrom(field: "buyerExitFill")
+  positionsExitedAsSeller: [Position!]! @derivedFrom(field: "sellerExitFill")
+
+  # Metadata
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+# Canonical mirror of the on-chain Position struct, keyed by positionId.
+# Lifecycle (paid / exited / breached / closed) is recorded here as a single source of truth.
+# References both the buyer's Fill and the seller's Fill that opened the position; if the position
+# is later exited via an opposing trade, references the buyer/seller exit Fills as well.
 type Position @entity(immutable: false) {
-  id: Bytes!
-  seller: Participant!
-  buyer: Participant!
+  id: Bytes! # on-chain positionId
+  seller: User!
+  buyer: User!
+  destURL: String!
   sellPricePerDay: BigInt!
   buyPricePerDay: BigInt!
   deliveryAt: BigInt!
+
+  buyerFill: Fill! # Fill on the buyer's side at the moment this position was created
+  sellerFill: Fill! # Fill on the seller's side at the moment this position was created
+  buyerExitFill: Fill # Fill on the buyer's side that exited this position via offset
+  sellerExitFill: Fill # Fill on the seller's side that exited this position via offset
+
+  isPaid: Boolean! # PositionPaid sets true; PositionPaymentReceived flips back to false
+  isExited: Boolean! # PositionExited at least once (a participant offset out of this position)
+  buyerExitPnl: BigInt # signed pnl for the buyer if they exited
+  sellerExitPnl: BigInt # signed pnl for the seller if they exited
+  isDeliveryClosed: Boolean! # PositionDeliveryClosed (delivery breach close)
+  closedBy: Bytes
+  isClosed: Boolean! # PositionClosed (final tombstone)
+
+  createdAt: BigInt!
+  closedAt: BigInt
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+# Open→close cycle for a (user, deliveryAt) pair.
+# A user can have multiple sessions concurrently — one per delivery date.
+type PositionSession @entity(immutable: false) {
+  id: String! # blockNumber (12 digits) + logIndex (6 digits) + side; deterministic
+  status: PositionSessionStatus!
+  user: User!
+  deliveryAt: BigInt!
+
+  entryPrice: BigInt! # qty-weighted average entry price
+  closePrice: BigInt! # qty-weighted average exit price
+  maxQuantity: Int! # max absolute qty reached during the session
+  closedQuantity: Int! # cumulative qty closed
+  realizedPnl: BigInt!
+  tradingFees: BigInt!
+
+  openedAt: BigInt!
+  lastTradeAt: BigInt!
+
+  fills: [Fill!]! @derivedFrom(field: "positionSession")
+  trades: [Trade!]! @derivedFrom(field: "positionSession")
+}
+
+enum PositionSessionStatus {
+  OPEN
+  CLOSE
+}
+
+# Liquidation event (driven by the new on-chain Liquidation event).
+type Liquidation @entity(immutable: true) {
+  id: Bytes! # tx hash + log index
+  user: User!
+  liquidator: User!
+  reclaimedMargin: BigInt!
+  realizedPnl: BigInt! # signed: net change in user collateral from forced position closes
   timestamp: BigInt!
   blockNumber: BigInt!
   transactionHash: Bytes!
-  orderId: Bytes!
-  destURL: String!
-
-  # PnL
-  sellerPnl: BigInt
-  buyerPnl: BigInt
-
-  # Status
-  isActive: Boolean!
-  closedAt: BigInt
-  closedBy: Bytes
-  isPaid: Boolean!
 }
 
-# Delivery Date Orders - tracks buy/sell counts per price level for each delivery date
-type DeliveryDateOrder @entity(immutable: false) {
-  "ID format: {deliveryDate}-{price}"
+# Bad debt event when a participant or the insurance fund cannot cover a loss.
+type BadDebtEvent @entity(immutable: true) {
+  id: Bytes! # tx hash + log index
+  user: User!
+  amount: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+# Order book price level aggregation per (deliveryAt, price, side).
+type PriceLevel @entity(immutable: false) {
+  "ID format: {deliveryAt}-{price}-{bid|ask}"
   id: String!
-  deliveryDate: BigInt!
+  deliveryAt: BigInt!
   price: BigInt!
-  buyOrdersCount: Int!
-  sellOrdersCount: Int!
+  isBid: Boolean!
+  totalQuantity: Int! # sum of ACTIVE OrderEntry units at this level
+}
+
+# Internal indexer lookup: tracks the open PositionSession + running net qty / entry price
+# for a (user, deliveryAt) pair. Not derived because GraphQL has no Map<deliveryAt, …> support.
+type UserDeliverySessionPointer @entity(immutable: false) {
+  id: Bytes! # user address ++ deliveryAt encoded
+  user: User!
+  deliveryAt: BigInt!
+  netQuantity: Int! # signed running net qty
+  aggregatedEntryPrice: BigInt!
+  "ID of the currently-OPEN PositionSession for this (user, deliveryAt). Empty string when flat."
+  currentSessionId: String!
 }

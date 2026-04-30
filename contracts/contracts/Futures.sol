@@ -64,7 +64,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private immutable _decimals; // decimals of the wrapped token
     string public validatorURL;
     uint256 public collectedFeesBalance;
-    uint256 public reservePoolBalance;
+    uint256 public _gap2;
     mapping(address => uint8) private addressFeeDiscountPercent;
     /// @notice Precomputed divisor used to rebase oracle answers from `oracle.decimals()` to the wrapped
     ///         token's decimals. Recomputed whenever the oracle is set.
@@ -78,7 +78,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     IPortfolioMarginEngine public marginEngine;
 
     // constants
-    string public constant VERSION = "2.2.0";
+    string public constant VERSION = "2.4.0";
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     uint8 public constant BREACH_PENALTY_DECIMALS = 18;
     uint32 private constant SECONDS_PER_DAY = 3600 * 24;
@@ -124,6 +124,12 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     );
     event OrderClosed(bytes32 indexed orderId, address indexed participant);
     event OrderFeeUpdated(uint256 orderFee);
+    /// @notice Fired when a position is opened by matching two opposing orders.
+    /// @param orderId       The resting (maker) order's id.
+    /// @param takerOrderId  The aggressor (taker) order's id. Each taker fill mints
+    ///                      a fresh orderId and is announced via a paired
+    ///                      OrderCreated + OrderClosed in the same transaction so
+    ///                      indexers see takers and makers symmetrically.
     event PositionCreated(
         bytes32 indexed positionId,
         address indexed seller,
@@ -132,7 +138,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         uint256 buyPricePerDay,
         uint256 deliveryAt,
         string destURL,
-        bytes32 orderId
+        bytes32 orderId,
+        bytes32 takerOrderId
     );
     event PositionClosed(bytes32 indexed positionId);
     event PositionExited(bytes32 indexed positionId, address indexed participant, int256 pnl); // positive pnl is participant's profit
@@ -140,6 +147,19 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     event PositionPaid(bytes32 indexed positionId);
     event PositionPaymentReceived(bytes32 indexed positionId);
     event ValidatorURLUpdated(string validatorURL);
+    /// @notice Emitted at the end of `marginCall` when at least one order or position was force-closed.
+    /// @param participant       Account whose orders/positions were liquidated
+    /// @param liquidator        Validator address that triggered the margin call
+    /// @param reclaimedMargin   Aggregate margin reclaimed by force-closing resting orders (token decimals)
+    /// @param realizedPnl       Net change in `participant`'s collateral balance from forced position closes (token decimals, signed)
+    event Liquidation(
+        address indexed participant, address indexed liquidator, int256 reclaimedMargin, int256 realizedPnl
+    );
+    /// @notice Emitted when a transfer cannot be fully covered by the payer's vault balance during PnL settlement.
+    ///         The transfer is partially executed using the payer's remaining balance and the shortfall is socialized.
+    /// @param account The account that could not cover its loss (typically a liquidated participant or the insurance fund)
+    /// @param amount  Shortfall amount that could not be covered (token decimals)
+    event BadDebt(address indexed account, uint256 amount);
 
     // errors
     error InvalidPrice();
@@ -317,12 +337,34 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         bytes32 oppositeOrderId = bytes32(oppositeOrderIdUint);
         Order memory oppositeOrder = orders[oppositeOrderId];
 
+        // Mint a transient orderId for the taker leg too so off-chain consumers
+        // see a symmetric OrderCreated → OrderClosed pair for both sides of the
+        // match. The taker order is never persisted to storage — it lives only
+        // in the event log.
+        bytes32 takerOrderId = _emitTakerMatchOrder(_participant, _price, _deliveryDate, _isBuy, _destURL);
+
         // delete matching order
         _closeOrder(oppositeOrderId, oppositeOrder);
 
         // create new position
-        _createPosition(oppositeOrderId, oppositeOrder, _participant, _destURL);
+        _createPosition(oppositeOrderId, oppositeOrder, _participant, _destURL, takerOrderId);
         return true;
+    }
+
+    /// @dev Mints a fresh orderId for an immediately-filled taker fill and emits
+    ///      `OrderCreated` followed by `OrderClosed` for it. The order itself is
+    ///      not stored — these events exist solely to let indexers materialize
+    ///      and resolve a complete Order record for the taker.
+    function _emitTakerMatchOrder(
+        address _participant,
+        uint256 _pricePerDay,
+        uint256 _deliveryAt,
+        bool _isBuy,
+        string memory _destURL
+    ) private returns (bytes32 takerOrderId) {
+        takerOrderId = bytes32(++nonce);
+        emit OrderCreated(takerOrderId, _participant, _destURL, _pricePerDay, _deliveryAt, _isBuy);
+        emit OrderClosed(takerOrderId, _participant);
     }
 
     function _createOrder(
@@ -332,8 +374,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         bool _isBuy,
         string memory _destURL
     ) private returns (bytes32) {
-        bytes32 orderId =
-            keccak256(abi.encode(_participant, _pricePerDay, _deliveryAt, _isBuy, block.timestamp, nonce++));
+        bytes32 orderId = bytes32(++nonce);
         orders[orderId] = Order({
             participant: _participant,
             pricePerDay: _pricePerDay,
@@ -347,9 +388,13 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         return orderId;
     }
 
-    function _createPosition(bytes32 orderId, Order memory order, address _otherParticipant, string memory _destURL)
-        private
-    {
+    function _createPosition(
+        bytes32 orderId,
+        Order memory order,
+        address _otherParticipant,
+        string memory _destURL,
+        bytes32 takerOrderId
+    ) private {
         // if (order.participant == _otherParticipant) {
         // should never happen
         // }
@@ -385,9 +430,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             return;
         }
 
-        bytes32 positionId = keccak256(
-            abi.encode(_temp.seller, _temp.buyer, order.pricePerDay, order.deliveryAt, block.timestamp, nonce++)
-        );
+        bytes32 positionId = bytes32(++nonce);
         positions[positionId] = Position({
             seller: _temp.seller,
             buyer: _temp.buyer,
@@ -407,15 +450,27 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         participantDeliveryDateNetDelta[_temp.buyer][order.deliveryAt] += _delta;
         participantDeliveryDateNetEntryValue[_temp.seller][order.deliveryAt] -= int256(_temp.sellPricePerDay) * _delta;
         participantDeliveryDateNetEntryValue[_temp.buyer][order.deliveryAt] += int256(_temp.buyPricePerDay) * _delta;
+        _emitPositionCreated(positionId, _temp, order.deliveryAt, orderId, takerOrderId);
+    }
+
+    /// @dev Extracted to keep `_createPosition` below the EVM stack-depth limit.
+    function _emitPositionCreated(
+        bytes32 positionId,
+        Position memory _temp,
+        uint256 deliveryAt,
+        bytes32 orderId,
+        bytes32 takerOrderId
+    ) private {
         emit PositionCreated(
             positionId,
             _temp.seller,
             _temp.buyer,
             _temp.sellPricePerDay,
             _temp.buyPricePerDay,
-            order.deliveryAt,
+            deliveryAt,
             _temp.destURL,
-            orderId
+            orderId,
+            takerOrderId
         );
     }
 
@@ -625,15 +680,15 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     function marginCall(address _participant) external onlyValidator {
         int256 effectiveMargin = getMinMargin(_participant);
-        uint256 userCollateral = balanceOf(_participant);
+        int256 startBalance = int256(balanceOf(_participant));
 
-        if (int256(userCollateral) > effectiveMargin) {
+        if (startBalance > effectiveMargin) {
             return;
         }
 
-        int256 marginShortfall = effectiveMargin - int256(userCollateral);
-
+        int256 marginShortfall = effectiveMargin - startBalance;
         int256 reclaimedMargin; // amount of margin that will be reclaimed by closing positions/orders
+        bool liquidated;
 
         // closing orders
         EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[_participant];
@@ -644,9 +699,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             int256 qty = order.isBuy ? int256(1) : int256(-1);
             int256 _margin = int256(clamp(getMinMarginForPosition(order.pricePerDay, qty)));
             _closeOrder(orderId, order);
+            liquidated = true;
 
             reclaimedMargin += _margin;
             if (reclaimedMargin >= marginShortfall) {
+                _emitLiquidation(_participant, reclaimedMargin, startBalance);
                 return;
             }
         }
@@ -657,20 +714,25 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             bytes32 positionId = _positions.at(0);
             Position storage position = positions[positionId];
 
-            // int256 qty = position.buyer == _participant ? int256(1) : int256(-1);
-            // int256 _margin = getMinMarginForPosition(position.pricePerDay, qty);
             // Force liquidation: settle unrealized PnL at market price and close position
             //TODO: avoid calling getMinMargin on each iteration, return reclaimed margin instead
             _forceLiquidatePosition(positionId, position, _participant);
-            uint256 collateralBalance = balanceOf(_participant);
-            int256 minMargin = getMinMargin(_participant);
-            if (int256(collateralBalance) >= minMargin) {
+            liquidated = true;
+            if (int256(balanceOf(_participant)) >= getMinMargin(_participant)) {
+                _emitLiquidation(_participant, reclaimedMargin, startBalance);
                 return;
             }
         }
 
-        //TODO: what happens if not enough funds to cover positions
-        // the other party takes the loss
+        if (liquidated) {
+            _emitLiquidation(_participant, reclaimedMargin, startBalance);
+        }
+    }
+
+    /// @dev Stack-saving wrapper around the `Liquidation` emit. `realizedPnl = currentBalance - startBalance`.
+    function _emitLiquidation(address _participant, int256 _reclaimedMargin, int256 _startBalance) private {
+        int256 realizedPnl = int256(balanceOf(_participant)) - _startBalance;
+        emit Liquidation(_participant, _msgSender(), _reclaimedMargin, realizedPnl);
     }
 
     /**
@@ -1124,11 +1186,32 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     function _transferPnl(address _from, address _to, int256 _pnl) private {
+        if (_pnl == 0) return;
+        address payer;
+        address receiver;
+        uint256 amount;
         if (_pnl > 0) {
-            collateralVault.internalTransfer(_from, _to, uint256(_pnl));
-        } else if (_pnl < 0) {
-            collateralVault.internalTransfer(_to, _from, uint256(-_pnl));
+            payer = _from;
+            receiver = _to;
+            amount = uint256(_pnl);
+        } else {
+            payer = _to;
+            receiver = _from;
+            amount = uint256(-_pnl);
         }
+
+        uint256 available = collateralVault.balanceOf(payer);
+        if (available >= amount) {
+            collateralVault.internalTransfer(payer, receiver, amount);
+            return;
+        }
+
+        // Payer cannot cover full amount: transfer what's available and socialize the shortfall.
+        // Surfaces previously-implicit reverts as a `BadDebt` signal for off-chain observers.
+        if (available > 0) {
+            collateralVault.internalTransfer(payer, receiver, available);
+        }
+        emit BadDebt(payer, amount - available);
     }
 
     /// @dev Shared reserve / PnL pool: vault `insuranceFund` receipt account.
