@@ -15,7 +15,7 @@ import { Versionable } from "./interfaces/Versionable.sol";
 import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
 import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/interfaces/IPortfolioMarginEngine.sol";
 
-import { console } from "hardhat/console.sol";
+// import { console } from "hardhat/console.sol";
 
 // TODO:
 // 6. Do we need to batch same price and delivery date orders/positions so it is a single entry?
@@ -49,7 +49,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint256 public orderFee; // fee for creating an order in tokens
     uint256 private nonce = 0; // nonce for the order id
 
-    IERC20 public token;
+    address public _gap;
     /// @notice Hashprice oracle returning the price of 100 TH/s per day denominated in the same currency as `token`
     /// @dev Chainlink-compatible aggregator (e.g. HashpriceUSD when `token` is a USD stablecoin).
     ///      Variable name retained from v1.x for storage / ABI backwards compatibility; semantically this is a
@@ -162,7 +162,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     error PositionDestURLNotSet();
     error NothingToWithdraw();
     error CollateralTokenMismatch();
-    error ZeroVaultAddress();
+    error ZeroAddress();
     error InsufficientContractReserve(uint256 reserve, uint256 required);
     error InsuranceFundNotConfigured();
     error TransferDisabled();
@@ -173,14 +173,13 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @param _collateralVault Must use the same underlying ERC20 as `token` passed to `initialize`.
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _collateralVault) {
-        if (address(_collateralVault) == address(0)) revert ZeroVaultAddress();
+        if (address(_collateralVault) == address(0)) revert ZeroAddress();
         collateralVault = _collateralVault;
         _decimals = IERC20Metadata(address(_collateralVault)).decimals();
         _disableInitializers();
     }
 
     function initialize(
-        IERC20Metadata _token,
         AggregatorV3Interface _hashrateOracle,
         address _validatorAddress,
         uint8 _liquidationMarginPercent,
@@ -203,7 +202,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         deliveryIntervalDays = _deliveryIntervalDays;
         setFutureDeliveryDatesCount(_futureDeliveryDatesCount);
         firstFutureDeliveryDate = _firstFutureDeliveryDate;
-        token = IERC20(address(_token));
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
@@ -375,37 +373,16 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         _temp.sellPricePerDay = order.pricePerDay;
         _temp.buyPricePerDay = order.pricePerDay;
 
-        EnumerableSet.Bytes32Set storage participantDeliveryDatePositionIds =
-            participantDeliveryDatePositionIdsIndex[order.participant][order.deliveryAt];
-        if (participantDeliveryDatePositionIds.length() > 0) {
-            bytes32 existingPositionId = participantDeliveryDatePositionIds.at(0);
-            Position memory existingPosition = positions[existingPositionId];
-
-            int256 pnlPerDay = 0; // negative is profit, positive is loss
-            if (existingPosition.buyer == order.participant && !order.isBuy) {
-                pnlPerDay = int256(existingPosition.buyPricePerDay) - int256(order.pricePerDay);
-                _temp.seller = existingPosition.seller;
-                _temp.buyer = _otherParticipant;
-                _temp.sellPricePerDay = existingPosition.sellPricePerDay;
-                _removePosition(existingPositionId, existingPosition);
-            } else if (existingPosition.seller == order.participant && order.isBuy) {
-                pnlPerDay = int256(order.pricePerDay) - int256(existingPosition.sellPricePerDay);
-                _temp.seller = _otherParticipant;
-                _temp.buyer = existingPosition.buyer;
-                _temp.buyPricePerDay = existingPosition.buyPricePerDay;
-                _removePosition(existingPositionId, existingPosition);
-            }
-            int256 pnl = pnlPerDay * int256(uint256(deliveryDurationDays));
-
-            _transferPnl(order.participant, _insuranceFundAccount(), pnl);
-            emit PositionExited(existingPositionId, order.participant, -pnl);
-
-            if (_temp.buyer == _temp.seller) {
-                // both parties exiting the position
-                emit PositionExited(existingPositionId, _temp.buyer, pnl);
-                _transferPnl(_insuranceFundAccount(), _temp.buyer, pnl);
-                return;
-            }
+        // Either side of the new trade may already hold an opposite-side position at this
+        // delivery date — exit it before creating the new position. `order.isBuy` is the
+        // side the resting-order placer takes; the new-order placer takes the opposite side.
+        bool exited = _maybeExitExistingPosition(_temp, order, order.participant, order.isBuy);
+        if (!exited) {
+            exited = _maybeExitExistingPosition(_temp, order, _otherParticipant, !order.isBuy);
+        }
+        if (exited && _temp.buyer == _temp.seller) {
+            // both parties exiting — no new position to create
+            return;
         }
 
         bytes32 positionId = keccak256(
@@ -440,6 +417,56 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             _temp.destURL,
             orderId
         );
+    }
+
+    /// @dev If `participant` already holds a position at `order.deliveryAt` on the opposite
+    ///      side of the trade they are about to enter, exit that position: settle realized PnL
+    ///      against the insurance fund, remove the old position, and rewire `_temp` so that
+    ///      the remaining counterparty (the other side of the old position) takes
+    ///      `participant`'s slot in the new position.
+    ///      `participantNewSideIsBuy` indicates which side `participant` is taking in the
+    ///      newly-executing trade.
+    ///      Returns `true` iff an existing position was offset.
+    function _maybeExitExistingPosition(
+        Position memory _temp,
+        Order memory order,
+        address participant,
+        bool participantNewSideIsBuy
+    ) private returns (bool) {
+        EnumerableSet.Bytes32Set storage participantPositions =
+            participantDeliveryDatePositionIdsIndex[participant][order.deliveryAt];
+        if (participantPositions.length() == 0) return false;
+
+        bytes32 existingPositionId = participantPositions.at(0);
+        Position memory existingPosition = positions[existingPositionId];
+
+        int256 pnlPerDay; // negative is profit, positive is loss
+        if (existingPosition.buyer == participant && !participantNewSideIsBuy) {
+            // long → flat: bought high (buyPx) and sells now at order.pricePerDay
+            pnlPerDay = int256(existingPosition.buyPricePerDay) - int256(order.pricePerDay);
+            _temp.seller = existingPosition.seller;
+            _temp.sellPricePerDay = existingPosition.sellPricePerDay;
+        } else if (existingPosition.seller == participant && participantNewSideIsBuy) {
+            // short → flat: sold at sellPx and buys back now at order.pricePerDay
+            pnlPerDay = int256(order.pricePerDay) - int256(existingPosition.sellPricePerDay);
+            _temp.buyer = existingPosition.buyer;
+            _temp.buyPricePerDay = existingPosition.buyPricePerDay;
+        } else {
+            // existing position is on the same side as the new trade — nothing to offset
+            return false;
+        }
+
+        _removePosition(existingPositionId, existingPosition);
+        int256 pnl = pnlPerDay * int256(uint256(deliveryDurationDays));
+        _transferPnl(participant, _insuranceFundAccount(), pnl);
+        emit PositionExited(existingPositionId, participant, -pnl);
+
+        if (_temp.buyer == _temp.seller) {
+            // both parties exiting the position
+            emit PositionExited(existingPositionId, _temp.buyer, pnl);
+            _transferPnl(_insuranceFundAccount(), _temp.buyer, pnl);
+        }
+        return true;
     }
 
     /// @notice Removes all outdated orders for a specific participant

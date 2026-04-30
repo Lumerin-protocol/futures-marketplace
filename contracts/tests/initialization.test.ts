@@ -11,8 +11,6 @@ describe("Futures - Initialization", () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
 
-    // Check token address
-    assert.equal(getAddress(await futures.read.token()), getAddress(contracts.usdcMock.address));
     // Check hashrate oracle address (now serves the hashprice in USD; getter name kept for back-compat)
     assert.equal(
       getAddress(await futures.read.hashrateOracle()),

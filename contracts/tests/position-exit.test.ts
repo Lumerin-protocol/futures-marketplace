@@ -56,4 +56,60 @@ describe("Position Exit", () => {
     const partBDelta = partBBalance - margin;
     assert.deepEqual([partADelta, partBDelta], [expPartApnl, expPartBpnl]);
   });
+
+  it("offsets the new-order placer's existing opposite position when their order crosses a resting one", async () => {
+    // Reproduces a bug where the offset logic in `_createPosition` only checked the
+    // resting-order placer's existing positions, never the new market-order placer's.
+    //
+    // Scenario:
+    //   1. A sells, B buys → P1 (seller=A, buyer=B). B is now long.
+    //   2. C places a *resting* buy order at the same price/date.
+    //   3. B places a sell order that immediately matches C's resting buy.
+    //
+    // Expected: B's existing long is offset and removed. The remaining short obligation
+    // (A) is rewired to face C as the new buyer — i.e. one position (A short, C long).
+    // Bug: B was left holding both the original long (vs A) AND a new short (vs C).
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures, collateralVault } = contracts;
+    const { seller: partA, buyer: partB, buyer2: partC, owner } = accounts;
+
+    const price = await futures.read.getMarketPrice();
+    const margin = price * BigInt(config.deliveryDurationDays) * 2n;
+    const deliveryDate = config.deliveryDates[0];
+
+    await futures.write.setOrderFee([0n], { account: owner.account });
+
+    await collateralVault.write.deposit([margin], { account: partA.account });
+    await collateralVault.write.deposit([margin], { account: partB.account });
+    await collateralVault.write.deposit([margin], { account: partC.account });
+
+    await futures.write.createOrder([price, deliveryDate, "", -1], { account: partA.account });
+    await futures.write.createOrder([price, deliveryDate, "", 1], { account: partB.account });
+    await futures.write.createOrder([price, deliveryDate, "", 1], { account: partC.account });
+    await futures.write.createOrder([price, deliveryDate, "", -1], { account: partB.account });
+
+    const partAPositions = await futures.read.getPositionsByParticipantDeliveryDate([
+      partA.account.address,
+      deliveryDate,
+    ]);
+    const partBPositions = await futures.read.getPositionsByParticipantDeliveryDate([
+      partB.account.address,
+      deliveryDate,
+    ]);
+    const partCPositions = await futures.read.getPositionsByParticipantDeliveryDate([
+      partC.account.address,
+      deliveryDate,
+    ]);
+    assert.equal(partBPositions.length, 0, "B should be flat after offsetting their long");
+    assert.equal(partAPositions.length, 1, "A should still hold one short position");
+    assert.equal(partCPositions.length, 1, "C should hold one long position");
+    assert.equal(partAPositions[0], partCPositions[0], "A and C should share the same position");
+
+    const partADelta = await futures.read.getNetPositionDelta([partA.account.address]);
+    const partBDelta = await futures.read.getNetPositionDelta([partB.account.address]);
+    const partCDelta = await futures.read.getNetPositionDelta([partC.account.address]);
+    assert.equal(partBDelta, 0n, "B net delta should be zero");
+    assert.equal(partADelta, -partCDelta, "A and C should hold opposite deltas");
+    assert.notEqual(partADelta, 0n, "A should be net short");
+  });
 });
