@@ -252,11 +252,6 @@ export const contractErrors = [
   },
   {
     "inputs": [],
-    "name": "ZeroVaultAddress",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "NotImplemented",
     "type": "error"
   },
@@ -273,6 +268,11 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "InsufficientMarginBalance",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroAddress",
     "type": "error"
   },
   {

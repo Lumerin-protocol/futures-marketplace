@@ -989,8 +989,17 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             bytes32 positionId = _positions.at(i);
             Position storage position = positions[positionId];
             if (position.seller == _msgSender() && position.paid) {
-                uint256 totalPayment = position.sellPricePerDay * deliveryDurationDays;
-                _internalTransfer(address(this), position.seller, totalPayment);
+                // The buyer escrowed `buyPricePerDay * days` into `address(this)` at deposit time,
+                // but the seller is owed `sellPricePerDay * days`. When `_maybeExitExistingPosition`
+                // rewired this position the price differential (sellPx - buyPx) was already settled
+                // against the insurance fund via `_transferPnl`. Route the buyer's escrow through
+                // the fund so the seller can be paid in full while the fund's balance net-nets to
+                // zero across the position's lifecycle.
+                uint256 buyerDeposit = position.buyPricePerDay * deliveryDurationDays;
+                uint256 sellerOwed = position.sellPricePerDay * deliveryDurationDays;
+                address fund = _insuranceFundAccount();
+                _internalTransfer(address(this), fund, buyerDeposit);
+                _internalTransfer(fund, position.seller, sellerOwed);
                 position.paid = false;
                 withdrew = true;
                 emit PositionPaymentReceived(positionId);
@@ -1111,7 +1120,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     function withdrawCollectedFees() external onlyOwner {
         uint256 amount = collectedFeesBalance;
         collectedFeesBalance = 0;
-        collateralVault.withdrawTo(address(this), owner(), amount);
+        collateralVault.withdrawTo(owner(), amount);
     }
 
     function _transferPnl(address _from, address _to, int256 _pnl) private {
@@ -1129,19 +1138,20 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         return fund;
     }
 
-    /// @notice Collateral balance for `account` held in `collateralVault` (same as `balanceOf` for all accounts).
-    function getCollateralBalance(address account) external view returns (uint256) {
-        return balanceOf(account);
-    }
-
     function _internalTransfer(address from, address to, uint256 amount) private {
         if (amount == 0) return;
         collateralVault.internalTransfer(from, to, amount);
     }
 
-    /// @custom:deprecated Prefer `getCollateralBalance` or `collateralVault.getBalance(account)`.
-    ///                 For `address(this)` this is a **fallback**: fee escrow plus `insuranceFund`
-    ///                 (same as `getCollateralBalance(address(this))`). Other `account` values are raw vault balance.
+    /// @notice Vault receipt-token balance for `account`. Identical
+    ///         to calling `collateralVault.balanceOf(account)` directly.
+    /// @dev    For `account == address(this)` this returns ONLY the balance held on the contract's own
+    ///         vault account — i.e. the fee escrow accumulated by `_skimOrderFee` plus any in-flight
+    ///         buyer-payment escrow from `depositDeliveryPaymentV2`. It does **not** include the
+    ///         insurance fund: that lives on the separate vanity account
+    ///         `collateralVault.INSURANCE_FUND_ADDR()` (see `_insuranceFundAccount`) and must be
+    ///         queried as `balanceOf(collateralVault.INSURANCE_FUND_ADDR())`.
+    /// @custom:deprecated Prefer `collateralVault.balanceOf(account)`.
     function balanceOf(address account) public view returns (uint256) {
         return collateralVault.balanceOf(account);
     }

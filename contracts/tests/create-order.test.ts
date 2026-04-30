@@ -469,7 +469,7 @@ describe("Order Creation", () => {
     await futures.write.createOrder([price, deliveryDate, "", 1], { account: seller.account });
 
     const collateralDeficit = await futures.read.getCollateralDeficit([seller.account.address]);
-    console.log("Collateral deficit after buy order:", collateralDeficit);
+    assert.equal(collateralDeficit < 0n, true);
 
     await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
   });

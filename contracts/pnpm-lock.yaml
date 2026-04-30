@@ -40,7 +40,7 @@ importers:
         version: 2.0.1(typescript@5.9.3)(zod@3.25.76)
       collateral-margin:
         specifier: git+ssh://git@github.com/Lumerin-protocol/collateral-margin.git#dev
-        version: git+https://git@github.com:Lumerin-protocol/collateral-margin.git#0e3e9566c0b7351b52f45c340fb328ea8fcd679d
+        version: git+https://git@github.com:Lumerin-protocol/collateral-margin.git#9d82ff02f788c545a54edae73d8d7441c4be702a
       dotenv:
         specifier: ^16.4.1
         version: 16.6.1
@@ -931,8 +931,8 @@ packages:
   ci-info@2.0.0:
     resolution: {integrity: sha512-5tK7EtrZ0N+OLFMthtqOj4fI2Jeb88C4CAZPu25LDVUgXJ0A3Js4PMGqrn0JU1W0Mh1/Z8wZzYPxqUrXeBboCQ==}
 
-  collateral-margin@git+https://git@github.com:Lumerin-protocol/collateral-margin.git#0e3e9566c0b7351b52f45c340fb328ea8fcd679d:
-    resolution: {commit: 0e3e9566c0b7351b52f45c340fb328ea8fcd679d, repo: git@github.com:Lumerin-protocol/collateral-margin.git, type: git}
+  collateral-margin@git+https://git@github.com:Lumerin-protocol/collateral-margin.git#9d82ff02f788c545a54edae73d8d7441c4be702a:
+    resolution: {commit: 9d82ff02f788c545a54edae73d8d7441c4be702a, repo: git@github.com:Lumerin-protocol/collateral-margin.git, type: git}
     version: 1.0.0
 
   color-convert@2.0.1:
@@ -2791,7 +2791,7 @@ snapshots:
 
   ci-info@2.0.0: {}
 
-  collateral-margin@git+https://git@github.com:Lumerin-protocol/collateral-margin.git#0e3e9566c0b7351b52f45c340fb328ea8fcd679d: {}
+  collateral-margin@git+https://git@github.com:Lumerin-protocol/collateral-margin.git#9d82ff02f788c545a54edae73d8d7441c4be702a: {}
 
   color-convert@2.0.1:
     dependencies:

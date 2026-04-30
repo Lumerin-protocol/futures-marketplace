@@ -30,10 +30,9 @@ describe("Reserve Pool", () => {
     const balanceBefore = await collateralVault.read.insuranceFundBalance();
     const ownerUsdcBefore = await usdcMock.read.balanceOf([owner.account.address]);
 
-    await collateralVault.write.depositInsuranceFund(
-      [owner.account.address, config.collateralAmount],
-      { account: owner.account },
-    );
+    await collateralVault.write.depositInsuranceFund([config.collateralAmount], {
+      account: owner.account,
+    });
 
     const balanceAfter = await collateralVault.read.insuranceFundBalance();
     const ownerUsdcAfter = await usdcMock.read.balanceOf([owner.account.address]);

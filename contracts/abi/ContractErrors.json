@@ -252,11 +252,6 @@
   },
   {
     "inputs": [],
-    "name": "ZeroVaultAddress",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "NotImplemented",
     "type": "error"
   },
@@ -273,6 +268,11 @@
   {
     "inputs": [],
     "name": "InsufficientMarginBalance",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroAddress",
     "type": "error"
   },
   {

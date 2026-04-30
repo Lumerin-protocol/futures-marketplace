@@ -244,7 +244,7 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "ZeroVaultAddress",
+    "name": "ZeroAddress",
     "type": "error"
   },
   {
@@ -578,6 +578,19 @@ export const FuturesAbi = [
         "internalType": "string",
         "name": "",
         "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "_gap",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
       }
     ],
     "stateMutability": "view",
@@ -1126,11 +1139,6 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
-        "internalType": "contract IERC20Metadata",
-        "name": "_token",
-        "type": "address"
-      },
-      {
         "internalType": "contract AggregatorV3Interface",
         "name": "_hashrateOracle",
         "type": "address"
@@ -1460,19 +1468,6 @@ export const FuturesAbi = [
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "token",
-    "outputs": [
-      {
-        "internalType": "contract IERC20",
-        "name": "",
-        "type": "address"
       }
     ],
     "stateMutability": "view",

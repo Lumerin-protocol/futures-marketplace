@@ -155,7 +155,7 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
     await usdcMock.write.approve([collateralVault.address, maxUint256], { account: w.account });
   }
 
-  await collateralVault.write.depositInsuranceFund([owner.account.address, collateralAmount], {
+  await collateralVault.write.depositInsuranceFund([collateralAmount], {
     account: owner.account,
   });
 
