@@ -18,15 +18,15 @@ async function totalContractBalance(contracts: FuturesFixture["contracts"]) {
 describe("Futures - createOrder - Order Matching and Position Creation", () => {
   it("should match sell and buy orders and create a position", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, buyer, pc } = accounts;
 
     const price = parseUnits("100", 6);
     const margin = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.addMargin([margin], { account: seller.account });
-    await futures.write.addMargin([margin], { account: buyer.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: buyer.account });
 
     await futures.write.createOrder([price, deliveryDate, "", -2], { account: seller.account });
 
@@ -53,15 +53,15 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
 
   it("should match sell and buy orders and create an position", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, buyer, pc } = accounts;
 
     const price = parseUnits("100", 6);
     const margin = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.addMargin([margin], { account: buyer.account });
-    await futures.write.addMargin([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: buyer.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
 
     await futures.write.createOrder([price, deliveryDate, "", 2], { account: buyer.account });
 
@@ -88,7 +88,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
 
   it("should exit position when matching order with opposite direction", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller: account1, buyer: account2, buyer2: account3, pc } = accounts;
 
     const price = parseUnits("100", 6);
@@ -96,9 +96,9 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     const margin = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.addMargin([margin], { account: account1.account });
-    await futures.write.addMargin([margin], { account: account2.account });
-    await futures.write.addMargin([margin], { account: account3.account });
+    await collateralVault.write.deposit([margin], { account: account1.account });
+    await collateralVault.write.deposit([margin], { account: account2.account });
+    await collateralVault.write.deposit([margin], { account: account3.account });
 
     await futures.write.createOrder([price, deliveryDate, "", -1], { account: account1.account });
     const initialTxHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
@@ -172,7 +172,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
 
   it("should exit position with loss and verify accounting is correct", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller: account1, buyer: account2, buyer2: account3, pc } = accounts;
 
     const price = parseUnits("100", 6);
@@ -180,9 +180,9 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     const margin = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.addMargin([margin], { account: account1.account });
-    await futures.write.addMargin([margin], { account: account2.account });
-    await futures.write.addMargin([margin], { account: account3.account });
+    await collateralVault.write.deposit([margin], { account: account1.account });
+    await collateralVault.write.deposit([margin], { account: account2.account });
+    await collateralVault.write.deposit([margin], { account: account3.account });
 
     await futures.write.createOrder([price, deliveryDate, "", -1], { account: account1.account });
     const initialTxHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
@@ -263,16 +263,16 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
 
   it("should handle exiting positions", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, buyer, buyer2, pc } = accounts;
 
     const price = parseUnits("100", 6);
     const margin = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.addMargin([margin], { account: seller.account });
-    await futures.write.addMargin([margin], { account: buyer.account });
-    await futures.write.addMargin([margin], { account: buyer2.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: buyer.account });
+    await collateralVault.write.deposit([margin], { account: buyer2.account });
 
     await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
     const txHash = await futures.write.createOrder([price, deliveryDate, "", 1], {

@@ -10,15 +10,15 @@ const { viem, networkHelpers } = await network.getOrCreate();
 describe("Validator Functions", () => {
   it("should allow validator to close position after start time", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, buyer, validator, pc, tc } = accounts;
 
     const price = await futures.read.getMarketPrice();
     const deliveryDate = config.deliveryDates[0];
     const marginAmount = price * 7n;
 
-    await futures.write.addMargin([marginAmount], { account: seller.account });
-    await futures.write.addMargin([marginAmount], { account: buyer.account });
+    await collateralVault.write.deposit([marginAmount], { account: seller.account });
+    await collateralVault.write.deposit([marginAmount], { account: buyer.account });
 
     await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
     const txHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
@@ -54,15 +54,15 @@ describe("Validator Functions", () => {
 
   it("should reject validator closing position before start time", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, buyer, validator, pc } = accounts;
 
     const price = parseUnits("100", 6);
     const margin = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.addMargin([margin], { account: seller.account });
-    await futures.write.addMargin([margin], { account: buyer.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: buyer.account });
     await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
     const txHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
       account: buyer.account,
@@ -85,15 +85,15 @@ describe("Validator Functions", () => {
 
   it("should reject non-validator from calling validator functions", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, buyer, buyer2, pc, tc } = accounts;
 
     const price = parseUnits("100", 6);
     const margin = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.addMargin([margin], { account: seller.account });
-    await futures.write.addMargin([margin], { account: buyer.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: buyer.account });
     await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
     const txHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
       account: buyer.account,

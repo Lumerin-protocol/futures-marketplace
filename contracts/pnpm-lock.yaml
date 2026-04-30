@@ -67,7 +67,7 @@ importers:
         specifier: ^3.0.0
         version: 3.0.15(hardhat@3.4.2)
       '@nomicfoundation/hardhat-viem':
-        specifier: ^3.0.6
+        specifier: ^3.0.4
         version: 3.0.6(hardhat@3.4.2)(viem@2.48.4(typescript@5.9.3)(zod@3.25.76))
       '@types/node':
         specifier: ^22.0.0

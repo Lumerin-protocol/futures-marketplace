@@ -8,14 +8,14 @@ const { viem, networkHelpers } = await network.getOrCreate();
 describe("Fees", () => {
   it("should collect order fee on order creation", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller } = accounts;
 
     const price = await futures.read.getMarketPrice();
     const margin = price * 10n;
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.addMargin([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
 
     const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
     const feesBefore = await futures.read.collectedFeesBalance();
@@ -31,7 +31,7 @@ describe("Fees", () => {
 
   it("should allow only owner to withdraw collected fees", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller } = accounts;
 
     await viem.assertions.revertWithCustomError(
@@ -43,14 +43,14 @@ describe("Fees", () => {
 
   it("should withdraw correct amount of fees", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, usdcMock } = contracts;
+    const { futures, usdcMock, collateralVault } = contracts;
     const { owner, seller } = accounts;
 
     const price = await futures.read.getMarketPrice();
     const margin = price * 10n;
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.addMargin([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
     await futures.write.createOrder([price, deliveryDate, "", 1], { account: seller.account });
 
     const feesAccrued = await futures.read.collectedFeesBalance();
@@ -69,7 +69,7 @@ describe("Fees", () => {
 
   it("should collect correct fee per address discount", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { owner, seller, buyer } = accounts;
 
     const discountPercent = 50;
@@ -81,8 +81,8 @@ describe("Fees", () => {
     const margin = price * 10n;
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.addMargin([margin], { account: seller.account });
-    await futures.write.addMargin([margin], { account: buyer.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: buyer.account });
 
     const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
     const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
@@ -105,7 +105,7 @@ describe("Fees", () => {
 
   it("should collect full fee for 0 percent discount", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { owner, seller } = accounts;
 
     await futures.write.setFeeDiscountPercent([seller.account.address, 0], {
@@ -116,7 +116,7 @@ describe("Fees", () => {
     const margin = price * 10n;
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.addMargin([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
 
     const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
     const feesBefore = await futures.read.collectedFeesBalance();
@@ -132,7 +132,7 @@ describe("Fees", () => {
 
   it("should collect zero fee for 100 percent discount", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { owner, seller } = accounts;
 
     await futures.write.setFeeDiscountPercent([seller.account.address, 100], {
@@ -143,7 +143,7 @@ describe("Fees", () => {
     const margin = price * 10n;
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.addMargin([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
 
     const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
     const feesBefore = await futures.read.collectedFeesBalance();

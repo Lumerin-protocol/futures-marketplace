@@ -32,7 +32,7 @@ export async function deployTokenOraclesAndMulticall3(conn: NetworkConnection) {
   }
 
   // 3. Deploy BTC/USD Feed
-  const hashrateOracle = await viem.deployContract("contracts/PriceFeedMock.sol:PriceFeedMock", [
+  const hashrateOracle = await viem.deployContract("PriceFeedMock", [
     HASHPRICE_DECIMALS,
     "The price of 100 TH/s per day in USD",
   ]);
@@ -211,15 +211,15 @@ export async function deployOnlyFuturesWithDummyData(
 ) {
   const ctx = await deployOnlyFuturesFixture(conn, data);
   const { contracts, accounts, config } = ctx;
-  const { futures } = contracts;
+  const { futures, collateralVault } = contracts;
   const { seller, buyer, buyer2, pc } = accounts;
 
   const mp = await futures.read.getMarketPrice();
   const inc = config.priceLadderStep;
   const marginAmount = mp * BigInt(config.deliveryDurationDays);
-  await futures.write.addMargin([marginAmount], { account: seller.account });
-  await futures.write.addMargin([marginAmount], { account: buyer.account });
-  await futures.write.addMargin([marginAmount], { account: buyer2.account });
+  await collateralVault.write.deposit([marginAmount], { account: seller.account });
+  await collateralVault.write.deposit([marginAmount], { account: buyer.account });
+  await collateralVault.write.deposit([marginAmount], { account: buyer2.account });
 
   // create positions
   const d = config.deliveryDates[0];
@@ -249,7 +249,7 @@ export async function deployOnlyFuturesWithDummyData(
   console.log("buyer balance:", formatUnits(buyerBalance, USDC_DECIMALS));
   console.log("total payment", formatUnits(totalPayment, USDC_DECIMALS));
 
-  await futures.write.addMargin([totalPayment], { account: buyer.account });
+  await collateralVault.write.deposit([totalPayment], { account: buyer.account });
 
   await futures.write.depositDeliveryPaymentV2([positionId], { account: buyer.account });
   return ctx;

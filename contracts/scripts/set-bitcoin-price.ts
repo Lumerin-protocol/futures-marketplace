@@ -19,10 +19,7 @@ async function main() {
 
   const pc = await viem.getPublicClient();
 
-  const priceFeedMock = await viem.getContractAt(
-    "contracts/PriceFeedMock.sol:PriceFeedMock",
-    oracleAddress,
-  );
+  const priceFeedMock = await viem.getContractAt("PriceFeedMock", oracleAddress);
 
   const [, answer] = await priceFeedMock.read.latestRoundData();
   const decimals = await priceFeedMock.read.decimals();

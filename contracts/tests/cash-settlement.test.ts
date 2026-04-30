@@ -21,16 +21,16 @@ describe("Futures - Offset & Cash Settlement", () => {
   it("should handle position offset and settlement with contract balance correctly when buyer exits at profit", async () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts, config } = data;
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, buyer, buyer2, validator, tc, pc } = accounts;
 
     const marginAmount = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
     const dst = "https://destination-url.com";
 
-    await futures.write.addMargin([marginAmount], { account: seller.account });
-    await futures.write.addMargin([marginAmount], { account: buyer.account });
-    await futures.write.addMargin([marginAmount], { account: buyer2.account });
+    await collateralVault.write.deposit([marginAmount], { account: seller.account });
+    await collateralVault.write.deposit([marginAmount], { account: buyer.account });
+    await collateralVault.write.deposit([marginAmount], { account: buyer2.account });
 
     const contractBalanceBefore = await totalContractBalance(contracts);
     const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
@@ -96,16 +96,16 @@ describe("Futures - Offset & Cash Settlement", () => {
   it("should handle position offset and settlement with contract balance correctly when buyer exits at loss", async () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts, config } = data;
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, buyer, buyer2, validator, tc, pc } = accounts;
 
     const marginAmount = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
     const dst = "https://destination-url.com";
 
-    await futures.write.addMargin([marginAmount], { account: seller.account });
-    await futures.write.addMargin([marginAmount], { account: buyer.account });
-    await futures.write.addMargin([marginAmount], { account: buyer2.account });
+    await collateralVault.write.deposit([marginAmount], { account: seller.account });
+    await collateralVault.write.deposit([marginAmount], { account: buyer.account });
+    await collateralVault.write.deposit([marginAmount], { account: buyer2.account });
 
     const contractBalanceBefore = await totalContractBalance(contracts);
     const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);

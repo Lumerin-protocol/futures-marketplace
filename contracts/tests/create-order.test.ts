@@ -81,13 +81,13 @@ describe("Order Creation", () => {
 
   it("should accept valid delivery dates from getDeliveryDates", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, pc } = accounts;
 
     const price = parseUnits("100", 6);
     const margin = parseUnits("10000", 6);
 
-    await futures.write.addMargin([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
 
     for (const deliveryDate of config.deliveryDates) {
       const txHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
@@ -110,7 +110,7 @@ describe("Order Creation", () => {
 
   it("should create a buy order when no matching sell order exists", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, pc } = accounts;
 
     const qty = 5;
@@ -118,7 +118,7 @@ describe("Order Creation", () => {
     const margin = await futures.read.getMinMarginForPosition([price, BigInt(qty)]);
     const deliveryDate = BigInt(config.deliveryDates[0]);
 
-    await futures.write.addMargin([margin + config.orderFee], { account: seller.account });
+    await collateralVault.write.deposit([margin + config.orderFee], { account: seller.account });
 
     const txHash = await futures.write.createOrder([price, deliveryDate, "", qty], {
       account: seller.account,
@@ -145,14 +145,14 @@ describe("Order Creation", () => {
   it("should create a sell order when no matching buy order exists", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { seller, pc } = accounts;
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
 
     const price = parseUnits("100", 6);
     const margin = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
     const qty = -5;
 
-    await futures.write.addMargin([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
 
     const txHash = await futures.write.createOrder([price, deliveryDate, "", qty], {
       account: seller.account,
@@ -178,14 +178,14 @@ describe("Order Creation", () => {
 
   it("should collect order fee, when order is created or matched, but not when it is offsetted (closed)", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, pc } = accounts;
 
     const price = parseUnits("100", 6);
     const margin = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.addMargin([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
 
     const initialSellerBalance = await futures.read.balanceOf([seller.account.address]);
     const initialContractBalance = await futures.read.balanceOf([futures.address]);
@@ -264,14 +264,14 @@ describe("Order Creation", () => {
 
   it("should allow order creation with sufficient margin balance", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, pc } = accounts;
 
     const price = parseUnits("100", 6);
     const margin = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.addMargin([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
 
     const txHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
       account: seller.account,
@@ -297,7 +297,7 @@ describe("Order Creation", () => {
 
   it("should allow sell order creation with sufficient margin balance", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, pc } = accounts;
 
     const price = parseUnits("100", 6);
@@ -305,7 +305,7 @@ describe("Order Creation", () => {
     const deliveryDate = config.deliveryDates[0];
     const isBuy = false;
 
-    await futures.write.addMargin([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
 
     const txHash = await futures.write.createOrder([price, deliveryDate, "", -1], {
       account: seller.account,
@@ -329,14 +329,14 @@ describe("Order Creation", () => {
 
   it("should remove existing order when creating one with opposite direction", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, pc } = accounts;
 
     const price = parseUnits("100", 6);
     const margin = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.addMargin([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
 
     const buyOrderTxHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
       account: seller.account,
@@ -382,14 +382,14 @@ describe("Order Creation", () => {
 
   it("should partially remove existing orders when creating opposite direction orders", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, pc } = accounts;
 
     const price = parseUnits("100", 6);
     const margin = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.addMargin([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
 
     const sellOrderTxHash = await futures.write.createOrder([price, deliveryDate, "", -3], {
       account: seller.account,
@@ -453,7 +453,7 @@ describe("Order Creation", () => {
 
   it("should remove existing orders when creating an opposite order even if margin balance is insufficient", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller } = accounts;
 
     const price = await futures.read.getMarketPrice();
@@ -464,7 +464,7 @@ describe("Order Creation", () => {
     const orderFee = await futures.read.orderFee();
     const margin = minMarginForOneOrder + orderFee * 2n;
 
-    await futures.write.addMargin([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
 
     await futures.write.createOrder([price, deliveryDate, "", 1], { account: seller.account });
 
@@ -476,7 +476,7 @@ describe("Order Creation", () => {
 
   it("should automatically remove outdated orders when creating a new order", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, pc, tc } = accounts;
 
     const price = parseUnits("100", 6);
@@ -484,7 +484,7 @@ describe("Order Creation", () => {
     const oldDeliveryDate = config.deliveryDates[0];
     const newDeliveryDate = config.deliveryDates[1];
 
-    await futures.write.addMargin([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
 
     const oldOrderTxHash = await futures.write.createOrder([price, oldDeliveryDate, "", 1], {
       account: seller.account,
@@ -538,7 +538,7 @@ describe("Order Creation", () => {
 
   it("should enforce maximum orders per participant", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller } = accounts;
 
     const numOrders = await futures.read.MAX_ORDERS_PER_PARTICIPANT();
@@ -546,7 +546,7 @@ describe("Order Creation", () => {
     const margin = price * BigInt(config.deliveryDurationDays) * BigInt(numOrders);
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.addMargin([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: seller.account });
 
     for (let i = 0; i < numOrders; i++) {
       await futures.write.createOrder(

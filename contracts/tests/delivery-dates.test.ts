@@ -169,11 +169,11 @@ describe("Delivery Date Management", () => {
 
   it("should validate delivery date correctly", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { tc, seller } = accounts;
 
     const price = await futures.read.getMarketPrice();
-    await futures.write.addMargin([price * 100n], { account: seller.account });
+    await collateralVault.write.deposit([price * 100n], { account: seller.account });
 
     await tc.setNextBlockTimestamp({ timestamp: config.firstFutureDeliveryDate + 1n });
     await tc.mine({ blocks: 1 });

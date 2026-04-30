@@ -11,7 +11,7 @@ import { ERC20Upgradeable } from "@openzeppelin/contracts-upgradeable/token/ERC2
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import { StructuredLinkedList } from "solidity-linked-list/contracts/StructuredLinkedList.sol";
-import { Versionable } from "./Versionable.sol";
+import { Versionable } from "./interfaces/Versionable.sol";
 import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
 import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/interfaces/IPortfolioMarginEngine.sol";
 
@@ -476,18 +476,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         emit OrderClosed(orderId, order.participant);
     }
 
-    /// @notice Convenience wrapper that pulls underlying into `collateralVault` for the caller.
-    /// @custom:deprecated Prefer `ICollateralVault.deposit` on `collateralVault` (after approving the vault).
-    function addMargin(uint256 _amount) external {
-        collateralVault.depositFor(_msgSender(), _msgSender(), _amount);
-    }
-
-    /// @notice Convenience wrapper that withdraws underlying from the caller's vault balance.
-    /// @custom:deprecated Prefer `ICollateralVault.withdraw` on `collateralVault` (respects vault margin gating).
-    function removeMargin(uint256 _amount) external {
-        collateralVault.withdrawTo(_msgSender(), _msgSender(), _amount);
-    }
-
     // Admin functions
 
     function setBreachPenaltyRatePerDay(uint256 _breachPenaltyRatePerDay) external onlyOwner {
@@ -525,8 +513,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         }
         hashrateOracle = _oracle;
         uint8 oracleDecimals = _oracle.decimals();
-        console.log("oracleDecimals:", oracleDecimals);
-        console.log("decimals:", _decimals);
         if (_decimals > oracleDecimals) {
             revert UnsupportedTokenDecimals();
         }

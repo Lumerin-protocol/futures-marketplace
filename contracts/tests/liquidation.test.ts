@@ -11,7 +11,7 @@ const { viem, networkHelpers } = await network.getOrCreate();
 async function positionWithMarginFixture() {
   const data = await networkHelpers.loadFixture(deployFuturesFixture);
   const { contracts, accounts, config } = data;
-  const { futures } = contracts;
+  const { futures, collateralVault } = contracts;
   const { seller, buyer, pc } = accounts;
 
   const entryPricePerDay = await futures.read.getMarketPrice();
@@ -19,8 +19,8 @@ async function positionWithMarginFixture() {
   const margin = entryPricePerDay * 3n;
   const deliveryDate = config.deliveryDates[0];
 
-  await futures.write.addMargin([margin], { account: seller.account });
-  await futures.write.addMargin([margin], { account: buyer.account });
+  await collateralVault.write.deposit([margin], { account: seller.account });
+  await collateralVault.write.deposit([margin], { account: buyer.account });
 
   await futures.write.createOrder([entryPricePerDay, deliveryDate, "", -1], {
     account: seller.account,
@@ -60,7 +60,7 @@ describe("Futures - Liquidation", function () {
     it("should liquidate buyer position when buyer is at loss and margin insufficient", async function () {
       const { contracts, accounts, entryPricePerDay, deliveryDate, positionId } =
         await networkHelpers.loadFixture(positionWithMarginFixture);
-      const { futures, hashrateOracle } = contracts;
+      const { futures, hashrateOracle, collateralVault } = contracts;
       const { seller, buyer, validator, pc } = accounts;
 
       const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
@@ -114,7 +114,7 @@ describe("Futures - Liquidation", function () {
     it("should liquidate seller position when seller is at loss and margin insufficient", async function () {
       const { contracts, accounts, entryPricePerDay, deliveryDate, positionId } =
         await networkHelpers.loadFixture(positionWithMarginFixture);
-      const { futures, hashrateOracle } = contracts;
+      const { futures, hashrateOracle, collateralVault } = contracts;
       const { seller, buyer, validator, pc } = accounts;
 
       const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
@@ -167,17 +167,17 @@ describe("Futures - Liquidation", function () {
     it("should close orders first, then positions during margin call", async function () {
       const { contracts, accounts, entryPricePerDay, deliveryDate, config } =
         await networkHelpers.loadFixture(positionWithMarginFixture);
-      const { futures, hashrateOracle } = contracts;
+      const { futures, hashrateOracle, collateralVault } = contracts;
       const { buyer, validator, pc } = accounts;
 
       const marketPrice = await futures.read.getMarketPrice();
-      const addMargin =
+      const amount =
         ((marketPrice *
           BigInt(config.deliveryDurationDays) *
           BigInt(config.liquidationMarginPercent)) /
           100n) *
         2n;
-      await futures.write.addMargin([addMargin], { account: buyer.account });
+      await collateralVault.write.deposit([amount], { account: buyer.account });
 
       const orderTx1 = await futures.write.createOrder([marketPrice, deliveryDate, "", 1], {
         account: buyer.account,
@@ -231,13 +231,13 @@ describe("Futures - Liquidation", function () {
 
       const entryPricePerDay = await contracts.futures.read.getMarketPrice();
       const deliveryDate = config.deliveryDates[0];
-      const { futures, hashrateOracle } = contracts;
+      const { futures, hashrateOracle, collateralVault } = contracts;
       const { seller, buyer, validator, pc } = accounts;
 
       const margin = await futures.read.getMinMarginForPosition([entryPricePerDay, -2n]);
       const orderFee = await futures.read.orderFee();
-      await futures.write.addMargin([margin + orderFee], { account: seller.account });
-      await futures.write.addMargin([margin + orderFee], { account: buyer.account });
+      await collateralVault.write.deposit([margin + orderFee], { account: seller.account });
+      await collateralVault.write.deposit([margin + orderFee], { account: buyer.account });
 
       await futures.write.createOrder([entryPricePerDay, deliveryDate, "", -2], {
         account: seller.account,
@@ -279,7 +279,7 @@ describe("Futures - Liquidation", function () {
     it("should not liquidate if margin is sufficient", async function () {
       const { contracts, accounts, entryPricePerDay } =
         await networkHelpers.loadFixture(positionWithMarginFixture);
-      const { futures, hashrateOracle } = contracts;
+      const { futures, hashrateOracle, collateralVault } = contracts;
       const { buyer, validator, pc } = accounts;
 
       // Move market price slightly (small loss)
@@ -304,7 +304,7 @@ describe("Futures - Liquidation", function () {
 
     it("should only allow validator to call marginCall", async () => {
       const { contracts, accounts } = await positionWithMarginFixture();
-      const { futures } = contracts;
+      const { futures, collateralVault } = contracts;
       const { buyer, seller } = accounts;
 
       await viem.assertions.revertWithCustomError(
@@ -317,7 +317,7 @@ describe("Futures - Liquidation", function () {
     it("should correctly calculate and transfer PnL when buyer profits", async function () {
       const { contracts, accounts, entryPricePerDay } =
         await networkHelpers.loadFixture(positionWithMarginFixture);
-      const { futures, hashrateOracle } = contracts;
+      const { futures, hashrateOracle, collateralVault } = contracts;
       const { seller, buyer, validator } = accounts;
 
       const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
@@ -332,7 +332,7 @@ describe("Futures - Liquidation", function () {
       const sellerMinMargin = await futures.read.getMinMargin([seller.account.address]);
       if (sellerBalance > sellerMinMargin) {
         const withdrawAmount = sellerBalance - sellerMinMargin + parseUnits("1", 6);
-        await futures.write.removeMargin([withdrawAmount], { account: seller.account });
+        await collateralVault.write.withdraw([withdrawAmount], { account: seller.account });
       }
 
       await futures.write.marginCall([seller.account.address], { account: validator.account });
@@ -359,7 +359,7 @@ describe("Futures - Liquidation", function () {
 
     it("should create counterparty order when buyer is liquidated", async () => {
       const { contracts, accounts, positionId } = await positionWithMarginFixture();
-      const { futures, hashrateOracle } = contracts;
+      const { futures, hashrateOracle, collateralVault } = contracts;
       const { seller, buyer, validator, pc } = accounts;
 
       assert.ok(positionId);
@@ -414,7 +414,7 @@ describe("Futures - Liquidation", function () {
 
     it("should create counterparty order when seller is liquidated", async () => {
       const { contracts, accounts, positionId } = await positionWithMarginFixture();
-      const { futures, hashrateOracle } = contracts;
+      const { futures, hashrateOracle, collateralVault } = contracts;
       const { seller, buyer, validator, pc } = accounts;
 
       assert.ok(positionId);
