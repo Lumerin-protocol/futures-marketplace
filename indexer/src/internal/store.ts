@@ -22,7 +22,6 @@ export function getOrCreateFutures(): Futures {
     futures.futureDeliveryDatesCount = 0;
     futures.firstFutureDeliveryDate = BigInt.zero();
     futures.breachPenaltyRatePerDay = BigInt.zero();
-    futures.reservePoolBalance = BigInt.zero();
     futures.collectedFeesBalance = BigInt.zero();
     futures.totalUsers = 0;
     futures.totalOrders = 0;
@@ -82,9 +81,6 @@ export function loadFuturesFromContract(futures: Futures): void {
 
   const breach = contract.try_breachPenaltyRatePerDay();
   if (!breach.reverted) futures.breachPenaltyRatePerDay = breach.value;
-
-  const reservePool = contract.try_reservePoolBalance();
-  if (!reservePool.reverted) futures.reservePoolBalance = reservePool.value;
 
   const fees = contract.try_collectedFeesBalance();
   if (!fees.reverted) futures.collectedFeesBalance = fees.value;

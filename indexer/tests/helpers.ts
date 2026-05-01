@@ -94,7 +94,6 @@ export function setupFutures(deliveryDurationDays: i32 = 30): void {
   f.futureDeliveryDatesCount = 0;
   f.firstFutureDeliveryDate = BigInt.zero();
   f.breachPenaltyRatePerDay = BigInt.zero();
-  f.reservePoolBalance = BigInt.zero();
   f.collectedFeesBalance = BigInt.zero();
   f.totalUsers = 0;
   f.totalOrders = 0;
