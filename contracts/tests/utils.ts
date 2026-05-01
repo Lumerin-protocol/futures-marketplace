@@ -7,9 +7,7 @@ type ScalablePriceFeed = {
   read: { latestRoundData: () => Promise<readonly [bigint, bigint, bigint, bigint, bigint]> };
   write: {
     setPrice: (args: readonly [bigint]) => Promise<`0x${string}`>;
-    setRound: (
-      args: readonly [bigint | number, bigint, bigint, bigint, bigint | number],
-    ) => Promise<`0x${string}`>;
+    setRound: (args: readonly [bigint, bigint, bigint, bigint, bigint]) => Promise<`0x${string}`>;
   };
 };
 
@@ -35,10 +33,7 @@ export async function scaleHashprice(
 /// `setRound` without consuming the next block's timestamp slot. Use this overload when
 /// the next tx (e.g. `closeDelivery`) must mine at a specific `deliveryDate` and the
 /// refresh shouldn't shift it.
-export async function refreshHashprice(
-  feed: ScalablePriceFeed,
-  freshAt?: bigint,
-): Promise<void> {
+export async function refreshHashprice(feed: ScalablePriceFeed, freshAt?: bigint): Promise<void> {
   const [roundId, answer, startedAt, , answeredInRound] = await feed.read.latestRoundData();
   if (freshAt === undefined) {
     await feed.write.setPrice([answer]);

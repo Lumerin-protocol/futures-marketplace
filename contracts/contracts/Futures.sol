@@ -11,14 +11,16 @@ import { ERC20Upgradeable } from "@openzeppelin/contracts-upgradeable/token/ERC2
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import { StructuredLinkedList } from "solidity-linked-list/contracts/StructuredLinkedList.sol";
-import { Versionable } from "./Versionable.sol";
+import { Versionable } from "./interfaces/Versionable.sol";
+import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
+import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/interfaces/IPortfolioMarginEngine.sol";
 
 // import { console } from "hardhat/console.sol";
 
 // TODO:
 // 6. Do we need to batch same price and delivery date orders/positions so it is a single entry?
 
-contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, MulticallUpgradeable, Versionable {
+contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, Versionable {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableSet for EnumerableSet.Bytes32Set;
@@ -45,7 +47,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     uint256 public orderFee; // fee for creating an order in tokens
     uint256 private nonce = 0; // nonce for the order id
 
-    IERC20 public token;
+    address private _gap;
     /// @notice Hashprice oracle returning the price of 100 TH/s per day denominated in the same currency as `token`
     /// @dev Chainlink-compatible aggregator (e.g. HashpriceUSD when `token` is a USD stablecoin).
     ///      Variable name retained from v1.x for storage / ABI backwards compatibility; semantically this is a
@@ -57,10 +59,10 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     uint8 public deliveryIntervalDays; // interval between two closest delivery dates in days
     uint8 public futureDeliveryDatesCount; // number of future delivery dates to be available for orders
     uint8 public liquidationMarginPercent;
-    uint8 private _decimals; // decimals of the wrapped token
+    uint8 private _gap3;
     string public validatorURL;
     uint256 public collectedFeesBalance;
-    uint256 public reservePoolBalance;
+    uint256 private _gap2;
     mapping(address => uint8) private addressFeeDiscountPercent;
     /// @notice Precomputed divisor used to rebase oracle answers from `oracle.decimals()` to the wrapped
     ///         token's decimals. Recomputed whenever the oracle is set.
@@ -68,8 +70,17 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     ///      fewer decimals than the token.
     uint256 public hashpriceScalingDivisor;
 
+    IPortfolioMarginEngine public marginEngine;
+    mapping(address => mapping(uint256 => int256)) private participantDeliveryDateNetDelta; // net delta per participant per delivery date (pre-scaled by deliveryDurationDays, without 1e18)
+    mapping(address => mapping(uint256 => int256)) private participantDeliveryDateNetEntryValue; // sum of qty_i * entryPrice_i * durationDays per participant per delivery date (token decimals)
+
+    // immutable
+    /// @dev Unified collateral vault (Titan `CollateralVault` or compatible). Baked into the implementation via constructor.
+    ICollateralVault public immutable collateralVault;
+    uint8 private immutable _decimals; // decimals of the wrapped token
+
     // constants
-    string public constant VERSION = "2.1.0";
+    string public constant VERSION = "2.5.0";
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     uint8 public constant BREACH_PENALTY_DECIMALS = 18;
     uint32 private constant SECONDS_PER_DAY = 3600 * 24;
@@ -115,6 +126,12 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     );
     event OrderClosed(bytes32 indexed orderId, address indexed participant);
     event OrderFeeUpdated(uint256 orderFee);
+    /// @notice Fired when a position is opened by matching two opposing orders.
+    /// @param orderId       The resting (maker) order's id.
+    /// @param takerOrderId  The aggressor (taker) order's id. Each taker fill mints
+    ///                      a fresh orderId and is announced via a paired
+    ///                      OrderCreated + OrderClosed in the same transaction so
+    ///                      indexers see takers and makers symmetrically.
     event PositionCreated(
         bytes32 indexed positionId,
         address indexed seller,
@@ -123,7 +140,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         uint256 buyPricePerDay,
         uint256 deliveryAt,
         string destURL,
-        bytes32 orderId
+        bytes32 orderId,
+        bytes32 takerOrderId
     );
     event PositionClosed(bytes32 indexed positionId);
     event PositionExited(bytes32 indexed positionId, address indexed participant, int256 pnl); // positive pnl is participant's profit
@@ -131,6 +149,19 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     event PositionPaid(bytes32 indexed positionId);
     event PositionPaymentReceived(bytes32 indexed positionId);
     event ValidatorURLUpdated(string validatorURL);
+    /// @notice Emitted at the end of `marginCall` when at least one order or position was force-closed.
+    /// @param participant       Account whose orders/positions were liquidated
+    /// @param liquidator        Validator address that triggered the margin call
+    /// @param reclaimedMargin   Aggregate margin reclaimed by force-closing resting orders (token decimals)
+    /// @param realizedPnl       Net change in `participant`'s collateral balance from forced position closes (token decimals, signed)
+    event Liquidation(
+        address indexed participant, address indexed liquidator, int256 reclaimedMargin, int256 realizedPnl
+    );
+    /// @notice Emitted when a transfer cannot be fully covered by the payer's vault balance during PnL settlement.
+    ///         The transfer is partially executed using the payer's remaining balance and the shortfall is socialized.
+    /// @param account The account that could not cover its loss (typically a liquidated participant or the insurance fund)
+    /// @param amount  Shortfall amount that could not be covered (token decimals)
+    event BadDebt(address indexed account, uint256 amount);
 
     // errors
     error InvalidPrice();
@@ -152,16 +183,25 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     error PositionAlreadyPaid();
     error PositionDestURLNotSet();
     error NothingToWithdraw();
+    error CollateralTokenMismatch();
+    error ZeroAddress();
+    error InsufficientContractReserve(uint256 reserve, uint256 required);
+    error InsuranceFundNotConfigured();
+    error TransferDisabled();
     error UnsupportedTokenDecimals(); // token decimals exceed oracle decimals
     error OracleStale(); // hashprice oracle answer older than MAX_ORACLE_STALENESS
     error InvalidOracle(); // hashprice oracle returned a non-positive answer
 
-    constructor() {
+    /// @param _collateralVault Must use the same underlying ERC20 as `token` passed to `initialize`.
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor(ICollateralVault _collateralVault) {
+        if (address(_collateralVault) == address(0)) revert ZeroAddress();
+        collateralVault = _collateralVault;
+        _decimals = IERC20Metadata(address(_collateralVault)).decimals();
         _disableInitializers();
     }
 
     function initialize(
-        IERC20Metadata _token,
         AggregatorV3Interface _hashrateOracle,
         address _validatorAddress,
         uint8 _liquidationMarginPercent,
@@ -174,7 +214,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     ) public initializer {
         __Ownable_init(_msgSender());
         __UUPSUpgradeable_init();
-        _initializeFuturesToken(_token);
         _setHashrateOracle(_hashrateOracle);
         validatorAddress = _validatorAddress;
         liquidationMarginPercent = _liquidationMarginPercent;
@@ -185,12 +224,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         deliveryIntervalDays = _deliveryIntervalDays;
         setFutureDeliveryDatesCount(_futureDeliveryDatesCount);
         firstFutureDeliveryDate = _firstFutureDeliveryDate;
-    }
-
-    function _initializeFuturesToken(IERC20Metadata _token) private {
-        __ERC20_init(string.concat("Lumerin Futures ", _token.symbol()), string.concat("w", _token.symbol()));
-        _decimals = _token.decimals();
-        token = _token;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
@@ -248,7 +281,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         uint256 fee = getOrderFee(_participant);
         collectedFeesBalance += fee;
         if (fee > 0) {
-            _transfer(_participant, address(this), fee);
+            _internalTransfer(_participant, address(this), fee);
         }
     }
 
@@ -306,12 +339,34 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         bytes32 oppositeOrderId = bytes32(oppositeOrderIdUint);
         Order memory oppositeOrder = orders[oppositeOrderId];
 
+        // Mint a transient orderId for the taker leg too so off-chain consumers
+        // see a symmetric OrderCreated → OrderClosed pair for both sides of the
+        // match. The taker order is never persisted to storage — it lives only
+        // in the event log.
+        bytes32 takerOrderId = _emitTakerMatchOrder(_participant, _price, _deliveryDate, _isBuy, _destURL);
+
         // delete matching order
         _closeOrder(oppositeOrderId, oppositeOrder);
 
         // create new position
-        _createPosition(oppositeOrderId, oppositeOrder, _participant, _destURL);
+        _createPosition(oppositeOrderId, oppositeOrder, _participant, _destURL, takerOrderId);
         return true;
+    }
+
+    /// @dev Mints a fresh orderId for an immediately-filled taker fill and emits
+    ///      `OrderCreated` followed by `OrderClosed` for it. The order itself is
+    ///      not stored — these events exist solely to let indexers materialize
+    ///      and resolve a complete Order record for the taker.
+    function _emitTakerMatchOrder(
+        address _participant,
+        uint256 _pricePerDay,
+        uint256 _deliveryAt,
+        bool _isBuy,
+        string memory _destURL
+    ) private returns (bytes32 takerOrderId) {
+        takerOrderId = bytes32(++nonce);
+        emit OrderCreated(takerOrderId, _participant, _destURL, _pricePerDay, _deliveryAt, _isBuy);
+        emit OrderClosed(takerOrderId, _participant);
     }
 
     function _createOrder(
@@ -321,8 +376,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         bool _isBuy,
         string memory _destURL
     ) private returns (bytes32) {
-        bytes32 orderId =
-            keccak256(abi.encode(_participant, _pricePerDay, _deliveryAt, _isBuy, block.timestamp, nonce++));
+        bytes32 orderId = bytes32(++nonce);
         orders[orderId] = Order({
             participant: _participant,
             pricePerDay: _pricePerDay,
@@ -336,9 +390,13 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         return orderId;
     }
 
-    function _createPosition(bytes32 orderId, Order memory order, address _otherParticipant, string memory _destURL)
-        private
-    {
+    function _createPosition(
+        bytes32 orderId,
+        Order memory order,
+        address _otherParticipant,
+        string memory _destURL,
+        bytes32 takerOrderId
+    ) private {
         // if (order.participant == _otherParticipant) {
         // should never happen
         // }
@@ -362,42 +420,19 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         _temp.sellPricePerDay = order.pricePerDay;
         _temp.buyPricePerDay = order.pricePerDay;
 
-        EnumerableSet.Bytes32Set storage participantDeliveryDatePositionIds =
-            participantDeliveryDatePositionIdsIndex[order.participant][order.deliveryAt];
-        if (participantDeliveryDatePositionIds.length() > 0) {
-            bytes32 existingPositionId = participantDeliveryDatePositionIds.at(0);
-            Position memory existingPosition = positions[existingPositionId];
-
-            int256 pnlPerDay = 0; // negative is profit, positive is loss
-            if (existingPosition.buyer == order.participant && !order.isBuy) {
-                pnlPerDay = int256(existingPosition.buyPricePerDay) - int256(order.pricePerDay);
-                _temp.seller = existingPosition.seller;
-                _temp.buyer = _otherParticipant;
-                _temp.sellPricePerDay = existingPosition.sellPricePerDay;
-                _removePosition(existingPositionId, existingPosition);
-            } else if (existingPosition.seller == order.participant && order.isBuy) {
-                pnlPerDay = int256(order.pricePerDay) - int256(existingPosition.sellPricePerDay);
-                _temp.seller = _otherParticipant;
-                _temp.buyer = existingPosition.buyer;
-                _temp.buyPricePerDay = existingPosition.buyPricePerDay;
-                _removePosition(existingPositionId, existingPosition);
-            }
-            int256 pnl = pnlPerDay * int256(uint256(deliveryDurationDays));
-
-            _transferPnl(order.participant, address(this), pnl);
-            emit PositionExited(existingPositionId, order.participant, -pnl);
-
-            if (_temp.buyer == _temp.seller) {
-                // both parties exiting the position
-                emit PositionExited(existingPositionId, _temp.buyer, pnl);
-                _transferPnl(address(this), _temp.buyer, pnl);
-                return;
-            }
+        // Either side of the new trade may already hold an opposite-side position at this
+        // delivery date — exit it before creating the new position. `order.isBuy` is the
+        // side the resting-order placer takes; the new-order placer takes the opposite side.
+        bool exited = _maybeExitExistingPosition(_temp, order, order.participant, order.isBuy);
+        if (!exited) {
+            exited = _maybeExitExistingPosition(_temp, order, _otherParticipant, !order.isBuy);
+        }
+        if (exited && _temp.buyer == _temp.seller) {
+            // both parties exiting — no new position to create
+            return;
         }
 
-        bytes32 positionId = keccak256(
-            abi.encode(_temp.seller, _temp.buyer, order.pricePerDay, order.deliveryAt, block.timestamp, nonce++)
-        );
+        bytes32 positionId = bytes32(++nonce);
         positions[positionId] = Position({
             seller: _temp.seller,
             buyer: _temp.buyer,
@@ -412,16 +447,83 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         participantPositionIdsIndex[_temp.buyer].add(positionId);
         participantDeliveryDatePositionIdsIndex[_temp.seller][order.deliveryAt].add(positionId);
         participantDeliveryDatePositionIdsIndex[_temp.buyer][order.deliveryAt].add(positionId);
+        int256 _delta = int256(uint256(deliveryDurationDays));
+        participantDeliveryDateNetDelta[_temp.seller][order.deliveryAt] -= _delta;
+        participantDeliveryDateNetDelta[_temp.buyer][order.deliveryAt] += _delta;
+        participantDeliveryDateNetEntryValue[_temp.seller][order.deliveryAt] -= int256(_temp.sellPricePerDay) * _delta;
+        participantDeliveryDateNetEntryValue[_temp.buyer][order.deliveryAt] += int256(_temp.buyPricePerDay) * _delta;
+        _emitPositionCreated(positionId, _temp, order.deliveryAt, orderId, takerOrderId);
+    }
+
+    /// @dev Extracted to keep `_createPosition` below the EVM stack-depth limit.
+    function _emitPositionCreated(
+        bytes32 positionId,
+        Position memory _temp,
+        uint256 deliveryAt,
+        bytes32 orderId,
+        bytes32 takerOrderId
+    ) private {
         emit PositionCreated(
             positionId,
             _temp.seller,
             _temp.buyer,
             _temp.sellPricePerDay,
             _temp.buyPricePerDay,
-            order.deliveryAt,
+            deliveryAt,
             _temp.destURL,
-            orderId
+            orderId,
+            takerOrderId
         );
+    }
+
+    /// @dev If `participant` already holds a position at `order.deliveryAt` on the opposite
+    ///      side of the trade they are about to enter, exit that position: settle realized PnL
+    ///      against the insurance fund, remove the old position, and rewire `_temp` so that
+    ///      the remaining counterparty (the other side of the old position) takes
+    ///      `participant`'s slot in the new position.
+    ///      `participantNewSideIsBuy` indicates which side `participant` is taking in the
+    ///      newly-executing trade.
+    ///      Returns `true` iff an existing position was offset.
+    function _maybeExitExistingPosition(
+        Position memory _temp,
+        Order memory order,
+        address participant,
+        bool participantNewSideIsBuy
+    ) private returns (bool) {
+        EnumerableSet.Bytes32Set storage participantPositions =
+            participantDeliveryDatePositionIdsIndex[participant][order.deliveryAt];
+        if (participantPositions.length() == 0) return false;
+
+        bytes32 existingPositionId = participantPositions.at(0);
+        Position memory existingPosition = positions[existingPositionId];
+
+        int256 pnlPerDay; // negative is profit, positive is loss
+        if (existingPosition.buyer == participant && !participantNewSideIsBuy) {
+            // long → flat: bought high (buyPx) and sells now at order.pricePerDay
+            pnlPerDay = int256(existingPosition.buyPricePerDay) - int256(order.pricePerDay);
+            _temp.seller = existingPosition.seller;
+            _temp.sellPricePerDay = existingPosition.sellPricePerDay;
+        } else if (existingPosition.seller == participant && participantNewSideIsBuy) {
+            // short → flat: sold at sellPx and buys back now at order.pricePerDay
+            pnlPerDay = int256(order.pricePerDay) - int256(existingPosition.sellPricePerDay);
+            _temp.buyer = existingPosition.buyer;
+            _temp.buyPricePerDay = existingPosition.buyPricePerDay;
+        } else {
+            // existing position is on the same side as the new trade — nothing to offset
+            return false;
+        }
+
+        _removePosition(existingPositionId, existingPosition);
+        int256 pnl = pnlPerDay * int256(uint256(deliveryDurationDays));
+        _transferPnl(participant, _insuranceFundAccount(), pnl);
+        emit PositionExited(existingPositionId, participant, -pnl);
+
+        if (_temp.buyer == _temp.seller) {
+            // both parties exiting the position
+            emit PositionExited(existingPositionId, _temp.buyer, pnl);
+            _transferPnl(_insuranceFundAccount(), _temp.buyer, pnl);
+        }
+        return true;
     }
 
     /// @notice Removes all outdated orders for a specific participant
@@ -456,16 +558,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         );
         delete orders[orderId];
         emit OrderClosed(orderId, order.participant);
-    }
-
-    function addMargin(uint256 _amount) external {
-        _mint(_msgSender(), _amount);
-        token.safeTransferFrom(_msgSender(), address(this), _amount);
-    }
-
-    function removeMargin(uint256 _amount) external enoughMarginBalance(_msgSender(), _amount) {
-        _burn(_msgSender(), _amount);
-        token.safeTransfer(_msgSender(), _amount);
     }
 
     // Admin functions
@@ -508,6 +600,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         if (_decimals > oracleDecimals) {
             revert UnsupportedTokenDecimals();
         }
+
         hashpriceScalingDivisor = 10 ** uint256(oracleDecimals - _decimals);
     }
 
@@ -522,6 +615,10 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     /// @dev Limits access to the functions with onlyValidator modifier
     function setValidatorAddress(address _validatorAddress) external onlyOwner {
         validatorAddress = _validatorAddress;
+    }
+
+    function setMarginEngine(address _marginEngine) external onlyOwner {
+        marginEngine = IPortfolioMarginEngine(_marginEngine);
     }
 
     /// @notice Gets the maintenance margin of a position, the minimum amount of effective margin that is required to avoid a margin call
@@ -585,15 +682,15 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
 
     function marginCall(address _participant) external onlyValidator {
         int256 effectiveMargin = getMinMargin(_participant);
-        uint256 userCollateral = balanceOf(_participant);
+        int256 startBalance = int256(collateralVault.balanceOf(_participant));
 
-        if (int256(userCollateral) > effectiveMargin) {
+        if (startBalance > effectiveMargin) {
             return;
         }
 
-        int256 marginShortfall = effectiveMargin - int256(userCollateral);
-
+        int256 marginShortfall = effectiveMargin - startBalance;
         int256 reclaimedMargin; // amount of margin that will be reclaimed by closing positions/orders
+        bool liquidated;
 
         // closing orders
         EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[_participant];
@@ -604,9 +701,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
             int256 qty = order.isBuy ? int256(1) : int256(-1);
             int256 _margin = int256(clamp(getMinMarginForPosition(order.pricePerDay, qty)));
             _closeOrder(orderId, order);
+            liquidated = true;
 
             reclaimedMargin += _margin;
             if (reclaimedMargin >= marginShortfall) {
+                _emitLiquidation(_participant, reclaimedMargin, startBalance);
                 return;
             }
         }
@@ -617,20 +716,25 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
             bytes32 positionId = _positions.at(0);
             Position storage position = positions[positionId];
 
-            // int256 qty = position.buyer == _participant ? int256(1) : int256(-1);
-            // int256 _margin = getMinMarginForPosition(position.pricePerDay, qty);
             // Force liquidation: settle unrealized PnL at market price and close position
             //TODO: avoid calling getMinMargin on each iteration, return reclaimed margin instead
             _forceLiquidatePosition(positionId, position, _participant);
-            uint256 collateralBalance = balanceOf(_participant);
-            int256 minMargin = getMinMargin(_participant);
-            if (int256(collateralBalance) >= minMargin) {
+            liquidated = true;
+            if (int256(collateralVault.balanceOf(_participant)) >= getMinMargin(_participant)) {
+                _emitLiquidation(_participant, reclaimedMargin, startBalance);
                 return;
             }
         }
 
-        //TODO: what happens if not enough funds to cover positions
-        // the other party takes the loss
+        if (liquidated) {
+            _emitLiquidation(_participant, reclaimedMargin, startBalance);
+        }
+    }
+
+    /// @dev Stack-saving wrapper around the `Liquidation` emit. `realizedPnl = currentBalance - startBalance`.
+    function _emitLiquidation(address _participant, int256 _reclaimedMargin, int256 _startBalance) private {
+        int256 realizedPnl = int256(collateralVault.balanceOf(_participant)) - _startBalance;
+        emit Liquidation(_participant, _msgSender(), _reclaimedMargin, realizedPnl);
     }
 
     /**
@@ -681,13 +785,13 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
                 position.sellPricePerDay * deliveryDurationDays,
                 position.deliveryAt + deliveryDurationSeconds() - block.timestamp
             );
-            _transfer(position.seller, position.buyer, breachPenalty);
+            _internalTransfer(position.seller, position.buyer, breachPenalty);
         } else {
             uint256 breachPenalty = _calculateBreachPenalty(
                 position.buyPricePerDay * deliveryDurationDays,
                 position.deliveryAt + deliveryDurationSeconds() - block.timestamp
             );
-            _transfer(position.buyer, position.seller, breachPenalty);
+            _internalTransfer(position.buyer, position.seller, breachPenalty);
         }
         _closeAndCashSettleDelivery(_positionId, position);
         emit PositionDeliveryClosed(_positionId, _msgSender());
@@ -715,19 +819,19 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
                 position.buyPricePerDay * deliveryDurationDays * positionElapsedTime / deliveryDurationSeconds();
             uint256 contractPaysToSeller =
                 uint256(priceDifference) * deliveryDurationDays * positionElapsedTime / deliveryDurationSeconds();
-            _transfer(address(this), position.seller, contractPaysToSeller);
-            _transfer(position.buyer, position.seller, buyerPaysToSeller);
+            _internalTransfer(_insuranceFundAccount(), position.seller, contractPaysToSeller);
+            _internalTransfer(position.buyer, position.seller, buyerPaysToSeller);
         } else if (priceDifference < 0) {
             uint256 buyerPaysToSeller =
                 position.sellPricePerDay * deliveryDurationDays * positionElapsedTime / deliveryDurationSeconds();
             uint256 buyerPaysToContract =
                 uint256(-priceDifference) * deliveryDurationDays * positionElapsedTime / deliveryDurationSeconds();
-            _transfer(address(this), position.buyer, buyerPaysToContract);
-            _transfer(position.buyer, position.seller, buyerPaysToSeller);
+            _internalTransfer(_insuranceFundAccount(), position.buyer, buyerPaysToContract);
+            _internalTransfer(position.buyer, position.seller, buyerPaysToSeller);
         } else {
             uint256 buyerPaysToSeller =
                 position.buyPricePerDay * deliveryDurationDays * positionElapsedTime / deliveryDurationSeconds();
-            _transfer(position.buyer, position.seller, buyerPaysToSeller);
+            _internalTransfer(position.buyer, position.seller, buyerPaysToSeller);
         }
 
         // Payment for the remaining portion of the hashrate
@@ -741,8 +845,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         emit PositionExited(_positionId, position.seller, -sellerPnl);
         emit PositionExited(_positionId, position.buyer, -buyerPnl);
 
-        _transferPnl(address(this), position.seller, sellerPnl);
-        _transferPnl(address(this), position.buyer, buyerPnl);
+        _transferPnl(_insuranceFundAccount(), position.seller, sellerPnl);
+        _transferPnl(_insuranceFundAccount(), position.buyer, buyerPnl);
 
         // remove position
         _removePosition(_positionId, position);
@@ -781,6 +885,13 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
         participantDeliveryDatePositionIdsIndex[position.buyer][position.deliveryAt].remove(_positionId);
         participantPositionIdsIndex[position.seller].remove(_positionId);
         participantPositionIdsIndex[position.buyer].remove(_positionId);
+        int256 _delta = int256(uint256(deliveryDurationDays));
+        participantDeliveryDateNetDelta[position.seller][position.deliveryAt] += _delta;
+        participantDeliveryDateNetDelta[position.buyer][position.deliveryAt] -= _delta;
+        participantDeliveryDateNetEntryValue[position.seller][position.deliveryAt] +=
+            int256(position.sellPricePerDay) * _delta;
+        participantDeliveryDateNetEntryValue[position.buyer][position.deliveryAt] -=
+            int256(position.buyPricePerDay) * _delta;
         delete positions[_positionId];
         emit PositionClosed(_positionId);
     }
@@ -817,8 +928,66 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     /// @notice Returns how much participant needs to add to their collateral to cover the margin shortfall
     function getCollateralDeficit(address _participant) public view returns (int256) {
         int256 effectiveMargin = getMinMargin(_participant);
-        uint256 balance = balanceOf(_participant);
+        uint256 balance = collateralVault.balanceOf(_participant);
         return int256(effectiveMargin) - int256(balance);
+    }
+
+    // ── Portfolio-margin view functions (used by PortfolioMarginEngine) ──────
+
+    /// @notice Net linear delta of all active *positions* in WAD (1e18) units.
+    ///         Each long contract contributes +deliveryDurationDays * WAD delta;
+    ///         each short contract contributes -deliveryDurationDays * WAD delta.
+    ///         Resting orders are excluded — their margin is reported separately
+    ///         via `getFuturesOrderMargin`.
+    function getNetPositionDelta(address _participant) external view returns (int256) {
+        int256 netDelta = 0;
+        uint256 currentIndex = _getCurrentDeliveryDateIndex();
+        uint256 interval = deliveryIntervalSeconds();
+        for (uint256 i = 0; i < futureDeliveryDatesCount; i++) {
+            uint256 date = firstFutureDeliveryDate + interval * (currentIndex + i);
+            netDelta += participantDeliveryDateNetDelta[_participant][date];
+        }
+        return netDelta * 1e18;
+    }
+
+    /// @notice Minimum margin locked by resting orders (token decimals).
+    ///         Computed as max(0, maintenanceMargin − unrealizedPnL) per order,
+    ///         mirroring how `getMinMargin` handles the order book component.
+    function getFuturesOrderMargin(address _participant) external view returns (uint256) {
+        EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[_participant];
+        uint256 len = _orders.length();
+        if (len == 0) return 0;
+        uint256 total = 0;
+        uint256 marketPricePerDay = getMarketPrice();
+        int256 durationDays = int256(uint256(deliveryDurationDays));
+        uint256 marginPct = getMarginPercent();
+        for (uint256 i = 0; i < len; i++) {
+            Order memory order = orders[_orders.at(i)];
+            if (order.deliveryAt < block.timestamp) continue;
+            int256 qty = order.isBuy ? int256(1) : int256(-1);
+            uint256 maintenanceMargin = order.pricePerDay * uint256(durationDays) * marginPct / 100;
+            int256 pnl = (int256(marketPricePerDay) - int256(order.pricePerDay)) * durationDays * qty;
+            total += clamp(int256(maintenanceMargin) - pnl);
+        }
+        return total;
+    }
+
+    /// @notice Aggregate unrealized PnL across active positions (token decimals).
+    ///         Positive = mark-to-market gain; negative = mark-to-market loss.
+    function getFuturesUnrealizedPnl(address _participant) external view returns (int256) {
+        uint256 currentIndex = _getCurrentDeliveryDateIndex();
+        uint256 interval = deliveryIntervalSeconds();
+        int256 totalNetDelta = 0;
+        int256 totalNetEntryValue = 0;
+        for (uint256 i = 0; i < futureDeliveryDatesCount; i++) {
+            uint256 date = firstFutureDeliveryDate + interval * (currentIndex + i);
+            totalNetDelta += participantDeliveryDateNetDelta[_participant][date];
+            totalNetEntryValue += participantDeliveryDateNetEntryValue[_participant][date];
+        }
+        // totalPnl = Σ(marketPrice - entryPrice_i) * durationDays * qty_i
+        //          = marketPrice * Σ(qty_i * durationDays) - Σ(qty_i * entryPrice_i * durationDays)
+        //          = marketPrice * totalNetDelta - totalNetEntryValue
+        return int256(getMarketPrice()) * totalNetDelta - totalNetEntryValue;
     }
 
     function getDeliveryDates() external view returns (uint256[] memory) {
@@ -884,8 +1053,17 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
             bytes32 positionId = _positions.at(i);
             Position storage position = positions[positionId];
             if (position.seller == _msgSender() && position.paid) {
-                uint256 totalPayment = position.sellPricePerDay * deliveryDurationDays;
-                _transfer(address(this), position.seller, totalPayment);
+                // The buyer escrowed `buyPricePerDay * days` into `address(this)` at deposit time,
+                // but the seller is owed `sellPricePerDay * days`. When `_maybeExitExistingPosition`
+                // rewired this position the price differential (sellPx - buyPx) was already settled
+                // against the insurance fund via `_transferPnl`. Route the buyer's escrow through
+                // the fund so the seller can be paid in full while the fund's balance net-nets to
+                // zero across the position's lifecycle.
+                uint256 buyerDeposit = position.buyPricePerDay * deliveryDurationDays;
+                uint256 sellerOwed = position.sellPricePerDay * deliveryDurationDays;
+                address fund = _insuranceFundAccount();
+                _internalTransfer(address(this), fund, buyerDeposit);
+                _internalTransfer(fund, position.seller, sellerOwed);
                 position.paid = false;
                 withdrew = true;
                 emit PositionPaymentReceived(positionId);
@@ -999,92 +1177,62 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, ERC20Upgradeable, Multi
     }
 
     function ensureNoCollateralDeficit(address _participant) private view {
-        int256 collateralDeficit = getCollateralDeficit(_participant);
-        if (collateralDeficit > 0) {
-            revert InsufficientMarginBalance();
-        }
-    }
-
-    /// @notice Deposits collateral into the contract to credit participant when position is exited
-    /// @param _amount The amount of collateral to deposit
-    function depositReservePool(uint256 _amount) external {
-        reservePoolBalance += _amount;
-        _mint(address(this), _amount);
-        token.safeTransferFrom(_msgSender(), address(this), _amount);
-    }
-
-    /// @notice Withdraws collateral from the contract to the sender
-    /// @param _amount The amount of collateral to withdraw
-    function withdrawReservePool(uint256 _amount) external onlyOwner {
-        if (_amount > reservePoolBalance) {
-            revert ERC20InsufficientBalance(address(this), reservePoolBalance, _amount);
-        }
-        reservePoolBalance -= _amount;
-        _burn(address(this), _amount);
-        token.safeTransfer(_msgSender(), _amount);
+        uint256 required = marginEngine.computePortfolioIM(_participant);
+        if (collateralVault.balanceOf(_participant) < required) revert InsufficientMarginBalance();
     }
 
     function withdrawCollectedFees() external onlyOwner {
         uint256 amount = collectedFeesBalance;
         collectedFeesBalance = 0;
-        _burn(address(this), amount);
-        token.safeTransfer(owner(), amount);
+        collateralVault.withdrawTo(owner(), amount);
     }
 
     function _transferPnl(address _from, address _to, int256 _pnl) private {
+        if (_pnl == 0) return;
+        address payer;
+        address receiver;
+        uint256 amount;
         if (_pnl > 0) {
-            _transfer(_from, _to, uint256(_pnl));
-        } else if (_pnl < 0) {
-            _transfer(_to, _from, uint256(-_pnl));
+            payer = _from;
+            receiver = _to;
+            amount = uint256(_pnl);
+        } else {
+            payer = _to;
+            receiver = _from;
+            amount = uint256(-_pnl);
         }
+
+        uint256 available = collateralVault.balanceOf(payer);
+        if (available >= amount) {
+            collateralVault.internalTransfer(payer, receiver, amount);
+            return;
+        }
+
+        // Payer cannot cover full amount: transfer what's available and socialize the shortfall.
+        // Surfaces previously-implicit reverts as a `BadDebt` signal for off-chain observers.
+        if (available > 0) {
+            collateralVault.internalTransfer(payer, receiver, available);
+        }
+        emit BadDebt(payer, amount - available);
     }
 
-    // ERC20 functions
-
-    function decimals() public view override returns (uint8) {
-        return _decimals;
+    /// @dev Shared reserve / PnL pool: vault `insuranceFund` receipt account.
+    function _insuranceFundAccount() private view returns (address) {
+        address fund = collateralVault.INSURANCE_FUND_ADDR();
+        if (fund == address(0)) revert InsuranceFundNotConfigured();
+        return fund;
     }
 
-    function transfer(address _to, uint256 _amount)
-        public
-        override
-        enoughMarginBalance(_msgSender(), _amount)
-        returns (bool)
-    {
-        return super.transfer(_to, _amount);
+    function _internalTransfer(address from, address to, uint256 amount) private {
+        if (amount == 0) return;
+        collateralVault.internalTransfer(from, to, amount);
     }
 
-    function _transferEnsureMarginBalance(address _from, address _to, uint256 _amount)
-        private
-        enoughMarginBalance(_from, _amount)
-        returns (bool)
-    {
-        _transfer(_from, _to, _amount);
-        return true;
-    }
-
-    function transferFrom(address _from, address _to, uint256 _amount)
-        public
-        override
-        enoughMarginBalance(_from, _amount)
-        returns (bool)
-    {
-        return super.transferFrom(_from, _to, _amount);
+    function _transferEnsureMarginBalance(address _from, address _to, uint256 _amount) private {
+        collateralVault.internalTransferWithMarginCheck(_from, _to, _amount);
     }
 
     // Modifiers
-
-    modifier enoughMarginBalance(address _from, uint256 _amount) {
-        uint256 depositedCollateral = balanceOf(_from);
-        if (depositedCollateral < _amount) {
-            revert ERC20InsufficientBalance(_from, depositedCollateral, _amount);
-        }
-
-        if (int256(_amount) > int256(depositedCollateral) - getMinMargin(_from)) {
-            revert InsufficientMarginBalance();
-        }
-        _;
-    }
 
     modifier onlyValidator() {
         if (_msgSender() != validatorAddress) {

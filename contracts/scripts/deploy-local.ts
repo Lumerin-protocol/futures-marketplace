@@ -1,43 +1,47 @@
-import { run } from "hardhat";
-import { deployLocalFixture } from "../tests/fixtures-2";
-import { deployOnlyFuturesWithDummyData } from "../tests/fixtures";
+import hre from "hardhat";
+import {
+  deployOnlyFuturesWithDummyData,
+  deployTokenOraclesAndMulticall3,
+} from "../tests/fixtures.ts";
+import { logInfo, logSuccess, logTitle } from "../lib/log.ts";
 
 async function main() {
+  logTitle("Local deployment with dummy data");
+
   console.log("Starting local deployment...");
-  await run("compile");
+  await hre.tasks.getTask("compile").run();
 
-  const runPromise = run("node");
+  const run = hre.tasks.getTask("node").run({ hostname: "0.0.0.0" });
 
-  const data = await deployLocalFixture();
-  const dataFutures = await deployOnlyFuturesWithDummyData(data);
-  const { contracts } = data;
+  const conn = await hre.network.getOrCreate("hardhat");
+  const base = await deployTokenOraclesAndMulticall3(conn);
+  const futures = await deployOnlyFuturesWithDummyData(conn, base);
 
-  console.log("Deployment completed successfully!");
+  logInfo("accounts", {
+    Owner: base.accounts.owner.account.address,
+    Seller: base.accounts.seller.account.address,
+    Buyer: base.accounts.buyer.account.address,
+    Buyer2: base.accounts.buyer2.account.address,
+    DefaultBuyer: base.accounts.defaultBuyer.account.address,
+    Validator: base.accounts.validator.account.address,
+    Validator2: base.accounts.validator2.account.address,
+  });
 
-  console.log();
-  console.log("Accounts:");
-  console.log("Owner:", data.accounts.owner.account.address);
-  console.log("Seller:", data.accounts.seller.account.address);
-  console.log("Buyer:", data.accounts.buyer.account.address);
-  console.log("Buyer2:", data.accounts.buyer2.account.address);
-  console.log("Default Buyer:", data.accounts.defaultBuyer.account.address);
-  console.log("Validator:", data.accounts.validator.account.address);
-  console.log("Validator2:", data.accounts.validator2.account.address);
-  console.log();
-  console.log("Contract addresses:");
-  console.log("Multicall3:", contracts.multicall3.address);
-  console.log("USDC Mock:", contracts.usdcMock.address);
-  console.log("Hashprice Oracle (PriceFeedMock):", contracts.hashrateOracle.address);
-  console.log("Futures:", dataFutures.contracts.futures.address);
+  logInfo("contracts", {
+    Multicall3: base.contracts.multicall3.address,
+    USDCMock: base.contracts.usdcMock.address,
+    HashrateOracle: base.contracts.hashrateOracle.address,
+    Futures: futures.contracts.futures.address,
+    CollateralVault: futures.contracts.collateralVault.address,
+    PortfolioMarginEngine: futures.contracts.portfolioMarginEngine.address,
+  });
 
-  console.log();
+  logSuccess("Local deployment complete. Run `hardhat node` separately to keep the network alive.");
 
-  await runPromise;
+  await run;
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

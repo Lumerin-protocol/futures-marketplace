@@ -1,61 +1,53 @@
-import { requireEnvsSet } from "../lib/env";
-import { viem } from "hardhat";
+import hre from "hardhat";
+import { requireAddress, requireEnvsSet } from "../lib/env.ts";
+import { addrUrl, txUrl } from "../lib/explorer.ts";
+import { logInfo, logStep, logSuccess, logTitle } from "../lib/log.ts";
 
 async function main() {
-  console.log("Futures contract close delivery script");
-  console.log();
+  logTitle("Futures Close Delivery");
 
-  const env = <
-    {
-      FUTURES_ADDRESS: `0x${string}`;
-      POSITION_ID: `0x${string}`;
-    }
-  >requireEnvsSet("FUTURES_ADDRESS", "POSITION_ID");
+  const { viem } = await hre.network.getOrCreate();
 
-  // BLAME_SELLER is optional, defaults to true
+  const futuresAddress = requireAddress("FUTURES_ADDRESS");
+  const env = requireEnvsSet("POSITION_ID");
+  const positionId = env.POSITION_ID as `0x${string}`;
   const blameSeller = process.env.BLAME_SELLER !== "false";
 
-  const [owner, seller, buyer, validator] = await viem.getWalletClients();
+  const [, , , validator] = await viem.getWalletClients();
   const pc = await viem.getPublicClient();
   const tc = await viem.getTestClient();
 
-  console.log("Futures address:", env.FUTURES_ADDRESS);
-  console.log("Position ID:", env.POSITION_ID);
-  console.log("Blame seller:", blameSeller);
-  console.log("Validator account:", validator.account.address);
-  console.log();
+  logInfo("inputs", {
+    Futures: addrUrl(pc, futuresAddress),
+    PositionId: positionId,
+    BlameSeller: blameSeller,
+    Validator: validator.account.address,
+  });
 
-  const futures = await viem.getContractAt("Futures", env.FUTURES_ADDRESS);
+  const futures = await viem.getContractAt("Futures", futuresAddress);
 
-  // Get position info before closing
-  const position = await futures.read.getPositionById([env.POSITION_ID]);
+  const position = await futures.read.getPositionById([positionId]);
+  logInfo("position", {
+    Seller: position.seller,
+    Buyer: position.buyer,
+    DeliveryAt: new Date(Number(position.deliveryAt) * 1000).toISOString(),
+    SellPricePerDay: position.sellPricePerDay.toString(),
+    BuyPricePerDay: position.buyPricePerDay.toString(),
+    Paid: position.paid,
+  });
 
-  console.log("Position details:");
-  console.log("  Seller:", position.seller);
-  console.log("  Buyer:", position.buyer);
-  console.log("  Delivery at:", new Date(Number(position.deliveryAt) * 1000).toISOString());
-  console.log("  Sell price per day:", position.sellPricePerDay.toString());
-  console.log("  Buy price per day:", position.buyPricePerDay.toString());
-  console.log("  Paid:", position.paid);
-  console.log();
-
-  console.log("Closing delivery...");
   await tc.setNextBlockTimestamp({ timestamp: BigInt(Math.floor(Date.now() / 1000)) });
-  const tx = await futures.write.closeDelivery([env.POSITION_ID, blameSeller], {
+  const tx = await futures.write.closeDelivery([positionId, blameSeller], {
     account: validator.account,
   });
 
   const receipt = await pc.waitForTransactionReceipt({ hash: tx });
-  console.log("Transaction hash:", tx);
-  console.log("Gas used:", receipt.gasUsed.toString());
-  console.log();
-  console.log("---");
-  console.log("SUCCESS: Position closed!");
+  logStep("Closed", txUrl(pc, receipt.transactionHash));
+  logStep("Gas used", receipt.gasUsed.toString());
+  logSuccess(`Position ${positionId} closed`);
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

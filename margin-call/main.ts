@@ -1,7 +1,7 @@
 import * as viem from "viem";
 import pino from "pino";
 import { Subgraph } from "./gateway/subgraph";
-import { FuturesABI } from "./abi/Futures";
+import { FuturesAbi } from "./abi/Futures";
 import { config } from "./config/env";
 import { hardhat } from "viem/chains";
 import { sendDeficitAlerts } from "./gateway/marginAlert";
@@ -30,7 +30,7 @@ async function main(executeMarginCall = false) {
 
   const futures = viem.getContract({
     address: config.FUTURES_ADDRESS,
-    abi: FuturesABI,
+    abi: FuturesAbi,
     client: ethClient,
   });
 
@@ -41,7 +41,7 @@ async function main(executeMarginCall = false) {
   const deficits = await Promise.all(
     participants.map(async (participant) => {
       const minMargin = await futures.read.getMinMargin([participant.address]);
-      const balance = await futures.read.balanceOf([participant.address]);
+      const balance = await collateralVault.read.balanceOf([participant.address]);
       // const balance = BigInt(participant.balance);
       const marginUtilizationRatio = Number(minMargin) / Number(balance);
 

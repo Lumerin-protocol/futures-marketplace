@@ -1,4 +1,4 @@
-import { FuturesABI } from "../../abi/Futures";
+import { FuturesAbi } from "../../abi/Futures";
 import type { PublicClient } from "viem";
 
 interface CalculateMinMarginProps {
@@ -13,7 +13,7 @@ interface CalculateMinMarginForAddressProps {
 export async function calculateMinMargin(publicClient: PublicClient, props: CalculateMinMarginProps): Promise<bigint> {
   const result = await publicClient.readContract({
     address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`,
-    abi: FuturesABI,
+    abi: FuturesAbi,
     functionName: "getMinMarginForPosition",
     args: [props.entryPricePerDay, BigInt(props.quantity)],
   });
@@ -27,7 +27,7 @@ export async function calculateMinMarginForAddress(
 ): Promise<bigint> {
   const result = await publicClient.readContract({
     address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`,
-    abi: FuturesABI,
+    abi: FuturesAbi,
     functionName: "getMinMargin",
     args: [props.participantAddress],
   });

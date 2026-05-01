@@ -1,5 +1,5 @@
 import { useReadContract } from "wagmi";
-import { FuturesABI } from "../../abi/Futures";
+import { FuturesAbi } from "../../abi/Futures";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 
 /**
@@ -10,7 +10,7 @@ import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 export function useOrderFee(participantAddress: `0x${string}` | undefined) {
   const result = useReadContract({
     address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS,
-    abi: FuturesABI,
+    abi: FuturesAbi,
     functionName: "getOrderFee",
     args: participantAddress ? [participantAddress] : undefined,
     query: {

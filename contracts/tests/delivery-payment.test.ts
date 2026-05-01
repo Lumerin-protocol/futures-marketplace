@@ -1,15 +1,18 @@
-import { expect } from "chai";
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { parseEventLogs, parseUnits, getAddress, maxUint256 } from "viem";
-import { deployFuturesFixture } from "./fixtures";
-import { catchError } from "../lib/lib";
-import { refreshHashprice } from "./utils";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { network } from "hardhat";
+import { getAddress, parseEventLogs, parseUnits } from "viem";
+import { deployFuturesFixture } from "./fixtures.ts";
+import { refreshHashprice } from "./utils.ts";
 
-describe("Futures Delivery Payment", function () {
-  describe("depositDeliveryPayment", function () {
-    it("should allow buyer to deposit delivery payment before delivery date", async function () {
-      const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-      const { futures, usdcMock } = contracts;
+const { viem, networkHelpers } = await network.getOrCreate();
+
+describe("Futures Delivery Payment", () => {
+  describe("depositDeliveryPayment", () => {
+    it("should allow buyer to deposit delivery payment before delivery date", async () => {
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures, collateralVault } = contracts;
       const { seller, buyer, pc } = accounts;
 
       const price = await futures.read.getMarketPrice();
@@ -17,18 +20,10 @@ describe("Futures Delivery Payment", function () {
       const deliveryDate = config.deliveryDates[0];
       const totalPayment = price * BigInt(config.deliveryDurationDays);
 
-      // Add margin for both participants
-      await futures.write.addMargin([marginAmount], {
-        account: seller.account,
-      });
-      await futures.write.addMargin([marginAmount], {
-        account: buyer.account,
-      });
+      await collateralVault.write.deposit([marginAmount], { account: seller.account });
+      await collateralVault.write.deposit([marginAmount], { account: buyer.account });
 
-      // Create matching orders to form a position
-      await futures.write.createOrder([price, deliveryDate, "", -1], {
-        account: seller.account,
-      });
+      await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
       const txHash = await futures.write.createOrder([price, deliveryDate, "https://dest.com", 1], {
         account: buyer.account,
       });
@@ -42,52 +37,40 @@ describe("Futures Delivery Payment", function () {
 
       const { positionId } = positionEvent.args;
 
-      // Check initial balances
-      const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
-      const contractBalanceBefore = await futures.read.balanceOf([futures.address]);
+      const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
+      const contractBalanceBefore = await collateralVault.read.balanceOf([futures.address]);
 
-      // Deposit delivery payment
       const depositTxHash = await futures.write.depositDeliveryPaymentV2([positionId], {
         account: buyer.account,
       });
 
       const depositReceipt = await pc.waitForTransactionReceipt({ hash: depositTxHash });
-      expect(depositReceipt.status).to.equal("success");
+      assert.equal(depositReceipt.status, "success");
 
-      // Check balances after deposit
-      const buyerBalanceAfter = await futures.read.balanceOf([buyer.account.address]);
-      const contractBalanceAfter = await futures.read.balanceOf([futures.address]);
+      const buyerBalanceAfter = await collateralVault.read.balanceOf([buyer.account.address]);
+      const contractBalanceAfter = await collateralVault.read.balanceOf([futures.address]);
 
-      expect(buyerBalanceAfter).to.equal(buyerBalanceBefore - totalPayment);
-      expect(contractBalanceAfter).to.equal(contractBalanceBefore + totalPayment);
+      assert.equal(buyerBalanceAfter, buyerBalanceBefore - totalPayment);
+      assert.equal(contractBalanceAfter, contractBalanceBefore + totalPayment);
 
-      // Check that position is marked as paid
       const position = await futures.read.getPositionById([positionId]);
-      expect(position.paid).to.equal(true);
+      assert.equal(position.paid, true);
     });
 
-    it("should reject deposit after delivery date has passed", async function () {
-      const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-      const { futures } = contracts;
+    it("should reject deposit after delivery date has passed", async () => {
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures, collateralVault } = contracts;
       const { seller, buyer, pc, tc } = accounts;
 
       const price = await futures.read.getMarketPrice();
       const marginAmount = parseUnits("10000", 6);
       const deliveryDate = config.deliveryDates[0];
-      const totalPayment = price * BigInt(config.deliveryDurationDays);
 
-      // Add margin for both participants
-      await futures.write.addMargin([marginAmount], {
-        account: seller.account,
-      });
-      await futures.write.addMargin([marginAmount], {
-        account: buyer.account,
-      });
+      await collateralVault.write.deposit([marginAmount], { account: seller.account });
+      await collateralVault.write.deposit([marginAmount], { account: buyer.account });
 
-      // Create matching orders to form a position
-      await futures.write.createOrder([price, deliveryDate, "", -1], {
-        account: seller.account,
-      });
+      await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
       const txHash = await futures.write.createOrder([price, deliveryDate, "https://dest.com", 1], {
         account: buyer.account,
       });
@@ -100,22 +83,21 @@ describe("Futures Delivery Payment", function () {
       });
       const { positionId } = positionEvent.args;
 
-      // Move time past delivery date
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
 
-      // Try to deposit after delivery date
-      await catchError(futures.abi, "DeliveryDateExpired", async () => {
-        await futures.write.depositDeliveryPaymentV2([positionId], {
-          account: buyer.account,
-        });
-      });
+      await viem.assertions.revertWithCustomError(
+        futures.write.depositDeliveryPaymentV2([positionId], { account: buyer.account }),
+        futures,
+        "DeliveryDateExpired",
+      );
     });
   });
 
-  describe("depositDeliveryPayment (position ids)", function () {
-    it("should allow buyer to deposit delivery payment for specific positions", async function () {
-      const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-      const { futures } = contracts;
+  describe("depositDeliveryPayment (position ids)", () => {
+    it("should allow buyer to deposit delivery payment for specific positions", async () => {
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures, collateralVault } = contracts;
       const { seller, buyer, buyer2, pc } = accounts;
 
       const price = await futures.read.getMarketPrice();
@@ -123,13 +105,9 @@ describe("Futures Delivery Payment", function () {
       const deliveryDate = config.deliveryDates[0];
       const durationDays = BigInt(config.deliveryDurationDays);
 
-      await futures.write.addMargin([marginAmount], { account: seller.account });
-      await futures.write.addMargin([marginAmount], { account: buyer.account });
-      await futures.write.addMargin([marginAmount], { account: buyer2.account });
-
-      await futures.write.approve([futures.address, maxUint256], {
-        account: buyer.account,
-      });
+      await collateralVault.write.deposit([marginAmount], { account: seller.account });
+      await collateralVault.write.deposit([marginAmount], { account: buyer.account });
+      await collateralVault.write.deposit([marginAmount], { account: buyer2.account });
 
       const createPosition = async (sellerAccount: typeof seller.account, destURL: string) => {
         await futures.write.createOrder([price, deliveryDate, "", -1], { account: sellerAccount });
@@ -151,37 +129,38 @@ describe("Futures Delivery Payment", function () {
       const paymentPerPosition = price * durationDays;
       const totalPayment = paymentPerPosition * 2n;
 
-      const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
-      const contractBalanceBefore = await futures.read.balanceOf([futures.address]);
+      const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
+      const contractBalanceBefore = await collateralVault.read.balanceOf([futures.address]);
 
       await futures.write.depositDeliveryPayment([[positionId1, positionId2]], {
         account: buyer.account,
       });
 
-      const buyerBalanceAfter = await futures.read.balanceOf([buyer.account.address]);
-      const contractBalanceAfter = await futures.read.balanceOf([futures.address]);
+      const buyerBalanceAfter = await collateralVault.read.balanceOf([buyer.account.address]);
+      const contractBalanceAfter = await collateralVault.read.balanceOf([futures.address]);
 
-      expect(buyerBalanceAfter).to.equal(buyerBalanceBefore - totalPayment);
-      expect(contractBalanceAfter).to.equal(contractBalanceBefore + totalPayment);
+      assert.equal(buyerBalanceAfter, buyerBalanceBefore - totalPayment);
+      assert.equal(contractBalanceAfter, contractBalanceBefore + totalPayment);
 
       const position1 = await futures.read.getPositionById([positionId1]);
       const position2 = await futures.read.getPositionById([positionId2]);
 
-      expect(position1.paid).to.equal(true);
-      expect(position2.paid).to.equal(true);
+      assert.equal(position1.paid, true);
+      assert.equal(position2.paid, true);
     });
 
-    it("should revert if delivery date already passed for a position", async function () {
-      const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-      const { futures } = contracts;
+    it("should revert if delivery date already passed for a position", async () => {
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures, collateralVault } = contracts;
       const { seller, buyer, pc, tc } = accounts;
 
       const price = await futures.read.getMarketPrice();
       const marginAmount = parseUnits("10000", 6);
       const deliveryDate = config.deliveryDates[0];
 
-      await futures.write.addMargin([marginAmount], { account: seller.account });
-      await futures.write.addMargin([marginAmount], { account: buyer.account });
+      await collateralVault.write.deposit([marginAmount], { account: seller.account });
+      await collateralVault.write.deposit([marginAmount], { account: buyer.account });
 
       await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
       const txHash = await futures.write.createOrder([price, deliveryDate, "https://dest.com", 1], {
@@ -197,24 +176,27 @@ describe("Futures Delivery Payment", function () {
 
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
 
-      await catchError(futures.abi, "DeliveryDateExpired", async () => {
-        await futures.write.depositDeliveryPayment([[positionEvent.args.positionId]], {
+      await viem.assertions.revertWithCustomError(
+        futures.write.depositDeliveryPayment([[positionEvent.args.positionId]], {
           account: buyer.account,
-        });
-      });
+        }),
+        futures,
+        "DeliveryDateExpired",
+      );
     });
 
-    it("should revert when caller is not the position buyer", async function () {
-      const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-      const { futures } = contracts;
+    it("should revert when caller is not the position buyer", async () => {
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures, collateralVault } = contracts;
       const { seller, buyer, pc } = accounts;
 
       const price = await futures.read.getMarketPrice();
       const marginAmount = parseUnits("10000", 6);
       const deliveryDate = config.deliveryDates[0];
 
-      await futures.write.addMargin([marginAmount], { account: seller.account });
-      await futures.write.addMargin([marginAmount], { account: buyer.account });
+      await collateralVault.write.deposit([marginAmount], { account: seller.account });
+      await collateralVault.write.deposit([marginAmount], { account: buyer.account });
 
       await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
       const txHash = await futures.write.createOrder([price, deliveryDate, "https://dest.com", 1], {
@@ -228,28 +210,27 @@ describe("Futures Delivery Payment", function () {
         eventName: "PositionCreated",
       });
 
-      await catchError(futures.abi, "OnlyPositionBuyer", async () => {
-        await futures.write.depositDeliveryPayment([[positionEvent.args.positionId]], {
+      await viem.assertions.revertWithCustomError(
+        futures.write.depositDeliveryPayment([[positionEvent.args.positionId]], {
           account: seller.account,
-        });
-      });
+        }),
+        futures,
+        "OnlyPositionBuyer",
+      );
     });
 
-    it("should revert if position was already paid", async function () {
-      const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-      const { futures } = contracts;
+    it("should revert if position was already paid", async () => {
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures, collateralVault } = contracts;
       const { seller, buyer, pc } = accounts;
 
       const price = await futures.read.getMarketPrice();
       const marginAmount = parseUnits("10000", 6);
       const deliveryDate = config.deliveryDates[0];
 
-      await futures.write.addMargin([marginAmount], { account: seller.account });
-      await futures.write.addMargin([marginAmount], { account: buyer.account });
-
-      await futures.write.approve([futures.address, maxUint256], {
-        account: buyer.account,
-      });
+      await collateralVault.write.deposit([marginAmount], { account: seller.account });
+      await collateralVault.write.deposit([marginAmount], { account: buyer.account });
 
       await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
       const txHash = await futures.write.createOrder([price, deliveryDate, "https://dest.com", 1], {
@@ -267,28 +248,27 @@ describe("Futures Delivery Payment", function () {
         account: buyer.account,
       });
 
-      await catchError(futures.abi, "PositionAlreadyPaid", async () => {
-        await futures.write.depositDeliveryPayment([[positionEvent.args.positionId]], {
+      await viem.assertions.revertWithCustomError(
+        futures.write.depositDeliveryPayment([[positionEvent.args.positionId]], {
           account: buyer.account,
-        });
-      });
+        }),
+        futures,
+        "PositionAlreadyPaid",
+      );
     });
 
-    it("should revert when position destination URL is not set", async function () {
-      const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-      const { futures } = contracts;
+    it("should revert when position destination URL is not set", async () => {
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures, collateralVault } = contracts;
       const { seller, buyer, pc } = accounts;
 
       const price = await futures.read.getMarketPrice();
       const marginAmount = parseUnits("10000", 6);
       const deliveryDate = config.deliveryDates[0];
 
-      await futures.write.addMargin([marginAmount], { account: seller.account });
-      await futures.write.addMargin([marginAmount], { account: buyer.account });
-
-      await futures.write.approve([futures.address, maxUint256], {
-        account: buyer.account,
-      });
+      await collateralVault.write.deposit([marginAmount], { account: seller.account });
+      await collateralVault.write.deposit([marginAmount], { account: buyer.account });
 
       await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
       const txHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
@@ -302,18 +282,21 @@ describe("Futures Delivery Payment", function () {
         eventName: "PositionCreated",
       });
 
-      await catchError(futures.abi, "PositionDestURLNotSet", async () => {
-        await futures.write.depositDeliveryPayment([[positionEvent.args.positionId]], {
+      await viem.assertions.revertWithCustomError(
+        futures.write.depositDeliveryPayment([[positionEvent.args.positionId]], {
           account: buyer.account,
-        });
-      });
+        }),
+        futures,
+        "PositionDestURLNotSet",
+      );
     });
   });
 
-  describe("withdrawDeliveryPayment", function () {
-    it("should allow seller to withdraw delivery payment after delivery finished", async function () {
-      const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-      const { futures } = contracts;
+  describe("withdrawDeliveryPayment", () => {
+    it("should allow seller to withdraw delivery payment after delivery finished", async () => {
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures, collateralVault } = contracts;
       const { seller, buyer, pc, tc } = accounts;
 
       const price = await futures.read.getMarketPrice();
@@ -321,18 +304,10 @@ describe("Futures Delivery Payment", function () {
       const deliveryDate = config.deliveryDates[0];
       const totalPayment = price * BigInt(config.deliveryDurationDays);
 
-      // Add margin for both participants
-      await futures.write.addMargin([marginAmount], {
-        account: seller.account,
-      });
-      await futures.write.addMargin([marginAmount], {
-        account: buyer.account,
-      });
+      await collateralVault.write.deposit([marginAmount], { account: seller.account });
+      await collateralVault.write.deposit([marginAmount], { account: buyer.account });
 
-      // Create matching orders to form a position
-      await futures.write.createOrder([price, deliveryDate, "", -1], {
-        account: seller.account,
-      });
+      await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
       const txHash = await futures.write.createOrder([price, deliveryDate, "https://dest.com", 1], {
         account: buyer.account,
       });
@@ -346,61 +321,45 @@ describe("Futures Delivery Payment", function () {
 
       const { positionId } = positionEvent.args;
 
-      // Buyer deposits payment
-      await futures.write.depositDeliveryPaymentV2([positionId], {
-        account: buyer.account,
-      });
+      await futures.write.depositDeliveryPaymentV2([positionId], { account: buyer.account });
 
-      // Move time past delivery end
       const deliveryEndTime = deliveryDate + BigInt(config.deliveryDurationSeconds);
       await tc.setNextBlockTimestamp({ timestamp: deliveryEndTime + 1n });
 
-      // Check balances before withdrawal
-      const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
-      const contractBalanceBefore = await futures.read.balanceOf([futures.address]);
+      const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
+      const contractBalanceBefore = await collateralVault.read.balanceOf([futures.address]);
 
-      // Seller withdraws payment
       const withdrawTxHash = await futures.write.withdrawDeliveryPayment([deliveryDate], {
         account: seller.account,
       });
 
       const withdrawReceipt = await pc.waitForTransactionReceipt({ hash: withdrawTxHash });
-      expect(withdrawReceipt.status).to.equal("success");
+      assert.equal(withdrawReceipt.status, "success");
 
-      // Check balances after withdrawal
-      const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
-      const contractBalanceAfter = await futures.read.balanceOf([futures.address]);
+      const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
+      const contractBalanceAfter = await collateralVault.read.balanceOf([futures.address]);
 
-      expect(sellerBalanceAfter).to.equal(sellerBalanceBefore + totalPayment);
-      expect(contractBalanceAfter).to.equal(contractBalanceBefore - totalPayment);
+      assert.equal(sellerBalanceAfter, sellerBalanceBefore + totalPayment);
+      assert.equal(contractBalanceAfter, contractBalanceBefore - totalPayment);
 
-      // Check that position is marked as not paid
       const position = await futures.read.getPositionById([positionId]);
-      expect(position.paid).to.equal(false);
+      assert.equal(position.paid, false);
     });
 
-    it("should reject withdrawal before delivery is finished", async function () {
-      const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-      const { futures } = contracts;
+    it("should reject withdrawal before delivery is finished", async () => {
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures, collateralVault } = contracts;
       const { seller, buyer, pc, tc } = accounts;
 
       const price = await futures.read.getMarketPrice();
       const marginAmount = parseUnits("10000", 6);
       const deliveryDate = config.deliveryDates[0];
-      const totalPayment = price * BigInt(config.deliveryDurationDays);
 
-      // Add margin for both participants
-      await futures.write.addMargin([marginAmount], {
-        account: seller.account,
-      });
-      await futures.write.addMargin([marginAmount], {
-        account: buyer.account,
-      });
+      await collateralVault.write.deposit([marginAmount], { account: seller.account });
+      await collateralVault.write.deposit([marginAmount], { account: buyer.account });
 
-      // Create matching orders to form a position
-      await futures.write.createOrder([price, deliveryDate, "", -1], {
-        account: seller.account,
-      });
+      await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
       const hash = await futures.write.createOrder([price, deliveryDate, "https://dest.com", 1], {
         account: buyer.account,
       });
@@ -412,26 +371,24 @@ describe("Futures Delivery Payment", function () {
         eventName: "PositionCreated",
       });
 
-      // Buyer deposits payment
       await futures.write.depositDeliveryPaymentV2([positionEvent.args.positionId], {
         account: buyer.account,
       });
 
-      // Move time to during delivery (but not finished)
       const deliveryEndTime = deliveryDate + BigInt(config.deliveryDurationSeconds);
       await tc.setNextBlockTimestamp({ timestamp: deliveryEndTime - 1n });
 
-      // Try to withdraw before delivery finished
-      await catchError(futures.abi, "DeliveryNotFinishedYet", async () => {
-        await futures.write.withdrawDeliveryPayment([deliveryDate], {
-          account: seller.account,
-        });
-      });
+      await viem.assertions.revertWithCustomError(
+        futures.write.withdrawDeliveryPayment([deliveryDate], { account: seller.account }),
+        futures,
+        "DeliveryNotFinishedYet",
+      );
     });
 
-    it("should only allow seller to withdraw their own positions", async function () {
-      const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-      const { futures } = contracts;
+    it("should only allow seller to withdraw their own positions", async () => {
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures, collateralVault } = contracts;
       const { seller, buyer, buyer2, pc, tc } = accounts;
 
       const price = await futures.read.getMarketPrice();
@@ -439,33 +396,20 @@ describe("Futures Delivery Payment", function () {
       const deliveryDate = config.deliveryDates[0];
       const totalPayment = price * BigInt(config.deliveryDurationDays);
 
-      // Add margin for all participants
-      await futures.write.addMargin([marginAmount], {
-        account: seller.account,
-      });
-      await futures.write.addMargin([marginAmount], {
-        account: buyer.account,
-      });
-      await futures.write.addMargin([marginAmount], {
-        account: buyer2.account,
-      });
+      await collateralVault.write.deposit([marginAmount], { account: seller.account });
+      await collateralVault.write.deposit([marginAmount], { account: buyer.account });
+      await collateralVault.write.deposit([marginAmount], { account: buyer2.account });
 
-      // Create position: seller with buyer
-      await futures.write.createOrder([price, deliveryDate, "", -1], {
-        account: seller.account,
-      });
+      await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
       const txHash1 = await futures.write.createOrder(
         [price, deliveryDate, "https://dest1.com", 1],
-        { account: buyer.account }
+        { account: buyer.account },
       );
 
-      // Create position: buyer2 as seller with buyer
-      await futures.write.createOrder([price, deliveryDate, "", -1], {
-        account: buyer2.account,
-      });
+      await futures.write.createOrder([price, deliveryDate, "", -1], { account: buyer2.account });
       const txHash2 = await futures.write.createOrder(
         [price, deliveryDate, "https://dest2.com", 1],
-        { account: buyer.account }
+        { account: buyer.account },
       );
 
       const receipt1 = await pc.waitForTransactionReceipt({ hash: txHash1 });
@@ -482,7 +426,6 @@ describe("Futures Delivery Payment", function () {
         eventName: "PositionCreated",
       });
 
-      // Buyer deposits payment for both positions
       await futures.write.depositDeliveryPaymentV2([positionEvent1.args.positionId], {
         account: buyer.account,
       });
@@ -490,33 +433,27 @@ describe("Futures Delivery Payment", function () {
         account: buyer.account,
       });
 
-      // Move time past delivery end
       const deliveryEndTime = deliveryDate + BigInt(config.deliveryDurationSeconds);
       await tc.setNextBlockTimestamp({ timestamp: deliveryEndTime + 1n });
 
-      const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
-      const buyer2BalanceBefore = await futures.read.balanceOf([buyer2.account.address]);
+      const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
+      const buyer2BalanceBefore = await collateralVault.read.balanceOf([buyer2.account.address]);
 
-      // Seller withdraws - should only get payment for their position
-      await futures.write.withdrawDeliveryPayment([deliveryDate], {
-        account: seller.account,
-      });
+      await futures.write.withdrawDeliveryPayment([deliveryDate], { account: seller.account });
 
-      const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
-      expect(sellerBalanceAfter).to.equal(sellerBalanceBefore + totalPayment);
+      const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
+      assert.equal(sellerBalanceAfter, sellerBalanceBefore + totalPayment);
 
-      // Buyer2 withdraws - should get payment for their position
-      await futures.write.withdrawDeliveryPayment([deliveryDate], {
-        account: buyer2.account,
-      });
+      await futures.write.withdrawDeliveryPayment([deliveryDate], { account: buyer2.account });
 
-      const buyer2BalanceAfter = await futures.read.balanceOf([buyer2.account.address]);
-      expect(buyer2BalanceAfter).to.equal(buyer2BalanceBefore + totalPayment);
+      const buyer2BalanceAfter = await collateralVault.read.balanceOf([buyer2.account.address]);
+      assert.equal(buyer2BalanceAfter, buyer2BalanceBefore + totalPayment);
     });
 
-    it("should only withdraw positions that are marked as paid", async function () {
-      const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-      const { futures } = contracts;
+    it("should only withdraw positions that are marked as paid", async () => {
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures, collateralVault } = contracts;
       const { seller, buyer, buyer2, pc, tc } = accounts;
 
       const price = await futures.read.getMarketPrice();
@@ -524,33 +461,20 @@ describe("Futures Delivery Payment", function () {
       const deliveryDate = config.deliveryDates[0];
       const totalPayment = price * BigInt(config.deliveryDurationDays);
 
-      // Add margin for all participants
-      await futures.write.addMargin([marginAmount], {
-        account: seller.account,
-      });
-      await futures.write.addMargin([marginAmount], {
-        account: buyer.account,
-      });
-      await futures.write.addMargin([marginAmount], {
-        account: buyer2.account,
-      });
+      await collateralVault.write.deposit([marginAmount], { account: seller.account });
+      await collateralVault.write.deposit([marginAmount], { account: buyer.account });
+      await collateralVault.write.deposit([marginAmount], { account: buyer2.account });
 
-      // Create position: seller with buyer (will be paid)
-      await futures.write.createOrder([price, deliveryDate, "", -1], {
-        account: seller.account,
-      });
+      await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
       const txHash1 = await futures.write.createOrder(
         [price, deliveryDate, "https://dest1.com", 1],
-        { account: buyer.account }
+        { account: buyer.account },
       );
 
-      // Create position: seller with buyer2 (will NOT be paid)
-      await futures.write.createOrder([price, deliveryDate, "", -1], {
-        account: seller.account,
-      });
+      await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
       const txHash2 = await futures.write.createOrder(
         [price, deliveryDate, "https://dest2.com", 1],
-        { account: buyer2.account }
+        { account: buyer2.account },
       );
 
       const receipt1 = await pc.waitForTransactionReceipt({ hash: txHash1 });
@@ -567,55 +491,43 @@ describe("Futures Delivery Payment", function () {
         eventName: "PositionCreated",
       });
 
-      // Only buyer deposits payment (buyer2 does not)
+      // Only buyer deposits, buyer2 does not.
       await futures.write.depositDeliveryPaymentV2([positionEvent1.args.positionId], {
         account: buyer.account,
       });
 
-      // Move time past delivery end
       const deliveryEndTime = deliveryDate + BigInt(config.deliveryDurationSeconds);
       await tc.setNextBlockTimestamp({ timestamp: deliveryEndTime + 1n });
 
-      const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
+      const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
 
-      // Seller withdraws - should only get payment for paid position
-      await futures.write.withdrawDeliveryPayment([deliveryDate], {
-        account: seller.account,
-      });
+      await futures.write.withdrawDeliveryPayment([deliveryDate], { account: seller.account });
 
-      const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
-      expect(sellerBalanceAfter).to.equal(sellerBalanceBefore + totalPayment);
+      const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
+      assert.equal(sellerBalanceAfter, sellerBalanceBefore + totalPayment);
 
-      // Verify only one position was marked as paid
       const position1 = await futures.read.getPositionById([positionEvent1.args.positionId]);
       const position2 = await futures.read.getPositionById([positionEvent2.args.positionId]);
-      expect(position1.paid).to.equal(false); // Withdrawn, so marked as not paid
-      expect(position2.paid).to.equal(false); // Never paid
+      assert.equal(position1.paid, false);
+      assert.equal(position2.paid, false);
     });
   });
 
-  describe("Cash Settlement when buyer doesn't deposit", function () {
-    it("should allow cash settlement via closeDelivery when buyer didn't deposit", async function () {
-      const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-      const { futures } = contracts;
+  describe("Cash Settlement when buyer doesn't deposit", () => {
+    it("should allow cash settlement via closeDelivery when buyer didn't deposit", async () => {
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures, collateralVault } = contracts;
       const { seller, buyer, validator, pc, tc } = accounts;
 
       const price = await futures.read.getMarketPrice();
       const marginAmount = parseUnits("10000", 6);
       const deliveryDate = config.deliveryDates[0];
 
-      // Add margin for both participants
-      await futures.write.addMargin([marginAmount], {
-        account: seller.account,
-      });
-      await futures.write.addMargin([marginAmount], {
-        account: buyer.account,
-      });
+      await collateralVault.write.deposit([marginAmount], { account: seller.account });
+      await collateralVault.write.deposit([marginAmount], { account: buyer.account });
 
-      // Create matching orders to form a position
-      await futures.write.createOrder([price, deliveryDate, "", -1], {
-        account: seller.account,
-      });
+      await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
       const txHash = await futures.write.createOrder([price, deliveryDate, "https://dest.com", 1], {
         account: buyer.account,
       });
@@ -629,18 +541,14 @@ describe("Futures Delivery Payment", function () {
 
       const { positionId } = positionEvent.args;
 
-      // Buyer does NOT deposit payment
-      // Position should remain unpaid
       const positionBefore = await futures.read.getPositionById([positionId]);
-      expect(positionBefore.paid).to.equal(false);
+      assert.equal(positionBefore.paid, false);
 
-      // Move time to during delivery
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
       await refreshHashprice(contracts.hashrateOracle);
 
-      // Close delivery via cash settlement (validator blames seller)
-      const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
-      const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
+      const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
+      const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
 
       const closeTxHash = await futures.write.closeDelivery([positionId, true], {
         account: validator.account,
@@ -653,38 +561,30 @@ describe("Futures Delivery Payment", function () {
         eventName: "PositionDeliveryClosed",
       });
 
-      expect(closeEvent.args.positionId).to.equal(positionId);
+      assert.equal(closeEvent.args.positionId, positionId);
 
-      // Check that balances changed due to cash settlement
-      const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
-      const buyerBalanceAfter = await futures.read.balanceOf([buyer.account.address]);
+      const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
+      const buyerBalanceAfter = await collateralVault.read.balanceOf([buyer.account.address]);
 
-      // Balances should have changed (cash settlement occurred)
-      expect(sellerBalanceBefore !== sellerBalanceAfter || buyerBalanceBefore !== buyerBalanceAfter)
-        .to.be.true;
+      assert.ok(
+        sellerBalanceBefore !== sellerBalanceAfter || buyerBalanceBefore !== buyerBalanceAfter,
+      );
     });
 
-    it("should allow buyer to close delivery via cash settlement when they didn't deposit", async function () {
-      const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-      const { futures } = contracts;
+    it("should allow buyer to close delivery via cash settlement when they didn't deposit", async () => {
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures, collateralVault } = contracts;
       const { seller, buyer, pc, tc } = accounts;
 
       const price = await futures.read.getMarketPrice();
       const marginAmount = parseUnits("10000", 6);
       const deliveryDate = config.deliveryDates[0];
 
-      // Add margin for both participants
-      await futures.write.addMargin([marginAmount], {
-        account: seller.account,
-      });
-      await futures.write.addMargin([marginAmount], {
-        account: buyer.account,
-      });
+      await collateralVault.write.deposit([marginAmount], { account: seller.account });
+      await collateralVault.write.deposit([marginAmount], { account: buyer.account });
 
-      // Create matching orders to form a position
-      await futures.write.createOrder([price, deliveryDate, "", -1], {
-        account: seller.account,
-      });
+      await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
       const txHash = await futures.write.createOrder([price, deliveryDate, "https://dest.com", 1], {
         account: buyer.account,
       });
@@ -698,12 +598,9 @@ describe("Futures Delivery Payment", function () {
 
       const { positionId } = positionEvent.args;
 
-      // Buyer does NOT deposit payment
-      // Move time to during delivery
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
       await refreshHashprice(contracts.hashrateOracle);
 
-      // Buyer closes delivery via cash settlement (blames seller)
       const closeTxHash = await futures.write.closeDelivery([positionId, true], {
         account: buyer.account,
       });
@@ -715,31 +612,24 @@ describe("Futures Delivery Payment", function () {
         eventName: "PositionDeliveryClosed",
       });
 
-      expect(closeEvent.args.positionId).to.equal(positionId);
-      expect(getAddress(closeEvent.args.closedBy)).to.equal(getAddress(buyer.account.address));
+      assert.equal(closeEvent.args.positionId, positionId);
+      assert.equal(getAddress(closeEvent.args.closedBy), getAddress(buyer.account.address));
     });
 
-    it("should allow seller to close delivery via cash settlement when buyer didn't deposit", async function () {
-      const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-      const { futures } = contracts;
+    it("should allow seller to close delivery via cash settlement when buyer didn't deposit", async () => {
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures, collateralVault } = contracts;
       const { seller, buyer, pc, tc } = accounts;
 
       const price = await futures.read.getMarketPrice();
       const marginAmount = parseUnits("10000", 6);
       const deliveryDate = config.deliveryDates[0];
 
-      // Add margin for both participants
-      await futures.write.addMargin([marginAmount], {
-        account: seller.account,
-      });
-      await futures.write.addMargin([marginAmount], {
-        account: buyer.account,
-      });
+      await collateralVault.write.deposit([marginAmount], { account: seller.account });
+      await collateralVault.write.deposit([marginAmount], { account: buyer.account });
 
-      // Create matching orders to form a position
-      await futures.write.createOrder([price, deliveryDate, "", -1], {
-        account: seller.account,
-      });
+      await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
       const txHash = await futures.write.createOrder([price, deliveryDate, "https://dest.com", 1], {
         account: buyer.account,
       });
@@ -753,12 +643,9 @@ describe("Futures Delivery Payment", function () {
 
       const { positionId } = positionEvent.args;
 
-      // Buyer does NOT deposit payment
-      // Move time to during delivery
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
       await refreshHashprice(contracts.hashrateOracle);
 
-      // Seller closes delivery via cash settlement (blames buyer)
       const closeTxHash = await futures.write.closeDelivery([positionId, false], {
         account: seller.account,
       });
@@ -770,8 +657,8 @@ describe("Futures Delivery Payment", function () {
         eventName: "PositionDeliveryClosed",
       });
 
-      expect(closeEvent.args.positionId).to.equal(positionId);
-      expect(getAddress(closeEvent.args.closedBy)).to.equal(getAddress(seller.account.address));
+      assert.equal(closeEvent.args.positionId, positionId);
+      assert.equal(getAddress(closeEvent.args.closedBy), getAddress(seller.account.address));
     });
   });
 });

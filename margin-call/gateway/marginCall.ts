@@ -2,7 +2,7 @@ import pino from "pino";
 import * as viem from "viem";
 import { encodeFunctionData } from "viem";
 import { Multicall3ABI } from "../abi/Multicall3";
-import { FuturesABI } from "../abi/Futures";
+import { FuturesAbi } from "../abi/Futures";
 import { config } from "../config/env";
 import { writeContract, waitForTransactionReceipt } from "viem/actions";
 import { BalanceEntry } from "./balanceEntry";
@@ -31,7 +31,7 @@ export async function executeMarginCalls(
       target: entry.address,
       allowFailure: false,
       callData: encodeFunctionData({
-        abi: FuturesABI,
+        abi: FuturesAbi,
         functionName: "marginCall",
         args: [entry.address],
       }),

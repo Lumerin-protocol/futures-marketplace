@@ -1,8 +1,11 @@
-import { viem } from "hardhat";
+import { createInterface } from "node:readline";
+import hre from "hardhat";
 import { formatUnits, parseUnits } from "viem";
-import { createInterface } from "readline";
+import { requireAddress } from "../lib/env.ts";
 
 async function main() {
+  const { viem } = await hre.network.getOrCreate();
+
   const oracleAddress = process.env.HASHRATE_ORACLE_ADDRESS as `0x${string}` | undefined;
   if (!oracleAddress) {
     console.error("HASHRATE_ORACLE_ADDRESS environment variable is required");
@@ -16,10 +19,7 @@ async function main() {
 
   const pc = await viem.getPublicClient();
 
-  const priceFeedMock = await viem.getContractAt(
-    "contracts/PriceFeedMock.sol:PriceFeedMock",
-    oracleAddress,
-  );
+  const priceFeedMock = await viem.getContractAt("PriceFeedMock", oracleAddress);
 
   const [, answer] = await priceFeedMock.read.latestRoundData();
   const decimals = await priceFeedMock.read.decimals();
@@ -56,7 +56,7 @@ async function main() {
       }
 
       const sign = match[1] === "-" ? -1 : 1;
-      const percent = parseFloat(match[2]) * sign;
+      const percent = Number.parseFloat(match[2]) * sign;
 
       const newPrice = currentPrice * (1 + percent / 100);
       const newPriceScaled = parseUnits(newPrice.toFixed(Number(decimals)), decimals);

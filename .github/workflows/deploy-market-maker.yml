@@ -83,22 +83,27 @@ jobs:
               ;;
           esac
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'yarn'
-          cache-dependency-path: market-maker/yarn.lock
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: market-maker/pnpm-lock.yaml
 
       - name: Install dependencies
         working-directory: market-maker
-        run: yarn install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build Lambda package
         working-directory: market-maker
         run: |
-          yarn build
-          yarn package
+          pnpm build
+          pnpm package
           echo "📦 Lambda package created: lambda.zip"
           ls -la lambda.zip
 

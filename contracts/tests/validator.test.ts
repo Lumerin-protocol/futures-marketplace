@@ -1,32 +1,26 @@
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { deployFuturesFixture } from "./fixtures";
-import { parseEventLogs, parseUnits, getAddress } from "viem";
-import { expect } from "chai";
-import { catchError } from "../lib/lib";
-import { refreshHashprice } from "./utils";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { network } from "hardhat";
+import { getAddress, parseEventLogs, parseUnits } from "viem";
+import { deployFuturesFixture } from "./fixtures.ts";
+import { refreshHashprice } from "./utils.ts";
 
-describe("Validator Functions", function () {
-  it("should allow validator to close position after start time", async function () {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+const { viem, networkHelpers } = await network.getOrCreate();
+
+describe("Validator Functions", () => {
+  it("should allow validator to close position after start time", async () => {
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures, collateralVault } = contracts;
     const { seller, buyer, validator, pc, tc } = accounts;
 
     const price = await futures.read.getMarketPrice();
     const deliveryDate = config.deliveryDates[0];
     const marginAmount = price * 7n;
 
-    // Add margin for both participants
-    await futures.write.addMargin([marginAmount], {
-      account: seller.account,
-    });
-    await futures.write.addMargin([marginAmount], {
-      account: buyer.account,
-    });
+    await collateralVault.write.deposit([marginAmount], { account: seller.account });
+    await collateralVault.write.deposit([marginAmount], { account: buyer.account });
 
-    // Create matching orders to form a position
-    await futures.write.createOrder([price, deliveryDate, "", -1], {
-      account: seller.account,
-    });
+    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
     const txHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
       account: buyer.account,
     });
@@ -43,7 +37,6 @@ describe("Validator Functions", function () {
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n }); // 1 day + 1 second
     await refreshHashprice(contracts.hashrateOracle);
 
-    // Close order as validator
     const closeTxHash = await futures.write.closeDelivery([positionId, true], {
       account: validator.account,
     });
@@ -55,29 +48,22 @@ describe("Validator Functions", function () {
       eventName: "PositionDeliveryClosed",
     });
 
-    expect(closeEvent.args.positionId).to.equal(positionId);
-    expect(getAddress(closeEvent.args.closedBy)).to.equal(getAddress(validator.account.address));
+    assert.equal(closeEvent.args.positionId, positionId);
+    assert.equal(getAddress(closeEvent.args.closedBy), getAddress(validator.account.address));
   });
 
-  it("should reject validator closing position before start time", async function () {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+  it("should reject validator closing position before start time", async () => {
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures, collateralVault } = contracts;
     const { seller, buyer, validator, pc } = accounts;
 
     const price = parseUnits("100", 6);
     const margin = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
 
-    // Create matching orders to form an position
-    await futures.write.addMargin([margin], {
-      account: seller.account,
-    });
-    await futures.write.addMargin([margin], {
-      account: buyer.account,
-    });
-    await futures.write.createOrder([price, deliveryDate, "", -1], {
-      account: seller.account,
-    });
+    await collateralVault.write.deposit([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
     const txHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
       account: buyer.account,
     });
@@ -88,36 +74,27 @@ describe("Validator Functions", function () {
       abi: futures.abi,
       eventName: "PositionCreated",
     });
-
     const { positionId } = createdEvent.args;
 
-    // Try to close order as validator before start time
-    await catchError(futures.abi, "PositionDeliveryNotStartedYet", async () => {
-      await futures.write.closeDelivery([positionId, true], {
-        account: validator.account,
-      });
-    });
+    await viem.assertions.revertWithCustomError(
+      futures.write.closeDelivery([positionId, true], { account: validator.account }),
+      futures,
+      "PositionDeliveryNotStartedYet",
+    );
   });
 
-  it("should reject non-validator from calling validator functions", async function () {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+  it("should reject non-validator from calling validator functions", async () => {
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures, collateralVault } = contracts;
     const { seller, buyer, buyer2, pc, tc } = accounts;
 
     const price = parseUnits("100", 6);
     const margin = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
 
-    // Create matching positions to form an order
-    await futures.write.addMargin([margin], {
-      account: seller.account,
-    });
-    await futures.write.addMargin([margin], {
-      account: buyer.account,
-    });
-    await futures.write.createOrder([price, deliveryDate, "", -1], {
-      account: seller.account,
-    });
+    await collateralVault.write.deposit([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
     const txHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
       account: buyer.account,
     });
@@ -128,16 +105,14 @@ describe("Validator Functions", function () {
       abi: futures.abi,
       eventName: "PositionCreated",
     });
-
     const { positionId } = orderEvent.args;
 
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
 
-    // Try to close order as non-validator
-    await catchError(futures.abi, "OnlyValidatorOrPositionParticipant", async () => {
-      await futures.write.closeDelivery([positionId, true], {
-        account: buyer2.account,
-      });
-    });
+    await viem.assertions.revertWithCustomError(
+      futures.write.closeDelivery([positionId, true], { account: buyer2.account }),
+      futures,
+      "OnlyValidatorOrPositionParticipant",
+    );
   });
 });

@@ -1,7 +1,7 @@
 import { useWriteContract } from "wagmi";
 import { getContract } from "viem";
 import { useWalletClient } from "wagmi";
-import { FuturesABI } from "../../abi/Futures";
+import { FuturesAbi } from "../../abi/Futures";
 
 interface DepositDeliveryPaymentProps {
   positionIds: `0x${string}`[];
@@ -16,7 +16,7 @@ export function useDepositDeliveryPayment() {
 
     const futuresContract = getContract({
       address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`,
-      abi: FuturesABI,
+      abi: FuturesAbi,
       client: walletClient,
     });
 

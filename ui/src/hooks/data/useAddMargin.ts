@@ -1,6 +1,6 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { getContract } from "viem";
-import { FuturesABI } from "../../abi/Futures";
+import { FuturesAbi } from "../../abi/Futures";
 import { useApproveERC20 } from "./useApproveERC20";
 import { useFuturePaymentToken } from "./useFuturePaymentToken";
 
@@ -23,7 +23,7 @@ export function useAddMargin() {
 
     const futuresContract = getContract({
       address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`,
-      abi: FuturesABI,
+      abi: FuturesAbi,
       client: walletClient,
     });
 

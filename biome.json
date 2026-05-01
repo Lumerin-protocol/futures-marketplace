@@ -3,19 +3,20 @@
   "overrides": [
     {
       "includes": [
-        "./indexer/src/**"
+        "./indexer/**"
       ],
       "linter": {
         "enabled": true,
         "rules": {
-          "complexity": {
-            "noForEach": "off"
-          },
           "style": {
             "useImportType": "off"
           },
+          "complexity": {
+            "noForEach": "off"
+          },
           "suspicious": {
-            "noShadowRestrictedNames": "off"
+            "noShadowRestrictedNames": "off",
+            "noDoubleEquals": "off"
           }
         }
       }

@@ -1,18 +1,24 @@
 import fs from "node:fs";
-import { requireEnvsSet } from "../lib/env";
-import { viem } from "hardhat";
 import { encodeFunctionData } from "viem";
-import { writeAndWait } from "../lib/writeContract";
-import { verifyContract } from "../lib/verify";
+import hre from "hardhat";
+import { readOptionalAddress, requireAddress, requireEnvsSet } from "../lib/env.ts";
+import { writeAndWait } from "../lib/writeContract.ts";
+import { verifyContract } from "../lib/verify.ts";
+import { addrUrl, txUrl } from "../lib/explorer.ts";
+import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts";
 
 async function main() {
-  console.log("Futures deployment script");
-  console.log();
+  logTitle("Futures Deployment");
+
+  const { viem } = await hre.network.getOrCreate();
+
+  const usdcAddress = requireAddress("USDC_TOKEN_ADDRESS");
+  const collateralVaultAddress = requireAddress("COLLATERAL_VAULT_ADDRESS");
+  const hashrateOracleAddress = requireAddress("HASHRATE_ORACLE_ADDRESS");
+  const validatorAddress = requireAddress("VALIDATOR_ADDRESS");
+  const SAFE_OWNER_ADDRESS = readOptionalAddress("SAFE_OWNER_ADDRESS");
 
   const env = requireEnvsSet(
-    "USDC_TOKEN_ADDRESS",
-    "HASHRATE_ORACLE_ADDRESS",
-    "VALIDATOR_ADDRESS",
     "LIQUIDATION_MARGIN_PERCENT",
     "SPEED_HPS",
     "MINIMUM_PRICE_INCREMENT",
@@ -21,98 +27,115 @@ async function main() {
     "FUTURE_DELIVERY_DATES_COUNT",
     "VALIDATOR_URL",
   );
-  const SAFE_OWNER_ADDRESS = process.env.SAFE_OWNER_ADDRESS as `0x${string}` | undefined;
 
   const [deployer] = await viem.getWalletClients();
-  console.log("Deployer:", deployer.account.address);
+  const pc = await viem.getPublicClient();
+  logInfo("deployer", { Address: addrUrl(pc, deployer.account.address) });
 
-  // Verify token contracts
+  // ── Verify token contracts ──────────────────────────────────────────────
   const paymentToken = await viem.getContractAt(
     "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol:IERC20Metadata",
-    env.USDC_TOKEN_ADDRESS as `0x${string}`,
+    usdcAddress,
   );
-  console.log("Payment token:", paymentToken.address);
-  console.log("Name:", await paymentToken.read.name());
-  console.log("Symbol:", await paymentToken.read.symbol());
-  console.log("Decimals:", await paymentToken.read.decimals());
+  logInfo("payment token", {
+    Address: paymentToken.address,
+    Name: await paymentToken.read.name(),
+    Symbol: await paymentToken.read.symbol(),
+    Decimals: await paymentToken.read.decimals(),
+  });
 
-  console.log();
+  const hashrateOracle = await viem.getContractAt("HashrateOracle", hashrateOracleAddress);
+  logInfo("hashrate oracle", {
+    Address: addrUrl(pc, hashrateOracle.address),
+    HashesForBTC: await hashrateOracle.read.getHashesForBTC(),
+  });
 
-  console.log();
+  if (SAFE_OWNER_ADDRESS) {
+    logInfo("ownership", { willTransferTo: SAFE_OWNER_ADDRESS });
+  }
 
-  const hashrateOracle = await viem.getContractAt(
-    "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol:AggregatorV3Interface",
-    env.HASHRATE_ORACLE_ADDRESS as `0x${string}`,
-  );
-  console.log("Hashprice oracle:", hashrateOracle.address);
-  console.log("Hashprice oracle decimals:", await hashrateOracle.read.decimals());
-  const [, hashpriceAnswer] = await hashrateOracle.read.latestRoundData();
-  console.log("Hashprice oracle latest answer:", hashpriceAnswer);
+  await logPrompt("Review the configuration above. Proceed with deployment?");
 
-  console.log();
+  // ── 1. Deploy implementation ────────────────────────────────────────────
+  logInfo("Deploy Futures implementation", {
+    contract: "Futures",
+    collateralVault: collateralVaultAddress,
+  });
+  await logPrompt("Proceed?");
+  const futuresImpl = await viem.deployContract("Futures", [collateralVaultAddress], {
+    confirmations: 5,
+  });
+  logStep("Deployed", addrUrl(pc, futuresImpl.address));
+  await verifyContract(futuresImpl.address, [collateralVaultAddress]);
+  logStep("Verified", addrUrl(pc, futuresImpl.address));
 
-  // Deploy Futures implementation
-  console.log("Deploying Futures implementation...");
-  const futuresImpl = await viem.deployContract("contracts/Futures.sol:Futures", []);
-  console.log("Deployed at:", futuresImpl.address);
-  await verifyContract(futuresImpl.address, []);
-
-  console.log();
-
+  // ── 2. Deploy proxy ─────────────────────────────────────────────────────
   const nearestMonday = new Date();
   nearestMonday.setUTCDate(nearestMonday.getUTCDate() + 8 - nearestMonday.getUTCDay());
   nearestMonday.setUTCHours(12, 0, 0, 0);
+  const firstFutureDeliveryDate = BigInt(Math.floor(nearestMonday.getTime() / 1000));
 
-  // Deploy Futures proxy
-  console.log("Deploying Futures proxy...");
-  const encodedInitFn = encodeFunctionData({
+  const initData = encodeFunctionData({
     abi: futuresImpl.abi,
     functionName: "initialize",
     args: [
-      env.USDC_TOKEN_ADDRESS as `0x${string}`, // payment token
-      env.HASHRATE_ORACLE_ADDRESS as `0x${string}`, // hashprice oracle (AggregatorV3Interface)
-      env.VALIDATOR_ADDRESS as `0x${string}`, // validator address
-      Number(env.LIQUIDATION_MARGIN_PERCENT), // seller liquidation margin percent
-      BigInt(env.SPEED_HPS), // speed HPS
-      BigInt(env.MINIMUM_PRICE_INCREMENT), // minimum price increment
-      Number(env.DELIVERY_DURATION_DAYS), // delivery duration days
-      Number(env.DELIVERY_INTERVAL_DAYS), // delivery interval days
-      Number(env.FUTURE_DELIVERY_DATES_COUNT), // future delivery dates count
-      BigInt(BigInt(nearestMonday.getTime() / 1000)), // first future delivery date
+      usdcAddress,
+      hashrateOracleAddress,
+      validatorAddress,
+      Number(env.LIQUIDATION_MARGIN_PERCENT),
+      BigInt(env.SPEED_HPS),
+      BigInt(env.MINIMUM_PRICE_INCREMENT),
+      Number(env.DELIVERY_DURATION_DAYS),
+      Number(env.DELIVERY_INTERVAL_DAYS),
+      Number(env.FUTURE_DELIVERY_DATES_COUNT),
+      firstFutureDeliveryDate,
     ],
   });
 
-  const futuresProxy = await viem.deployContract(
-    "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy",
-    [futuresImpl.address, encodedInitFn],
-  );
-  console.log("Deployed at:", futuresProxy.address);
-  await verifyContract(futuresProxy.address, [futuresImpl.address, encodedInitFn]);
+  logInfo("Deploy Futures proxy", {
+    implementation: futuresImpl.address,
+    firstDeliveryDate: nearestMonday.toISOString(),
+  });
+  await logPrompt("Proceed?");
+  const futuresProxy = await viem.deployContract("ERC1967Proxy", [futuresImpl.address, initData], {
+    confirmations: 5,
+  });
+  logStep("Deployed", addrUrl(pc, futuresProxy.address));
+  await verifyContract(futuresProxy.address, [futuresImpl.address, initData]);
+  logStep("Verified", addrUrl(pc, futuresProxy.address));
 
   const futures = await viem.getContractAt("Futures", futuresProxy.address);
 
-  console.log();
-  await futures.write.setValidatorURL([env.VALIDATOR_URL]);
-  console.log("Validator URL set:", await futures.read.validatorURL());
-
-  if (SAFE_OWNER_ADDRESS) {
-    console.log("Transferring ownership of Futures to owner:", SAFE_OWNER_ADDRESS);
-
-    const res = await futures.simulate.transferOwnership([SAFE_OWNER_ADDRESS]);
-    const receipt = await writeAndWait(deployer, res);
-    console.log("Txhash:", receipt.transactionHash);
+  // ── 3. Set validator URL ────────────────────────────────────────────────
+  logInfo("Futures.setValidatorURL", { url: env.VALIDATOR_URL });
+  await logPrompt("Proceed?");
+  {
+    const sim = await futures.simulate.setValidatorURL([env.VALIDATOR_URL]);
+    const receipt = await writeAndWait(deployer, sim);
+    logStep("Done", txUrl(pc, receipt.transactionHash));
   }
 
-  console.log("---");
-  console.log("SUCCESS");
+  // ── 4. Transfer ownership (optional) ────────────────────────────────────
+  if (SAFE_OWNER_ADDRESS) {
+    logInfo("Transfer Futures ownership", { owner: SAFE_OWNER_ADDRESS });
+    await logPrompt("Proceed?");
+    const sim = await futures.simulate.transferOwnership([SAFE_OWNER_ADDRESS]);
+    const receipt = await writeAndWait(deployer, sim);
+    logStep("Futures ownership", txUrl(pc, receipt.transactionHash));
+  }
 
-  console.log("FUTURES address:", futuresProxy.address);
-  fs.writeFileSync("futures-addr.tmp", futuresProxy.address);
+  // ── Summary ─────────────────────────────────────────────────────────────
+  logInfo("addresses", {
+    Futures: futures.address,
+    "  futures impl": futuresImpl.address,
+  });
+
+  logSuccess(`Futures ${futures.address}`);
+
+  fs.writeFileSync("futures-addr.tmp", futures.address);
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

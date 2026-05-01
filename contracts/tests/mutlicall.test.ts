@@ -1,18 +1,19 @@
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { deployFuturesFixture } from "./fixtures";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { network } from "hardhat";
 import { encodeFunctionData, getAddress, parseEventLogs } from "viem";
-import { expect } from "chai";
+import { deployFuturesFixture } from "./fixtures.ts";
 
-describe("Futures - multicall write", function () {
-  it("should perform multicall write", async function () {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+const { networkHelpers } = await network.getOrCreate();
+
+describe("Futures - multicall write", () => {
+  it("should perform multicall write", async () => {
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures, collateralVault } = contracts;
     const { seller, pc } = accounts;
     const price = await futures.read.getMarketPrice();
     const deliveryDate = config.deliveryDates[0];
-    await futures.write.addMargin([price * 10n], {
-      account: seller.account,
-    });
+    await collateralVault.write.deposit([price * 10n], { account: seller.account });
 
     const calldata = [
       encodeFunctionData({
@@ -27,9 +28,7 @@ describe("Futures - multicall write", function () {
       }),
     ];
 
-    const tx = await futures.write.multicall([calldata], {
-      account: seller.account,
-    });
+    const tx = await futures.write.multicall([calldata], { account: seller.account });
     const receipt = await pc.waitForTransactionReceipt({ hash: tx });
 
     const events = parseEventLogs({
@@ -37,12 +36,11 @@ describe("Futures - multicall write", function () {
       abi: futures.abi,
       eventName: "OrderCreated",
     });
-    expect(events.length).to.equal(2);
+    assert.equal(events.length, 2);
     for (const event of events) {
-      expect(event.args.participant).to.equal(getAddress(seller.account.address));
+      assert.equal(event.args.participant, getAddress(seller.account.address));
     }
 
-    // now close the orders
     const closeCalldata = [
       encodeFunctionData({
         abi: futures.abi,
@@ -56,9 +54,7 @@ describe("Futures - multicall write", function () {
       }),
     ];
 
-    const closeTx = await futures.write.multicall([closeCalldata], {
-      account: seller.account,
-    });
+    const closeTx = await futures.write.multicall([closeCalldata], { account: seller.account });
     const closeReceipt = await pc.waitForTransactionReceipt({ hash: closeTx });
 
     const closeEvents = parseEventLogs({
@@ -66,9 +62,9 @@ describe("Futures - multicall write", function () {
       abi: futures.abi,
       eventName: "OrderClosed",
     });
-    expect(closeEvents.length).to.equal(2);
+    assert.equal(closeEvents.length, 2);
     for (const event of closeEvents) {
-      expect(event.args.participant).to.equal(getAddress(seller.account.address));
+      assert.equal(event.args.participant, getAddress(seller.account.address));
     }
   });
 });

@@ -1,5 +1,5 @@
 import { createPublicClient, createWalletClient, encodeFunctionData, http } from "viem";
-import { FuturesABI } from "./abi/Futures.ts";
+import { FuturesAbi } from "./abi/Futures.ts";
 import { privateKeyToAccount } from "viem/accounts";
 import { getChain } from "./chainId.ts";
 import { IERC20ABI } from "./abi/IERC20.ts";
@@ -23,7 +23,8 @@ export class FuturesContract {
   private address: `0x${string}`;
   private pc: ReturnType<typeof makeClient>;
   private wc: ReturnType<typeof makeWalletClient>;
-  private usdcAddress: `0x${string}`;
+  private usdcAddress?: `0x${string}`;
+  private vaultAddress?: `0x${string}`;
 
   constructor(address: `0x${string}`, url: string, privateKey: `0x${string}`, chainId: number) {
     this.address = address;
@@ -38,24 +39,44 @@ export class FuturesContract {
   async getBalance(): Promise<bigint> {
     return this.pc.readContract({
       address: this.address as `0x${string}`,
-      abi: FuturesABI,
+      abi: FuturesAbi,
       functionName: "balanceOf",
       args: [this.wc.account.address],
       authorizationList: undefined,
     });
   }
 
-  async getUSDCBalance(address: `0x${string}`): Promise<bigint> {
+  private async getTokenAddress(): Promise<`0x${string}`> {
     if (!this.usdcAddress) {
       this.usdcAddress = await this.pc.readContract({
         address: this.address as `0x${string}`,
-        abi: FuturesABI,
+        abi: FuturesAbi,
         functionName: "token",
         authorizationList: undefined,
       });
     }
+    return this.usdcAddress;
+  }
+
+  /// `addMargin` proxies to `collateralVault.depositFor`, which pulls the underlying token
+  /// from `msg.sender` into the vault. The ERC20 spender that needs allowance is therefore
+  /// the vault, not the Futures contract.
+  private async getVaultAddress(): Promise<`0x${string}`> {
+    if (!this.vaultAddress) {
+      this.vaultAddress = await this.pc.readContract({
+        address: this.address as `0x${string}`,
+        abi: FuturesAbi,
+        functionName: "collateralVault",
+        authorizationList: undefined,
+      });
+    }
+    return this.vaultAddress;
+  }
+
+  async getUSDCBalance(address: `0x${string}`): Promise<bigint> {
+    const tokenAddress = await this.getTokenAddress();
     return this.pc.readContract({
-      address: this.usdcAddress,
+      address: tokenAddress,
       abi: IERC20ABI,
       functionName: "balanceOf",
       args: [address],
@@ -68,18 +89,16 @@ export class FuturesContract {
   }
 
   async approve(amount: bigint): Promise<TxResult> {
-    const tokenAddress = await this.pc.readContract({
-      address: this.address as `0x${string}`,
-      abi: FuturesABI,
-      functionName: "token",
-      authorizationList: undefined,
-    });
+    const [tokenAddress, vaultAddress] = await Promise.all([
+      this.getTokenAddress(),
+      this.getVaultAddress(),
+    ]);
 
     const tx = await this.pc.simulateContract({
       address: tokenAddress,
-      abi: FuturesABI,
+      abi: IERC20ABI,
       functionName: "approve",
-      args: [this.address, amount],
+      args: [vaultAddress, amount],
       account: this.wc.account,
       chain: this.wc.chain,
     });
@@ -90,7 +109,7 @@ export class FuturesContract {
   async deposit(amount: bigint): Promise<TxResult> {
     const tx = await this.pc.simulateContract({
       address: this.address as `0x${string}`,
-      abi: FuturesABI,
+      abi: FuturesAbi,
       functionName: "addMargin",
       args: [amount],
       account: this.wc.account,
@@ -105,14 +124,14 @@ export class FuturesContract {
   ): Promise<TxResult> {
     const callsDatas = orders.map((order) =>
       encodeFunctionData({
-        abi: FuturesABI,
+        abi: FuturesAbi,
         functionName: "createOrder",
         args: [order.price, order.deliveryDate, "", Number(order.qty)],
       })
     );
     const tx = await this.pc.simulateContract({
       address: this.address as `0x${string}`,
-      abi: FuturesABI,
+      abi: FuturesAbi,
       functionName: "multicall",
       args: [callsDatas],
       account: this.wc.account,
@@ -123,7 +142,7 @@ export class FuturesContract {
 
   //TODO: rewrite for continuous monitoring
   async waitForPositionCreated(address: `0x${string}`, blockNumber: number): Promise<void> {
-    const positionCreatedAbi = FuturesABI.find(
+    const positionCreatedAbi = FuturesAbi.find(
       (event) => event.type === "event" && event.name === "PositionCreated"
     )!;
 
@@ -148,7 +167,7 @@ export class FuturesContract {
   async getCurrentDeliveryDate(): Promise<number> {
     const deliveryDates = await this.pc.readContract({
       address: this.address as `0x${string}`,
-      abi: FuturesABI,
+      abi: FuturesAbi,
       functionName: "getDeliveryDates",
       authorizationList: undefined,
     });
@@ -159,7 +178,7 @@ export class FuturesContract {
   async getIndexPrice(): Promise<bigint> {
     return this.pc.readContract({
       address: this.address as `0x${string}`,
-      abi: FuturesABI,
+      abi: FuturesAbi,
       functionName: "getMarketPrice",
       authorizationList: undefined,
     });
@@ -168,7 +187,7 @@ export class FuturesContract {
   async getContractMultiplier(): Promise<number> {
     return this.pc.readContract({
       address: this.address as `0x${string}`,
-      abi: FuturesABI,
+      abi: FuturesAbi,
       functionName: "deliveryDurationDays",
       authorizationList: undefined,
     });
@@ -177,7 +196,7 @@ export class FuturesContract {
   async getTickSize(): Promise<bigint> {
     return this.pc.readContract({
       address: this.address as `0x${string}`,
-      abi: FuturesABI,
+      abi: FuturesAbi,
       functionName: "minimumPriceIncrement",
       authorizationList: undefined,
     });

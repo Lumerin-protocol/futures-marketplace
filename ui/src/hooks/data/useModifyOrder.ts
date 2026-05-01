@@ -1,6 +1,6 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { encodeFunctionData, getContract } from "viem";
-import { FuturesABI } from "../../abi/Futures";
+import { FuturesAbi } from "../../abi/Futures";
 
 interface ModifyOrderProps {
   oldPrice: bigint;
@@ -21,7 +21,7 @@ export function useModifyOrder() {
 
     const futuresContract = getContract({
       address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`,
-      abi: FuturesABI,
+      abi: FuturesAbi,
       client: publicClient,
     });
 
@@ -35,12 +35,12 @@ export function useModifyOrder() {
     // Encode the two createOrder calls
     const calldata = [
       encodeFunctionData({
-        abi: FuturesABI,
+        abi: FuturesAbi,
         functionName: "createOrder",
         args: [props.oldPrice, props.deliveryDate, props.destUrl, oppositeOldQuantity],
       }),
       encodeFunctionData({
-        abi: FuturesABI,
+        abi: FuturesAbi,
         functionName: "createOrder",
         args: [props.newPrice, props.deliveryDate, props.destUrl, clampNewQuantity],
       }),

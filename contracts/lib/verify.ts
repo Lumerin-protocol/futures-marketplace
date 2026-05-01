@@ -1,38 +1,39 @@
-import { run } from "hardhat";
+import {
+  verifyContract as hreVerify,
+  type VerifyContractArgs,
+} from "@nomicfoundation/hardhat-verify/verify";
+import hre from "hardhat";
 
-const VERIFY_MAX_ATTEMPTS = 5;
-const VERIFY_RETRY_DELAY_MS = 10_000;
+/// Providers we attempt by default. Independent indexers — verifying on more
+/// than one is fine, and a failure on one (e.g. Etherscan being picky about
+/// constructor encoding for proxies) shouldn't mask a success on another.
+const DEFAULT_PROVIDERS = ["etherscan", "blockscout", "sourcify"] as const;
+type Provider = NonNullable<VerifyContractArgs["provider"]>;
 
-export async function verifyContract(address: string, constructorArgs?: any[]) {
-  for (let attempt = 1; attempt <= VERIFY_MAX_ATTEMPTS; attempt++) {
+/// Verify on each provider in turn. Never throws — failures are logged so the
+/// deploy script can keep going.
+export async function verifyContract(
+  address: string,
+  constructorArgs?: readonly unknown[],
+  providers: readonly Provider[] = DEFAULT_PROVIDERS,
+) {
+  const args: Omit<VerifyContractArgs, "provider"> = {
+    address,
+    constructorArgs: (constructorArgs ?? []) as unknown[],
+  };
+
+  for (const provider of providers) {
+    console.log(`\nVerifying ${address} on ${provider}...`);
     try {
-      await run("verify:verify", {
-        address,
-        constructorArguments: constructorArgs,
-      });
-      return;
+      await hreVerify({ ...args, provider }, hre);
+      console.log(`  ${provider}: verified.`);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-
-      // If already verified, treat as success.
-      if (/already verified/i.test(message)) {
-        console.log(`Contract ${address} is already verified.`);
-        return;
+      const msg = (err as Error).message ?? String(err);
+      if (msg.includes("Already Verified") || msg.includes("already been verified")) {
+        console.log(`  ${provider}: already verified.`);
+      } else {
+        console.warn(`  ${provider}: verification failed — ${msg}`);
       }
-
-      if (attempt < VERIFY_MAX_ATTEMPTS) {
-        console.warn(
-          `Verification attempt ${attempt}/${VERIFY_MAX_ATTEMPTS} failed for ${address}: ${message}`
-        );
-        console.warn(`Retrying in ${VERIFY_RETRY_DELAY_MS / 1000}s...`);
-        await new Promise((resolve) => setTimeout(resolve, VERIFY_RETRY_DELAY_MS));
-        continue;
-      }
-
-      console.error(
-        `Verification failed for ${address} after ${VERIFY_MAX_ATTEMPTS} attempts. Continuing script.`
-      );
-      console.error(err);
     }
   }
 }

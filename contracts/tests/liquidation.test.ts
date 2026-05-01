@@ -1,27 +1,27 @@
-import { expect } from "chai";
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { parseEventLogs, parseUnits, getAddress, Account } from "viem";
-import { deployFuturesFixture } from "./fixtures";
-import { catchError } from "../lib/lib";
-import { viem } from "hardhat";
-import { scaleHashprice } from "./utils";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { network } from "hardhat";
+import { type Account, getAddress, parseEventLogs, parseUnits } from "viem";
+import { deployFuturesFixture } from "./fixtures.ts";
+import { scaleHashprice } from "./utils.ts";
+import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
+
+const { viem, networkHelpers } = await network.getOrCreate();
 
 async function positionWithMarginFixture() {
-  const data = await loadFixture(deployFuturesFixture);
+  const data = await networkHelpers.loadFixture(deployFuturesFixture);
   const { contracts, accounts, config } = data;
-  const { futures } = contracts;
+  const { futures, collateralVault } = contracts;
   const { seller, buyer, pc } = accounts;
 
   const entryPricePerDay = await futures.read.getMarketPrice();
-  // Use smaller margin to ensure liquidation can be triggered
-  const margin = entryPricePerDay * 3n; // Enough margin initially but can become insufficient
+  // Smaller margin so liquidation can be triggered.
+  const margin = entryPricePerDay * 3n;
   const deliveryDate = config.deliveryDates[0];
 
-  // Add margin for both participants
-  await futures.write.addMargin([margin], { account: seller.account });
-  await futures.write.addMargin([margin], { account: buyer.account });
+  await collateralVault.write.deposit([margin], { account: seller.account });
+  await collateralVault.write.deposit([margin], { account: buyer.account });
 
-  // Create a position by matching orders - store the tx hash to get position ID
   await futures.write.createOrder([entryPricePerDay, deliveryDate, "", -1], {
     account: seller.account,
   });
@@ -29,7 +29,6 @@ async function positionWithMarginFixture() {
     account: buyer.account,
   });
 
-  // Get position ID from the transaction
   const receipt = await pc.waitForTransactionReceipt({ hash: matchTxHash });
   const positionCreatedEvents = parseEventLogs({
     logs: receipt.logs,
@@ -48,78 +47,61 @@ async function positionWithMarginFixture() {
   };
 }
 
-function getFuturesContract(address: `0x${string}`) {
-  return viem.getContractAt("Futures", address);
-}
+type FuturesContract = ContractReturnType<"Futures">;
+type CollateralVaultContract = ContractReturnType<"CollateralVault">;
 
 async function getMarginDeficit(
-  futures: Awaited<ReturnType<typeof getFuturesContract>>,
+  futures: FuturesContract,
+  collateralVault: CollateralVaultContract,
   party: Account,
 ) {
-  const partyCollateral = await futures.read.balanceOf([party.address]);
+  const partyCollateral = await collateralVault.read.balanceOf([party.address]);
   const partyMinMargin = await futures.read.getMinMargin([party.address]);
-  const marginDeficit = partyMinMargin - partyCollateral;
-  return marginDeficit;
+  return partyMinMargin - partyCollateral;
 }
 
 describe("Futures - Liquidation", function () {
   describe("Margin Call - Position Liquidation", function () {
     it("should liquidate buyer position when buyer is at loss and margin insufficient", async function () {
-      const { contracts, accounts, entryPricePerDay, deliveryDate, positionId } = await loadFixture(
-        positionWithMarginFixture,
-      );
-      const { futures, hashrateOracle } = contracts;
+      const { contracts, accounts, entryPricePerDay, deliveryDate, positionId } =
+        await networkHelpers.loadFixture(positionWithMarginFixture);
+      const { futures, hashrateOracle, collateralVault } = contracts;
       const { seller, buyer, validator, pc } = accounts;
 
-      // Get initial balances
-      const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
-      const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
+      const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
+      const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
 
-      // Position ID is already in the fixture
-      expect(positionId).to.not.be.null;
+      assert.notEqual(positionId, null);
 
       // Drop hashprice ~33% so margin becomes insufficient and buyer is at loss.
       await scaleHashprice(hashrateOracle, 100n, 150n);
       const newMarketPrice = await futures.read.getMarketPrice();
-      expect(newMarketPrice < entryPricePerDay).to.be.true;
+      assert.ok(newMarketPrice < entryPricePerDay);
 
-      // Check that buyer now has insufficient margin
-      const buyerMinMargin = await futures.read.getMinMargin([buyer.account.address]);
-      const buyerCollateral = await futures.read.balanceOf([buyer.account.address]);
-
-      // Verify margin is now insufficient
       const buyerMinMarginAfter = await futures.read.getMinMargin([buyer.account.address]);
-      const buyerCollateralAfter = await futures.read.balanceOf([buyer.account.address]);
-      expect(buyerCollateralAfter < buyerMinMarginAfter).to.be.true;
+      const buyerCollateralAfter = await collateralVault.read.balanceOf([buyer.account.address]);
+      assert.ok(buyerCollateralAfter < buyerMinMarginAfter);
 
-      // Execute margin call
       const txHash = await futures.write.marginCall([buyer.account.address], {
         account: validator.account,
       });
 
-      // Check PositionClosed event
       const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
       const positionClosedEvents = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
         eventName: "PositionClosed",
       });
-      expect(positionClosedEvents.length).to.equal(1);
-      expect(positionClosedEvents[0].args.positionId).to.equal(positionId);
+      assert.equal(positionClosedEvents.length, 1);
+      assert.equal(positionClosedEvents[0].args.positionId, positionId);
 
-      // Verify position is closed (PositionClosed event confirms it)
+      const buyerPnL = (BigInt(newMarketPrice) - BigInt(entryPricePerDay)) * 7n;
 
-      // Calculate expected PnL
-      const buyerPnL = (BigInt(newMarketPrice) - BigInt(entryPricePerDay)) * 7n; // deliveryDurationDays = 7
-      const deliveryDurationDays = 7n;
+      const buyerBalanceAfter = await collateralVault.read.balanceOf([buyer.account.address]);
+      const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
 
-      // Verify PnL was transferred (buyer loses, so buyer pays seller)
-      const buyerBalanceAfter = await futures.read.balanceOf([buyer.account.address]);
-      const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
-
-      // Buyer should have paid the loss
       if (buyerPnL < 0n) {
-        const expectedBuyerBalance = buyerBalanceBefore + buyerPnL; // buyerPnL is negative
+        const expectedBuyerBalance = buyerBalanceBefore + buyerPnL;
         const tolerance = parseUnits("1", 6);
         const buyerDiff =
           buyerBalanceAfter > expectedBuyerBalance
@@ -129,62 +111,50 @@ describe("Futures - Liquidation", function () {
           sellerBalanceAfter > sellerBalanceBefore - buyerPnL
             ? sellerBalanceAfter - (sellerBalanceBefore - buyerPnL)
             : sellerBalanceBefore - buyerPnL - sellerBalanceAfter;
-        expect(buyerDiff <= tolerance).to.be.true;
-        expect(sellerDiff <= tolerance).to.be.true;
+        assert.ok(buyerDiff <= tolerance);
+        assert.ok(sellerDiff <= tolerance);
       }
     });
 
     it("should liquidate seller position when seller is at loss and margin insufficient", async function () {
-      const { contracts, accounts, entryPricePerDay, deliveryDate, positionId } = await loadFixture(
-        positionWithMarginFixture,
-      );
-      const { futures, hashrateOracle } = contracts;
+      const { contracts, accounts, entryPricePerDay, deliveryDate, positionId } =
+        await networkHelpers.loadFixture(positionWithMarginFixture);
+      const { futures, hashrateOracle, collateralVault } = contracts;
       const { seller, buyer, validator, pc } = accounts;
 
-      // Get initial balances
-      const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
-      const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
+      const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
+      const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
 
-      // Position ID is already in the fixture
-      expect(positionId).to.not.be.null;
+      assert.notEqual(positionId, null);
 
       // Raise hashprice ~25% so seller is at loss.
       await scaleHashprice(hashrateOracle, 100n, 80n);
       const newMarketPrice = await futures.read.getMarketPrice();
-      expect(newMarketPrice > entryPricePerDay).to.be.true;
+      assert.ok(newMarketPrice > entryPricePerDay);
 
-      // Check that seller now has insufficient margin
       const sellerMinMargin = await futures.read.getMinMargin([seller.account.address]);
-      const sellerCollateral = await futures.read.balanceOf([seller.account.address]);
-      expect(sellerCollateral < sellerMinMargin).to.be.true;
+      const sellerCollateral = await collateralVault.read.balanceOf([seller.account.address]);
+      assert.ok(sellerCollateral < sellerMinMargin);
 
-      // Execute margin call
       const txHash = await futures.write.marginCall([seller.account.address], {
         account: validator.account,
       });
 
-      // Check PositionClosed event
       const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
       const positionClosedEvents = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
         eventName: "PositionClosed",
       });
-      expect(positionClosedEvents.length).to.equal(1);
-      expect(positionClosedEvents[0].args.positionId).to.equal(positionId);
+      assert.equal(positionClosedEvents.length, 1);
+      assert.equal(positionClosedEvents[0].args.positionId, positionId);
 
-      // Verify position is closed (PositionClosed event confirms it)
+      const buyerPnL = (BigInt(newMarketPrice) - BigInt(entryPricePerDay)) * 7n;
 
-      // Calculate expected PnL (buyer perspective)
-      const buyerPnL = (BigInt(newMarketPrice) - BigInt(entryPricePerDay)) * 7n; // deliveryDurationDays = 7
+      const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
+      const buyerBalanceAfter = await collateralVault.read.balanceOf([buyer.account.address]);
 
-      // Verify PnL was transferred (seller loses, so seller pays buyer)
-      const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
-      const buyerBalanceAfter = await futures.read.balanceOf([buyer.account.address]);
-
-      // Seller should have paid the loss
       if (buyerPnL > 0n) {
-        // Buyer profits, seller pays
         const tolerance = parseUnits("1", 6);
         const sellerDiff =
           sellerBalanceAfter > sellerBalanceBefore - buyerPnL
@@ -194,30 +164,26 @@ describe("Futures - Liquidation", function () {
           buyerBalanceAfter > buyerBalanceBefore + buyerPnL
             ? buyerBalanceAfter - (buyerBalanceBefore + buyerPnL)
             : buyerBalanceBefore + buyerPnL - buyerBalanceAfter;
-        expect(sellerDiff <= tolerance).to.be.true;
-        expect(buyerDiff <= tolerance).to.be.true;
+        assert.ok(sellerDiff <= tolerance);
+        assert.ok(buyerDiff <= tolerance);
       }
     });
 
     it("should close orders first, then positions during margin call", async function () {
-      const { contracts, accounts, entryPricePerDay, deliveryDate, config } = await loadFixture(
-        positionWithMarginFixture,
-      );
-      const { futures, hashrateOracle } = contracts;
-      const { seller, buyer, validator, pc } = accounts;
+      const { contracts, accounts, entryPricePerDay, deliveryDate, config } =
+        await networkHelpers.loadFixture(positionWithMarginFixture);
+      const { futures, hashrateOracle, collateralVault } = contracts;
+      const { buyer, validator, pc } = accounts;
 
-      // Create additional orders for the buyer
       const marketPrice = await futures.read.getMarketPrice();
-      const addMargin =
+      const amount =
         ((marketPrice *
           BigInt(config.deliveryDurationDays) *
           BigInt(config.liquidationMarginPercent)) /
           100n) *
         2n;
-      await futures.write.addMargin([addMargin], { account: buyer.account });
+      await collateralVault.write.deposit([amount], { account: buyer.account });
 
-      // Verify buyer has orders by checking OrderCreated events from the transactions
-      // We created 2 additional orders, so we expect at least 2 OrderCreated events
       const orderTx1 = await futures.write.createOrder([marketPrice, deliveryDate, "", 1], {
         account: buyer.account,
       });
@@ -236,23 +202,18 @@ describe("Futures - Liquidation", function () {
         abi: futures.abi,
         eventName: "OrderCreated",
       });
-      expect(orders1.length + orders2.length).to.be.greaterThanOrEqual(2);
+      assert.ok(orders1.length + orders2.length >= 2);
 
       // Move market price down to trigger margin call
       await scaleHashprice(hashrateOracle, 100n, 150n);
 
-      const marginDeficit = await getMarginDeficit(futures, buyer.account);
+      const marginDeficit = await getMarginDeficit(futures, collateralVault, buyer.account);
+      assert.ok(marginDeficit > 0n);
 
-      expect(marginDeficit > 0n).to.be.true;
-
-      // Execute margin call
       const txHash = await futures.write.marginCall([buyer.account.address], {
         account: validator.account,
       });
 
-      const marginDeficit2 = await getMarginDeficit(futures, buyer.account);
-
-      // Check events
       const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
       const orderClosedEvents = parseEventLogs({
         logs: receipt.logs,
@@ -265,29 +226,24 @@ describe("Futures - Liquidation", function () {
         eventName: "PositionClosed",
       });
 
-      // Orders should be closed first
-      expect(orderClosedEvents.length === 2).to.be.true;
-      // Position should be closed after orders
-      expect(positionClosedEvents.length === 0).to.be.true;
-
-      // Verify orders and position are closed (events confirm this)
+      assert.equal(orderClosedEvents.length, 2);
+      assert.equal(positionClosedEvents.length, 0);
     });
 
-    it("should liquidate multiple positions if needed", async function () {
-      const data = await loadFixture(deployFuturesFixture);
+    it("should liquidate multiple positions if needed", async () => {
+      const data = await networkHelpers.loadFixture(deployFuturesFixture);
       const { contracts, accounts, config } = data;
 
       const entryPricePerDay = await contracts.futures.read.getMarketPrice();
       const deliveryDate = config.deliveryDates[0];
-      const { futures, hashrateOracle } = contracts;
-      const { seller, buyer, buyer2, validator, pc } = accounts;
+      const { futures, hashrateOracle, collateralVault } = contracts;
+      const { seller, buyer, validator, pc } = accounts;
 
       const margin = await futures.read.getMinMarginForPosition([entryPricePerDay, -2n]);
       const orderFee = await futures.read.orderFee();
-      await futures.write.addMargin([margin + orderFee], { account: seller.account });
-      await futures.write.addMargin([margin + orderFee], { account: buyer.account });
+      await collateralVault.write.deposit([margin + orderFee], { account: seller.account });
+      await collateralVault.write.deposit([margin + orderFee], { account: buyer.account });
 
-      // Create multiple positions for seller
       await futures.write.createOrder([entryPricePerDay, deliveryDate, "", -2], {
         account: seller.account,
       });
@@ -301,117 +257,97 @@ describe("Futures - Liquidation", function () {
         abi: futures.abi,
         eventName: "PositionCreated",
       });
-      expect(positionCreatedEvents.length).to.equal(2);
+      assert.equal(positionCreatedEvents.length, 2);
 
       // Move market price up (seller loses on both positions)
       await scaleHashprice(hashrateOracle, 100n, 90n);
 
-      // Check margin is insufficient
-      const sellerMarginDeficit = await getMarginDeficit(futures, seller.account);
-      expect(sellerMarginDeficit > 0n).to.be.true;
+      const sellerMarginDeficit = await getMarginDeficit(futures, collateralVault, seller.account);
+      assert.ok(sellerMarginDeficit > 0n);
 
-      // Execute margin call
       const txHash = await futures.write.marginCall([seller.account.address], {
         account: validator.account,
       });
 
-      // Check events - one position should be closed
       const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
       const positionClosedEvents = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
         eventName: "PositionClosed",
       });
-      expect(positionClosedEvents.length).to.equal(2);
+      assert.equal(positionClosedEvents.length, 2);
 
-      // Check margin is insufficient
-      const sellerMarginDeficit2 = await getMarginDeficit(futures, seller.account);
-      expect(sellerMarginDeficit2 <= 0n).to.be.true;
+      const sellerMarginDeficit2 = await getMarginDeficit(futures, collateralVault, seller.account);
+      assert.ok(sellerMarginDeficit2 <= 0n);
     });
 
     it("should not liquidate if margin is sufficient", async function () {
-      const { contracts, accounts, entryPricePerDay } = await loadFixture(
-        positionWithMarginFixture,
-      );
-      const { futures, hashrateOracle } = contracts;
+      const { contracts, accounts, entryPricePerDay } =
+        await networkHelpers.loadFixture(positionWithMarginFixture);
+      const { futures, hashrateOracle, collateralVault } = contracts;
       const { buyer, validator, pc } = accounts;
 
       // Move market price slightly (small loss)
       await scaleHashprice(hashrateOracle, 100n, 105n);
 
-      // Check margin is still sufficient
       const buyerMinMargin = await futures.read.getMinMargin([buyer.account.address]);
-      const buyerCollateral = await futures.read.balanceOf([buyer.account.address]);
-      expect(buyerCollateral >= buyerMinMargin).to.be.true;
+      const buyerCollateral = await collateralVault.read.balanceOf([buyer.account.address]);
+      assert.ok(buyerCollateral >= buyerMinMargin);
 
-      // Execute margin call (should do nothing)
       const txHash = await futures.write.marginCall([buyer.account.address], {
         account: validator.account,
       });
 
-      // Check no PositionClosed event
       const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
       const positionClosedEvents = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
         eventName: "PositionClosed",
       });
-      expect(positionClosedEvents.length).to.equal(0);
-
-      // Verify position still exists (no PositionClosed event was emitted)
+      assert.equal(positionClosedEvents.length, 0);
     });
 
-    it("should only allow validator to call marginCall", async function () {
-      const { contracts, accounts } = await loadFixture(positionWithMarginFixture);
-      const { futures } = contracts;
+    it("should only allow validator to call marginCall", async () => {
+      const { contracts, accounts } = await positionWithMarginFixture();
+      const { futures, collateralVault } = contracts;
       const { buyer, seller } = accounts;
 
-      await catchError(futures.abi, "OnlyValidator", async () => {
-        await futures.write.marginCall([buyer.account.address], {
-          account: seller.account,
-        });
-      });
+      await viem.assertions.revertWithCustomError(
+        futures.write.marginCall([buyer.account.address], { account: seller.account }),
+        futures,
+        "OnlyValidator",
+      );
     });
 
     it("should correctly calculate and transfer PnL when buyer profits", async function () {
-      const { contracts, accounts, entryPricePerDay } = await loadFixture(
-        positionWithMarginFixture,
-      );
-      const { futures, hashrateOracle } = contracts;
-      const { seller, buyer, validator, pc } = accounts;
+      const { contracts, accounts, entryPricePerDay } =
+        await networkHelpers.loadFixture(positionWithMarginFixture);
+      const { futures, hashrateOracle, collateralVault } = contracts;
+      const { seller, buyer, validator } = accounts;
 
-      const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
-      const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
+      const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
+      const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
 
       // Raise hashprice ~25% so buyer profits.
       await scaleHashprice(hashrateOracle, 100n, 80n);
       const newMarketPrice = await futures.read.getMarketPrice();
-      expect(newMarketPrice > entryPricePerDay).to.be.true;
+      assert.ok(newMarketPrice > entryPricePerDay);
 
-      // Make seller margin insufficient to trigger liquidation
-      // First, reduce seller's margin
-      const sellerBalance = await futures.read.balanceOf([seller.account.address]);
+      const sellerBalance = await collateralVault.read.balanceOf([seller.account.address]);
       const sellerMinMargin = await futures.read.getMinMargin([seller.account.address]);
       if (sellerBalance > sellerMinMargin) {
-        // Withdraw some margin to make it insufficient
         const withdrawAmount = sellerBalance - sellerMinMargin + parseUnits("1", 6);
-        await futures.write.removeMargin([withdrawAmount], { account: seller.account });
+        await collateralVault.write.withdraw([withdrawAmount], { account: seller.account });
       }
 
-      // Execute margin call on seller
-      const txHash = await futures.write.marginCall([seller.account.address], {
-        account: validator.account,
-      });
+      await futures.write.marginCall([seller.account.address], { account: validator.account });
 
-      // Calculate expected PnL
-      const buyerPnL = (BigInt(newMarketPrice) - BigInt(entryPricePerDay)) * 7n; // deliveryDurationDays = 7
+      const buyerPnL = (BigInt(newMarketPrice) - BigInt(entryPricePerDay)) * 7n;
 
-      // Verify PnL transfer (buyer profits, seller pays)
-      const buyerBalanceAfter = await futures.read.balanceOf([buyer.account.address]);
-      const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
+      const buyerBalanceAfter = await collateralVault.read.balanceOf([buyer.account.address]);
+      const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
 
       if (buyerPnL > 0n) {
-        // Buyer should receive profit
         const tolerance = parseUnits("1", 6);
         const buyerDiff =
           buyerBalanceAfter > buyerBalanceBefore + buyerPnL
@@ -421,20 +357,20 @@ describe("Futures - Liquidation", function () {
           sellerBalanceAfter > sellerBalanceBefore - buyerPnL
             ? sellerBalanceAfter - (sellerBalanceBefore - buyerPnL)
             : sellerBalanceBefore - buyerPnL - sellerBalanceAfter;
-        expect(buyerDiff <= tolerance).to.be.true;
-        expect(sellerDiff <= tolerance).to.be.true;
+        assert.ok(buyerDiff <= tolerance);
+        assert.ok(sellerDiff <= tolerance);
       }
     });
 
-    it("should create counterparty order when buyer is liquidated", async function () {
-      const { contracts, accounts, positionId } = await loadFixture(positionWithMarginFixture);
-      const { futures, hashrateOracle } = contracts;
+    it("should create counterparty order when buyer is liquidated", async () => {
+      const { contracts, accounts, positionId } = await positionWithMarginFixture();
+      const { futures, hashrateOracle, collateralVault } = contracts;
       const { seller, buyer, validator, pc } = accounts;
 
-      // Get position details before liquidation
-      const position = await futures.read.getPositionById([positionId!]);
-      expect(position.seller).to.equal(getAddress(seller.account.address));
-      expect(position.buyer).to.equal(getAddress(buyer.account.address));
+      assert.ok(positionId);
+      const position = await futures.read.getPositionById([positionId]);
+      assert.equal(position.seller, getAddress(seller.account.address));
+      assert.equal(position.buyer, getAddress(buyer.account.address));
       const positionPrice = position.sellPricePerDay;
       const positionDeliveryDate = position.deliveryAt;
       const positionDestURL = position.destURL;
@@ -442,59 +378,54 @@ describe("Futures - Liquidation", function () {
       // Drop hashprice ~33% so buyer is at loss.
       await scaleHashprice(hashrateOracle, 100n, 150n);
 
-      // Verify buyer has insufficient margin
       const buyerMinMargin = await futures.read.getMinMargin([buyer.account.address]);
-      const buyerCollateral = await futures.read.balanceOf([buyer.account.address]);
-      expect(buyerCollateral < buyerMinMargin).to.be.true;
+      const buyerCollateral = await collateralVault.read.balanceOf([buyer.account.address]);
+      assert.ok(buyerCollateral < buyerMinMargin);
 
-      // Execute margin call on buyer
       const txHash = await futures.write.marginCall([buyer.account.address], {
         account: validator.account,
       });
 
-      // Check events
       const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
       const positionClosedEvents = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
         eventName: "PositionClosed",
       });
-      expect(positionClosedEvents.length).to.equal(1);
-      expect(positionClosedEvents[0].args.positionId).to.equal(positionId);
+      assert.equal(positionClosedEvents.length, 1);
+      assert.equal(positionClosedEvents[0].args.positionId, positionId);
 
-      // Verify OrderCreated event for counterparty (seller)
       const orderCreatedEvents = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
         eventName: "OrderCreated",
       });
-      expect(orderCreatedEvents.length).to.equal(1);
+      assert.equal(orderCreatedEvents.length, 1);
 
       const counterpartyOrder = orderCreatedEvents[0].args;
-      expect(counterpartyOrder.participant).to.equal(getAddress(seller.account.address));
-      expect(counterpartyOrder.pricePerDay).to.equal(positionPrice);
-      expect(counterpartyOrder.deliveryAt).to.equal(positionDeliveryDate);
-      expect(counterpartyOrder.destURL).to.equal(positionDestURL);
-      // When buyer is liquidated, seller (counterparty) should get a sell order (isBuy = false)
-      expect(counterpartyOrder.isBuy).to.equal(false);
+      assert.equal(counterpartyOrder.participant, getAddress(seller.account.address));
+      assert.equal(counterpartyOrder.pricePerDay, positionPrice);
+      assert.equal(counterpartyOrder.deliveryAt, positionDeliveryDate);
+      assert.equal(counterpartyOrder.destURL, positionDestURL);
+      // Buyer liquidated → seller (counterparty) gets a sell order.
+      assert.equal(counterpartyOrder.isBuy, false);
 
-      // Verify the order exists in the contract
       const order = await futures.read.getOrderById([counterpartyOrder.orderId]);
-      expect(order.participant).to.equal(getAddress(seller.account.address));
-      expect(order.pricePerDay).to.equal(positionPrice);
-      expect(order.deliveryAt).to.equal(positionDeliveryDate);
-      expect(order.isBuy).to.equal(false);
+      assert.equal(order.participant, getAddress(seller.account.address));
+      assert.equal(order.pricePerDay, positionPrice);
+      assert.equal(order.deliveryAt, positionDeliveryDate);
+      assert.equal(order.isBuy, false);
     });
 
-    it("should create counterparty order when seller is liquidated", async function () {
-      const { contracts, accounts, positionId } = await loadFixture(positionWithMarginFixture);
-      const { futures, hashrateOracle } = contracts;
+    it("should create counterparty order when seller is liquidated", async () => {
+      const { contracts, accounts, positionId } = await positionWithMarginFixture();
+      const { futures, hashrateOracle, collateralVault } = contracts;
       const { seller, buyer, validator, pc } = accounts;
 
-      // Get position details before liquidation
-      const position = await futures.read.getPositionById([positionId!]);
-      expect(position.seller).to.equal(getAddress(seller.account.address));
-      expect(position.buyer).to.equal(getAddress(buyer.account.address));
+      assert.ok(positionId);
+      const position = await futures.read.getPositionById([positionId]);
+      assert.equal(position.seller, getAddress(seller.account.address));
+      assert.equal(position.buyer, getAddress(buyer.account.address));
       const positionPrice = position.sellPricePerDay;
       const positionDeliveryDate = position.deliveryAt;
       const positionDestURL = position.destURL;
@@ -502,48 +433,43 @@ describe("Futures - Liquidation", function () {
       // Raise hashprice ~25% so seller is at loss.
       await scaleHashprice(hashrateOracle, 100n, 80n);
 
-      // Verify seller has insufficient margin
       const sellerMinMargin = await futures.read.getMinMargin([seller.account.address]);
-      const sellerCollateral = await futures.read.balanceOf([seller.account.address]);
-      expect(sellerCollateral < sellerMinMargin).to.be.true;
+      const sellerCollateral = await collateralVault.read.balanceOf([seller.account.address]);
+      assert.ok(sellerCollateral < sellerMinMargin);
 
-      // Execute margin call on seller
       const txHash = await futures.write.marginCall([seller.account.address], {
         account: validator.account,
       });
 
-      // Check events
       const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
       const positionClosedEvents = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
         eventName: "PositionClosed",
       });
-      expect(positionClosedEvents.length).to.equal(1);
-      expect(positionClosedEvents[0].args.positionId).to.equal(positionId);
+      assert.equal(positionClosedEvents.length, 1);
+      assert.equal(positionClosedEvents[0].args.positionId, positionId);
 
-      // Verify OrderCreated event for counterparty (buyer)
       const orderCreatedEvents = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
         eventName: "OrderCreated",
       });
-      expect(orderCreatedEvents.length).to.equal(1);
+      assert.equal(orderCreatedEvents.length, 1);
 
       const counterpartyOrder = orderCreatedEvents[0].args;
-      expect(counterpartyOrder.participant).to.equal(getAddress(buyer.account.address));
-      expect(counterpartyOrder.pricePerDay).to.equal(positionPrice);
-      expect(counterpartyOrder.deliveryAt).to.equal(positionDeliveryDate);
-      expect(counterpartyOrder.destURL).to.equal(positionDestURL);
-      // When seller is liquidated, buyer (counterparty) should get a buy order (isBuy = true)
-      expect(counterpartyOrder.isBuy).to.equal(true);
+      assert.equal(counterpartyOrder.participant, getAddress(buyer.account.address));
+      assert.equal(counterpartyOrder.pricePerDay, positionPrice);
+      assert.equal(counterpartyOrder.deliveryAt, positionDeliveryDate);
+      assert.equal(counterpartyOrder.destURL, positionDestURL);
+      // Seller liquidated → buyer (counterparty) gets a buy order.
+      assert.equal(counterpartyOrder.isBuy, true);
 
-      // Verify the order exists in the contract
       const order = await futures.read.getOrderById([counterpartyOrder.orderId]);
-      expect(order.participant).to.equal(getAddress(buyer.account.address));
-      expect(order.pricePerDay).to.equal(positionPrice);
-      expect(order.deliveryAt).to.equal(positionDeliveryDate);
-      expect(order.isBuy).to.equal(true);
+      assert.equal(order.participant, getAddress(buyer.account.address));
+      assert.equal(order.pricePerDay, positionPrice);
+      assert.equal(order.deliveryAt, positionDeliveryDate);
+      assert.equal(order.isBuy, true);
     });
   });
 });

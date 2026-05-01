@@ -9,12 +9,8 @@ export const ParticipantQuery = gql`
   ) {
     participant(id: $participantAddress) {
       address
-      balance
-      lastBalanceUpdate
       orderCount
-      totalDeposited
       totalVolume
-      totalWithdrawn
       orders(where: { isActive: true, deliveryAt_gt: $now }, first: $orderLimit, skip: $orderOffset, orderBy: timestamp, orderDirection: desc) {
         closedAt
         closedBy

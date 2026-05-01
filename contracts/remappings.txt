@@ -1,0 +1,6 @@
+@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/
+@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/
+hashprice-oracle/=node_modules/hashprice-oracle/
+multicall3/=node_modules/multicall3/
+collateral-margin/=node_modules/collateral-margin/
+solidity-linked-list/=node_modules/solidity-linked-list/
