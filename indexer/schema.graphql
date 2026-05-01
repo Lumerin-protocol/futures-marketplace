@@ -22,7 +22,6 @@ type Futures @entity(immutable: false) {
   breachPenaltyRatePerDay: BigInt!
 
   # Pool balances
-  reservePoolBalance: BigInt!
   collectedFeesBalance: BigInt!
 
   # Stats
