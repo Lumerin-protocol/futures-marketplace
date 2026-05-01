@@ -17,12 +17,12 @@ describe("Fees", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
+    const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
     const feesBefore = await futures.read.collectedFeesBalance();
 
     await futures.write.createOrder([price, deliveryDate, "", 1], { account: seller.account });
 
-    const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
+    const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
     const feesAfter = await futures.read.collectedFeesBalance();
 
     assert.equal(feesAfter - feesBefore, config.orderFee);
@@ -84,15 +84,15 @@ describe("Fees", () => {
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
-    const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
+    const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
+    const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
     const feesBefore = await futures.read.collectedFeesBalance();
 
     await futures.write.createOrder([price, deliveryDate, "", 1], { account: seller.account });
     await futures.write.createOrder([price, deliveryDate, "", 1], { account: buyer.account });
 
-    const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
-    const buyerBalanceAfter = await futures.read.balanceOf([buyer.account.address]);
+    const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
+    const buyerBalanceAfter = await collateralVault.read.balanceOf([buyer.account.address]);
     const feesAfter = await futures.read.collectedFeesBalance();
 
     const discountedFee = config.orderFee - (config.orderFee * BigInt(discountPercent)) / 100n;
@@ -118,12 +118,12 @@ describe("Fees", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
+    const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
     const feesBefore = await futures.read.collectedFeesBalance();
 
     await futures.write.createOrder([price, deliveryDate, "", 1], { account: seller.account });
 
-    const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
+    const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
     const feesAfter = await futures.read.collectedFeesBalance();
 
     assert.equal(feesAfter - feesBefore, config.orderFee);
@@ -145,12 +145,12 @@ describe("Fees", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
+    const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
     const feesBefore = await futures.read.collectedFeesBalance();
 
     await futures.write.createOrder([price, deliveryDate, "", 1], { account: seller.account });
 
-    const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
+    const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
     const feesAfter = await futures.read.collectedFeesBalance();
 
     assert.equal(feesAfter - feesBefore, 0n);

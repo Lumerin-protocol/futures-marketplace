@@ -14,6 +14,7 @@ async function main() {
 
   const futuresAddress = requireAddress("FUTURES_ADDRESS");
   const SAFE_OWNER_ADDRESS = readOptionalAddress("SAFE_OWNER_ADDRESS");
+  const vaultAddress = requireAddress("VAULT_ADDRESS");
 
   const [deployer, proposer] = await viem.getWalletClients();
   const pc = await viem.getPublicClient();
@@ -28,7 +29,6 @@ async function main() {
     Address: addrUrl(pc, futuresProxy.address),
     Owner: await futuresProxy.read.owner(),
     Version: currentVersion,
-    Token: await futuresProxy.read.token(),
     HashrateOracle: await futuresProxy.read.hashrateOracle(),
     Validator: await futuresProxy.read.validatorAddress(),
   });
@@ -38,9 +38,15 @@ async function main() {
   // ── 1. Deploy new implementation ────────────────────────────────────────
   logInfo("Deploy new Futures implementation", { contract: "Futures" });
   await logPrompt("Proceed?");
-  const futuresImpl = await viem.deployContract("Futures", [], { confirmations: 5 });
+  // const futuresImpl = await viem.deployContract("Futures", [vaultAddress], {
+  //   confirmations: 3,
+  // });
+  const futuresImpl = await viem.getContractAt(
+    "Futures",
+    "0xc52d98e9e1ccffc0f104435030857751b98788c7",
+  );
   logStep("Deployed", addrUrl(pc, futuresImpl.address));
-  await verifyContract(futuresImpl.address, []);
+  await verifyContract(futuresImpl.address, [vaultAddress]);
   logStep("Verified", addrUrl(pc, futuresImpl.address));
 
   const newVersion = await futuresImpl.read.VERSION();
@@ -82,7 +88,8 @@ async function main() {
 
     const upgraded = await viem.getContractAt("Futures", futuresAddress);
     logInfo("upgraded futures", {
-      Token: await upgraded.read.token(),
+      Vault: await upgraded.read.collateralVault(),
+      MarginEngine: await upgraded.read.marginEngine(),
       HashrateOracle: await upgraded.read.hashrateOracle(),
       Validator: await upgraded.read.validatorAddress(),
       Owner: await upgraded.read.owner(),

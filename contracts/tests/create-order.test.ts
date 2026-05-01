@@ -187,8 +187,8 @@ describe("Order Creation", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    const initialSellerBalance = await futures.read.balanceOf([seller.account.address]);
-    const initialContractBalance = await futures.read.balanceOf([futures.address]);
+    const initialSellerBalance = await collateralVault.read.balanceOf([seller.account.address]);
+    const initialContractBalance = await collateralVault.read.balanceOf([futures.address]);
 
     const txHash = await futures.write.createOrder([price, deliveryDate, "", 5], {
       account: seller.account,
@@ -197,10 +197,10 @@ describe("Order Creation", () => {
     const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
     assert.equal(receipt.status, "success");
 
-    const finalSellerBalance = await futures.read.balanceOf([seller.account.address]);
+    const finalSellerBalance = await collateralVault.read.balanceOf([seller.account.address]);
     assert.equal(finalSellerBalance, initialSellerBalance - config.orderFee);
 
-    const finalContractBalance = await futures.read.balanceOf([futures.address]);
+    const finalContractBalance = await collateralVault.read.balanceOf([futures.address]);
     assert.equal(finalContractBalance, initialContractBalance + config.orderFee);
 
     const sellOrderTxHash = await futures.write.createOrder([price, deliveryDate, "", -5], {
@@ -210,10 +210,10 @@ describe("Order Creation", () => {
     const sellOrderReceipt = await pc.waitForTransactionReceipt({ hash: sellOrderTxHash });
     assert.equal(sellOrderReceipt.status, "success");
 
-    const finalSellerBalance2 = await futures.read.balanceOf([seller.account.address]);
+    const finalSellerBalance2 = await collateralVault.read.balanceOf([seller.account.address]);
     assert.equal(finalSellerBalance2, finalSellerBalance);
 
-    const finalContractBalance2 = await futures.read.balanceOf([futures.address]);
+    const finalContractBalance2 = await collateralVault.read.balanceOf([futures.address]);
     assert.equal(finalContractBalance2, finalContractBalance);
   });
 

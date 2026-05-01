@@ -10,8 +10,8 @@ async function totalContractBalance(contracts: FuturesFixture["contracts"]) {
   const { futures, collateralVault } = contracts;
   const insuranceFundAddr = await collateralVault.read.INSURANCE_FUND_ADDR();
   return (
-    (await futures.read.balanceOf([futures.address])) +
-    (await futures.read.balanceOf([insuranceFundAddr]))
+    (await collateralVault.read.balanceOf([futures.address])) +
+    (await collateralVault.read.balanceOf([insuranceFundAddr]))
   );
 }
 
@@ -122,7 +122,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
       getAddress(account2.account.address),
     );
 
-    const account2BalanceBefore = await futures.read.balanceOf([account2.account.address]);
+    const account2BalanceBefore = await collateralVault.read.balanceOf([account2.account.address]);
 
     await futures.write.createOrder([exitPrice, deliveryDate, "", -1], {
       account: account2.account,
@@ -134,7 +134,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
 
     const exitReceipt = await pc.waitForTransactionReceipt({ hash: exitTxHash });
 
-    const account2BalanceAfter = await futures.read.balanceOf([account2.account.address]);
+    const account2BalanceAfter = await collateralVault.read.balanceOf([account2.account.address]);
 
     const [positionClosedEvent] = parseEventLogs({
       logs: exitReceipt.logs,
@@ -206,7 +206,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
       getAddress(account2.account.address),
     );
 
-    const account2BalanceBefore = await futures.read.balanceOf([account2.account.address]);
+    const account2BalanceBefore = await collateralVault.read.balanceOf([account2.account.address]);
 
     await futures.write.createOrder([exitPrice, deliveryDate, "", -1], {
       account: account2.account,
@@ -220,7 +220,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
 
     const exitReceipt = await pc.waitForTransactionReceipt({ hash: exitTxHash });
 
-    const account2BalanceAfter = await futures.read.balanceOf([account2.account.address]);
+    const account2BalanceAfter = await collateralVault.read.balanceOf([account2.account.address]);
     const contractBalanceAfter = await totalContractBalance(contracts);
 
     const [positionClosedEvent] = parseEventLogs({
@@ -384,10 +384,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     assert.equal(ordersClosed.length, 2);
 
     const takerOrderCreated = ordersCreated[0];
-    assert.equal(
-      getAddress(takerOrderCreated.args.participant),
-      getAddress(buyer.account.address),
-    );
+    assert.equal(getAddress(takerOrderCreated.args.participant), getAddress(buyer.account.address));
     assert.equal(takerOrderCreated.args.destURL, "u-taker");
     assert.equal(takerOrderCreated.args.pricePerDay, price);
     assert.equal(takerOrderCreated.args.deliveryAt, BigInt(deliveryDate));

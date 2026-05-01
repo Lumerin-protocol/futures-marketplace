@@ -136,7 +136,7 @@ describe("Futures - getMinMargin", () => {
     const effectiveMargin = await futures.read.getMinMargin([seller.account.address]);
     assert.ok(effectiveMargin < 0n);
 
-    const balance = await futures.read.balanceOf([seller.account.address]);
+    const balance = await collateralVault.read.balanceOf([seller.account.address]);
     await viem.assertions.revertWithCustomError(
       collateralVault.write.withdraw([balance + 1n], { account: seller.account }),
       collateralVault,
@@ -233,7 +233,7 @@ describe("Futures - margin management", () => {
     const { futures, usdcMock, collateralVault } = contracts;
     const { seller, pc } = accounts;
 
-    const sellerBalance1 = await futures.read.balanceOf([seller.account.address]);
+    const sellerBalance1 = await collateralVault.read.balanceOf([seller.account.address]);
     const collateralVaultBalance1 = await usdcMock.read.balanceOf([
       contracts.collateralVault.address,
     ]);
@@ -245,7 +245,7 @@ describe("Futures - margin management", () => {
     const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
     assert.equal(receipt.status, "success");
 
-    const sellerBalance2 = await futures.read.balanceOf([seller.account.address]);
+    const sellerBalance2 = await collateralVault.read.balanceOf([seller.account.address]);
     assert.equal(sellerBalance2, sellerBalance1 + marginAmount);
 
     const collateralVaultBalance2 = await usdcMock.read.balanceOf([
@@ -271,7 +271,7 @@ describe("Futures - margin management", () => {
     const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
     assert.equal(receipt.status, "success");
 
-    const balance = await futures.read.balanceOf([seller.account.address]);
+    const balance = await collateralVault.read.balanceOf([seller.account.address]);
     assert.equal(balance, marginAmount - removeAmount);
   });
 

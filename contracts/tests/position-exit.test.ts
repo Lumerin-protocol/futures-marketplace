@@ -49,8 +49,8 @@ describe("Position Exit", () => {
     const expPartApnl = (price - price2) * BigInt(config.deliveryDurationDays);
     const expPartBpnl = (price2 - price) * BigInt(config.deliveryDurationDays);
 
-    const partABalance = await futures.read.balanceOf([partA.account.address]);
-    const partBBalance = await futures.read.balanceOf([partB.account.address]);
+    const partABalance = await collateralVault.read.balanceOf([partA.account.address]);
+    const partBBalance = await collateralVault.read.balanceOf([partB.account.address]);
 
     const partADelta = partABalance - margin;
     const partBDelta = partBBalance - margin;

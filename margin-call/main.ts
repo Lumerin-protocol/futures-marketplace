@@ -41,7 +41,7 @@ async function main(executeMarginCall = false) {
   const deficits = await Promise.all(
     participants.map(async (participant) => {
       const minMargin = await futures.read.getMinMargin([participant.address]);
-      const balance = await futures.read.balanceOf([participant.address]);
+      const balance = await collateralVault.read.balanceOf([participant.address]);
       // const balance = BigInt(participant.balance);
       const marginUtilizationRatio = Number(minMargin) / Number(balance);
 

@@ -31,11 +31,6 @@ describe("Futures - Initialization", () => {
     assert.equal(await futures.read.breachPenaltyRatePerDay(), 0n);
   });
 
-  it("should have correct decimals", async () => {
-    const { contracts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    assert.equal(await contracts.futures.read.decimals(), 6);
-  });
-
   it("should expose the configured oracle staleness window", async function () {
     const { contracts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;

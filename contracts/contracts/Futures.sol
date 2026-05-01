@@ -78,7 +78,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     IPortfolioMarginEngine public marginEngine;
 
     // constants
-    string public constant VERSION = "2.4.0";
+    string public constant VERSION = "2.5.0";
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     uint8 public constant BREACH_PENALTY_DECIMALS = 18;
     uint32 private constant SECONDS_PER_DAY = 3600 * 24;
@@ -680,7 +680,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     function marginCall(address _participant) external onlyValidator {
         int256 effectiveMargin = getMinMargin(_participant);
-        int256 startBalance = int256(balanceOf(_participant));
+        int256 startBalance = int256(collateralVault.balanceOf(_participant));
 
         if (startBalance > effectiveMargin) {
             return;
@@ -718,7 +718,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             //TODO: avoid calling getMinMargin on each iteration, return reclaimed margin instead
             _forceLiquidatePosition(positionId, position, _participant);
             liquidated = true;
-            if (int256(balanceOf(_participant)) >= getMinMargin(_participant)) {
+            if (int256(collateralVault.balanceOf(_participant)) >= getMinMargin(_participant)) {
                 _emitLiquidation(_participant, reclaimedMargin, startBalance);
                 return;
             }
@@ -731,7 +731,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     /// @dev Stack-saving wrapper around the `Liquidation` emit. `realizedPnl = currentBalance - startBalance`.
     function _emitLiquidation(address _participant, int256 _reclaimedMargin, int256 _startBalance) private {
-        int256 realizedPnl = int256(balanceOf(_participant)) - _startBalance;
+        int256 realizedPnl = int256(collateralVault.balanceOf(_participant)) - _startBalance;
         emit Liquidation(_participant, _msgSender(), _reclaimedMargin, realizedPnl);
     }
 
@@ -926,7 +926,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @notice Returns how much participant needs to add to their collateral to cover the margin shortfall
     function getCollateralDeficit(address _participant) public view returns (int256) {
         int256 effectiveMargin = getMinMargin(_participant);
-        uint256 balance = balanceOf(_participant);
+        uint256 balance = collateralVault.balanceOf(_participant);
         return int256(effectiveMargin) - int256(balance);
     }
 
@@ -1176,7 +1176,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     function ensureNoCollateralDeficit(address _participant) private view {
         uint256 required = marginEngine.computePortfolioIM(_participant);
-        if (balanceOf(_participant) < required) revert InsufficientMarginBalance();
+        if (collateralVault.balanceOf(_participant) < required) revert InsufficientMarginBalance();
     }
 
     function withdrawCollectedFees() external onlyOwner {
@@ -1224,35 +1224,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     function _internalTransfer(address from, address to, uint256 amount) private {
         if (amount == 0) return;
         collateralVault.internalTransfer(from, to, amount);
-    }
-
-    /// @notice Vault receipt-token balance for `account`. Identical
-    ///         to calling `collateralVault.balanceOf(account)` directly.
-    /// @dev    For `account == address(this)` this returns ONLY the balance held on the contract's own
-    ///         vault account — i.e. the fee escrow accumulated by `_skimOrderFee` plus any in-flight
-    ///         buyer-payment escrow from `depositDeliveryPaymentV2`. It does **not** include the
-    ///         insurance fund: that lives on the separate vanity account
-    ///         `collateralVault.INSURANCE_FUND_ADDR()` (see `_insuranceFundAccount`) and must be
-    ///         queried as `balanceOf(collateralVault.INSURANCE_FUND_ADDR())`.
-    /// @custom:deprecated Prefer `collateralVault.balanceOf(account)`.
-    function balanceOf(address account) public view returns (uint256) {
-        return collateralVault.balanceOf(account);
-    }
-
-    function totalSupply() public view returns (uint256) {
-        return collateralVault.totalSupply();
-    }
-
-    function decimals() public view returns (uint8) {
-        return IERC20Metadata(address(collateralVault.collateralToken())).decimals();
-    }
-
-    function transfer(address, uint256) public pure returns (bool) {
-        revert TransferDisabled();
-    }
-
-    function transferFrom(address, address, uint256) public pure returns (bool) {
-        revert TransferDisabled();
     }
 
     function _transferEnsureMarginBalance(address _from, address _to, uint256 _amount) private {

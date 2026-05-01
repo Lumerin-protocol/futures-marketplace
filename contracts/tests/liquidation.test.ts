@@ -48,9 +48,14 @@ async function positionWithMarginFixture() {
 }
 
 type FuturesContract = ContractReturnType<"Futures">;
+type CollateralVaultContract = ContractReturnType<"CollateralVault">;
 
-async function getMarginDeficit(futures: FuturesContract, party: Account) {
-  const partyCollateral = await futures.read.balanceOf([party.address]);
+async function getMarginDeficit(
+  futures: FuturesContract,
+  collateralVault: CollateralVaultContract,
+  party: Account,
+) {
+  const partyCollateral = await collateralVault.read.balanceOf([party.address]);
   const partyMinMargin = await futures.read.getMinMargin([party.address]);
   return partyMinMargin - partyCollateral;
 }
@@ -63,8 +68,8 @@ describe("Futures - Liquidation", function () {
       const { futures, hashrateOracle, collateralVault } = contracts;
       const { seller, buyer, validator, pc } = accounts;
 
-      const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
-      const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
+      const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
+      const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
 
       assert.notEqual(positionId, null);
 
@@ -74,7 +79,7 @@ describe("Futures - Liquidation", function () {
       assert.ok(newMarketPrice < entryPricePerDay);
 
       const buyerMinMarginAfter = await futures.read.getMinMargin([buyer.account.address]);
-      const buyerCollateralAfter = await futures.read.balanceOf([buyer.account.address]);
+      const buyerCollateralAfter = await collateralVault.read.balanceOf([buyer.account.address]);
       assert.ok(buyerCollateralAfter < buyerMinMarginAfter);
 
       const txHash = await futures.write.marginCall([buyer.account.address], {
@@ -92,8 +97,8 @@ describe("Futures - Liquidation", function () {
 
       const buyerPnL = (BigInt(newMarketPrice) - BigInt(entryPricePerDay)) * 7n;
 
-      const buyerBalanceAfter = await futures.read.balanceOf([buyer.account.address]);
-      const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
+      const buyerBalanceAfter = await collateralVault.read.balanceOf([buyer.account.address]);
+      const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
 
       if (buyerPnL < 0n) {
         const expectedBuyerBalance = buyerBalanceBefore + buyerPnL;
@@ -117,8 +122,8 @@ describe("Futures - Liquidation", function () {
       const { futures, hashrateOracle, collateralVault } = contracts;
       const { seller, buyer, validator, pc } = accounts;
 
-      const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
-      const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
+      const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
+      const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
 
       assert.notEqual(positionId, null);
 
@@ -128,7 +133,7 @@ describe("Futures - Liquidation", function () {
       assert.ok(newMarketPrice > entryPricePerDay);
 
       const sellerMinMargin = await futures.read.getMinMargin([seller.account.address]);
-      const sellerCollateral = await futures.read.balanceOf([seller.account.address]);
+      const sellerCollateral = await collateralVault.read.balanceOf([seller.account.address]);
       assert.ok(sellerCollateral < sellerMinMargin);
 
       const txHash = await futures.write.marginCall([seller.account.address], {
@@ -146,8 +151,8 @@ describe("Futures - Liquidation", function () {
 
       const buyerPnL = (BigInt(newMarketPrice) - BigInt(entryPricePerDay)) * 7n;
 
-      const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
-      const buyerBalanceAfter = await futures.read.balanceOf([buyer.account.address]);
+      const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
+      const buyerBalanceAfter = await collateralVault.read.balanceOf([buyer.account.address]);
 
       if (buyerPnL > 0n) {
         const tolerance = parseUnits("1", 6);
@@ -202,7 +207,7 @@ describe("Futures - Liquidation", function () {
       // Move market price down to trigger margin call
       await scaleHashprice(hashrateOracle, 100n, 150n);
 
-      const marginDeficit = await getMarginDeficit(futures, buyer.account);
+      const marginDeficit = await getMarginDeficit(futures, collateralVault, buyer.account);
       assert.ok(marginDeficit > 0n);
 
       const txHash = await futures.write.marginCall([buyer.account.address], {
@@ -257,7 +262,7 @@ describe("Futures - Liquidation", function () {
       // Move market price up (seller loses on both positions)
       await scaleHashprice(hashrateOracle, 100n, 90n);
 
-      const sellerMarginDeficit = await getMarginDeficit(futures, seller.account);
+      const sellerMarginDeficit = await getMarginDeficit(futures, collateralVault, seller.account);
       assert.ok(sellerMarginDeficit > 0n);
 
       const txHash = await futures.write.marginCall([seller.account.address], {
@@ -272,7 +277,7 @@ describe("Futures - Liquidation", function () {
       });
       assert.equal(positionClosedEvents.length, 2);
 
-      const sellerMarginDeficit2 = await getMarginDeficit(futures, seller.account);
+      const sellerMarginDeficit2 = await getMarginDeficit(futures, collateralVault, seller.account);
       assert.ok(sellerMarginDeficit2 <= 0n);
     });
 
@@ -286,7 +291,7 @@ describe("Futures - Liquidation", function () {
       await scaleHashprice(hashrateOracle, 100n, 105n);
 
       const buyerMinMargin = await futures.read.getMinMargin([buyer.account.address]);
-      const buyerCollateral = await futures.read.balanceOf([buyer.account.address]);
+      const buyerCollateral = await collateralVault.read.balanceOf([buyer.account.address]);
       assert.ok(buyerCollateral >= buyerMinMargin);
 
       const txHash = await futures.write.marginCall([buyer.account.address], {
@@ -320,15 +325,15 @@ describe("Futures - Liquidation", function () {
       const { futures, hashrateOracle, collateralVault } = contracts;
       const { seller, buyer, validator } = accounts;
 
-      const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
-      const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
+      const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
+      const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
 
       // Raise hashprice ~25% so buyer profits.
       await scaleHashprice(hashrateOracle, 100n, 80n);
       const newMarketPrice = await futures.read.getMarketPrice();
       assert.ok(newMarketPrice > entryPricePerDay);
 
-      const sellerBalance = await futures.read.balanceOf([seller.account.address]);
+      const sellerBalance = await collateralVault.read.balanceOf([seller.account.address]);
       const sellerMinMargin = await futures.read.getMinMargin([seller.account.address]);
       if (sellerBalance > sellerMinMargin) {
         const withdrawAmount = sellerBalance - sellerMinMargin + parseUnits("1", 6);
@@ -339,8 +344,8 @@ describe("Futures - Liquidation", function () {
 
       const buyerPnL = (BigInt(newMarketPrice) - BigInt(entryPricePerDay)) * 7n;
 
-      const buyerBalanceAfter = await futures.read.balanceOf([buyer.account.address]);
-      const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
+      const buyerBalanceAfter = await collateralVault.read.balanceOf([buyer.account.address]);
+      const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
 
       if (buyerPnL > 0n) {
         const tolerance = parseUnits("1", 6);
@@ -374,7 +379,7 @@ describe("Futures - Liquidation", function () {
       await scaleHashprice(hashrateOracle, 100n, 150n);
 
       const buyerMinMargin = await futures.read.getMinMargin([buyer.account.address]);
-      const buyerCollateral = await futures.read.balanceOf([buyer.account.address]);
+      const buyerCollateral = await collateralVault.read.balanceOf([buyer.account.address]);
       assert.ok(buyerCollateral < buyerMinMargin);
 
       const txHash = await futures.write.marginCall([buyer.account.address], {
@@ -429,7 +434,7 @@ describe("Futures - Liquidation", function () {
       await scaleHashprice(hashrateOracle, 100n, 80n);
 
       const sellerMinMargin = await futures.read.getMinMargin([seller.account.address]);
-      const sellerCollateral = await futures.read.balanceOf([seller.account.address]);
+      const sellerCollateral = await collateralVault.read.balanceOf([seller.account.address]);
       assert.ok(sellerCollateral < sellerMinMargin);
 
       const txHash = await futures.write.marginCall([seller.account.address], {

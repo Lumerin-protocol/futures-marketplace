@@ -12,8 +12,8 @@ async function totalContractBalance(contracts: FuturesFixture["contracts"]) {
   const { futures, collateralVault } = contracts;
   const insuranceFundAddr = await collateralVault.read.INSURANCE_FUND_ADDR();
   return (
-    (await futures.read.balanceOf([futures.address])) +
-    (await futures.read.balanceOf([insuranceFundAddr]))
+    (await collateralVault.read.balanceOf([futures.address])) +
+    (await collateralVault.read.balanceOf([insuranceFundAddr]))
   );
 }
 
@@ -33,7 +33,7 @@ describe("Futures - Offset & Cash Settlement", () => {
     await collateralVault.write.deposit([marginAmount], { account: buyer2.account });
 
     const contractBalanceBefore = await totalContractBalance(contracts);
-    const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
+    const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
 
     const initialPrice = quantizePrice(parseUnits("100", 6), config.priceLadderStep);
 
@@ -70,7 +70,7 @@ describe("Futures - Offset & Cash Settlement", () => {
     const newPositionId = positionCreatedEvents[0].args.positionId;
 
     // Buyer profits — contract pays out from balance.
-    const buyerBalanceAfterOffset = await futures.read.balanceOf([buyer.account.address]);
+    const buyerBalanceAfterOffset = await collateralVault.read.balanceOf([buyer.account.address]);
     const contractBalanceAfterOffset = await totalContractBalance(contracts);
 
     const expectedPnL = (exitPrice - initialPrice) * BigInt(config.deliveryDurationDays);
@@ -108,7 +108,7 @@ describe("Futures - Offset & Cash Settlement", () => {
     await collateralVault.write.deposit([marginAmount], { account: buyer2.account });
 
     const contractBalanceBefore = await totalContractBalance(contracts);
-    const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
+    const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
 
     const initialPrice = quantizePrice(parseUnits("100", 6), config.priceLadderStep);
 
@@ -142,7 +142,7 @@ describe("Futures - Offset & Cash Settlement", () => {
     assert.ok(positionCreatedEvents.length > 0);
     const newPositionId = positionCreatedEvents[0].args.positionId;
 
-    const buyerBalanceAfterOffset = await futures.read.balanceOf([buyer.account.address]);
+    const buyerBalanceAfterOffset = await collateralVault.read.balanceOf([buyer.account.address]);
     const contractBalanceAfterOffset = await totalContractBalance(contracts);
 
     const expectedPnL = (exitPrice - initialPrice) * BigInt(config.deliveryDurationDays);
@@ -158,8 +158,12 @@ describe("Futures - Offset & Cash Settlement", () => {
     await refreshHashprice(contracts.hashrateOracle, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
 
-    const sellerBalanceBeforeSettlement = await futures.read.balanceOf([seller.account.address]);
-    const buyer2BalanceBeforeSettlement = await futures.read.balanceOf([buyer2.account.address]);
+    const sellerBalanceBeforeSettlement = await collateralVault.read.balanceOf([
+      seller.account.address,
+    ]);
+    const buyer2BalanceBeforeSettlement = await collateralVault.read.balanceOf([
+      buyer2.account.address,
+    ]);
 
     await futures.write.closeDelivery([newPositionId, false], { account: validator.account });
 
@@ -167,12 +171,12 @@ describe("Futures - Offset & Cash Settlement", () => {
     assert.equal(contractBalanceBefore + totalOrderFees, contractBalanceAfterSettlement);
     const marketPrice = await futures.read.getMarketPrice();
 
-    const sellerBalance = await futures.read.balanceOf([seller.account.address]);
+    const sellerBalance = await collateralVault.read.balanceOf([seller.account.address]);
     const deltaSeller = sellerBalance - sellerBalanceBeforeSettlement;
     const expectedSellerPnl = (initialPrice - marketPrice) * BigInt(config.deliveryDurationDays);
     assert.equal(deltaSeller, expectedSellerPnl);
 
-    const buyer2Balance = await futures.read.balanceOf([buyer2.account.address]);
+    const buyer2Balance = await collateralVault.read.balanceOf([buyer2.account.address]);
     const deltaBuyer2 = buyer2Balance - buyer2BalanceBeforeSettlement;
     const expectedBuyer2Pnl = (marketPrice - exitPrice) * BigInt(config.deliveryDurationDays);
     assert.equal(deltaBuyer2, expectedBuyer2Pnl);

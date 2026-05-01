@@ -37,8 +37,8 @@ describe("Futures Delivery Payment", () => {
 
       const { positionId } = positionEvent.args;
 
-      const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
-      const contractBalanceBefore = await futures.read.balanceOf([futures.address]);
+      const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
+      const contractBalanceBefore = await collateralVault.read.balanceOf([futures.address]);
 
       const depositTxHash = await futures.write.depositDeliveryPaymentV2([positionId], {
         account: buyer.account,
@@ -47,8 +47,8 @@ describe("Futures Delivery Payment", () => {
       const depositReceipt = await pc.waitForTransactionReceipt({ hash: depositTxHash });
       assert.equal(depositReceipt.status, "success");
 
-      const buyerBalanceAfter = await futures.read.balanceOf([buyer.account.address]);
-      const contractBalanceAfter = await futures.read.balanceOf([futures.address]);
+      const buyerBalanceAfter = await collateralVault.read.balanceOf([buyer.account.address]);
+      const contractBalanceAfter = await collateralVault.read.balanceOf([futures.address]);
 
       assert.equal(buyerBalanceAfter, buyerBalanceBefore - totalPayment);
       assert.equal(contractBalanceAfter, contractBalanceBefore + totalPayment);
@@ -129,15 +129,15 @@ describe("Futures Delivery Payment", () => {
       const paymentPerPosition = price * durationDays;
       const totalPayment = paymentPerPosition * 2n;
 
-      const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
-      const contractBalanceBefore = await futures.read.balanceOf([futures.address]);
+      const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
+      const contractBalanceBefore = await collateralVault.read.balanceOf([futures.address]);
 
       await futures.write.depositDeliveryPayment([[positionId1, positionId2]], {
         account: buyer.account,
       });
 
-      const buyerBalanceAfter = await futures.read.balanceOf([buyer.account.address]);
-      const contractBalanceAfter = await futures.read.balanceOf([futures.address]);
+      const buyerBalanceAfter = await collateralVault.read.balanceOf([buyer.account.address]);
+      const contractBalanceAfter = await collateralVault.read.balanceOf([futures.address]);
 
       assert.equal(buyerBalanceAfter, buyerBalanceBefore - totalPayment);
       assert.equal(contractBalanceAfter, contractBalanceBefore + totalPayment);
@@ -326,8 +326,8 @@ describe("Futures Delivery Payment", () => {
       const deliveryEndTime = deliveryDate + BigInt(config.deliveryDurationSeconds);
       await tc.setNextBlockTimestamp({ timestamp: deliveryEndTime + 1n });
 
-      const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
-      const contractBalanceBefore = await futures.read.balanceOf([futures.address]);
+      const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
+      const contractBalanceBefore = await collateralVault.read.balanceOf([futures.address]);
 
       const withdrawTxHash = await futures.write.withdrawDeliveryPayment([deliveryDate], {
         account: seller.account,
@@ -336,8 +336,8 @@ describe("Futures Delivery Payment", () => {
       const withdrawReceipt = await pc.waitForTransactionReceipt({ hash: withdrawTxHash });
       assert.equal(withdrawReceipt.status, "success");
 
-      const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
-      const contractBalanceAfter = await futures.read.balanceOf([futures.address]);
+      const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
+      const contractBalanceAfter = await collateralVault.read.balanceOf([futures.address]);
 
       assert.equal(sellerBalanceAfter, sellerBalanceBefore + totalPayment);
       assert.equal(contractBalanceAfter, contractBalanceBefore - totalPayment);
@@ -436,17 +436,17 @@ describe("Futures Delivery Payment", () => {
       const deliveryEndTime = deliveryDate + BigInt(config.deliveryDurationSeconds);
       await tc.setNextBlockTimestamp({ timestamp: deliveryEndTime + 1n });
 
-      const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
-      const buyer2BalanceBefore = await futures.read.balanceOf([buyer2.account.address]);
+      const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
+      const buyer2BalanceBefore = await collateralVault.read.balanceOf([buyer2.account.address]);
 
       await futures.write.withdrawDeliveryPayment([deliveryDate], { account: seller.account });
 
-      const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
+      const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
       assert.equal(sellerBalanceAfter, sellerBalanceBefore + totalPayment);
 
       await futures.write.withdrawDeliveryPayment([deliveryDate], { account: buyer2.account });
 
-      const buyer2BalanceAfter = await futures.read.balanceOf([buyer2.account.address]);
+      const buyer2BalanceAfter = await collateralVault.read.balanceOf([buyer2.account.address]);
       assert.equal(buyer2BalanceAfter, buyer2BalanceBefore + totalPayment);
     });
 
@@ -499,11 +499,11 @@ describe("Futures Delivery Payment", () => {
       const deliveryEndTime = deliveryDate + BigInt(config.deliveryDurationSeconds);
       await tc.setNextBlockTimestamp({ timestamp: deliveryEndTime + 1n });
 
-      const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
+      const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
 
       await futures.write.withdrawDeliveryPayment([deliveryDate], { account: seller.account });
 
-      const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
+      const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
       assert.equal(sellerBalanceAfter, sellerBalanceBefore + totalPayment);
 
       const position1 = await futures.read.getPositionById([positionEvent1.args.positionId]);
@@ -547,8 +547,8 @@ describe("Futures Delivery Payment", () => {
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
       await refreshHashprice(contracts.hashrateOracle);
 
-      const sellerBalanceBefore = await futures.read.balanceOf([seller.account.address]);
-      const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
+      const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
+      const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
 
       const closeTxHash = await futures.write.closeDelivery([positionId, true], {
         account: validator.account,
@@ -563,8 +563,8 @@ describe("Futures Delivery Payment", () => {
 
       assert.equal(closeEvent.args.positionId, positionId);
 
-      const sellerBalanceAfter = await futures.read.balanceOf([seller.account.address]);
-      const buyerBalanceAfter = await futures.read.balanceOf([buyer.account.address]);
+      const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
+      const buyerBalanceAfter = await collateralVault.read.balanceOf([buyer.account.address]);
 
       assert.ok(
         sellerBalanceBefore !== sellerBalanceAfter || buyerBalanceBefore !== buyerBalanceAfter,

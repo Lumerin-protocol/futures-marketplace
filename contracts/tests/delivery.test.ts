@@ -15,7 +15,7 @@ describe("Futures Delivery", () => {
 
     async function logBalance(client: Client, name: string) {
       if (!client.account) return;
-      const balance = await futures.read.balanceOf([client.account.address]);
+      const balance = await collateralVault.read.balanceOf([client.account.address]);
       console.log(`${name} balance`, balance);
     }
 
