@@ -1,11 +1,13 @@
 import { backgroundRefetchOpts } from "./config";
-import { gql } from "graphql-request";
 import { graphqlRequest } from "./graphql";
-import { QueryClient, useQuery } from "@tanstack/react-query";
-import type { GetResponse } from "../../gateway/interfaces";
-import { ParticipantQuery } from "./graphql-queries";
+import { useQuery } from "@tanstack/react-query";
+import { UserFuturesOrdersByStatusQuery } from "./graphql-queries";
 
 export const PARTICIPANT_QK = "Participant";
+
+/// Statuses that count as "open" on the order book — i.e. orders the UI shows
+/// in the active list and uses for conflict detection in PlaceOrder/ModifyOrder.
+const ACTIVE_STATUSES = ["ACTIVE", "PARTIAL"] as const;
 
 export const useParticipant = (
   participantAddress: `0x${string}` | undefined,
@@ -34,39 +36,40 @@ const fetchParticipantAsync = async (
 ) => {
   const now = Math.floor(Date.now() / 1000);
   const variables = {
-    participantAddress,
-    orderOffset: props?.orderOffset || 0,
-    orderLimit: props?.orderLimit || 100,
+    address: participantAddress.toLowerCase(),
+    statuses: [...ACTIVE_STATUSES],
     now,
+    first: props?.orderLimit ?? 100,
+    skip: props?.orderOffset ?? 0,
   };
 
-  const response = await graphqlRequest<ParticipantResponse>(ParticipantQuery, variables);
+  const response = await graphqlRequest<UserFuturesOrdersResponse>(
+    UserFuturesOrdersByStatusQuery,
+    variables,
+  );
 
-  if (!response.participant) {
-    return {
-      data: null,
-      blockNumber: response._meta.block.number,
-    };
-  }
+  const orders: ParticipantOrder[] = response.orders.map((order) => ({
+    id: order.id,
+    isBuy: order.isBuy,
+    isActive: isActiveStatus(order.status),
+    pricePerDay: BigInt(order.price),
+    deliveryAt: BigInt(order.deliveryAt),
+    timestamp: order.createdAt,
+    closedAt: order.closedAt,
+    // The new schema doesn't expose destURL or closedBy on Order — both live
+    // on OrderEntry. Consumers that need them must query entries separately.
+    destURL: "",
+    closedBy: null,
+    participant: {
+      address: (order.user.id as `0x${string}`) ?? participantAddress,
+    },
+  }));
 
   const data: Participant = {
-    address: response.participant.address,
-    orderCount: response.participant.orderCount,
-    totalVolume: BigInt(response.participant.totalVolume),
-    orders: response.participant.orders.map((order) => ({
-      closedAt: order.closedAt,
-      closedBy: order.closedBy,
-      deliveryAt: BigInt(order.deliveryAt),
-      id: order.id,
-      isActive: order.isActive,
-      isBuy: order.isBuy,
-      destURL: order.destURL,
-      participant: {
-        address: order.participant.address,
-      },
-      pricePerDay: BigInt(order.pricePerDay),
-      timestamp: order.timestamp,
-    })),
+    address: participantAddress,
+    orderCount: orders.length,
+    totalVolume: 0n,
+    orders,
   };
 
   return {
@@ -75,20 +78,22 @@ const fetchParticipantAsync = async (
   };
 };
 
+const isActiveStatus = (status: string): boolean =>
+  status === "ACTIVE" || status === "PARTIAL";
+
 export const waitForBlockNumber = async (blockNumber: bigint, participantAddress: `0x${string}`) => {
   const delay = 1000;
-  const maxAttempts = 30; // 30 attempts with 2s delay = max 1 minute wait
+  const maxAttempts = 30; // 30 attempts with 1s delay = max 30 seconds wait
 
   let attempts = 0;
   while (attempts < maxAttempts) {
     await new Promise((resolve) => setTimeout(resolve, delay));
-    var data = await fetchParticipantAsync(participantAddress);
+    const data = await fetchParticipantAsync(participantAddress);
     const currentBlock = data?.blockNumber;
 
     if (currentBlock !== undefined && currentBlock >= Number(blockNumber)) {
       return;
     }
-    // Wait 2 seconds before next attempt
     attempts++;
   }
 
@@ -117,30 +122,30 @@ export type ParticipantOrder = {
   timestamp: string;
 };
 
-type ParticipantResponse = {
+type UserFuturesOrdersResponse = {
   _meta: {
     block: {
       number: number;
       timestamp: string;
     };
   };
-  participant: {
-    address: `0x${string}`;
-    orderCount: number;
-    totalVolume: string;
-    orders: {
-      closedAt: string | null;
-      closedBy: string | null;
-      deliveryAt: string;
-      destURL: string;
+  orders: {
+    user: {
       id: string;
-      isActive: boolean;
-      isBuy: boolean;
-      participant: {
-        address: `0x${string}`;
-      };
-      pricePerDay: string;
-      timestamp: string;
-    }[];
-  } | null;
+    };
+    blockNumber: string;
+    cancelledQuantity: number;
+    closedAt: string | null;
+    deliveryAt: string;
+    createdAt: string;
+    filledQuantity: number;
+    id: string;
+    isBuy: boolean;
+    originalQuantity: number;
+    quantity: number;
+    price: string;
+    status: string;
+    transactionHash: `0x${string}`;
+    updatedAt: string;
+  }[];
 };

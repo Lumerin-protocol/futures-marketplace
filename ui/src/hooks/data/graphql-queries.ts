@@ -1,31 +1,41 @@
 import { gql } from "graphql-request";
 
-export const ParticipantQuery = gql`
-  query Participant(
-    $participantAddress: ID!
-    $orderOffset: Int!
-    $orderLimit: Int!
+// Per-user futures Orders, paged with first/skip and filtered by status + future deliveryAt.
+// Mirrors the perps `UserPerpsOrdersByStatusQuery` shape (the futures Order entity exposes
+// the same fields plus `deliveryAt`).
+export const UserFuturesOrdersByStatusQuery = gql`
+  query UserFuturesOrdersByStatus(
+    $address: ID!
+    $statuses: [String!]!
     $now: BigInt!
+    $first: Int!
+    $skip: Int!
   ) {
-    participant(id: $participantAddress) {
-      address
-      orderCount
-      totalVolume
-      orders(where: { isActive: true, deliveryAt_gt: $now }, first: $orderLimit, skip: $orderOffset, orderBy: timestamp, orderDirection: desc) {
-        closedAt
-        closedBy
-        deliveryAt
+    orders(
+      where: { user: $address, status_in: $statuses, deliveryAt_gt: $now }
+      first: $first
+      skip: $skip
+      orderBy: createdAt
+      orderDirection: desc
+    ) {
+      user {
         id
-        destURL
-        isActive
-        isBuy
-        participant {
-          address
-        }
-        pricePerDay
-        timestamp
       }
-    },
+      blockNumber
+      cancelledQuantity
+      closedAt
+      deliveryAt
+      createdAt
+      filledQuantity
+      id
+      isBuy
+      originalQuantity
+      quantity
+      price
+      status
+      transactionHash
+      updatedAt
+    }
     _meta {
       block {
         number
@@ -35,43 +45,48 @@ export const ParticipantQuery = gql`
   }
 `;
 
+// Per-user PositionSessions for futures, mirroring the perps `UserPositionSessionsQuery`.
+// The futures schema replaces the legacy `Position` book with per-(user, deliveryAt) sessions
+// that aggregate the user's trades; the UI collapses each session into a single
+// PositionBookPosition row downstream so consumers keep working.
 export const PositionsBookQuery = gql`
-  query PositionsBookQuery($address: ID!, $now: BigInt!) {
-  positions(
-    where: {
-      or: [
-        { isActive: true, deliveryAt_gt: $now, buyer_: { address: $address } },
-        { isActive: true, deliveryAt_gt: $now, seller_: { address: $address } }
-      ]
-    },
-    orderBy: timestamp,
-    orderDirection: desc
-  ) {
-    transactionHash
-    timestamp
-    deliveryAt
-    sellPricePerDay
-    buyPricePerDay
-    isActive
-    id
-    closedBy
-    closedAt
-    destURL
-    isPaid
-    buyer {
-      address
+  query PositionsBookQuery($address: ID!) {
+    positionSessions(where: { user: $address }) {
+      closePrice
+      closedQuantity
+      deliveryAt
+      entryPrice
+      id
+      lastTradeAt
+      maxQuantity
+      openedAt
+      realizedPnl
+      status
+      tradingFees
+      user {
+        id
+      }
+      trades {
+        blockNumber
+        deliveryAt
+        fillCount
+        id
+        netQuantityAfter
+        realizedPnl
+        timestamp
+        tradePrice
+        tradeQuantity
+        tradingFee
+        transactionHash
+      }
     }
-    seller {
-      address
+    _meta {
+      block {
+        number
+        timestamp
+      }
     }
   }
-  _meta {
-    block {
-      number
-      timestamp
-    }
-  }
-}
 `;
 
 export const OrderBookQuery = gql`
@@ -96,18 +111,18 @@ export const OrderBookQuery = gql`
 `;
 
 export const AggregateOrderBookQuery = gql`
-  query AggregateOrderBook($deliveryAt: BigInt!, $first: Int!, $lastId: ID!) {
-    deliveryDateOrders(
+  query AggregateOrderBookQuery($deliveryAt: BigInt!, $first: Int!, $lastId: ID!) {
+    priceLevels(
       first: $first
-      where: { deliveryDate: $deliveryAt, id_gt: $lastId }
+      where: { deliveryAt: $deliveryAt, id_gt: $lastId, totalQuantity_gte: 1 }
       orderBy: id
       orderDirection: asc
     ) {
-      buyOrdersCount
-      deliveryDate
       id
+      isBid
+      deliveryAt
       price
-      sellOrdersCount
+      totalQuantity
     }
     _meta {
       block {
@@ -126,7 +141,7 @@ export const ContractSpecsQuery = gql`
       hashrateOracleAddress
       minimumPriceIncrement
       speedHps
-      tokenAddress
+      contractAddress
       validatorAddress
     }
     _meta {
@@ -165,21 +180,6 @@ export const AggregatedHashrateIndexQuery = gql`
   }
 }`;
 
-export const DeliveryDatesQuery = gql`
-  query DeliveryDates($now: BigInt!) {
-    deliveryDates(where: { deliveryDate_gte: $now }, orderBy: deliveryDate, orderDirection: asc) {
-      deliveryDate
-      id
-    },
-    _meta {
-      block {
-        number
-        timestamp
-      }
-    }
-  }
-`;
-
 export const PaidSellerPositionsQuery = gql`
   query PaidSellerPositionsQuery($address: ID!) {
     positions(
@@ -197,36 +197,44 @@ export const PaidSellerPositionsQuery = gql`
   }
 `;
 
-// Historical positions query (last 30 days, isActive: false) with cursor pagination
+// Historical (closed) PositionSessions for the last 30 days, paged with first/skip.
+// Mirrors the active `PositionsBookQuery` shape — the only difference is the
+// `status: CLOSE` filter and the `lastTradeAt_gte` cutoff.
 export const HistoricalPositionsQuery = gql`
   query HistoricalPositionsQuery($address: ID!, $thirtyDaysAgo: BigInt!, $first: Int!, $skip: Int!) {
-    positions(
-      where: {
-        or: [
-          { isActive: false, deliveryAt_gte: $thirtyDaysAgo, buyer_: { address: $address } },
-          { isActive: false, deliveryAt_gte: $thirtyDaysAgo, seller_: { address: $address } }
-        ]
-      },
-      first: $first,
-      skip: $skip,
-      orderBy: timestamp,
+    positionSessions(
+      where: { user: $address, status: CLOSE, lastTradeAt_gte: $thirtyDaysAgo }
+      first: $first
+      skip: $skip
+      orderBy: lastTradeAt
       orderDirection: desc
     ) {
-      id
-      timestamp
+      closePrice
+      closedQuantity
       deliveryAt
-      sellPricePerDay
-      buyPricePerDay
-      buyerPnl
-      sellerPnl
-      isActive
-      closedAt
-      transactionHash
-      buyer {
-        address
+      entryPrice
+      id
+      lastTradeAt
+      maxQuantity
+      openedAt
+      realizedPnl
+      status
+      tradingFees
+      user {
+        id
       }
-      seller {
-        address
+      trades {
+        blockNumber
+        deliveryAt
+        fillCount
+        id
+        netQuantityAfter
+        realizedPnl
+        timestamp
+        tradePrice
+        tradeQuantity
+        tradingFee
+        transactionHash
       }
     }
     _meta {
@@ -238,30 +246,39 @@ export const HistoricalPositionsQuery = gql`
   }
 `;
 
-// Historical orders query (last 30 days, isActive: false) with cursor pagination
+// Historical (closed) Orders for the last 30 days, paged with first/skip.
+// Mirrors the active `UserFuturesOrdersByStatusQuery` shape — the only difference
+// is the status filter (`FILLED`/`CANCELLED`) and the deliveryAt cutoff.
 export const HistoricalOrdersQuery = gql`
-  query HistoricalOrdersQuery($participantAddress: ID!, $thirtyDaysAgo: BigInt!, $first: Int!, $skip: Int!) {
+  query HistoricalOrdersQuery($address: ID!, $thirtyDaysAgo: BigInt!, $first: Int!, $skip: Int!) {
     orders(
-      where: { 
-        isActive: false, 
-        deliveryAt_gte: $thirtyDaysAgo,
-        participant_: { address: $participantAddress }
-      },
-      first: $first,
-      skip: $skip,
-      orderBy: timestamp,
+      where: {
+        user: $address
+        status_in: ["FILLED", "CANCELLED"]
+        deliveryAt_gte: $thirtyDaysAgo
+      }
+      first: $first
+      skip: $skip
+      orderBy: createdAt
       orderDirection: desc
     ) {
-      id
-      timestamp
-      deliveryAt
-      pricePerDay
-      isBuy
-      isActive
-      closedAt
-      participant {
-        address
+      user {
+        id
       }
+      blockNumber
+      cancelledQuantity
+      closedAt
+      deliveryAt
+      createdAt
+      filledQuantity
+      id
+      isBuy
+      originalQuantity
+      quantity
+      price
+      status
+      transactionHash
+      updatedAt
     }
     _meta {
       block {

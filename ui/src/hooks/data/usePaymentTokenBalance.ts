@@ -1,24 +1,16 @@
 import { usdcMockAbi } from "contracts-js/dist/abi/abi";
-import { FuturesAbi } from "../../abi/Futures";
 import { useReadContract } from "wagmi";
 import { backgroundRefetchOpts } from "./config";
+import { useFuturePaymentToken } from "./useFuturePaymentToken";
 
-function usePaymentTokenAddress() {
-  return useReadContract({
-    address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS,
-    abi: FuturesAbi,
-    functionName: "token",
-    query: {
-      staleTime: Number.POSITIVE_INFINITY,
-      gcTime: Number.POSITIVE_INFINITY,
-    },
-  });
-}
-
+/// Wallet (ERC20) balance of the futures payment token.
+///
+/// The token address is resolved via the CollateralVault chain (see
+/// `useFuturePaymentToken`): Futures.collateralVault() → CollateralVault.collateralToken().
+/// Once available, we call `balanceOf(address)` against that ERC20.
 export function useFuturesPaymentTokenBalance(address: `0x${string}` | undefined) {
-  const { data: paymentTokenAddress } = usePaymentTokenAddress();
+  const { data: paymentTokenAddress } = useFuturePaymentToken();
 
-  // Read balance using the payment token address
   return useReadContract({
     address: paymentTokenAddress,
     abi: usdcMockAbi,

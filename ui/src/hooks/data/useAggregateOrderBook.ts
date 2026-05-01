@@ -23,7 +23,7 @@ export const useAggregateOrderBook = (
 const PAGE_SIZE = 100;
 
 const fetchAggregateOrderBookAsync = async (deliveryDate: number) => {
-  const orders: AggregateOrderBookOrder[] = [];
+  const priceLevels: AggregatePriceLevel[] = [];
   let lastId = "";
   let blockNumber = 0;
 
@@ -36,21 +36,21 @@ const fetchAggregateOrderBookAsync = async (deliveryDate: number) => {
 
     blockNumber = response._meta.block.number;
 
-    for (const order of response.deliveryDateOrders) {
-      orders.push({
-        id: order.id,
-        price: BigInt(order.price),
-        deliveryDate: BigInt(order.deliveryDate),
-        buyOrdersCount: order.buyOrdersCount,
-        sellOrdersCount: order.sellOrdersCount,
+    for (const level of response.priceLevels) {
+      priceLevels.push({
+        id: level.id,
+        price: BigInt(level.price),
+        isBid: level.isBid,
+        deliveryAt: BigInt(level.deliveryAt),
+        totalQuantity: level.totalQuantity,
       });
     }
 
-    if (response.deliveryDateOrders.length < PAGE_SIZE) break;
-    lastId = response.deliveryDateOrders[response.deliveryDateOrders.length - 1].id;
+    if (response.priceLevels.length < PAGE_SIZE) break;
+    lastId = response.priceLevels[response.priceLevels.length - 1].id;
   }
 
-  const data: AggregateOrderBook = { orders };
+  const data: AggregateOrderBook = { priceLevels };
 
   return {
     data,
@@ -81,15 +81,15 @@ export const waitForAggregateBlockNumber = async (blockNumber: bigint, qc: Query
 };
 
 export type AggregateOrderBook = {
-  orders: AggregateOrderBookOrder[];
+  priceLevels: AggregatePriceLevel[];
 };
 
-export type AggregateOrderBookOrder = {
+export type AggregatePriceLevel = {
   id: string;
   price: bigint;
-  deliveryDate: bigint;
-  buyOrdersCount: number;
-  sellOrdersCount: number;
+  isBid: boolean;
+  deliveryAt: bigint;
+  totalQuantity: number;
 };
 
 type AggregateOrderBookResponse = {
@@ -99,11 +99,11 @@ type AggregateOrderBookResponse = {
       timestamp: string;
     };
   };
-  deliveryDateOrders: {
+  priceLevels: {
     id: string;
     price: string;
-    deliveryDate: string;
-    buyOrdersCount: number;
-    sellOrdersCount: number;
+    isBid: boolean;
+    deliveryAt: string;
+    totalQuantity: number;
   }[];
 };

@@ -7,7 +7,7 @@ import { useMemo } from "react";
 import { tokens } from "../../../styles/tokens";
 import { ModalCard } from "../../Modal.styled";
 import { DateTimeCell } from "../../DateTimeCell";
-import { useHistoricalPositions } from "../../../hooks/data/useHistoricalPositions";
+import { useHistoricalPositions, type HistoricalPosition } from "../../../hooks/data/useHistoricalPositions";
 import type { PositionBookPosition } from "../../../hooks/data/usePositionBook";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import type { ContractMode } from "../../../types/types";
@@ -87,6 +87,50 @@ export const FuturesTradesModal = ({
     const historical = historicalPositionsQuery.data?.data ?? [];
     const active = activePositions ?? [];
 
+    // Futures mode: every PositionBookPosition / HistoricalPosition row carries
+    // the underlying PositionSession.trades[] (see usePositionBook /
+    // useHistoricalPositions). Render one row per real on-chain Trade instead
+    // of synthesising rows from positions.
+    if (contractMode === "futures") {
+      type AnyPosition = PositionBookPosition | HistoricalPosition;
+      const matchingPositions: AnyPosition[] = [...active, ...historical].filter((p) => {
+        if (p.deliveryAt !== selection.deliveryAt) return false;
+        const isLong = sideLookupAddress
+          ? p.buyer.address.toLowerCase() === sideLookupAddress
+          : p.buyPricePerDay > 0n;
+        const positionType: "Long" | "Short" = isLong ? "Long" : "Short";
+        if (positionType !== selection.positionType) return false;
+        const sidePrice = isLong ? p.buyPricePerDay : p.sellPricePerDay;
+        return sidePrice === selection.pricePerDay;
+      });
+
+      const seen = new Set<string>();
+      const rows: TradeRow[] = [];
+      for (const p of matchingPositions) {
+        for (const trade of p.trades ?? []) {
+          if (seen.has(trade.id)) continue;
+          seen.add(trade.id);
+          rows.push({
+            id: trade.id,
+            timestamp: trade.timestamp,
+            // Trades themselves don't have a "closed" concept — show the
+            // session's closedAt if the parent session is closed, else "-".
+            closedAt: !p.isActive ? p.closedAt : null,
+            pricePerDay: trade.tradePrice,
+            positionType: selection.positionType,
+            realizedPnl: Number(trade.realizedPnl),
+            counterparty: null,
+            quantity: Math.abs(trade.tradeQuantity),
+            hasActive: p.isActive,
+          });
+        }
+      }
+      rows.sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
+      return rows;
+    }
+
+    // Perpetual fallback (kept for safety; this modal isn't currently opened
+    // outside futures, but the `contractMode` prop allows for it).
     const unified: UnifiedPosition[] = [
       ...active.map<UnifiedPosition>((p) => ({
         id: p.id,
@@ -118,12 +162,7 @@ export const FuturesTradesModal = ({
       })),
     ];
 
-    // Group by (transactionHash, deliveryAt, price) and aggregate the matching
-    // positions into a single trade row. A single transaction can produce
-    // multiple Position entities (e.g. one taker order matched against several
-    // maker orders), so we merge them here and sum the resulting quantity.
     const groups = new Map<string, TradeRow>();
-
     for (const p of unified) {
       if (p.deliveryAt !== selection.deliveryAt) continue;
 
@@ -162,7 +201,6 @@ export const FuturesTradesModal = ({
         existing.hasActive = true;
         existing.closedAt = null;
       } else if (!existing.hasActive && p.closedAt) {
-        // Keep the latest closedAt across all closed positions in the group.
         if (!existing.closedAt || Number(p.closedAt) > Number(existing.closedAt)) {
           existing.closedAt = p.closedAt;
         }

@@ -1,9 +1,11 @@
 import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
+import { useState } from "react";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import type { HistoricalPosition } from "../../../hooks/data/useHistoricalPositions";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { FuturesTradesModal, type FuturesTradesModalSelection } from "./FuturesTradesModal";
 
 interface HistoricalPositionsListWidgetProps {
   positions: HistoricalPosition[];
@@ -16,6 +18,7 @@ export const HistoricalPositionsListWidget = ({
   isLoading,
   participantAddress,
 }: HistoricalPositionsListWidgetProps) => {
+  const [tradesSelection, setTradesSelection] = useState<FuturesTradesModalSelection | null>(null);
   const getPositionType = (position: HistoricalPosition) => {
     if (!participantAddress) return "Unknown";
     return position.buyer.address.toLowerCase() === participantAddress.toLowerCase() ? "Long" : "Short";
@@ -108,6 +111,7 @@ export const HistoricalPositionsListWidget = ({
               <th>Realized PnL (USDC)</th>
               <th>Created</th>
               <th>Closed</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -128,6 +132,20 @@ export const HistoricalPositionsListWidget = ({
                 </td>
                 <td><DateTimeCell timestamp={groupedPosition.timestamp} /></td>
                 <td>{groupedPosition.closedAt ? <DateTimeCell timestamp={groupedPosition.closedAt} /> : "-"}</td>
+                <td>
+                  <TradesButton
+                    onClick={() =>
+                      setTradesSelection({
+                        pricePerDay: groupedPosition.pricePerDay,
+                        deliveryAt: groupedPosition.deliveryAt,
+                        positionType: groupedPosition.positionType as "Long" | "Short",
+                      })
+                    }
+                    title="View matching trades from the last 30 days"
+                  >
+                    Trades
+                  </TradesButton>
+                </td>
               </TableRow>
             ))}
           </tbody>
@@ -139,6 +157,14 @@ export const HistoricalPositionsListWidget = ({
           <p>No historical positions found in the last 30 days</p>
         </EmptyState>
       )}
+
+      <FuturesTradesModal
+        open={tradesSelection !== null}
+        onClose={() => setTradesSelection(null)}
+        selection={tradesSelection}
+        participantAddress={participantAddress}
+        contractMode="futures"
+      />
     </PositionsContainer>
   );
 };
@@ -233,6 +259,33 @@ const TypeBadge = styled("span")<{ $type: string }>`
 const PnLCell = styled("span")<{ $isPositive: boolean; $isZero: boolean }>`
   color: ${(props) => (props.$isZero ? "white" : props.$isPositive ? tokens.trading.long : tokens.trading.short)};
   font-weight: 600;
+`;
+
+const TradesButton = styled("button")`
+  padding: 0.5rem 0.875rem;
+  background: ${tokens.neutralButton.bg};
+  color: ${tokens.text.onDark};
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+
+  &:hover:not(:disabled) {
+    background: ${tokens.neutralButton.hover};
+    transform: translateY(-1px);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    background: ${tokens.text.muted};
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
 `;
 
 const EmptyState = styled("div")`

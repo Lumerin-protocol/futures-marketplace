@@ -26,7 +26,7 @@ const fetchContractSpecsAsync = async (): Promise<GetResponse<FuturesContractSpe
     minimumPriceIncrement: BigInt(response.futures.minimumPriceIncrement),
     liquidationMarginPercent: response.futures.liquidationMarginPercent,
     speedHps: BigInt(+response.futures.speedHps),
-    tokenAddress: response.futures.tokenAddress,
+    tokenAddress: response.futures.contractAddress,
     validatorAddress: response.futures.validatorAddress,
   };
   return {
@@ -59,7 +59,7 @@ type ContractSpecsResponse = {
     hashrateOracleAddress: `0x${string}`;
     minimumPriceIncrement: string;
     speedHps: string;
-    tokenAddress: `0x${string}`;
+    contractAddress: `0x${string}`;
     validatorAddress: `0x${string}`;
   };
 };

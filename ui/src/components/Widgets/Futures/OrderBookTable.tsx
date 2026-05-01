@@ -79,42 +79,54 @@ export const OrderBookTable = ({
   const perpsOrderBookQuery = usePerpsOrderBook(
     contractMode === "perpetual" ? { refetch: true, interval: 15000 } : undefined
   );
-  
+
   const orderBookQuery = contractMode === "perpetual" ? perpsOrderBookQuery : futuresOrderBookQuery;
-  
-  // Transform perps data to match futures structure
+
+  // Both subgraphs expose the same `priceLevels` collection (one row per
+  // {price, isBid} pair, plus `deliveryAt` on futures). Reduce either source
+  // to the per-price shape the renderer expects.
+  //
+  // The only schema difference is how `totalQuantity` is denominated:
+  //   - perps: scaled BigInt (divide by QUANTITY_SCALE_NUM to get units)
+  //   - futures: raw integer count of OrderEntry units
   const orderBookData = useMemo(() => {
-    if (contractMode === "perpetual" && perpsOrderBookQuery.data?.data?.priceLevels) {
-      // Convert perps price levels to aggregate order format
-      const priceLevelMap = new Map<string, { buyOrdersCount: number; sellOrdersCount: number; price: bigint }>();
-      
-      for (const level of perpsOrderBookQuery.data.data.priceLevels) {
-        const key = level.price.toString();
-        const existing = priceLevelMap.get(key) || { buyOrdersCount: 0, sellOrdersCount: 0, price: level.price };
-        
-        // Divide by QUANTITY_SCALE_NUM to get actual quantity with QUANTITY_DECIMALS
-        const quantity = Number(level.totalQuantity) / QUANTITY_SCALE_NUM;
-        
-        if (level.isBid) {
-          existing.buyOrdersCount = quantity;
-        } else {
-          existing.sellOrdersCount = quantity;
-        }
-        
-        priceLevelMap.set(key, existing);
+    const futuresPriceLevels = futuresOrderBookQuery.data?.data?.priceLevels;
+    const perpsPriceLevels = perpsOrderBookQuery.data?.data?.priceLevels;
+
+    const priceLevels =
+      contractMode === "perpetual" ? perpsPriceLevels : futuresPriceLevels;
+
+    if (!priceLevels) return [];
+
+    const quantityScale = contractMode === "perpetual" ? QUANTITY_SCALE_NUM : 1;
+
+    const priceLevelMap = new Map<
+      string,
+      { buyOrdersCount: number; sellOrdersCount: number; price: bigint }
+    >();
+
+    for (const level of priceLevels) {
+      const key = level.price.toString();
+      const existing =
+        priceLevelMap.get(key) ?? { buyOrdersCount: 0, sellOrdersCount: 0, price: level.price };
+
+      const quantity = Number(level.totalQuantity) / quantityScale;
+
+      if (level.isBid) {
+        existing.buyOrdersCount = quantity;
+      } else {
+        existing.sellOrdersCount = quantity;
       }
-      
-      return Array.from(priceLevelMap.values()).map((item, index) => ({
-        id: `perps-${index}`,
-        price: item.price,
-        deliveryDate: 0n, // Not used in perpetual
-        buyOrdersCount: item.buyOrdersCount,
-        sellOrdersCount: item.sellOrdersCount,
-      }));
+
+      priceLevelMap.set(key, existing);
     }
-    
-    return futuresOrderBookQuery.data?.data?.orders || [];
-  }, [contractMode, perpsOrderBookQuery.data?.data?.priceLevels, futuresOrderBookQuery.data?.data?.orders]);
+
+    return Array.from(priceLevelMap.values());
+  }, [
+    contractMode,
+    perpsOrderBookQuery.data?.data?.priceLevels,
+    futuresOrderBookQuery.data?.data?.priceLevels,
+  ]);
 
   useEffect(() => {
     previousOrderBookStateRef.current = new Map();

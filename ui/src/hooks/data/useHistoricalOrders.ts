@@ -28,16 +28,23 @@ type HistoricalOrdersResponse = {
     };
   };
   orders: {
-    id: string;
-    timestamp: string;
-    deliveryAt: string;
-    pricePerDay: string;
-    isBuy: boolean;
-    isActive: boolean;
-    closedAt: string | null;
-    participant: {
-      address: `0x${string}`;
+    user: {
+      id: string;
     };
+    blockNumber: string;
+    cancelledQuantity: number;
+    closedAt: string | null;
+    deliveryAt: string;
+    createdAt: string;
+    filledQuantity: number;
+    id: string;
+    isBuy: boolean;
+    originalQuantity: number;
+    quantity: number;
+    price: string;
+    status: string;
+    transactionHash: `0x${string}`;
+    updatedAt: string;
   }[];
 };
 
@@ -57,30 +64,31 @@ const fetchAllHistoricalOrders = async (
 
   while (hasMore) {
     const variables = {
-      participantAddress: address,
-      thirtyDaysAgo: thirtyDaysAgo,
+      address: address.toLowerCase(),
+      thirtyDaysAgo,
       first: PAGE_SIZE,
-      skip: skip,
+      skip,
     };
 
     const response = await graphqlRequest<HistoricalOrdersResponse>(HistoricalOrdersQuery, variables);
 
     blockNumber = response._meta.block.number;
 
-    const orders = response.orders.map((order) => ({
+    const orders: HistoricalOrder[] = response.orders.map((order) => ({
       id: order.id,
-      timestamp: order.timestamp,
+      timestamp: order.createdAt,
       deliveryAt: BigInt(order.deliveryAt),
-      pricePerDay: BigInt(order.pricePerDay),
+      pricePerDay: BigInt(order.price),
       isBuy: order.isBuy,
-      isActive: order.isActive,
+      // Anything coming back from this query is FILLED or CANCELLED — never active.
+      isActive: false,
       closedAt: order.closedAt,
       participant: {
-        address: order.participant.address,
+        address: order.user.id as `0x${string}`,
       },
     }));
 
-    allOrders = [...allOrders, ...orders];
+    allOrders = allOrders.concat(orders);
 
     if (response.orders.length < PAGE_SIZE) {
       hasMore = false;
