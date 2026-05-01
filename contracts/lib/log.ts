@@ -1,6 +1,7 @@
 import readline from "node:readline";
 
 const STEP_WIDTH = 30;
+const MIN_KEY_WIDTH = 16;
 
 export function logTitle(title: string): void {
   console.log(`\n--- ${title} ---\n`);
@@ -8,7 +9,7 @@ export function logTitle(title: string): void {
 
 export function logInfo(label: string, fields: Record<string, unknown>): void {
   const keys = Object.keys(fields);
-  const maxKeyLen = Math.max(...keys.map((k) => k.length));
+  const maxKeyLen = Math.max(MIN_KEY_WIDTH, ...keys.map((k) => k.length));
   console.log(`\n[${label}]`);
   for (const [k, v] of Object.entries(fields)) {
     console.log(`  ${k.padEnd(maxKeyLen)}  ${v}`);
