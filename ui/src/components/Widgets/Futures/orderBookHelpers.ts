@@ -1,4 +1,3 @@
-import type { AggregateOrderBookOrder } from "../../../hooks/data/useAggregateOrderBook";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 
@@ -12,6 +11,16 @@ export interface OrderBookData {
 }
 
 /**
+ * Per-price aggregated row consumed by the order-book renderer. Both futures
+ * `priceLevels` and perps `priceLevels` get reduced to this shape upstream.
+ */
+export interface AggregatedOrderBookEntry {
+  price: bigint;
+  buyOrdersCount: number;
+  sellOrdersCount: number;
+}
+
+/**
  * Creates the final order book data by merging live aggregated order book data with calculated static data
  * @param orderBookData - Pre-aggregated order book data from the API (already has buyOrdersCount and sellOrdersCount)
  * @param marketPrice - Market price from the Futures contract
@@ -19,7 +28,7 @@ export interface OrderBookData {
  * @returns Final merged and sorted order book data
  */
 export const createFinalOrderBookData = (
-  orderBookData: AggregateOrderBookOrder[],
+  orderBookData: AggregatedOrderBookEntry[],
   marketPrice: bigint | null | undefined,
   contractSpecs: FuturesContractSpecs | undefined,
 ): OrderBookData[] => {

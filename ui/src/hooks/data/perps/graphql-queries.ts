@@ -107,26 +107,6 @@ query UserPerpsOrdersExcludeStatus ($address: ID!, $statuses: [String!]!)  {
 }
     `
 
-
-export const UserPositionSnapshotsQuery = gql`
- query UserPositionSnapshots ($address: ID!) {
-        positionSnapshots (where: { user: $address }) {
-          aggregatedEntryPriceAfter
-          blockNumber
-          id
-          netQuantityAfter
-          timestamp
-          tradePrice
-          tradeQuantity
-          transactionHash
-          user {
-            id
-          }
-        }
-      }
-    `
-
-
 export const UserPerpsTradesQuery = gql`
     query UserPerpsTrades  ($address: ID!){
   trades(
