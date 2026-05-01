@@ -24,10 +24,10 @@ importers:
         specifier: ^1.6.0
         version: 1.9.7
       '@openzeppelin/contracts':
-        specifier: npm:@openzeppelin/contracts@5.1.0
+        specifier: 5.1.0
         version: 5.1.0
       '@openzeppelin/contracts-upgradeable':
-        specifier: npm:@openzeppelin/contracts-upgradeable@5.1.0
+        specifier: 5.1.0
         version: 5.1.0(@openzeppelin/contracts@5.1.0)
       '@safe-global/api-kit':
         specifier: ^3.0.1
@@ -39,19 +39,16 @@ importers:
         specifier: ^2.0.1
         version: 2.0.1(typescript@5.9.3)(zod@3.25.76)
       collateral-margin:
-        specifier: git+ssh://git@github.com/Lumerin-protocol/collateral-margin.git#dev
-        version: git+https://git@github.com:Lumerin-protocol/collateral-margin.git#9d82ff02f788c545a54edae73d8d7441c4be702a
-      dotenv:
-        specifier: ^16.4.1
-        version: 16.6.1
+        specifier: github:Lumerin-protocol/collateral-margin.git#dev
+        version: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/e86ec3901dd94ecfefccac0d82cadc7e65a789b2
       hashprice-oracle:
-        specifier: git+ssh://git@github.com/Lumerin-protocol/hashprice-oracle.git#dev
+        specifier: github:Lumerin-protocol/hashprice-oracle.git#dev
         version: https://codeload.github.com/Lumerin-protocol/hashprice-oracle/tar.gz/55776ca92c86c69e38e5210e9b63d77d9e4218d8
       multicall3:
         specifier: github:mds1/multicall3
         version: https://codeload.github.com/mds1/multicall3/tar.gz/b667d67ecfa5361a81e8f110234ce242613b0012(patch_hash=f161cbee6da2788494364d99cafb2d9c802738f56fb89426eebbc0a14a4f4a8f)
       solidity-linked-list:
-        specifier: ^6.5.0
+        specifier: 6.5.0
         version: 6.5.0
       viem:
         specifier: ^2.42.1
@@ -931,8 +928,8 @@ packages:
   ci-info@2.0.0:
     resolution: {integrity: sha512-5tK7EtrZ0N+OLFMthtqOj4fI2Jeb88C4CAZPu25LDVUgXJ0A3Js4PMGqrn0JU1W0Mh1/Z8wZzYPxqUrXeBboCQ==}
 
-  collateral-margin@git+https://git@github.com:Lumerin-protocol/collateral-margin.git#9d82ff02f788c545a54edae73d8d7441c4be702a:
-    resolution: {commit: 9d82ff02f788c545a54edae73d8d7441c4be702a, repo: git@github.com:Lumerin-protocol/collateral-margin.git, type: git}
+  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/e86ec3901dd94ecfefccac0d82cadc7e65a789b2:
+    resolution: {tarball: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/e86ec3901dd94ecfefccac0d82cadc7e65a789b2}
     version: 1.0.0
 
   color-convert@2.0.1:
@@ -980,10 +977,6 @@ packages:
   dir-glob@3.0.1:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
-
-  dotenv@16.6.1:
-    resolution: {integrity: sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==}
-    engines: {node: '>=12'}
 
   elliptic@6.6.1:
     resolution: {integrity: sha512-RaddvvMatK2LJHqFJ+YA4WysVN5Ita9E35botqIYspQ4TkRAlCicdzKOjlyv/1Za5RyTNn7di//eEV0uTAfe3g==}
@@ -2791,7 +2784,7 @@ snapshots:
 
   ci-info@2.0.0: {}
 
-  collateral-margin@git+https://git@github.com:Lumerin-protocol/collateral-margin.git#9d82ff02f788c545a54edae73d8d7441c4be702a: {}
+  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/e86ec3901dd94ecfefccac0d82cadc7e65a789b2: {}
 
   color-convert@2.0.1:
     dependencies:
@@ -2832,8 +2825,6 @@ snapshots:
   dir-glob@3.0.1:
     dependencies:
       path-type: 4.0.0
-
-  dotenv@16.6.1: {}
 
   elliptic@6.6.1:
     dependencies:
