@@ -49,7 +49,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint256 public orderFee; // fee for creating an order in tokens
     uint256 private nonce = 0; // nonce for the order id
 
-    address public _gap;
+    address private _gap;
     /// @notice Hashprice oracle returning the price of 100 TH/s per day denominated in the same currency as `token`
     /// @dev Chainlink-compatible aggregator (e.g. HashpriceUSD when `token` is a USD stablecoin).
     ///      Variable name retained from v1.x for storage / ABI backwards compatibility; semantically this is a
@@ -64,7 +64,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private immutable _decimals; // decimals of the wrapped token
     string public validatorURL;
     uint256 public collectedFeesBalance;
-    uint256 public _gap2;
+    uint256 private _gap2;
     mapping(address => uint8) private addressFeeDiscountPercent;
     /// @notice Precomputed divisor used to rebase oracle answers from `oracle.decimals()` to the wrapped
     ///         token's decimals. Recomputed whenever the oracle is set.
