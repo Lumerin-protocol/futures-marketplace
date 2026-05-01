@@ -34,8 +34,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     mapping(address => EnumerableSet.Bytes32Set) private participantPositionIdsIndex; // index of  positions by participant
     mapping(address => EnumerableSet.Bytes32Set) private participantOrderIdsIndex; // index of orders by participant
     mapping(address => mapping(uint256 => EnumerableSet.Bytes32Set)) private participantDeliveryDatePositionIdsIndex; // index of positions by participant and delivery date
-    mapping(address => mapping(uint256 => int256)) private participantDeliveryDateNetDelta; // net delta per participant per delivery date (pre-scaled by deliveryDurationDays, without 1e18)
-    mapping(address => mapping(uint256 => int256)) private participantDeliveryDateNetEntryValue; // sum of qty_i * entryPrice_i * durationDays per participant per delivery date (token decimals)
     mapping(address => mapping(uint256 => mapping(uint256 => EnumerableSet.Bytes32Set))) private
         participantDeliveryDatePriceOrderIdsIndex;
 
@@ -61,7 +59,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 public deliveryIntervalDays; // interval between two closest delivery dates in days
     uint8 public futureDeliveryDatesCount; // number of future delivery dates to be available for orders
     uint8 public liquidationMarginPercent;
-    uint8 private immutable _decimals; // decimals of the wrapped token
+    uint8 private _gap3;
     string public validatorURL;
     uint256 public collectedFeesBalance;
     uint256 private _gap2;
@@ -72,10 +70,14 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     ///      fewer decimals than the token.
     uint256 public hashpriceScalingDivisor;
 
+    IPortfolioMarginEngine public marginEngine;
+    mapping(address => mapping(uint256 => int256)) private participantDeliveryDateNetDelta; // net delta per participant per delivery date (pre-scaled by deliveryDurationDays, without 1e18)
+    mapping(address => mapping(uint256 => int256)) private participantDeliveryDateNetEntryValue; // sum of qty_i * entryPrice_i * durationDays per participant per delivery date (token decimals)
+
+    // immutable
     /// @dev Unified collateral vault (Titan `CollateralVault` or compatible). Baked into the implementation via constructor.
     ICollateralVault public immutable collateralVault;
-
-    IPortfolioMarginEngine public marginEngine;
+    uint8 private immutable _decimals; // decimals of the wrapped token
 
     // constants
     string public constant VERSION = "2.5.0";
