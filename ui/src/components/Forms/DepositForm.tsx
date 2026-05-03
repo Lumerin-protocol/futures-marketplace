@@ -171,7 +171,7 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance, c
       },
     },
     {
-      label: contractMode === "perpetual" ? "Deposit Collateral" : "Deposit Margin",
+      label: "Deposit Collateral",
       async action() {
         const amount = form.getValues("amount");
         if (!amount) throw new Error("Amount not set");
@@ -182,10 +182,10 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance, c
     },
   ];
 
-  const title = contractMode === "perpetual" ? "Deposit Collateral" : "Deposit Margin";
-  const description = contractMode === "perpetual" 
-    ? "Add collateral to your perpetual account" 
-    : "Add margin to your futures account";
+  const title = "Deposit Collateral";
+  const description = contractMode === "perpetual"
+    ? "Add collateral to your perpetual account"
+    : "Add collateral to your futures account";
 
   return (
     <TransactionForm

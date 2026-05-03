@@ -1,25 +1,32 @@
-import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
+import { useWriteContract, useWalletClient } from "wagmi";
 import { getContract } from "viem";
-import { FuturesAbi } from "../../abi/Futures";
+import { CollateralVaultAbi } from "../../abi/ICollateralVault";
+import { useFuturesCollateralVault } from "./useFuturesCollateralVault";
 
 interface RemoveMarginProps {
   amount: bigint;
 }
 
+/// Withdraws collateral from the futures CollateralVault by calling
+/// `vault.withdraw(amount)` directly. The vault address is resolved through
+/// `useFuturesCollateralVault` (same chain as `useGetFutureBalance`).
 export function useRemoveMargin() {
   const { writeContractAsync, isPending, isError, error, data: hash } = useWriteContract();
   const { data: walletClient } = useWalletClient();
+  const { data: collateralVaultAddress } = useFuturesCollateralVault();
 
   const removeMarginAsync = async (props: RemoveMarginProps) => {
-    if (!writeContractAsync || !walletClient) return;
+    if (!writeContractAsync || !walletClient || !collateralVaultAddress) return;
 
-    const futuresContract = getContract({
-      address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`,
-      abi: FuturesAbi,
+    const vault = getContract({
+      address: collateralVaultAddress,
+      abi: CollateralVaultAbi,
       client: walletClient,
     });
 
-    const req = await futuresContract.simulate.removeMargin([props.amount], { account: walletClient.account.address });
+    const req = await vault.simulate.withdraw([props.amount], {
+      account: walletClient.account.address,
+    });
 
     return writeContractAsync(req.request);
   };

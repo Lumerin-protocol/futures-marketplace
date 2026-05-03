@@ -156,7 +156,7 @@ export const WithdrawalForm: FC<WithdrawalFormProps> = ({ closeForm, minMargin, 
 
   const transactionSteps = [
     {
-      label: "Withdraw Margin",
+      label: "Withdraw Collateral",
       async action() {
         const amount = form.getValues("amount");
         if (!amount) throw new Error("Amount not set");
@@ -170,8 +170,8 @@ export const WithdrawalForm: FC<WithdrawalFormProps> = ({ closeForm, minMargin, 
   return (
     <TransactionForm
       onClose={closeForm}
-      title="Withdraw Margin"
-      description="Remove margin from your futures account"
+      title="Withdraw Collateral"
+      description="Remove collateral from your futures account"
       reviewForm={inputForm}
       validateInput={validateInput}
       transactionSteps={transactionSteps}
