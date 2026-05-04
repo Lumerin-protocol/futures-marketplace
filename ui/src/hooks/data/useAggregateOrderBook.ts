@@ -11,7 +11,7 @@ export const useAggregateOrderBook = (
 ) => {
   const query = useQuery({
     queryKey: [AGGREGATE_ORDER_BOOK_QK, deliveryDate],
-    queryFn: () => fetchAggregateOrderBookAsync(deliveryDate!),
+    queryFn: () => fetchAggregateOrderBookAsync(deliveryDate),
     enabled: !!deliveryDate,
     refetchInterval: props?.interval ?? 10000,
     refetchIntervalInBackground: true,
@@ -22,7 +22,17 @@ export const useAggregateOrderBook = (
 
 const PAGE_SIZE = 100;
 
-const fetchAggregateOrderBookAsync = async (deliveryDate: number) => {
+const EMPTY_RESULT = { data: { priceLevels: [] } as AggregateOrderBook, blockNumber: 0 };
+
+const fetchAggregateOrderBookAsync = async (deliveryDate: number | undefined) => {
+  // Defensive guard: TanStack Query's `invalidateQueries({ queryKey: [AGGREGATE_ORDER_BOOK_QK] })`
+  // (used in PlaceOrderForm / CloseOrderForm / ModifyOrderForm post-confirmation hooks)
+  // refetches active observers even when `enabled: false`, so we may be entered with no
+  // delivery date selected (e.g. before `useGetDeliveryDates()` resolves). The indexer's
+  // `priceLevels` collection is keyed by `(deliveryAt, price, side)` and `$deliveryAt`
+  // is non-nullable, so sending `undefined` produces a hard GraphQL error.
+  if (deliveryDate === undefined) return EMPTY_RESULT;
+
   const priceLevels: AggregatePriceLevel[] = [];
   let lastId = "";
   let blockNumber = 0;
@@ -59,6 +69,11 @@ const fetchAggregateOrderBookAsync = async (deliveryDate: number) => {
 };
 
 export const waitForAggregateBlockNumber = async (blockNumber: bigint, qc: QueryClient, deliveryDate?: number) => {
+  // Without a delivery date there's no specific aggregate cache slot to poll; the
+  // caller is post-tx but the form never resolved a delivery context (e.g. cancel
+  // path on perps). Skip the wait — the matching tx-side invalidator still runs.
+  if (deliveryDate === undefined) return;
+
   const delay = 1000;
   const maxAttempts = 30; // 30 attempts with 1s delay = max 30 seconds wait
 

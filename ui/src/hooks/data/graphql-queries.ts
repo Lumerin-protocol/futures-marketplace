@@ -59,6 +59,7 @@ export const PositionsBookQuery = gql`
       id
       lastTradeAt
       maxQuantity
+      netQuantity
       openedAt
       realizedPnl
       status

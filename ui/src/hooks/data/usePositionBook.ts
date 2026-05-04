@@ -72,6 +72,7 @@ const sessionToPosition = (
     deliveryAt: session.deliveryAt,
     sellPricePerDay: isLong ? 0n : entryPrice,
     buyPricePerDay: isLong ? entryPrice : 0n,
+    netQuantity: session.netQuantity,
     isActive,
     closedAt: isActive ? null : session.lastTradeAt,
     closedBy: null,
@@ -151,6 +152,10 @@ export type PositionBookPosition = {
   deliveryAt: string;
   sellPricePerDay: bigint;
   buyPricePerDay: bigint;
+  /// Signed running net qty for the (user, deliveryAt) pair the source
+  /// PositionSession belongs to. Mirrors `UserDeliverySessionPointer.netQuantity`
+  /// while the session is OPEN; 0 once the session is CLOSE.
+  netQuantity: number;
   isActive: boolean;
   id: string;
   closedBy: string | null;
@@ -183,6 +188,7 @@ type PositionsBookResponse = {
     closePrice: string;
     closedQuantity: number;
     maxQuantity: number;
+    netQuantity: number;
     openedAt: string;
     lastTradeAt: string;
     realizedPnl: string;
