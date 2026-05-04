@@ -15,8 +15,8 @@ import { getOrCreateFutures, getOrCreatePointer } from "./store";
 // Public entry points
 // ============================================================================
 
-/// PositionCreated leg: user is opening (or scaling, or flipping into) a position
-/// at `tradePrice`. Returns the Fill id so the canonical `Position` can backlink.
+/// PositionCreated leg: user is opening or scaling into a position at
+/// `tradePrice`. Returns the Fill id so the canonical `Position` can backlink.
 export function applyOpenFill(
   user: User,
   counterpartyId: Bytes,
@@ -91,8 +91,14 @@ export function derivePriceFromExit(wasBuyer: boolean, pnl: BigInt, entryPrice: 
 // ============================================================================
 
 /// Applies one signed-unit fill against the user's `(user, deliveryAt)` session
-/// pointer, opening / closing / flipping the session as needed and upserting the
+/// pointer, opening / scaling / closing the session as needed and upserting the
 /// per-(tx, user, counterparty) Fill and per-(tx, user) Trade aggregates.
+///
+/// Note: a single fill cannot flip the position because both PositionCreated
+/// and PositionExited are emitted with implied qty=1 per event. With unit
+/// fills, |newNet| ≤ |oldNet| + 1, so newNet either reaches 0 or stays
+/// same-signed — never crosses zero in one step.
+///
 /// Returns the Fill id.
 function processUserMatch(
   user: User,
@@ -116,14 +122,11 @@ function processUserMatch(
 
   const wasFlat = oldNet == 0;
   const isNowFlat = newNet == 0;
-  const positionFlipped = !wasFlat && !isNowFlat && !isSameSignI32(oldNet, newNet);
-  const isPositionClosed = isNowFlat || positionFlipped;
-  const isPositionOpened = wasFlat || positionFlipped;
+  const reducingExisting = !wasFlat && !isSameSignI32(oldNet, tradeQty);
 
   // Realized PnL: take from `preComputedPnl` if supplied (PositionExited path),
   // otherwise compute from entry/trade price differential for the close portion.
   let realizedPnl = preComputedPnl;
-  const reducingExisting = !wasFlat && !isSameSignI32(oldNet, tradeQty);
   if (realizedPnl.equals(BigInt.zero()) && reducingExisting) {
     const settledAbs = minI32(absI32(oldNet), absI32(tradeQty));
     const priceDiff = tradePrice.minus(oldEntry);
@@ -131,57 +134,28 @@ function processUserMatch(
     realizedPnl = priceDiff.times(BigInt.fromI32(signedSettled));
   }
 
-  const newEntry = computeNewEntryPrice(
-    oldEntry,
-    tradePrice,
-    oldNet,
+  const newEntry = computeNewEntryPrice(oldEntry, tradePrice, oldNet, tradeQty, newNet);
+
+  const fillId = handleFill(
+    user,
+    pointer,
+    counterpartyId,
     tradeQty,
+    tradePrice,
+    realizedPnl,
     newNet,
+    newEntry,
+    oldNet,
     wasFlat,
     isNowFlat,
-    positionFlipped,
+    reducingExisting,
+    deliveryAt,
+    txHash,
+    blockNumber,
+    timestamp,
+    logIndex,
+    sideIndex,
   );
-
-  let fillId: Bytes;
-  if (positionFlipped) {
-    fillId = handleFlip(
-      user,
-      pointer,
-      counterpartyId,
-      tradeQty,
-      tradePrice,
-      realizedPnl,
-      newNet,
-      newEntry,
-      oldNet,
-      deliveryAt,
-      txHash,
-      blockNumber,
-      timestamp,
-      logIndex,
-      sideIndex,
-    );
-  } else {
-    fillId = handleNonFlip(
-      user,
-      pointer,
-      counterpartyId,
-      tradeQty,
-      tradePrice,
-      realizedPnl,
-      newNet,
-      newEntry,
-      oldNet,
-      isPositionOpened,
-      isPositionClosed,
-      deliveryAt,
-      txHash,
-      blockNumber,
-      timestamp,
-      logIndex,
-      sideIndex,
-    );
-  }
 
   pointer.netQuantity = newNet;
   pointer.aggregatedEntryPrice = newEntry;
@@ -196,21 +170,17 @@ function processUserMatch(
   return fillId;
 }
 
-/// New aggregated entry price. Open / flip → trade price. Scale-in → weighted
-/// avg over abs(oldNet) and abs(tradeQty). Reduce same-direction → unchanged.
-/// Flat → 0.
+/// New aggregated entry price. Open → trade price. Scale-in → weighted avg over
+/// abs(oldNet) and abs(tradeQty). Reduce same-direction → unchanged. Flat → 0.
 function computeNewEntryPrice(
   oldEntry: BigInt,
   tradePrice: BigInt,
   oldNet: i32,
   tradeQty: i32,
   newNet: i32,
-  wasFlat: boolean,
-  isNowFlat: boolean,
-  positionFlipped: boolean,
 ): BigInt {
-  if (isNowFlat) return BigInt.zero();
-  if (positionFlipped || wasFlat) return tradePrice;
+  if (newNet == 0) return BigInt.zero();
+  if (oldNet == 0) return tradePrice;
   if (isSameSignI32(oldNet, tradeQty)) {
     const oldAbs = absI32(oldNet);
     const addAbs = absI32(tradeQty);
@@ -228,10 +198,8 @@ function computeNewEntryPrice(
 // Session lifecycle
 // ============================================================================
 
-/// Flip: closing leg attributed to the OLD session, opening leg starts a NEW
-/// session. We emit two distinct Fills (each with a 1-byte side suffix) so the
-/// `Position.{buyer,seller}Fill` derivations always point at the OPEN leg.
-function handleFlip(
+/// Open / scale / partial-close / full-close — all share one session.
+function handleFill(
   user: User,
   pointer: UserDeliverySessionPointer,
   counterpartyId: Bytes,
@@ -241,84 +209,9 @@ function handleFlip(
   newNet: i32,
   newEntry: BigInt,
   oldNet: i32,
-  deliveryAt: BigInt,
-  txHash: Bytes,
-  blockNumber: BigInt,
-  timestamp: BigInt,
-  logIndex: BigInt,
-  sideIndex: i32,
-): Bytes {
-  const absOld = absI32(oldNet);
-
-  // 1. Close old session.
-  if (pointer.currentSessionId.length > 0) {
-    const oldSession = PositionSession.load(pointer.currentSessionId);
-    if (oldSession) {
-      const oldClosed = oldSession.closedQuantity;
-      oldSession.closedQuantity = oldClosed + absOld;
-      oldSession.realizedPnl = oldSession.realizedPnl.plus(realizedPnl);
-      if (oldSession.closedQuantity > 0) {
-        oldSession.closePrice = oldSession.closePrice
-          .times(BigInt.fromI32(oldClosed))
-          .plus(tradePrice.times(BigInt.fromI32(absOld)))
-          .div(BigInt.fromI32(oldSession.closedQuantity));
-      }
-      oldSession.netQuantity = 0;
-      oldSession.status = PositionSessionStatus.CLOSE;
-      oldSession.lastTradeAt = timestamp;
-      oldSession.save();
-
-      const closeQty = tradeQty > 0 ? absOld : -absOld;
-      upsertFill(
-        user,
-        counterpartyId,
-        oldSession.id,
-        deliveryAt,
-        tradePrice,
-        closeQty,
-        /* netQtyAfter */ 0,
-        realizedPnl,
-        txHash,
-        blockNumber,
-        timestamp,
-      );
-    }
-  }
-
-  // 2. Open new session for the residual (signed in `newNet`'s direction).
-  const newSessionId = positionSessionId(blockNumber, logIndex, sideIndex * 2 + 1);
-  const newSession = openSession(newSessionId, user.id, deliveryAt, newEntry, newNet, timestamp);
-  newSession.save();
-  pointer.currentSessionId = newSessionId;
-
-  return upsertFill(
-    user,
-    counterpartyId,
-    newSessionId,
-    deliveryAt,
-    tradePrice,
-    newNet,
-    newNet,
-    BigInt.zero(),
-    txHash,
-    blockNumber,
-    timestamp,
-  );
-}
-
-/// Non-flip: open / scale / partial-close / full-close — all share one session.
-function handleNonFlip(
-  user: User,
-  pointer: UserDeliverySessionPointer,
-  counterpartyId: Bytes,
-  tradeQty: i32,
-  tradePrice: BigInt,
-  realizedPnl: BigInt,
-  newNet: i32,
-  newEntry: BigInt,
-  oldNet: i32,
-  isPositionOpened: boolean,
-  isPositionClosed: boolean,
+  wasFlat: boolean,
+  isNowFlat: boolean,
+  reducingExisting: boolean,
   deliveryAt: BigInt,
   txHash: Bytes,
   blockNumber: BigInt,
@@ -328,7 +221,7 @@ function handleNonFlip(
 ): Bytes {
   let session: PositionSession;
 
-  if (isPositionOpened) {
+  if (wasFlat) {
     const id = positionSessionId(blockNumber, logIndex, sideIndex);
     session = openSession(id, user.id, deliveryAt, newEntry, newNet, timestamp);
     pointer.currentSessionId = id;
@@ -349,18 +242,23 @@ function handleNonFlip(
     }
   }
 
-  session.entryPrice = newEntry;
+  // Preserve the historical entry price once the session is closing — `newEntry`
+  // is 0 when the position goes flat (correct for the pointer, wrong for the session).
+  if (!isNowFlat) session.entryPrice = newEntry;
   session.netQuantity = newNet;
   session.lastTradeAt = timestamp;
   const absAfter = absI32(newNet);
   if (session.maxQuantity < absAfter) session.maxQuantity = absAfter;
 
-  if (isPositionClosed) {
+  if (isNowFlat) {
     session.status = PositionSessionStatus.CLOSE;
     pointer.currentSessionId = "";
   }
 
-  if (!realizedPnl.equals(BigInt.zero())) {
+  // Close-bookkeeping fires whenever the trade reduces or closes an existing
+  // position — break-even closes (priceDiff == 0) still close units, so this
+  // must not be gated on realizedPnl != 0.
+  if (reducingExisting) {
     const settledAbs = minI32(absI32(oldNet), absI32(tradeQty));
     const oldClosed = session.closedQuantity;
     session.closedQuantity = oldClosed + settledAbs;

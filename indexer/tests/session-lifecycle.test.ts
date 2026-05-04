@@ -83,6 +83,8 @@ describe("session lifecycle: open → close → reopen", () => {
     const buyerSession2 = "00000000000300000301"; // block=3 logIndex=3 side=1
     assert.fieldEquals("PositionSession", buyerSession1, "status", "CLOSE");
     assert.fieldEquals("PositionSession", buyerSession1, "netQuantity", "0");
+    // Historical entryPrice must survive the close (must NOT be reset to 0).
+    assert.fieldEquals("PositionSession", buyerSession1, "entryPrice", PRICE.toString());
     assert.fieldEquals("PositionSession", buyerSession2, "status", "OPEN");
     assert.fieldEquals("PositionSession", buyerSession2, "netQuantity", "1");
     assert.fieldEquals("UserDeliverySessionPointer", pointerKey(buyer, DELIVERY), "netQuantity", "1");

@@ -129,7 +129,7 @@ export function handlePositionExited(event: PositionExited): void {
     event.block.number,
     event.block.timestamp,
     event.logIndex,
-    /* sideIndex */ wasBuyer ? 3 : 2,
+    /* sideIndex */ wasBuyer ? 1 : 0,
   );
 
   if (wasBuyer) {

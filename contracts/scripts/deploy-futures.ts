@@ -13,7 +13,7 @@ async function main() {
   const { viem } = await hre.network.getOrCreate();
 
   const usdcAddress = requireAddress("USDC_TOKEN_ADDRESS");
-  const collateralVaultAddress = requireAddress("COLLATERAL_VAULT_ADDRESS");
+  const collateralVaultAddress = requireAddress("VAULT_ADDRESS");
   const hashrateOracleAddress = requireAddress("HASHRATE_ORACLE_ADDRESS");
   const validatorAddress = requireAddress("VALIDATOR_ADDRESS");
   const SAFE_OWNER_ADDRESS = readOptionalAddress("SAFE_OWNER_ADDRESS");

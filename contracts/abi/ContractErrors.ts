@@ -63,6 +63,11 @@ export const contractErrors = [
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "ZeroAmount",
+    "type": "error"
+  },
+  {
     "inputs": [
       {
         "internalType": "uint256",
@@ -121,6 +126,17 @@ export const contractErrors = [
     "type": "error"
   },
   {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      }
+    ],
+    "name": "SafeERC20FailedOperation",
+    "type": "error"
+  },
+  {
     "inputs": [],
     "name": "PositionDeliveryExpired",
     "type": "error"
@@ -138,6 +154,11 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "Unauthorized",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "MarginBreach",
     "type": "error"
   },
   {
@@ -237,6 +258,11 @@ export const contractErrors = [
   },
   {
     "inputs": [],
+    "name": "FunctionDisabled",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "InsuranceFundNotConfigured",
     "type": "error"
   },
@@ -310,6 +336,11 @@ export const contractErrors = [
       }
     ],
     "name": "ERC20InvalidApprover",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotAuthorized",
     "type": "error"
   },
   {
