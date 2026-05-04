@@ -141,16 +141,23 @@ export const PositionsListWidget = ({
     deliveryAt: string;
     positionType: string;
     amount: number;
+    netQuantity: number;
     positions: PositionBookPosition[];
   }) => {
     // Determine order type to close the position
     // If it's a Long position, create a Sell order (negative quantity)
     // If it's a Short position, create a Buy order (positive quantity)
-    // Quantity sign: positive = Buy, negative = Sell
+    // Quantity sign: positive = Buy, negative = Sell.
+    // Size is taken from the session-level `netQuantity` (the actual signed
+    // position size), not `groupedPosition.amount` (a count of how many
+    // PositionBookPosition rows fell into this group — usually 1, since
+    // sessions are per-(user, deliveryAt) and one session collapses to one
+    // PositionBookPosition).
+    const positionSize = Math.abs(groupedPosition.netQuantity);
     const quantity =
       groupedPosition.positionType === "Short"
-        ? groupedPosition.amount // Buy order (positive)
-        : -groupedPosition.amount; // Sell order (negative)
+        ? positionSize // Buy order (positive)
+        : -positionSize; // Sell order (negative)
 
     // Use market price instead of position price for closing
     const priceString = latestPrice ? latestPrice.toFixed(2) : formatPrice(groupedPosition.pricePerDay);

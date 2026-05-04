@@ -51,7 +51,7 @@ export const UserFuturesOrdersByStatusQuery = gql`
 // PositionBookPosition row downstream so consumers keep working.
 export const PositionsBookQuery = gql`
   query PositionsBookQuery($address: ID!) {
-    positionSessions(where: { user: $address }) {
+    positionSessions(where: { user: $address, netQuantity_gt: 0 }) {
       closePrice
       closedQuantity
       deliveryAt

@@ -109,7 +109,14 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
     modifyModal.open();
   };
 
-  // Group orders by type, pricePerDay, and deliveryAt
+  // Group orders by type, pricePerDay, and deliveryAt.
+  //
+  // The indexer aggregates qty=N OrderCreated events from a single
+  // `createOrder` call into one Order entity carrying `quantity` /
+  // `originalQuantity` / `filledQuantity` counters. We still group across
+  // multiple Order rows here because the same (isBuy, price, deliveryAt)
+  // tuple can be hit by separate transactions, each producing its own
+  // Order — and the modify/close UX collapses those into one row.
   const groupedOrders = orders.reduce(
     (acc, order) => {
       const key = `${order.isBuy}-${order.pricePerDay}-${order.deliveryAt}`;
@@ -121,6 +128,8 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
           deliveryAt: order.deliveryAt,
           destURL: order.destURL,
           amount: 0,
+          originalQuantity: 0,
+          filledQuantity: 0,
           isActive: order.isActive,
           closedAt: order.closedAt,
           timestamp: order.timestamp,
@@ -129,7 +138,12 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
         };
       }
 
-      acc[key].amount += 1;
+      // `amount` represents still-open units — what margin / modify / close
+      // calculations need. Filled and original are summed separately for
+      // the "filled / total" cell.
+      acc[key].amount += order.quantity;
+      acc[key].originalQuantity += order.originalQuantity;
+      acc[key].filledQuantity += order.filledQuantity;
       acc[key].orderIds.push(order.id);
 
       return acc;
@@ -142,6 +156,8 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
         deliveryAt: bigint;
         destURL: string;
         amount: number;
+        originalQuantity: number;
+        filledQuantity: number;
         isActive: boolean;
         closedAt: string | null;
         timestamp: string;
@@ -175,7 +191,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
               <th>Contract Expiration</th>
               <th>Side</th>
               <th>Price (USDC)</th>
-              <th>Quantity</th>
+              <th>Filled / Quantity</th>
               <th>Margin</th>
               <th>Destination</th>
               <th>Time</th>
@@ -192,7 +208,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
                   </TypeBadge>
                 </td>
                 <td>{formatPrice(groupedOrder.pricePerDay)}</td>
-                <td>{groupedOrder.amount}</td>
+                <td>{groupedOrder.filledQuantity} / {groupedOrder.originalQuantity}</td>
                 <td>
                   {formatMargin(calculateMargin(groupedOrder.pricePerDay, groupedOrder.amount, groupedOrder.isBuy))}
                 </td>

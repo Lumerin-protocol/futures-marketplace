@@ -110,6 +110,11 @@ export const FuturesTradesModal = ({
         for (const trade of p.trades ?? []) {
           if (seen.has(trade.id)) continue;
           seen.add(trade.id);
+          // Each fill has its own signed `tradeQuantity`. A session opened
+          // long with +5 and exited via -2 / -3 generates trades on both
+          // sides — so per-row side comes from the fill itself, not the
+          // parent group's `selection.positionType`.
+          const isLong = trade.tradeQuantity >= 0;
           rows.push({
             id: trade.id,
             timestamp: trade.timestamp,
@@ -117,7 +122,7 @@ export const FuturesTradesModal = ({
             // session's closedAt if the parent session is closed, else "-".
             closedAt: !p.isActive ? p.closedAt : null,
             pricePerDay: trade.tradePrice,
-            positionType: selection.positionType,
+            positionType: isLong ? "Long" : "Short",
             realizedPnl: Number(trade.realizedPnl),
             counterparty: null,
             quantity: Math.abs(trade.tradeQuantity),
@@ -262,7 +267,7 @@ export const FuturesTradesModal = ({
                 {matchingTrades.map((trade) => (
                   <TableRow key={trade.id}>
                     <td>
-                      <DateTimeCell timestamp={trade.timestamp} showSeconds />
+                      <DateTimeCell timestamp={trade.timestamp} showSeconds timeOnly />
                     </td>
                     <td>
                       <TypeBadge $type={trade.positionType}>{trade.positionType}</TypeBadge>

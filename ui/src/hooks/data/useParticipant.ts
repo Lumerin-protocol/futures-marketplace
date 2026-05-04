@@ -56,6 +56,14 @@ const fetchParticipantAsync = async (
     deliveryAt: BigInt(order.deliveryAt),
     timestamp: order.createdAt,
     closedAt: order.closedAt,
+    // Schema collapses qty=N OrderCreated events into a single Order with
+    // running counts. `quantity` is the still-open units (initial −
+    // filled − cancelled); `originalQuantity` / `filledQuantity` are
+    // surfaced for the "filled / total" display in OrdersListWidget.
+    quantity: order.quantity,
+    originalQuantity: order.originalQuantity,
+    filledQuantity: order.filledQuantity,
+    cancelledQuantity: order.cancelledQuantity,
     // The new schema doesn't expose destURL or closedBy on Order — both live
     // on OrderEntry. Consumers that need them must query entries separately.
     destURL: "",
@@ -119,6 +127,14 @@ export type ParticipantOrder = {
     address: `0x${string}`;
   };
   pricePerDay: bigint;
+  /// Currently-open units = originalQuantity − filledQuantity − cancelledQuantity.
+  quantity: number;
+  /// Initial units across all entries when the Order was first emitted.
+  originalQuantity: number;
+  /// Number of underlying entries that have matched (i.e. became Fills).
+  filledQuantity: number;
+  /// Number of underlying entries that closed without matching.
+  cancelledQuantity: number;
   timestamp: string;
 };
 
