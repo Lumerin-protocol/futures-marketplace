@@ -44,7 +44,17 @@ export const HistoricalPositionsListWidget = ({
   };
 
 
-  // Group positions by price (based on position type), deliveryAt, and position type
+  // Group positions by price (based on position type), deliveryAt, and position type.
+  //
+  // Each `HistoricalPosition` here is one closed `PositionSession`, which
+  // already carries its own `closedQuantity` (cumulative qty closed during
+  // the session). The new indexer no longer emits one record per contract,
+  // so the previous `amount += 1` row-count tally would always read `1`
+  // even for sessions that closed N contracts. Sum `closedQuantity`
+  // instead — that lets multiple sessions hitting the same
+  // (price, deliveryAt, side) over the 30-day window still collapse into
+  // one row, with the displayed quantity being the contract total across
+  // them.
   const groupedPositions = positions.reduce(
     (acc, position) => {
       const positionType = getPositionType(position);
@@ -64,7 +74,7 @@ export const HistoricalPositionsListWidget = ({
         };
       }
 
-      acc[key].amount += 1;
+      acc[key].amount += position.closedQuantity;
       acc[key].realizedPnl += pnl;
 
       return acc;

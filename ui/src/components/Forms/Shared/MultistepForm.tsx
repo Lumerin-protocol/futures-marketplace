@@ -94,6 +94,8 @@ export const TransactionForm = (props: TransactionFormProps) => {
               <MultipleTransactionProgress
                 steps={props.transactionSteps}
                 txState={multistepTx.txState}
+                showError={multistepTx.showError}
+                onToggleShowError={multistepTx.toggleShowError}
                 onRetry={(stepNumber) => handleExecuteTransaction(stepNumber)}
               />
               <MultistepFormActions
@@ -199,6 +201,8 @@ export const TransactionFormV2 = (props: TransactionFormProps) => {
               <MultipleTransactionProgress
                 steps={props.transactionSteps}
                 txState={multistepTx.txState}
+                showError={multistepTx.showError}
+                onToggleShowError={multistepTx.toggleShowError}
                 onRetry={(stepNumber) => handleExecuteTransaction(stepNumber)}
               />
               {multistepTx.isSuccess && props.resultForm!(p)}
@@ -222,9 +226,11 @@ export const TransactionFormV2 = (props: TransactionFormProps) => {
 export const MultipleTransactionProgress = (props: {
   steps: TransactionStep[];
   txState: Record<number, TxState>;
+  showError: boolean;
+  onToggleShowError: () => void;
   onRetry: (txNumber: number) => void;
 }) => {
-  const [showError, useShowError] = useState(false);
+  const { showError, onToggleShowError } = props;
   return (
     <div>
       <Alert severity="warning" sx={{ margin: "0 0 1em 0" }}>
@@ -248,7 +254,7 @@ export const MultipleTransactionProgress = (props: {
                   size="small"
                   type="button"
                   color="error"
-                  onClick={() => useShowError(!showError)}
+                  onClick={onToggleShowError}
                 >
                   {showError ? "Hide" : "Show"} Details
                 </RetryButton>

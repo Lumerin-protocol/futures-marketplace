@@ -5,6 +5,9 @@ import { tokens } from "../styles/tokens";
 interface DateTimeCellProps {
   timestamp: string | bigint | number;
   showSeconds?: boolean;
+  /// Render only the time (single line) — useful for trade-level rows where
+  /// the parent table already conveys the date context.
+  timeOnly?: boolean;
 }
 
 /**
@@ -13,19 +16,14 @@ interface DateTimeCellProps {
  *   Line 2: time  (e.g. "02:30 PM")
  *
  * Accepts string, bigint, or number values — all treated as unix seconds.
- * Pass `showSeconds` for trade-level precision.
+ * Pass `showSeconds` for trade-level precision, or `timeOnly` to drop the
+ * date line entirely.
  */
-export const DateTimeCell: FC<DateTimeCellProps> = ({ timestamp, showSeconds }) => {
+export const DateTimeCell: FC<DateTimeCellProps> = ({ timestamp, showSeconds, timeOnly }) => {
   const ts = Number(timestamp);
   if (!ts) return <span>-</span>;
 
   const date = new Date(ts * 1000);
-
-  const datePart = date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 
   const timeOptions: Intl.DateTimeFormatOptions = {
     hour: "2-digit",
@@ -33,6 +31,16 @@ export const DateTimeCell: FC<DateTimeCellProps> = ({ timestamp, showSeconds }) 
     ...(showSeconds && { second: "2-digit" }),
   };
   const timePart = date.toLocaleTimeString("en-US", timeOptions);
+
+  if (timeOnly) {
+    return <span>{timePart}</span>;
+  }
+
+  const datePart = date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 
   return (
     <Wrapper>

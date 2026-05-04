@@ -19,6 +19,9 @@ export type HistoricalPosition = {
   buyPricePerDay: bigint;
   buyerPnl: number;
   sellerPnl: number;
+  /// Cumulative qty closed during the session's lifetime (mirrors
+  /// `PositionSession.closedQuantity` on the indexer).
+  closedQuantity: number;
   isActive: boolean;
   closedAt: string | null;
   transactionHash: `0x${string}`;
@@ -103,6 +106,7 @@ const sessionToHistoricalPosition = (
     buyPricePerDay: isLong ? entryPrice : 0n,
     buyerPnl: isLong ? realizedPnl : 0,
     sellerPnl: isLong ? 0 : realizedPnl,
+    closedQuantity: session.closedQuantity,
     isActive: false,
     closedAt: session.lastTradeAt,
     transactionHash: (latestTrade?.transactionHash as `0x${string}`) ?? ZERO_HASH,
