@@ -1320,6 +1320,19 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
+        "internalType": "address[]",
+        "name": "_participants",
+        "type": "address[]"
+      }
+    ],
+    "name": "resetState",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "uint256",
         "name": "_breachPenaltyRatePerDay",
         "type": "uint256"
