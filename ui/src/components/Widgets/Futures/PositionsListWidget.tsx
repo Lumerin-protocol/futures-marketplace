@@ -211,6 +211,10 @@ export const PositionsListWidget = ({
           destURL: position.destURL,
           amount: 0,
           paidCount: 0,
+          // Sessions are per (user, deliveryAt), so every position rolling up
+          // into this group shares the same session-level net qty. Take it
+          // from the first one we see; subsequent ones would just duplicate it.
+          netQuantity: position.netQuantity,
           isActive: position.isActive,
           closedAt: position.closedAt,
           timestamp: position.timestamp,
@@ -235,6 +239,7 @@ export const PositionsListWidget = ({
         destURL: string;
         amount: number;
         paidCount: number;
+        netQuantity: number;
         isActive: boolean;
         closedAt: string | null;
         timestamp: string;
@@ -268,6 +273,7 @@ export const PositionsListWidget = ({
               <th>Side</th>
               <th>Price (USDC)</th>
               <th>Quantity</th>
+              <th>Net Quantity</th>
               <th>Margin</th>
               <th>Unrealized PnL (USDC)</th>
               <th>Destination</th>
@@ -287,6 +293,12 @@ export const PositionsListWidget = ({
                 </td>
                 <td>{formatPrice(groupedPosition.pricePerDay)}</td>
                 <td>{groupedPosition.amount}</td>
+                <td>
+                  <NetQuantityCell $isPositive={groupedPosition.netQuantity >= 0}>
+                    {groupedPosition.netQuantity > 0 ? "+" : ""}
+                    {groupedPosition.netQuantity}
+                  </NetQuantityCell>
+                </td>
                 <td>
                   {formatMargin(
                     calculateMargin(groupedPosition.pricePerDay, groupedPosition.amount, groupedPosition.positionType),
@@ -507,6 +519,12 @@ const TypeBadge = styled("span")<{ $type: string }>`
 const PnLCell = styled("span")<{ $isPositive: boolean }>`
   color: ${(props) => (props.$isPositive ? tokens.trading.long : tokens.trading.short)};
   font-weight: 600;
+`;
+
+const NetQuantityCell = styled("span")<{ $isPositive: boolean }>`
+  color: ${(props) => (props.$isPositive ? tokens.trading.long : tokens.trading.short)};
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 `;
 
 const DestURLCell = styled("span")`
