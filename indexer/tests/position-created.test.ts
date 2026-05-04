@@ -76,12 +76,14 @@ describe("handlePositionCreated", () => {
     assert.fieldEquals("PositionSession", SELLER_SESSION, "deliveryAt", DELIVERY.toString());
     assert.fieldEquals("PositionSession", SELLER_SESSION, "status", "OPEN");
     assert.fieldEquals("PositionSession", SELLER_SESSION, "entryPrice", PRICE.toString());
+    assert.fieldEquals("PositionSession", SELLER_SESSION, "netQuantity", "-1");
     assert.fieldEquals("PositionSession", SELLER_SESSION, "maxQuantity", "1");
     assert.fieldEquals("PositionSession", SELLER_SESSION, "closedQuantity", "0");
 
     // Buyer side: net qty +1.
     assert.fieldEquals("PositionSession", BUYER_SESSION, "user", buyer.toHexString());
     assert.fieldEquals("PositionSession", BUYER_SESSION, "status", "OPEN");
+    assert.fieldEquals("PositionSession", BUYER_SESSION, "netQuantity", "1");
 
     // Per-(user, deliveryAt) pointer reflects net qty.
     assert.fieldEquals("UserDeliverySessionPointer", pointerKey(seller, DELIVERY), "netQuantity", "-1");
@@ -136,7 +138,9 @@ describe("handlePositionCreated", () => {
     assert.entityCount("Trade", 2);
     // Same session continues — qty doubles, status still OPEN.
     assert.fieldEquals("PositionSession", SELLER_SESSION, "maxQuantity", "2");
+    assert.fieldEquals("PositionSession", SELLER_SESSION, "netQuantity", "-2");
     assert.fieldEquals("PositionSession", BUYER_SESSION, "maxQuantity", "2");
+    assert.fieldEquals("PositionSession", BUYER_SESSION, "netQuantity", "2");
 
     const sellerFillId = fillAggKeyDefaultTx(seller, buyer);
     const buyerFillId = fillAggKeyDefaultTx(buyer, seller);

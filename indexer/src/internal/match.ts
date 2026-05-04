@@ -249,7 +249,6 @@ function handleFlip(
   sideIndex: i32,
 ): Bytes {
   const absOld = absI32(oldNet);
-  const absNew = absI32(newNet);
 
   // 1. Close old session.
   if (pointer.currentSessionId.length > 0) {
@@ -264,6 +263,7 @@ function handleFlip(
           .plus(tradePrice.times(BigInt.fromI32(absOld)))
           .div(BigInt.fromI32(oldSession.closedQuantity));
       }
+      oldSession.netQuantity = 0;
       oldSession.status = PositionSessionStatus.CLOSE;
       oldSession.lastTradeAt = timestamp;
       oldSession.save();
@@ -287,7 +287,7 @@ function handleFlip(
 
   // 2. Open new session for the residual (signed in `newNet`'s direction).
   const newSessionId = positionSessionId(blockNumber, logIndex, sideIndex * 2 + 1);
-  const newSession = openSession(newSessionId, user.id, deliveryAt, newEntry, absNew, timestamp);
+  const newSession = openSession(newSessionId, user.id, deliveryAt, newEntry, newNet, timestamp);
   newSession.save();
   pointer.currentSessionId = newSessionId;
 
@@ -330,7 +330,7 @@ function handleNonFlip(
 
   if (isPositionOpened) {
     const id = positionSessionId(blockNumber, logIndex, sideIndex);
-    session = openSession(id, user.id, deliveryAt, newEntry, absI32(newNet), timestamp);
+    session = openSession(id, user.id, deliveryAt, newEntry, newNet, timestamp);
     pointer.currentSessionId = id;
   } else {
     const loaded = PositionSession.load(pointer.currentSessionId);
@@ -342,7 +342,7 @@ function handleNonFlip(
       ]);
       // Should never happen, but recover by minting a fresh session.
       const id = positionSessionId(blockNumber, logIndex, sideIndex);
-      session = openSession(id, user.id, deliveryAt, newEntry, absI32(newNet), timestamp);
+      session = openSession(id, user.id, deliveryAt, newEntry, newNet, timestamp);
       pointer.currentSessionId = id;
     } else {
       session = loaded;
@@ -350,6 +350,7 @@ function handleNonFlip(
   }
 
   session.entryPrice = newEntry;
+  session.netQuantity = newNet;
   session.lastTradeAt = timestamp;
   const absAfter = absI32(newNet);
   if (session.maxQuantity < absAfter) session.maxQuantity = absAfter;
@@ -394,7 +395,7 @@ function openSession(
   userId: Bytes,
   deliveryAt: BigInt,
   entryPrice: BigInt,
-  initialAbsQty: i32,
+  initialNetQty: i32,
   timestamp: BigInt,
 ): PositionSession {
   const s = new PositionSession(id);
@@ -403,9 +404,10 @@ function openSession(
   s.deliveryAt = deliveryAt;
   s.entryPrice = entryPrice;
   s.closePrice = BigInt.zero();
+  s.netQuantity = initialNetQty;
   s.closedQuantity = 0;
   s.realizedPnl = BigInt.zero();
-  s.maxQuantity = initialAbsQty;
+  s.maxQuantity = absI32(initialNetQty);
   s.tradingFees = BigInt.zero();
   s.openedAt = timestamp;
   s.lastTradeAt = timestamp;

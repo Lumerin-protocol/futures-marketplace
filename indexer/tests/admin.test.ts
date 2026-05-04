@@ -15,7 +15,13 @@ import {
   handleOrderFeeUpdated,
   handleValidatorURLUpdated,
 } from "../src/handlers/admin";
-import { paramString, paramUint, setupDataSourceMock, setupFutures } from "./helpers";
+import {
+  mockFuturesContractCallsAsReverted,
+  paramString,
+  paramUint,
+  setupDataSourceMock,
+  setupFutures,
+} from "./helpers";
 
 describe("admin handlers", () => {
   beforeEach(() => {
@@ -39,5 +45,21 @@ describe("admin handlers", () => {
       ]),
     );
     assert.fieldEquals("Futures", "0", "validatorURL", "https://newvalidator.example");
+  });
+});
+
+describe("Futures.startBlock from data source context", () => {
+  beforeEach(() => clearStore());
+
+  test("getOrCreateFutures populates startBlock from the dataSource context", () => {
+    const startBlock = BigInt.fromI64(222_848_905);
+    setupDataSourceMock(startBlock);
+    mockFuturesContractCallsAsReverted();
+    // No setupFutures() — first handler invocation creates the singleton and
+    // must read startBlock from the mocked data source context.
+    handleOrderFeeUpdated(
+      newTypedMockEventWithParams<OrderFeeUpdated>([paramUint("orderFee", BigInt.fromI32(1))]),
+    );
+    assert.fieldEquals("Futures", "0", "startBlock", startBlock.toString());
   });
 });

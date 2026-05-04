@@ -2,8 +2,15 @@
  * Deterministic test data generators and event param helpers.
  * AssemblyScript has no Math.random, so we use seeds for reproducible IDs.
  */
-import { Address, BigInt, Bytes, ethereum } from "@graphprotocol/graph-ts";
-import { dataSourceMock } from "matchstick-as/assembly/index";
+import {
+  Address,
+  BigInt,
+  Bytes,
+  DataSourceContext,
+  Value,
+  ethereum,
+} from "@graphprotocol/graph-ts";
+import { createMockedFunction, dataSourceMock } from "matchstick-as/assembly/index";
 import { Futures } from "../generated/schema";
 
 function padLeft(s: string, len: i32, char: string): string {
@@ -24,9 +31,14 @@ export function contractAddress(): Address {
   return userAddress(255);
 }
 
-/// Mock dataSource address; without this `dataSource.address()` warns at runtime.
-export function setupDataSourceMock(): void {
-  dataSourceMock.setAddress(contractAddress().toHexString());
+/// Mock dataSource address + context. The `startBlock` context entry mirrors
+/// the production data source context populated from `START_BLOCK_FUTURES` in
+/// `subgraph.template.yaml`. Note: matchstick's `setContext` resets the
+/// address, so we set both atomically via `setAddressAndContext`.
+export function setupDataSourceMock(startBlock: BigInt = BigInt.zero()): void {
+  const ctx = new DataSourceContext();
+  ctx.set("startBlock", Value.fromBigInt(startBlock));
+  dataSourceMock.setAddressAndContext(contractAddress().toHexString(), ctx);
 }
 
 /// Deterministic 32-byte id from a numeric seed (orderId / positionId).
@@ -75,6 +87,33 @@ export function pointerKey(user: Address, deliveryAt: BigInt): string {
   return changetype<Bytes>(user).concatI32(deliveryAt.toI32()).toHexString();
 }
 
+/// Mark every contract getter consumed by `loadFuturesFromContract` as
+/// reverted. Lets handlers run `getOrCreateFutures()` from scratch in tests
+/// without pre-creating the singleton, while still falling through to default
+/// values (the production code uses `try_*` and skips on revert).
+export function mockFuturesContractCallsAsReverted(): void {
+  const addr = contractAddress();
+  const getters: string[][] = [
+    ["collateralVault", "collateralVault():(address)"],
+    ["hashrateOracle", "hashrateOracle():(address)"],
+    ["validatorAddress", "validatorAddress():(address)"],
+    ["validatorURL", "validatorURL():(string)"],
+    ["minimumPriceIncrement", "minimumPriceIncrement():(uint256)"],
+    ["orderFee", "orderFee():(uint256)"],
+    ["liquidationMarginPercent", "liquidationMarginPercent():(uint8)"],
+    ["speedHps", "speedHps():(uint256)"],
+    ["deliveryDurationDays", "deliveryDurationDays():(uint8)"],
+    ["deliveryIntervalDays", "deliveryIntervalDays():(uint8)"],
+    ["futureDeliveryDatesCount", "futureDeliveryDatesCount():(uint8)"],
+    ["firstFutureDeliveryDate", "firstFutureDeliveryDate():(uint256)"],
+    ["breachPenaltyRatePerDay", "breachPenaltyRatePerDay():(uint256)"],
+    ["collectedFeesBalance", "collectedFeesBalance():(uint256)"],
+  ];
+  for (let i = 0; i < getters.length; i++) {
+    createMockedFunction(addr, getters[i][0], getters[i][1]).reverts();
+  }
+}
+
 /// Pre-create the Futures singleton so handlers don't try to call into the
 /// (unmocked) on-chain contract during tests. Default `deliveryDurationDays`
 /// is 30 because exit-pnl arithmetic divides by it.
@@ -85,6 +124,7 @@ export function setupFutures(deliveryDurationDays: i32 = 30): void {
   f.hashrateOracleAddress = Bytes.empty();
   f.validatorAddress = Bytes.empty();
   f.validatorURL = "";
+  f.startBlock = BigInt.zero();
   f.minimumPriceIncrement = BigInt.zero();
   f.orderFee = BigInt.zero();
   f.liquidationMarginPercent = 0;

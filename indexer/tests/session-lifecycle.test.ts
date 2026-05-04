@@ -82,7 +82,9 @@ describe("session lifecycle: open → close → reopen", () => {
     const buyerSession1 = "00000000000100000101"; // block=1 logIndex=1 side=1
     const buyerSession2 = "00000000000300000301"; // block=3 logIndex=3 side=1
     assert.fieldEquals("PositionSession", buyerSession1, "status", "CLOSE");
+    assert.fieldEquals("PositionSession", buyerSession1, "netQuantity", "0");
     assert.fieldEquals("PositionSession", buyerSession2, "status", "OPEN");
+    assert.fieldEquals("PositionSession", buyerSession2, "netQuantity", "1");
     assert.fieldEquals("UserDeliverySessionPointer", pointerKey(buyer, DELIVERY), "netQuantity", "1");
     assert.fieldEquals("UserDeliverySessionPointer", pointerKey(buyer, DELIVERY), "currentSessionId", buyerSession2);
   });

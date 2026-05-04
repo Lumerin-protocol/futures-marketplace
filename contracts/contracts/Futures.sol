@@ -80,7 +80,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private immutable _decimals; // decimals of the wrapped token
 
     // constants
-    string public constant VERSION = "2.5.0";
+    string public constant VERSION = "2.5.1";
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     uint8 public constant BREACH_PENALTY_DECIMALS = 18;
     uint32 private constant SECONDS_PER_DAY = 3600 * 24;
@@ -619,6 +619,37 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     function setMarginEngine(address _marginEngine) external onlyOwner {
         marginEngine = IPortfolioMarginEngine(_marginEngine);
+    }
+
+    /// @notice Admin escape hatch that clears every order and position belonging to the
+    ///         supplied participants along with all derived bookkeeping (per-participant
+    ///         order/position indices, per-delivery-date price queues, and the net delta /
+    ///         entry-value accumulators).
+    /// @dev Collateral balances in the vault and `collectedFeesBalance` are deliberately left
+    ///      untouched; any delivery payments already escrowed in `address(this)` via
+    ///      `depositDeliveryPaymentV2` also remain — refund them out-of-band if needed.
+    ///      Iterates each participant's index backwards so swap-and-pop removals stay safe.
+    ///      Pass every participant with outstanding state — orders/positions belonging to
+    ///      addresses not included in `_participants` will not be cleared.
+    /// @param _participants Addresses whose orders and positions should be fully purged.
+    function resetState(address[] calldata _participants) external onlyOwner {
+        for (uint256 p = 0; p < _participants.length; p++) {
+            address participant = _participants[p];
+
+            EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[participant];
+            for (uint256 i = _orders.length(); i > 0; i--) {
+                bytes32 orderId = _orders.at(i - 1);
+                _closeOrder(orderId, orders[orderId]);
+            }
+
+            // `_removePosition` mutates the counterparty's index as well, so a position is
+            // only seen once even when both seller and buyer appear in `_participants`.
+            EnumerableSet.Bytes32Set storage _positions = participantPositionIdsIndex[participant];
+            for (uint256 i = _positions.length(); i > 0; i--) {
+                bytes32 positionId = _positions.at(i - 1);
+                _removePosition(positionId, positions[positionId]);
+            }
+        }
     }
 
     /// @notice Gets the maintenance margin of a position, the minimum amount of effective margin that is required to avoid a margin call

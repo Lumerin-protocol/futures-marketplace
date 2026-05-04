@@ -98,6 +98,7 @@ describe("handlePositionExited", () => {
     // Buyer's PositionSession (block=1, logIndex=1, side=1) transitions to CLOSE.
     const buyerSession = "00000000000100000101";
     assert.fieldEquals("PositionSession", buyerSession, "status", "CLOSE");
+    assert.fieldEquals("PositionSession", buyerSession, "netQuantity", "0");
     assert.fieldEquals("PositionSession", buyerSession, "closedQuantity", "1");
     assert.fieldEquals("PositionSession", buyerSession, "realizedPnl", pnl.toString());
 
