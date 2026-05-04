@@ -13,6 +13,10 @@ dataSources:
       address: "${FUTURES_ADDRESS}"
       startBlock: ${START_BLOCK_FUTURES}
       abi: Futures
+    context:
+      startBlock:
+        type: BigInt
+        data: "${START_BLOCK_FUTURES}"
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9

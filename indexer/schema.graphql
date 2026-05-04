@@ -10,6 +10,9 @@ type Futures @entity(immutable: false) {
   validatorAddress: Bytes!
   validatorURL: String!
 
+  "Block number the indexer was configured to start from (sourced from the data source context, set via START_BLOCK_FUTURES)."
+  startBlock: BigInt!
+
   # Configuration
   minimumPriceIncrement: BigInt!
   orderFee: BigInt!
@@ -210,6 +213,8 @@ type PositionSession @entity(immutable: false) {
 
   entryPrice: BigInt! # qty-weighted average entry price
   closePrice: BigInt! # qty-weighted average exit price
+  "Signed running net qty. Mirrors UserDeliverySessionPointer.netQuantity while OPEN; 0 once CLOSE."
+  netQuantity: Int!
   maxQuantity: Int! # max absolute qty reached during the session
   closedQuantity: Int! # cumulative qty closed
   realizedPnl: BigInt!

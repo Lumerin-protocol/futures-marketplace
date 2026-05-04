@@ -13,6 +13,7 @@ export function getOrCreateFutures(): Futures {
     futures.hashrateOracleAddress = Bytes.empty();
     futures.validatorAddress = Bytes.empty();
     futures.validatorURL = "";
+    futures.startBlock = readStartBlockFromContext();
     futures.minimumPriceIncrement = BigInt.zero();
     futures.orderFee = BigInt.zero();
     futures.liquidationMarginPercent = 0;
@@ -36,6 +37,16 @@ export function getOrCreateFutures(): Futures {
     loadFuturesFromContract(futures);
   }
   return futures;
+}
+
+/// Pull the configured start block from the data source context (set in
+/// `subgraph.template.yaml` from the `START_BLOCK_FUTURES` env var).
+/// Returns zero if the context entry is absent (e.g. matchstick tests).
+function readStartBlockFromContext(): BigInt {
+  const ctx = dataSource.context();
+  const value = ctx.get("startBlock");
+  if (value == null) return BigInt.zero();
+  return value.toBigInt();
 }
 
 /// Refresh on-chain config snapshot via getter eth_calls. Best-effort: any
