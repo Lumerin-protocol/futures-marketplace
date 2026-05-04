@@ -17,6 +17,7 @@ export default defineConfig({
       "BTCPriceOracleMock",
       "ICollateralVault",
       "IPortfolioMarginEngine",
+      "CollateralVault",
     ],
   },
   paths: {
