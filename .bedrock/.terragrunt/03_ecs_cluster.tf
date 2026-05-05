@@ -54,7 +54,7 @@ resource "aws_cloudwatch_log_group" "futures_marketplace" {
     var.default_tags,
     var.foundation_tags,
     {
-      Name = "Bedrock ${local.shortname} ECS Cluster Cloudwatch Log Group",
+      Name       = "Bedrock ${local.shortname} ECS Cluster Cloudwatch Log Group",
       Capability = "Bedrock Cloudwatch Log Group",
     },
   )

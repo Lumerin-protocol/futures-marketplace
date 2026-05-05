@@ -22,7 +22,7 @@ resource "aws_cloudwatch_composite_alarm" "futures_ui_unhealthy" {
     "ALARM(${aws_cloudwatch_metric_alarm.futures_ui_5xx[0].alarm_name})",
     "ALARM(${aws_cloudwatch_metric_alarm.futures_ui_4xx[0].alarm_name})",
     "ALARM(${aws_cloudwatch_metric_alarm.canary_failed[0].alarm_name})"
-  ]) : join(" OR ", [
+    ]) : join(" OR ", [
     "ALARM(${aws_cloudwatch_metric_alarm.futures_ui_unreachable[0].alarm_name})",
     "ALARM(${aws_cloudwatch_metric_alarm.futures_ui_5xx[0].alarm_name})",
     "ALARM(${aws_cloudwatch_metric_alarm.futures_ui_4xx[0].alarm_name})"
