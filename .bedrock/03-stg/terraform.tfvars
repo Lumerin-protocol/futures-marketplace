@@ -1,5 +1,14 @@
 create_core = true
 
+# Optional human-readable alias hostname mirroring stg.hashpower.exchange.
+# Spins up an additional CloudFront + ACM cert + Route53 record (in the root zone)
+# without touching the existing stg distribution or its cert. See
+# .terragrunt/04_futures_ui_beta_alias.tf for details.
+beta_alias = {
+  create   = true
+  hostname = "beta.hashpower.exchange"
+}
+
 ecs_cluster = {
   create  = true
   protect = false
@@ -11,19 +20,19 @@ market_maker = {
   # Lambda Configuration
   timeout                     = 60          # 60 seconds (enough for blockchain tx)
   memory_size                 = 1024        # 1GB RAM
-  schedule_rate               = 1           # Run every 1 minute
+  schedule_rate               = 5           # Run every 1 minute
   # Trading Parameters
-  float_amount                = 450000000   # 450 USDC (450n * 10n ** 6n)
+  float_amount                = 200000000   # 200 USDC — STG-lite (prod: 450 USDC)
   spread_amount               = 10000       # 0.01 USDC (1n * 10n ** 4n)
-  grid_levels                 = 5
+  grid_levels                 = 5           # STG-lite (prod: 5)
   active_quoting_amount_ratio = 0.6
   risk_aversion               = 15000
-  max_position                = 10
+  max_position                = 8           # STG-lite (prod: 10)
   log_level                   = "info"
   chain_id                    = 8453       # Base Mainnet
   # Balance Thresholds (graceful exit when funds low)
   min_eth_balance             = "100000000000000"     # 0.0001 ETH in wei (~1.4 txns - stops before failing)
-  min_usdc_balance            = "10000000"            # 10 USDC (10n * 10n ** 6n)
+  min_usdc_balance            = "5000000"             # 5 USDC — STG-lite (prod: 10 USDC)
 }
 
 margin_call_lambda = {
@@ -70,6 +79,14 @@ clone_factory_address   = "0xb5838586b43b50f9a739d1256a067859fe5b3234"
 hashrate_oracle_address = "0x614dCAfa33AF0705C7b4A37667eF511F400F36d0"
 futures_address         = "0xf97a1bbfb5e061ef73dad8ebf25939d93639fb7f"
 multicall_address       = "0xcA11bde05977b3631167028862bE2a173976CA11"
+
+########################################
+# Goldsky Subgraph Endpoints (public)
+########################################
+gs_subgraphs = {
+  futures = "https://api.goldsky.com/api/public/project_cmmz5dm4l7ocp01xng61y5nwr/subgraphs/hpow-futures/stg-latest/gn"
+  oracles = "https://api.goldsky.com/api/public/project_cmmz5dm4l7ocp01xng61y5nwr/subgraphs/hpow-oracles/stg-latest/gn"
+}
 
 ########################################
 # Monitoring Configuration

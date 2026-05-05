@@ -12,13 +12,13 @@ market_maker = {
   # Lambda Configuration
   timeout                     = 60          # 60 seconds (enough for blockchain tx)
   memory_size                 = 1024        # 1GB RAM
-  schedule_rate               = 5           # Run every 5 minutes Graph for Sep-ARB is 2-5 minutes (mainnet is <60 seconds)
+  schedule_rate               = 1           # Run every 2 minutes (Graph for Sep-ARB is 2-5 minutes (mainnet is <60 seconds)
   # Trading Parameters
   float_amount                = 800000000   # 800 USDC (800n * 10n ** 6n)
   spread_amount               = 10000       # 0.01 USDC (1n * 10n ** 4n)
   grid_levels                 = 5
   active_quoting_amount_ratio = 0.4
-  risk_aversion               = 3000000     # Risk aversion parameter (higher = more conservative)
+  risk_aversion               = 15000 #3000000     # Risk aversion parameter (higher = more conservative)
   max_position                = 10
   log_level                   = "info"
   chain_id                    = 84532       # Base Sepolia

@@ -4,6 +4,23 @@ variable "create_core" {
   default     = false
 }
 
+# Optional human-readable alias hostname (e.g. beta.hashpower.exchange) that mirrors
+# the marketplace site. When enabled, provisions a SECOND CloudFront distribution sharing
+# the existing marketplace S3 origin, a dedicated ACM cert (us-east-1, DNS-validated against
+# the hashpower.exchange root zone in titanio-net), and an A-alias Route53 record in that
+# root zone. Intended for short-lived "press the easy button" hostnames; defaults off.
+variable "beta_alias" {
+  description = "Optional human-readable alias hostname mirroring the marketplace site (e.g. beta.hashpower.exchange)"
+  type = object({
+    create   = bool
+    hostname = string # FQDN, must be a direct child of hashpower.exchange (e.g. beta.hashpower.exchange)
+  })
+  default = {
+    create   = false
+    hostname = ""
+  }
+}
+
 variable "ecs_cluster" {
   description = "ECS Cluster Variables"
   type    = map(any)
