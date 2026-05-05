@@ -72,6 +72,15 @@ futures_address         = "0x8464dc5ab80e76e497fad318fe6d444408e5ccda"
 multicall_address       = "0xcA11bde05977b3631167028862bE2a173976CA11"
 
 ########################################
+# Goldsky Subgraph Endpoints (public)
+########################################
+gs_subgraphs = {
+  futures = "FINDME"
+  oracles = "FINDME"
+}
+
+
+########################################
 # Monitoring Configuration
 ########################################
 monitoring = {

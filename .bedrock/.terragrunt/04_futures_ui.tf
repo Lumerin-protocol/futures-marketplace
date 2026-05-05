@@ -53,7 +53,10 @@ data "aws_iam_policy_document" "s3_marketplace" {
     condition {
       test     = "StringEquals"
       variable = "AWS:SourceARN"
-      values   = [aws_cloudfront_distribution.marketplace[0].arn]
+      values = concat(
+        [aws_cloudfront_distribution.marketplace[0].arn],
+        var.beta_alias.create ? [aws_cloudfront_distribution.beta_alias[0].arn] : [],
+      )
     }
   }
 }
