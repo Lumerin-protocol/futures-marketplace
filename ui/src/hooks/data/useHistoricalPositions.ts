@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { graphqlRequest } from "./graphql";
 import { HistoricalPositionsQuery } from "./graphql-queries";
-import { toFuturesSessionTrade, type FuturesSessionTrade } from "./usePositionBook";
+import { toFuturesSessionTrade, type FuturesSessionTrade } from "./getUserFuturesPositions";
 
 export const HISTORICAL_POSITIONS_QK = "HistoricalPositions";
 

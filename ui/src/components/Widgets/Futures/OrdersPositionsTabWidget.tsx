@@ -7,8 +7,8 @@ import { OrdersListWidget } from "./OrdersListWidget";
 import { PositionsListWidget } from "./PositionsListWidget";
 import { HistoricalOrdersListWidget } from "./HistoricalOrdersListWidget";
 import { HistoricalPositionsListWidget } from "./HistoricalPositionsListWidget";
-import type { ParticipantOrder } from "../../../hooks/data/useParticipant";
-import type { PositionBookPosition } from "../../../hooks/data/usePositionBook";
+import type { ParticipantOrder } from "../../../hooks/data/getUserFuturesOrders";
+import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPositions";
 import { useHistoricalOrders } from "../../../hooks/data/useHistoricalOrders";
 import { useHistoricalPositions } from "../../../hooks/data/useHistoricalPositions";
 import { useUserFuturesTrades, type UserFuturesTrade } from "../../../hooks/data/useUserFuturesTrades";
@@ -91,12 +91,7 @@ export const OrdersPositionsTabWidget = ({
   }, [tradesQuery.data?.trades]);
 
   const orderHistoryCount = useMemo(() => {
-    const historicalOrders = historicalOrdersQuery.data?.data ?? [];
-    const unique = new Set<string>();
-    historicalOrders.forEach((order) => {
-      unique.add(`${order.deliveryAt.toString()}_${order.pricePerDay.toString()}`);
-    });
-    return unique.size;
+    return historicalOrdersQuery.data?.data?.length ?? 0;
   }, [historicalOrdersQuery.data?.data]);
 
   const positionHistoryCount = useMemo(() => {

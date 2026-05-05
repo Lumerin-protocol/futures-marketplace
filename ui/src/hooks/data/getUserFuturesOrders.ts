@@ -9,7 +9,7 @@ export const PARTICIPANT_QK = "Participant";
 /// in the active list and uses for conflict detection in PlaceOrder/ModifyOrder.
 const ACTIVE_STATUSES = ["ACTIVE", "PARTIAL"] as const;
 
-export const useParticipant = (
+export const getUserFuturesOrders = (
   participantAddress: `0x${string}` | undefined,
   props?: {
     refetch?: boolean;

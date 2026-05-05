@@ -15,41 +15,6 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
-  // Group orders by type, pricePerDay, and deliveryAt
-  const groupedOrders = orders.reduce(
-    (acc, order) => {
-      const key = `${order.isBuy}-${order.pricePerDay}-${order.deliveryAt}`;
-
-      if (!acc[key]) {
-        acc[key] = {
-          isBuy: order.isBuy,
-          pricePerDay: order.pricePerDay,
-          deliveryAt: order.deliveryAt,
-          amount: 0,
-          closedAt: order.closedAt,
-          timestamp: order.timestamp,
-        };
-      }
-
-      acc[key].amount += 1;
-
-      return acc;
-    },
-    {} as Record<
-      string,
-      {
-        isBuy: boolean;
-        pricePerDay: bigint;
-        deliveryAt: bigint;
-        amount: number;
-        closedAt: string | null;
-        timestamp: string;
-      }
-    >,
-  );
-
-  const groupedOrdersArray = Object.values(groupedOrders);
-
   if (isLoading) {
     return (
       <OrdersContainer>
@@ -78,25 +43,25 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
             </tr>
           </thead>
           <tbody>
-            {groupedOrdersArray.map((groupedOrder, index) => (
-              <TableRow key={`${groupedOrder.isBuy}-${groupedOrder.pricePerDay}-${groupedOrder.deliveryAt}-${index}`}>
-                <td><DateTimeCell timestamp={groupedOrder.deliveryAt} /></td>
+            {orders.map((order) => (
+              <TableRow key={order.id}>
+                <td><DateTimeCell timestamp={order.deliveryAt} /></td>
                 <td>
-                  <TypeBadge $type={groupedOrder.isBuy ? "Long" : "Short"}>
-                    {groupedOrder.isBuy ? "Long" : "Short"}
+                  <TypeBadge $type={order.isBuy ? "Long" : "Short"}>
+                    {order.isBuy ? "Long" : "Short"}
                   </TypeBadge>
                 </td>
-                <td>{formatPrice(groupedOrder.pricePerDay)}</td>
-                <td>{groupedOrder.amount}</td>
-                <td><DateTimeCell timestamp={groupedOrder.timestamp} /></td>
-                <td>{groupedOrder.closedAt ? <DateTimeCell timestamp={groupedOrder.closedAt} /> : "-"}</td>
+                <td>{formatPrice(order.pricePerDay)}</td>
+                <td>{order.originalQuantity}</td>
+                <td><DateTimeCell timestamp={order.timestamp} /></td>
+                <td>{order.closedAt ? <DateTimeCell timestamp={order.closedAt} /> : "-"}</td>
               </TableRow>
             ))}
           </tbody>
         </Table>
       </TableContainer>
 
-      {groupedOrdersArray.length === 0 && (
+      {orders.length === 0 && (
         <EmptyState>
           <p>No historical orders found in the last 30 days</p>
         </EmptyState>

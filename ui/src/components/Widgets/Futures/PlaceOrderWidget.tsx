@@ -29,7 +29,7 @@ import { PlaceOrderForm } from "../../Forms/PlaceOrderForm";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
-import type { Participant } from "../../../hooks/data/useParticipant";
+import type { Participant } from "../../../hooks/data/getUserFuturesOrders";
 import type { ContractMode, AccountBalance } from "../../../types/types";
 import type { PerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
 import { useAccount } from "wagmi";

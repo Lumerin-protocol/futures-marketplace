@@ -9,7 +9,7 @@ export const POSITION_BOOK_QK = "PositionBook";
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
 const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`;
 
-export const usePositionBook = (address: `0x${string}` | undefined, props?: { refetch?: boolean }) => {
+export const getUserFuturesPositions = (address: `0x${string}` | undefined, props?: { refetch?: boolean }) => {
   const query = useQuery({
     queryKey: [POSITION_BOOK_QK],
     queryFn: () => fetchPositionBookAsync(address!),

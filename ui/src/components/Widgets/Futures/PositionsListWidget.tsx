@@ -2,7 +2,7 @@ import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import Tooltip from "@mui/material/Tooltip";
 import { SmallWidget } from "../../Cards/Cards.styled";
-import type { PositionBookPosition } from "../../../hooks/data/usePositionBook";
+import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPositions";
 import { useCreateOrder } from "../../../hooks/data/useCreateOrder";
 import { useCreatePerpsOrder } from "../../../hooks/data/perps/useCreatePerpsOrder";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
