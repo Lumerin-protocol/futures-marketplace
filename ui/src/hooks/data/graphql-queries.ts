@@ -51,7 +51,7 @@ export const UserFuturesOrdersByStatusQuery = gql`
 // PositionBookPosition row downstream so consumers keep working.
 export const PositionsBookQuery = gql`
   query PositionsBookQuery($address: ID!) {
-    positionSessions(where: { user: $address, netQuantity_gt: 0 }) {
+    positionSessions(where: { user: $address, netQuantity_not: 0 }) {
       closePrice
       closedQuantity
       deliveryAt
@@ -315,6 +315,30 @@ export const AggregatedBtcPriceIndexQuery = gql`
       id
       sum
       timestamp
+    }
+  }
+`;
+
+// Per-user futures Trades, mirroring the perps `UserTradesQuery` shape.
+// The futures Trade entity has no `aggregatedEntryPriceAfter` (perps-only)
+// but does carry `deliveryAt` and `fillCount` (futures-only).
+export const UserFuturesTradesQuery = gql`
+  query UserFuturesTrades($address: ID!) {
+    trades(where: { user: $address }, orderBy: timestamp, orderDirection: desc) {
+      user {
+        id
+      }
+      transactionHash
+      blockNumber
+      deliveryAt
+      fillCount
+      id
+      netQuantityAfter
+      realizedPnl
+      timestamp
+      tradePrice
+      tradeQuantity
+      tradingFee
     }
   }
 `;
