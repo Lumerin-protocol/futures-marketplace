@@ -21,7 +21,7 @@ resource "aws_iam_policy" "futures_marketplace_secret_access" {
         ]
         Resource = compact([
           var.create_core ? aws_secretsmanager_secret.futures.arn : "",
-          var.market_maker.create ? aws_secretsmanager_secret.market_maker.arn : "", 
+          var.market_maker.create ? aws_secretsmanager_secret.market_maker[0].arn : "",
           var.notifications_service.create ? aws_secretsmanager_secret.notifications.arn : "",
           var.margin_call_lambda.create ? aws_secretsmanager_secret.margin_call.arn : ""
         ])
@@ -83,9 +83,22 @@ resource "aws_secretsmanager_secret_version" "futures" {
 # Separate secret for Market Maker service
 # Contains private key and ETH node URL (sensitive trading credentials)
 
+# `moved` block migrates the previously-unindexed secret state address into
+# the count-indexed [0] address that this resource now uses. This keeps stg/lmn
+# (where var.market_maker.create is still true) intact across the count
+# refactor; in dev (count = 0) the moved block is a no-op and the secret is
+# planned for destroy. recovery_window_in_days = 0 forces immediate deletion
+# rather than the default 30-day soft-delete window.
+moved {
+  from = aws_secretsmanager_secret.market_maker
+  to   = aws_secretsmanager_secret.market_maker[0]
+}
+
 resource "aws_secretsmanager_secret" "market_maker" {
-  name        = "market-maker-secrets-v3-${substr(var.account_shortname, 8, 3)}"
-  description = "Secrets for Market Maker trading service (private key and ETH node URL)"
+  count                   = var.market_maker.create ? 1 : 0
+  name                    = "market-maker-secrets-v3-${substr(var.account_shortname, 8, 3)}"
+  description             = "Secrets for Market Maker trading service (private key and ETH node URL)"
+  recovery_window_in_days = 0
   tags = merge(var.default_tags, var.foundation_tags, {
     Name = "market-maker-secrets-v3-${substr(var.account_shortname, 8, 3)}"
   })
@@ -94,7 +107,7 @@ resource "aws_secretsmanager_secret" "market_maker" {
 resource "aws_secretsmanager_secret_version" "market_maker" {
   count = var.market_maker.create ? 1 : 0
   # lifecycle {ignore_changes = [secret_string]}
-  secret_id = aws_secretsmanager_secret.market_maker.id
+  secret_id = aws_secretsmanager_secret.market_maker[0].id
   secret_string = jsonencode({
     private_key          = var.market_maker_private_key
     eth_node_url         = var.market_maker_eth_node_url

@@ -8,7 +8,7 @@ ecs_cluster = {
 
 # Configure Market Maker Lambda
 market_maker = {
-  create                      = true
+  create                      = false
   # Lambda Configuration
   timeout                     = 60          # 60 seconds (enough for blockchain tx)
   memory_size                 = 1024        # 1GB RAM

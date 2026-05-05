@@ -77,10 +77,10 @@ resource "aws_cloudwatch_metric_alarm" "futures_ui_4xx" {
 # This works correctly for low-traffic sites (dev/stg) where no user traffic is normal
 resource "aws_cloudwatch_metric_alarm" "futures_ui_unreachable" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.create_core ? 1 : 0
-  provider            = aws.use1  # Route53 metrics are only in us-east-1
+  provider            = aws.use1 # Route53 metrics are only in us-east-1
   alarm_name          = "futures-ui-unreachable-${local.env_suffix}"
   comparison_operator = "LessThanThreshold"
-  evaluation_periods  = local.route53_alarm_evaluation_periods  # unhealthy_alarm_period (1 min periods)
+  evaluation_periods  = local.route53_alarm_evaluation_periods # unhealthy_alarm_period (1 min periods)
   metric_name         = "HealthCheckStatus"
   namespace           = "AWS/Route53"
   period              = 60
@@ -209,7 +209,7 @@ resource "aws_cloudwatch_metric_alarm" "mm_insufficient_funds" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.market_maker.create ? 1 : 0
   alarm_name          = "market-maker-insufficient-funds-${local.env_suffix}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1  # Alert immediately on first occurrence
+  evaluation_periods  = 1 # Alert immediately on first occurrence
   metric_name         = "InsufficientBalance"
   namespace           = local.monitoring_namespace
   period              = 300
@@ -527,7 +527,7 @@ resource "aws_cloudwatch_metric_alarm" "notifications_rds_storage" {
   namespace           = "AWS/RDS"
   period              = 300
   statistic           = "Average"
-  threshold           = var.alarm_thresholds.rds_storage_threshold * 1024 * 1024 * 1024  # Convert GB to bytes
+  threshold           = var.alarm_thresholds.rds_storage_threshold * 1024 * 1024 * 1024 # Convert GB to bytes
   alarm_description   = "Notifications RDS storage low for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
   treat_missing_data  = "notBreaching"
 
@@ -619,7 +619,7 @@ resource "aws_cloudwatch_metric_alarm" "notifications_alb_unhealthy" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.notifications_service.create ? 1 : 0
   alarm_name          = "notifications-alb-unhealthy-${local.env_suffix}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = local.route53_alarm_evaluation_periods  # period = 60 sec
+  evaluation_periods  = local.route53_alarm_evaluation_periods # period = 60 sec
   metric_name         = "UnHealthyHostCount"
   namespace           = "AWS/ApplicationELB"
   period              = 60

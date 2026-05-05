@@ -24,8 +24,8 @@ data "aws_iam_openid_connect_provider" "github" {
 # IAM ROLE FOR GITHUB ACTIONS
 ################################################################################
 resource "aws_iam_role" "github_actions_futures" {
-  count = var.create_core ? 1 : 0
-  name  = "github-actions-futures-v3-${substr(var.account_shortname, 8, 3)}"
+  count    = var.create_core ? 1 : 0
+  name     = "github-actions-futures-v3-${substr(var.account_shortname, 8, 3)}"
   provider = aws.use1
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -63,10 +63,10 @@ resource "aws_iam_role" "github_actions_futures" {
 # SECRETS ACCESS POLICY (for reading deployment secrets and configuration)
 ################################################################################
 resource "aws_iam_role_policy" "github_secrets_read" {
-  count = var.create_core ? 1 : 0
+  count    = var.create_core ? 1 : 0
   provider = aws.use1
-  name  = "secrets-read-futures"
-  role  = aws_iam_role.github_actions_futures[count.index].id
+  name     = "secrets-read-futures"
+  role     = aws_iam_role.github_actions_futures[count.index].id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -78,11 +78,11 @@ resource "aws_iam_role_policy" "github_secrets_read" {
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret"
         ]
-        Resource = [
-          var.create_core ? aws_secretsmanager_secret.futures.arn : null, 
-          var.market_maker.create ? aws_secretsmanager_secret.market_maker.arn : null,
-          var.notifications_service.create ? aws_secretsmanager_secret.notifications.arn : null
-       ]
+        Resource = compact([
+          var.create_core ? aws_secretsmanager_secret.futures.arn : "",
+          var.market_maker.create ? aws_secretsmanager_secret.market_maker[0].arn : "",
+          var.notifications_service.create ? aws_secretsmanager_secret.notifications.arn : ""
+        ])
       }
     ]
   })
@@ -92,10 +92,10 @@ resource "aws_iam_role_policy" "github_secrets_read" {
 # MARKETPLACE DEPLOYMENT POLICY (for S3 and CloudFront)
 ################################################################################
 resource "aws_iam_role_policy" "github_marketplace_deploy" {
-  count = var.create_core ? 1 : 0
+  count    = var.create_core ? 1 : 0
   provider = aws.use1
-  name  = "marketplace-deploy-s3-cloudfront"
-  role  = aws_iam_role.github_actions_futures[count.index].id
+  name     = "marketplace-deploy-s3-cloudfront"
+  role     = aws_iam_role.github_actions_futures[count.index].id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [

@@ -5,60 +5,60 @@
 locals {
   # Environment suffix for resource naming
   env_suffix = substr(var.account_shortname, 8, 3)
-  
+
   # Monitoring namespace for custom metrics
   monitoring_namespace = "FuturesMarketplace/${local.env_suffix}"
-  
+
   # SNS Topic ARNs for alerting
   dev_alerts_sns_arn    = var.monitoring.create && var.monitoring.dev_alerts_topic_name != "" ? "arn:aws:sns:${var.default_region}:${var.account_number}:${var.monitoring.dev_alerts_topic_name}" : ""
   devops_alerts_sns_arn = var.monitoring.create && var.monitoring.devops_alerts_topic_name != "" ? "arn:aws:sns:${var.default_region}:${var.account_number}:${var.monitoring.devops_alerts_topic_name}" : ""
-  
+
   # Use devops alerts for critical (production) or dev alerts for non-prod
   critical_sns_arn = var.account_lifecycle == "prd" ? local.devops_alerts_sns_arn : local.dev_alerts_sns_arn
-  
+
   # Alarm action strategy:
   # - Component alarms: NO notifications (just state tracking for composites)
   # - Composite alarms: YES notifications when notifications_enabled = true
   # This prevents double-alerting when a component triggers its parent composite
-  
+
   # Component alarms - never send notifications (empty actions)
   component_alarm_actions = []
-  
+
   # Composite alarms - send notifications only when enabled
   composite_alarm_actions = var.monitoring.notifications_enabled ? [local.critical_sns_arn] : []
-  
+
   # Alarm evaluation periods - calculated from unhealthy_alarm_period_minutes
   # Different metric sources have different native periods:
   #   - Standard CloudWatch ECS/Lambda/ALB metrics: 300 sec (5 min) periods
   #   - Route53 health checks: 60 sec (1 min) periods
   #   - Canary: runs at configurable rate
   standard_alarm_evaluation_periods = ceil(var.monitoring_schedule.unhealthy_alarm_period_minutes / 5)
-  route53_alarm_evaluation_periods  = var.monitoring_schedule.unhealthy_alarm_period_minutes  # period = 60 sec = 1 min
+  route53_alarm_evaluation_periods  = var.monitoring_schedule.unhealthy_alarm_period_minutes # period = 60 sec = 1 min
   canary_alarm_evaluation_periods   = max(1, ceil(var.monitoring_schedule.unhealthy_alarm_period_minutes / var.monitoring_schedule.synthetics_canary_rate_minutes))
-  
+
   # Resource references (conditional on service creation)
   ecs_cluster_name = var.ecs_cluster.create ? aws_ecs_cluster.futures_marketplace[0].name : ""
-  
+
   # CloudFront distribution ID (for metrics)
   cloudfront_distribution_id = var.create_core ? aws_cloudfront_distribution.marketplace[0].id : ""
-  
+
   # Service names for metric dimensions
-  notifications_service_name   = var.notifications_service.create ? "svc-${var.notifications_service["svc_name"]}-${local.env_suffix}" : ""
-  margin_call_function_name    = var.margin_call_lambda.create ? "margin-call-v2-${local.env_suffix}" : ""
-  market_maker_function_name   = var.market_maker.create ? "market-maker-${local.env_suffix}" : ""
-  
+  notifications_service_name = var.notifications_service.create ? "svc-${var.notifications_service["svc_name"]}-${local.env_suffix}" : ""
+  margin_call_function_name  = var.margin_call_lambda.create ? "margin-call-v2-${local.env_suffix}" : ""
+  market_maker_function_name = var.market_maker.create ? "market-maker-${local.env_suffix}" : ""
+
   # Log group names for metric filters
-  market_maker_log_group    = var.market_maker.create ? "/aws/lambda/market-maker-${local.env_suffix}" : ""
-  notifications_log_group   = var.notifications_service.create ? "/ecs/${var.notifications_service["svc_name"]}-${local.env_suffix}" : ""
-  margin_call_log_group     = var.margin_call_lambda.create ? "/aws/lambda/margin-call-v2-${local.env_suffix}" : ""
-  
+  market_maker_log_group  = var.market_maker.create ? "/aws/lambda/market-maker-${local.env_suffix}" : ""
+  notifications_log_group = var.notifications_service.create ? "/ecs/${var.notifications_service["svc_name"]}-${local.env_suffix}" : ""
+  margin_call_log_group   = var.margin_call_lambda.create ? "/aws/lambda/margin-call-v2-${local.env_suffix}" : ""
+
   # RDS instance identifier
   notifications_rds_identifier = var.notifications_service.create ? "notifications-v2-${local.env_suffix}" : ""
-  
+
   # ALB ARN suffix for metrics (extract from full ARN)
   notifications_alb_arn_suffix = var.notifications_service.create ? replace(aws_alb.notifications_int_use1[0].arn, "arn:aws:elasticloadbalancing:${var.default_region}:${var.account_number}:loadbalancer/", "") : ""
   notifications_tg_arn_suffix  = var.notifications_service.create ? replace(aws_alb_target_group.notifications_int_use1[0].arn, "arn:aws:elasticloadbalancing:${var.default_region}:${var.account_number}:", "") : ""
-  
+
   # Futures UI URL for Synthetics Canary and Route53 Health Check
   # Zone apex only (matches CloudFront alias): hashpower.exchange | dev.* | stg.*
   futures_ui_url = "https://${local.hp_dns["exc"].name}"
@@ -182,7 +182,7 @@ resource "aws_iam_role_policy" "synthetics_canary" {
 resource "aws_s3_bucket" "synthetics_artifacts" {
   count         = var.monitoring.create && var.monitoring.create_synthetics_canary ? 1 : 0
   bucket        = "futures-synthetics-${var.account_number}-${local.env_suffix}"
-  force_destroy = true  # Allow deletion even with artifacts present
+  force_destroy = true # Allow deletion even with artifacts present
 
   tags = merge(
     var.default_tags,

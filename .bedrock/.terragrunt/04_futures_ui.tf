@@ -94,16 +94,16 @@ resource "aws_cloudfront_distribution" "marketplace" {
     origin_access_control_id = aws_cloudfront_origin_access_control.marketplace[0].id
     origin_id                = "${var.account_shortname}-${local.s3_cf_origin}"
   }
-  http_version        = "http2and3"
-  web_acl_id          = data.aws_wafv2_web_acl.bedrock_waf_cloudfront.arn
-  retain_on_delete    = true
-  enabled             = true
-  is_ipv6_enabled     = true
+  http_version     = "http2and3"
+  web_acl_id       = data.aws_wafv2_web_acl.bedrock_waf_cloudfront.arn
+  retain_on_delete = true
+  enabled          = true
+  is_ipv6_enabled  = true
   # Public URL is zone apex only: hashpower.exchange | dev.hashpower.exchange | stg.hashpower.exchange (no futures. subdomain)
   comment             = "${local.hp_dns["exc"].name} marketplace"
   default_root_object = "index.html"
   aliases             = [local.hp_dns["exc"].name]
-  price_class = "PriceClass_200" #200=all except SouthAmerica, Australia/NZ, 100=NA/EMEA only All=All
+  price_class         = "PriceClass_200" #200=all except SouthAmerica, Australia/NZ, 100=NA/EMEA only All=All
   logging_config {
     include_cookies = false
     bucket          = "${var.account_shortname}-devops.s3.amazonaws.com"
