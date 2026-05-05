@@ -956,7 +956,7 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoad
       <Table>
         <thead>
           <tr>
-            <th>Timestamp</th>
+            <th>Time</th>
             <th>Side</th>
             <th>Trade Price</th>
             <th>Size (USDC)</th>
@@ -1055,7 +1055,7 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
           <TradesTable>
             <thead>
               <tr>
-                <th>Timestamp</th>
+                <th>Time</th>
                 <th>Side</th>
                 <th>Trade Price</th>
                 <th>Size (USDC)</th>

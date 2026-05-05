@@ -238,7 +238,7 @@ const FuturesTradesTable = ({ trades, isLoading, visibleCount, onLoadMore }: Fut
       <Table>
         <thead>
           <tr>
-            <th>Timestamp</th>
+            <th>Time</th>
             <th>Side</th>
             <th>Contract Expiration</th>
             <th>Price (USDC)</th>
