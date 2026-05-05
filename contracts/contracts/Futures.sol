@@ -74,14 +74,25 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     mapping(address => mapping(uint256 => int256)) private participantDeliveryDateNetDelta; // net delta per participant per delivery date (pre-scaled by deliveryDurationDays, without 1e18)
     mapping(address => mapping(uint256 => int256)) private participantDeliveryDateNetEntryValue; // sum of qty_i * entryPrice_i * durationDays per participant per delivery date (token decimals)
 
+    /// @notice Set of price levels that currently have at least one resting buy order, per delivery date.
+    /// @dev Maintained by `_addOrderToQueue` / `_removeOrderFromQueue`. Used by the off-chain market maker
+    ///      and indexers to walk active depth without scanning every possible price tick.
+    mapping(uint256 => EnumerableSet.UintSet) private activeBidPrices;
+    /// @notice Set of price levels that currently have at least one resting sell order, per delivery date.
+    mapping(uint256 => EnumerableSet.UintSet) private activeAskPrices;
+
     // immutable
     /// @dev Unified collateral vault (Titan `CollateralVault` or compatible). Baked into the implementation via constructor.
     ICollateralVault public immutable collateralVault;
     uint8 private immutable _decimals; // decimals of the wrapped token
 
     // constants
-    string public constant VERSION = "2.5.1";
+    string public constant VERSION = "2.6.0";
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
+    /// @notice Maximum absolute quantity accepted in a single `createOrder` call.
+    /// @dev Bounded by the int8 parameter type. Exposed as a constant so off-chain
+    ///      callers (e.g. the market maker) can clamp without hard-coding the limit.
+    int8 public constant MAX_ORDER_QTY = type(int8).max;
     uint8 public constant BREACH_PENALTY_DECIMALS = 18;
     uint32 private constant SECONDS_PER_DAY = 3600 * 24;
     uint256 private constant MAX_BREACH_PENALTY_RATE_PER_DAY = 5 * 10 ** (BREACH_PENALTY_DECIMALS - 2); // 5%
@@ -314,7 +325,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
                 revert MaxOrdersPerParticipantReached();
             }
             bytes32 _orderId = _createOrder(_participant, _price, _deliveryDate, _isBuy, _destURL);
-            orderIndexId.pushBack(uint256(_orderId));
+            _addOrderToQueue(orderIndexId, _orderId, _deliveryDate, _price, _isBuy);
             participantOrders.add(_orderId);
             participantPriceOrderIds.add(_orderId);
             return true;
@@ -550,7 +561,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     function _closeOrder(bytes32 orderId, Order memory order) private {
         StructuredLinkedList.List storage orderIndexId =
             _deliveryDatePriceOrderIds(order.deliveryAt, order.pricePerDay, order.isBuy);
-        orderIndexId.remove(uint256(orderId));
+        _removeOrderFromQueue(orderIndexId, orderId, order.deliveryAt, order.pricePerDay, order.isBuy);
 
         participantOrderIdsIndex[order.participant].remove(orderId);
         participantDeliveryDatePriceOrderIdsIndex[order.participant][order.deliveryAt][order.pricePerDay].remove(
@@ -558,6 +569,47 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         );
         delete orders[orderId];
         emit OrderClosed(orderId, order.participant);
+    }
+
+    /// @dev Pushes `_orderId` onto the per-(deliveryDate, price) FIFO queue and, if the queue
+    ///      transitioned from empty → non-empty, records the price level in
+    ///      `activeBidPrices` / `activeAskPrices` so off-chain consumers can enumerate live depth.
+    function _addOrderToQueue(
+        StructuredLinkedList.List storage orderIndexId,
+        bytes32 _orderId,
+        uint256 _deliveryDate,
+        uint256 _price,
+        bool _isBuy
+    ) private {
+        bool wasEmpty = orderIndexId.sizeOf() == 0;
+        orderIndexId.pushBack(uint256(_orderId));
+        if (wasEmpty) {
+            (_isBuy ? activeBidPrices : activeAskPrices)[_deliveryDate].add(_price);
+        }
+    }
+
+    /// @dev Removes `_orderId` from the per-(deliveryDate, price) queue and, if the queue is now
+    ///      empty, drops the price level from the active-price set.
+    function _removeOrderFromQueue(
+        StructuredLinkedList.List storage orderIndexId,
+        bytes32 _orderId,
+        uint256 _deliveryDate,
+        uint256 _price,
+        bool _isBuy
+    ) private {
+        orderIndexId.remove(uint256(_orderId));
+        if (orderIndexId.sizeOf() == 0) {
+            (_isBuy ? activeBidPrices : activeAskPrices)[_deliveryDate].remove(_price);
+        }
+    }
+
+    /// @notice Cancels a resting order owned by the caller. The locked margin is released
+    ///         the next time `computePortfolioIM` is consulted (no on-chain bookkeeping
+    ///         needed: order margin is recomputed on read).
+    function closeOrder(bytes32 _orderId) external {
+        Order memory order = orders[_orderId];
+        if (order.participant != _msgSender()) revert OrderNotBelongToSender();
+        _closeOrder(_orderId, order);
     }
 
     // Admin functions
@@ -1030,6 +1082,56 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         }
 
         return deliveryDatesArray;
+    }
+
+    // ── MM-helping views ────────────────────────────────────────────────────
+
+    /// @notice All resting order ids owned by `_participant`. Order is set-iteration
+    ///         order; callers that need ordering should sort off-chain.
+    /// @dev Used by the market maker for own-state warm-up; replaces an event-scan path.
+    function getOrderIds(address _participant) external view returns (bytes32[] memory) {
+        return participantOrderIdsIndex[_participant].values();
+    }
+
+    /// @notice All active position ids `_participant` is a side of (buyer or seller).
+    function getPositionIds(address _participant) external view returns (bytes32[] memory) {
+        return participantPositionIdsIndex[_participant].values();
+    }
+
+    /// @notice Active price levels for one side of one delivery date, capped at `_maxLevels`.
+    /// @dev Iteration order is the EnumerableSet's internal swap-and-pop order, i.e. unsorted.
+    ///      Off-chain callers sort to derive the visible top of book.
+    function getBidPrices(uint256 _deliveryDate, uint256 _maxLevels) external view returns (uint256[] memory) {
+        return _activePricesSlice(activeBidPrices[_deliveryDate], _maxLevels);
+    }
+
+    /// @notice Mirror of `getBidPrices` for the ask side.
+    function getAskPrices(uint256 _deliveryDate, uint256 _maxLevels) external view returns (uint256[] memory) {
+        return _activePricesSlice(activeAskPrices[_deliveryDate], _maxLevels);
+    }
+
+    function _activePricesSlice(EnumerableSet.UintSet storage set, uint256 _maxLevels)
+        private
+        view
+        returns (uint256[] memory)
+    {
+        uint256 total = set.length();
+        uint256 count = total < _maxLevels ? total : _maxLevels;
+        uint256[] memory out = new uint256[](count);
+        for (uint256 i = 0; i < count; i++) {
+            out[i] = set.at(i);
+        }
+        return out;
+    }
+
+    /// @notice Sum of resting quantities at one (deliveryDate, price, side).
+    /// @dev Each order in the FIFO queue contributes ±1 contract; we sum the queue size.
+    ///      Returned value is unsigned (absolute aggregate quantity) for symmetry with perps.
+    function getQuantityAtPrice(uint256 _deliveryDate, uint256 _price, bool _isBid) external view returns (uint256) {
+        StructuredLinkedList.List storage queue =
+            _isBid ? deliveryDatePriceOrdersLongIdQueue[_deliveryDate][_price]
+                  : deliveryDatePriceOrdersShortIdQueue[_deliveryDate][_price];
+        return queue.sizeOf();
     }
 
     /// @dev Returns the index of the current (closest available in the future) delivery date relative to the first future delivery date

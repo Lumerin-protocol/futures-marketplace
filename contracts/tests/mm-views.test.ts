@@ -1,0 +1,143 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { network } from "hardhat";
+import { parseUnits } from "viem";
+import { deployFuturesFixture } from "./fixtures.ts";
+import { refreshHashprice } from "./utils.ts";
+
+const { viem, networkHelpers } = await network.getOrCreate();
+
+/**
+ * Tests covering the views added for the off-chain market maker:
+ *   - getOrderIds(participant)
+ *   - getPositionIds(participant)
+ *   - MAX_ORDER_QTY constant
+ *   - getBidPrices / getAskPrices / getQuantityAtPrice (per-delivery-date depth)
+ *
+ * Active-price-set maintenance is verified end-to-end by creating, partially
+ * cancelling, and fully cancelling orders and asserting the depth views drop
+ * the price level when the queue empties.
+ */
+
+describe("MM views", () => {
+  it("MAX_ORDER_QTY equals int8 max (127)", async () => {
+    const { contracts } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const max = await contracts.futures.read.MAX_ORDER_QTY();
+    assert.equal(max, 127);
+  });
+
+  it("getOrderIds returns the full set of resting orders for a participant", async () => {
+    const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures } = contracts;
+    const { seller } = accounts;
+    const deliveryDates = await futures.read.getDeliveryDates();
+    const dd = deliveryDates[0];
+
+    const p1 = parseUnits("100", 6);
+    const p2 = parseUnits("101", 6);
+
+    await refreshHashprice(contracts.hashrateOracle);
+    await futures.write.createOrder([p1, dd, "", 1], { account: seller.account });
+    await refreshHashprice(contracts.hashrateOracle);
+    await futures.write.createOrder([p2, dd, "", 2], { account: seller.account });
+
+    const ids = await futures.read.getOrderIds([seller.account.address]);
+    assert.equal(ids.length, 3, "1 + 2 orders");
+  });
+
+  it("getPositionIds returns positions where caller is buyer or seller", async () => {
+    const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures } = contracts;
+    const { seller, buyer } = accounts;
+    const deliveryDates = await futures.read.getDeliveryDates();
+    const dd = deliveryDates[0];
+    const price = parseUnits("100", 6);
+
+    await refreshHashprice(contracts.hashrateOracle);
+    await futures.write.createOrder([price, dd, "", -1], { account: seller.account });
+    await refreshHashprice(contracts.hashrateOracle);
+    await futures.write.createOrder([price, dd, "destURL", 1], { account: buyer.account });
+
+    const sellerIds = await futures.read.getPositionIds([seller.account.address]);
+    const buyerIds = await futures.read.getPositionIds([buyer.account.address]);
+    assert.equal(sellerIds.length, 1);
+    assert.equal(buyerIds.length, 1);
+    assert.equal(sellerIds[0], buyerIds[0]);
+  });
+
+  it("getBidPrices/getAskPrices include each active price exactly once", async () => {
+    const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures } = contracts;
+    const { seller, buyer } = accounts;
+    const dd = (await futures.read.getDeliveryDates())[0];
+
+    const ask1 = parseUnits("100", 6);
+    const ask2 = parseUnits("101", 6);
+    const bid1 = parseUnits("99", 6);
+
+    await refreshHashprice(contracts.hashrateOracle);
+    await futures.write.createOrder([ask1, dd, "", -1], { account: seller.account });
+    await refreshHashprice(contracts.hashrateOracle);
+    await futures.write.createOrder([ask1, dd, "", -1], { account: seller.account });
+    await refreshHashprice(contracts.hashrateOracle);
+    await futures.write.createOrder([ask2, dd, "", -1], { account: seller.account });
+    await refreshHashprice(contracts.hashrateOracle);
+    await futures.write.createOrder([bid1, dd, "", 1], { account: buyer.account });
+
+    const asks = [...(await futures.read.getAskPrices([dd, 50n]))].sort((a, b) => Number(a - b));
+    const bids = [...(await futures.read.getBidPrices([dd, 50n]))].sort((a, b) => Number(a - b));
+    assert.deepEqual(asks, [ask1, ask2]);
+    assert.deepEqual(bids, [bid1]);
+
+    assert.equal(await futures.read.getQuantityAtPrice([dd, ask1, false]), 2n);
+    assert.equal(await futures.read.getQuantityAtPrice([dd, ask2, false]), 1n);
+    assert.equal(await futures.read.getQuantityAtPrice([dd, bid1, true]), 1n);
+  });
+
+  it("active-price set drops the level once the last order at it closes", async () => {
+    const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures } = contracts;
+    const { seller } = accounts;
+    const dd = (await futures.read.getDeliveryDates())[0];
+    const price = parseUnits("100", 6);
+
+    await refreshHashprice(contracts.hashrateOracle);
+    await futures.write.createOrder([price, dd, "", -1], { account: seller.account });
+    await refreshHashprice(contracts.hashrateOracle);
+    await futures.write.createOrder([price, dd, "", -1], { account: seller.account });
+
+    let asks = await futures.read.getAskPrices([dd, 50n]);
+    assert.equal(asks.length, 1);
+    assert.equal(await futures.read.getQuantityAtPrice([dd, price, false]), 2n);
+
+    const ids = await futures.read.getOrderIds([seller.account.address]);
+    assert.equal(ids.length, 2);
+
+    await futures.write.closeOrder([ids[0]], { account: seller.account });
+    asks = await futures.read.getAskPrices([dd, 50n]);
+    assert.equal(asks.length, 1, "still one level — second order remains");
+    assert.equal(await futures.read.getQuantityAtPrice([dd, price, false]), 1n);
+
+    await futures.write.closeOrder([ids[1]], { account: seller.account });
+    asks = await futures.read.getAskPrices([dd, 50n]);
+    assert.equal(asks.length, 0, "level removed once queue empties");
+    assert.equal(await futures.read.getQuantityAtPrice([dd, price, false]), 0n);
+  });
+
+  it("closeOrder rejects callers that don't own the order", async () => {
+    const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures } = contracts;
+    const { seller, buyer } = accounts;
+    const dd = (await futures.read.getDeliveryDates())[0];
+
+    await refreshHashprice(contracts.hashrateOracle);
+    await futures.write.createOrder([parseUnits("100", 6), dd, "", -1], { account: seller.account });
+    const ids = await futures.read.getOrderIds([seller.account.address]);
+
+    await viem.assertions.revertWithCustomError(
+      futures.write.closeOrder([ids[0]], { account: buyer.account }),
+      futures,
+      "OrderNotBelongToSender",
+    );
+  });
+});
