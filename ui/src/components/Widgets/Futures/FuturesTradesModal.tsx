@@ -8,7 +8,7 @@ import { tokens } from "../../../styles/tokens";
 import { ModalCard } from "../../Modal.styled";
 import { DateTimeCell } from "../../DateTimeCell";
 import { useHistoricalPositions, type HistoricalPosition } from "../../../hooks/data/useHistoricalPositions";
-import type { PositionBookPosition } from "../../../hooks/data/usePositionBook";
+import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPositions";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import type { ContractMode } from "../../../types/types";
 

@@ -6,8 +6,8 @@ import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpec
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import { formatValue, PAYMENT_TOKEN_SCALE_NUM, paymentToken } from "../../lib/units";
 import { parseUnits, type TransactionReceipt } from "viem";
-import type { PositionBookPosition } from "../../hooks/data/usePositionBook";
-import { POSITION_BOOK_QK, waitForBlockNumberPositionBook } from "../../hooks/data/usePositionBook";
+import type { PositionBookPosition } from "../../hooks/data/getUserFuturesPositions";
+import { POSITION_BOOK_QK, waitForBlockNumberPositionBook } from "../../hooks/data/getUserFuturesPositions";
 import { useQueryClient } from "@tanstack/react-query";
 
 interface BalanceQueryResult {

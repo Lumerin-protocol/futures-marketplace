@@ -2,7 +2,7 @@ import { tokens } from "../../../styles/tokens";
 import { useState } from "react";
 import styled from "@mui/material/styles/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
-import type { ParticipantOrder } from "../../../hooks/data/useParticipant";
+import type { ParticipantOrder } from "../../../hooks/data/getUserFuturesOrders";
 import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
 import { ModifyOrderForm } from "../../Forms/ModifyOrderForm";

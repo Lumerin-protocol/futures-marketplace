@@ -15,6 +15,9 @@ export type HistoricalOrder = {
   isBuy: boolean;
   isActive: boolean;
   closedAt: string | null;
+  originalQuantity: number;
+  filledQuantity: number;
+  cancelledQuantity: number;
   participant: {
     address: `0x${string}`;
   };
@@ -83,6 +86,9 @@ const fetchAllHistoricalOrders = async (
       // Anything coming back from this query is FILLED or CANCELLED — never active.
       isActive: false,
       closedAt: order.closedAt,
+      originalQuantity: order.originalQuantity,
+      filledQuantity: order.filledQuantity,
+      cancelledQuantity: order.cancelledQuantity,
       participant: {
         address: order.user.id as `0x${string}`,
       },

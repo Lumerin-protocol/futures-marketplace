@@ -12,8 +12,8 @@ import { PerpsOrdersPositionsTabWidget } from "../../components/Widgets/Futures/
 import { ClosePositionModal, useClosePositionModal } from "../../components/Widgets/Futures/ClosePositionModal";
 import { useHashrateIndexData, type TimePeriod } from "../../hooks/data/useHashRateIndexData";
 import { useBtcPriceIndexData } from "../../hooks/data/useBtcPriceIndexData";
-import { useParticipant } from "../../hooks/data/useParticipant";
-import { usePositionBook } from "../../hooks/data/usePositionBook";
+import { getUserFuturesOrders } from "../../hooks/data/getUserFuturesOrders";
+import { getUserFuturesPositions } from "../../hooks/data/getUserFuturesPositions";
 import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpecs";
 import { useGetMinMargin } from "../../hooks/data/useGetMinMargin";
 import { useGetMarketPrice } from "../../hooks/data/useGetMarketPrice";
@@ -29,7 +29,7 @@ import { useUserPositionSessions } from "../../hooks/data/perps/useUserPositionS
 import { useMaintenanceMarginPercent } from "../../hooks/data/perps/useMaintenanceMarginPercent";
 import { computeLiquidationState } from "../../hooks/data/perps/positionHelper";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
-import type { PositionBookPosition } from "../../hooks/data/usePositionBook";
+import type { PositionBookPosition } from "../../hooks/data/getUserFuturesPositions";
 import type { ContractMode } from "../../types/types";
 import styled from "@mui/material/styles/styled";
 import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE } from "../../lib/units";
@@ -76,8 +76,16 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const hashrateQuery = useHashrateIndexData({ timePeriod: chartTimePeriod });
   const btcPriceQuery = useBtcPriceIndexData({ timePeriod: chartTimePeriod });
   const contractSpecsQuery = useFuturesContractSpecs();
-  const { data: participantData, isLoading: isParticipantLoading } = useParticipant(address);
-  const { data: positionBookData, isLoading: isPositionBookLoading } = usePositionBook(address);
+  const [hasOpenOrders, setHasOpenOrders] = useState(false);
+  const { data: participantData, isLoading: isParticipantLoading } = getUserFuturesOrders(address, {
+    refetch: hasOpenOrders,
+  });
+  const { data: positionBookData, isLoading: isPositionBookLoading } = getUserFuturesPositions(address, {
+    refetch: hasOpenOrders,
+  });
+  useEffect(() => {
+    setHasOpenOrders((participantData?.data?.orders?.length ?? 0) > 0);
+  }, [participantData?.data?.orders?.length]);
   const { data: historicalPositionsData, isLoading: isHistoricalPositionsLoading } = useHistoricalPositions(
     address,
     true,

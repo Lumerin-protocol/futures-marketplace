@@ -4,11 +4,11 @@ import { waitForOrderBookBlockNumber, getOrderBookQueryKey } from "../../hooks/d
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import type { TransactionReceipt } from "viem";
 import { useModifyOrder } from "../../hooks/data/useModifyOrder";
-import { PARTICIPANT_QK } from "../../hooks/data/useParticipant";
-import { POSITION_BOOK_QK } from "../../hooks/data/usePositionBook";
+import { PARTICIPANT_QK } from "../../hooks/data/getUserFuturesOrders";
+import { POSITION_BOOK_QK } from "../../hooks/data/getUserFuturesPositions";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
-import type { ParticipantOrder, Participant } from "../../hooks/data/useParticipant";
+import type { ParticipantOrder, Participant } from "../../hooks/data/getUserFuturesOrders";
 import styled from "@mui/material/styles/styled";
 import { tokens } from "../../styles/tokens";
 import { handleNumericDecimalInput } from "./Shared/AmountInputForm";
