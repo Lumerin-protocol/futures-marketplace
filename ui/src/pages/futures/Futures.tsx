@@ -266,9 +266,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
       let totalPnL = 0;
       historicalPositionsData.data.forEach((position) => {
-        const isLong = position.buyer.address.toLowerCase() === address.toLowerCase();
-        const pnl = isLong ? position.buyerPnl : position.sellerPnl;
-        totalPnL += pnl;
+        totalPnL += position.pnl;
       });
 
       return totalPnL;

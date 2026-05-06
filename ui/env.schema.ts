@@ -9,7 +9,7 @@ export const EnvSchema = Type.Object({
   DEV_SERVER_HTTPS: Type.Boolean({ default: false }),
   REACT_APP_CHAIN_ID: Type.Number(),
   REACT_APP_CLONE_FACTORY: TypeEthAddress(),
-  REACT_APP_ETHERSCAN_URL: Type.String({ format: "uri" }),
+  REACT_APP_ETHERSCAN_URL: Type.String({ format: "uri", default: "https://sepolia.basescan.org" }),
   REACT_APP_FUTURES_DOCS_URL: Type.String({
     format: "uri",
     default:
