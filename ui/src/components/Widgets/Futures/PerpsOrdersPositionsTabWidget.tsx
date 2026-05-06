@@ -24,6 +24,7 @@ import { ModifyPerpsOrderModal } from "./ModifyPerpsOrderModal";
 import type { PerpsOrder } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_DECIMALS_BIGINT, QUANTITY_SCALE } from "../../../lib/units";
+import { getTxUrl } from "../../../lib/indexer";
 
 type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "POSITION_HISTORY" | "ORDER_HISTORY";
 
@@ -986,7 +987,7 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoad
               </td>
               <td>
                 <TxLink 
-                  href={`https://etherscan.io/tx/${trade.transactionHash}`} 
+                  href={getTxUrl(trade.transactionHash as `0x${string}`)} 
                   target="_blank" 
                   rel="noopener noreferrer"
                 >
@@ -1085,7 +1086,7 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
                   </td>
                   <td>
                     <TxLink 
-                      href={`https://etherscan.io/tx/${trade.transactionHash}`} 
+                      href={getTxUrl(trade.transactionHash as `0x${string}`)} 
                       target="_blank" 
                       rel="noopener noreferrer"
                     >

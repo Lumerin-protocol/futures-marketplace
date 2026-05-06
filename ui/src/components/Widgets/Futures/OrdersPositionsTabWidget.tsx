@@ -14,6 +14,7 @@ import { useHistoricalPositions } from "../../../hooks/data/useHistoricalPositio
 import { useUserFuturesTrades, type UserFuturesTrade } from "../../../hooks/data/useUserFuturesTrades";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { getTxUrl } from "../../../lib/indexer";
 
 import type { AccountBalance, ContractMode } from "../../../types/types";
 
@@ -98,12 +99,10 @@ export const OrdersPositionsTabWidget = ({
     const historicalPositions = historicalPositionsQuery.data?.data ?? [];
     const unique = new Set<string>();
     historicalPositions.forEach((p) => {
-      const isLong = participantAddress && p.buyer.address.toLowerCase() === participantAddress.toLowerCase();
-      const pricePerDay = isLong ? p.buyPricePerDay : p.sellPricePerDay;
-      unique.add(`${p.deliveryAt.toString()}_${pricePerDay.toString()}`);
+      unique.add(`${p.deliveryAt.toString()}_${p.pricePerDay.toString()}`);
     });
     return unique.size;
-  }, [historicalPositionsQuery.data?.data, participantAddress]);
+  }, [historicalPositionsQuery.data?.data]);
 
   // Auto-switch to Positions tab when there are no open orders but there are open positions.
   useEffect(() => {
@@ -265,7 +264,7 @@ const FuturesTradesTable = ({ trades, isLoading, visibleCount, onLoadMore }: Fut
                 </td>
                 <td>
                   <TxLink
-                    href={`https://etherscan.io/tx/${trade.transactionHash}`}
+                    href={getTxUrl(trade.transactionHash as `0x${string}`)}
                     target="_blank"
                     rel="noopener noreferrer"
                   >

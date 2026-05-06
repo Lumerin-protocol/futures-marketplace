@@ -19,20 +19,8 @@ export const HistoricalPositionsListWidget = ({
   participantAddress,
 }: HistoricalPositionsListWidgetProps) => {
   const [tradesSelection, setTradesSelection] = useState<FuturesTradesModalSelection | null>(null);
-  const getPositionType = (position: HistoricalPosition) => {
-    if (!participantAddress) return "Unknown";
-    return position.buyer.address.toLowerCase() === participantAddress.toLowerCase() ? "Long" : "Short";
-  };
-
-  const getPriceForPosition = (position: HistoricalPosition) => {
-    const positionType = getPositionType(position);
-    return positionType === "Long" ? position.buyPricePerDay : position.sellPricePerDay;
-  };
-
-  const getPnlForPosition = (position: HistoricalPosition) => {
-    const positionType = getPositionType(position);
-    return positionType === "Long" ? position.buyerPnl : position.sellerPnl;
-  };
+  const getPositionType = (position: HistoricalPosition) =>
+    position.isLong ? "Long" : "Short";
 
   const formatPrice = (price: bigint) => {
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
@@ -58,8 +46,8 @@ export const HistoricalPositionsListWidget = ({
   const groupedPositions = positions.reduce(
     (acc, position) => {
       const positionType = getPositionType(position);
-      const pricePerDay = getPriceForPosition(position);
-      const pnl = getPnlForPosition(position);
+      const pricePerDay = position.pricePerDay;
+      const pnl = position.pnl;
       const key = `${pricePerDay}-${position.deliveryAt}-${positionType}`;
 
       if (!acc[key]) {

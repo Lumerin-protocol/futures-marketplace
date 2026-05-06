@@ -7,8 +7,8 @@ import { useMemo } from "react";
 import { tokens } from "../../../styles/tokens";
 import { ModalCard } from "../../Modal.styled";
 import { DateTimeCell } from "../../DateTimeCell";
-import { useHistoricalPositions, type HistoricalPosition } from "../../../hooks/data/useHistoricalPositions";
-import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPositions";
+import { useHistoricalPositions } from "../../../hooks/data/useHistoricalPositions";
+import type { PositionBookPosition, FuturesSessionTrade } from "../../../hooks/data/getUserFuturesPositions";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import type { ContractMode } from "../../../types/types";
 
@@ -39,22 +39,21 @@ interface TradeRow {
   hasActive: boolean;
 }
 
-// Internal shape that unifies active (PositionBookPosition) and historical
+// Normalized shape that unifies active (PositionBookPosition) and historical
 // (HistoricalPosition) positions so they can be processed by the same grouping
-// pipeline.
-interface UnifiedPosition {
+// pipeline. Direction is collapsed into a single `isLong` flag and the
+// row-level price/pnl are flattened (active rows have no realized pnl yet).
+interface NormalizedPosition {
   id: string;
   transactionHash: `0x${string}`;
   timestamp: string;
   deliveryAt: string;
-  sellPricePerDay: bigint;
-  buyPricePerDay: bigint;
+  pricePerDay: bigint;
+  isLong: boolean;
   isActive: boolean;
   closedAt: string | null;
-  buyerAddress: `0x${string}`;
-  sellerAddress: `0x${string}`;
-  buyerPnl: number;
-  sellerPnl: number;
+  pnl: number;
+  trades: FuturesSessionTrade[];
 }
 
 const truncateAddress = (address: string) => {
@@ -87,27 +86,58 @@ export const FuturesTradesModal = ({
     const historical = historicalPositionsQuery.data?.data ?? [];
     const active = activePositions ?? [];
 
-    // Futures mode: every PositionBookPosition / HistoricalPosition row carries
-    // the underlying PositionSession.trades[] (see usePositionBook /
-    // useHistoricalPositions). Render one row per real on-chain Trade instead
-    // of synthesising rows from positions.
-    if (contractMode === "futures") {
-      type AnyPosition = PositionBookPosition | HistoricalPosition;
-      const matchingPositions: AnyPosition[] = [...active, ...historical].filter((p) => {
-        if (p.deliveryAt !== selection.deliveryAt) return false;
+    // Normalize active (buyer/seller-shaped) and historical (single-user-shaped)
+    // positions into one shape keyed by `isLong` + `pricePerDay`. Active rows
+    // resolve direction from `participantAddress` against the buyer/seller
+    // pair, historical rows already carry `isLong` from the indexer session.
+    const normalized: NormalizedPosition[] = [
+      ...active.map<NormalizedPosition>((p) => {
         const isLong = sideLookupAddress
           ? p.buyer.address.toLowerCase() === sideLookupAddress
           : p.buyPricePerDay > 0n;
-        const positionType: "Long" | "Short" = isLong ? "Long" : "Short";
-        if (positionType !== selection.positionType) return false;
-        const sidePrice = isLong ? p.buyPricePerDay : p.sellPricePerDay;
-        return sidePrice === selection.pricePerDay;
-      });
+        return {
+          id: p.id,
+          transactionHash: p.transactionHash,
+          timestamp: p.timestamp,
+          deliveryAt: p.deliveryAt,
+          pricePerDay: isLong ? p.buyPricePerDay : p.sellPricePerDay,
+          isLong,
+          isActive: p.isActive,
+          closedAt: p.closedAt,
+          pnl: 0,
+          trades: p.trades ?? [],
+        };
+      }),
+      ...historical.map<NormalizedPosition>((p) => ({
+        id: p.id,
+        transactionHash: p.transactionHash,
+        timestamp: p.timestamp,
+        deliveryAt: p.deliveryAt,
+        pricePerDay: p.pricePerDay,
+        isLong: p.isLong,
+        isActive: p.isActive,
+        closedAt: p.closedAt,
+        pnl: p.pnl,
+        trades: p.trades ?? [],
+      })),
+    ];
 
+    const matchingPositions = normalized.filter((p) => {
+      if (p.deliveryAt !== selection.deliveryAt) return false;
+      const positionType: "Long" | "Short" = p.isLong ? "Long" : "Short";
+      if (positionType !== selection.positionType) return false;
+      return p.pricePerDay === selection.pricePerDay;
+    });
+
+    // Futures mode: every position row carries the underlying
+    // PositionSession.trades[] (see usePositionBook / useHistoricalPositions).
+    // Render one row per real on-chain Trade instead of synthesising rows
+    // from positions.
+    if (contractMode === "futures") {
       const seen = new Set<string>();
       const rows: TradeRow[] = [];
       for (const p of matchingPositions) {
-        for (const trade of p.trades ?? []) {
+        for (const trade of p.trades) {
           if (seen.has(trade.id)) continue;
           seen.add(trade.id);
           // Each fill has its own signed `tradeQuantity`. A session opened
@@ -135,54 +165,12 @@ export const FuturesTradesModal = ({
     }
 
     // Perpetual fallback (kept for safety; this modal isn't currently opened
-    // outside futures, but the `contractMode` prop allows for it).
-    const unified: UnifiedPosition[] = [
-      ...active.map<UnifiedPosition>((p) => ({
-        id: p.id,
-        transactionHash: p.transactionHash,
-        timestamp: p.timestamp,
-        deliveryAt: p.deliveryAt,
-        sellPricePerDay: p.sellPricePerDay,
-        buyPricePerDay: p.buyPricePerDay,
-        isActive: p.isActive,
-        closedAt: p.closedAt,
-        buyerAddress: p.buyer.address,
-        sellerAddress: p.seller.address,
-        buyerPnl: 0,
-        sellerPnl: 0,
-      })),
-      ...historical.map<UnifiedPosition>((p) => ({
-        id: p.id,
-        transactionHash: p.transactionHash,
-        timestamp: p.timestamp,
-        deliveryAt: p.deliveryAt,
-        sellPricePerDay: p.sellPricePerDay,
-        buyPricePerDay: p.buyPricePerDay,
-        isActive: p.isActive,
-        closedAt: p.closedAt,
-        buyerAddress: p.buyer.address,
-        sellerAddress: p.seller.address,
-        buyerPnl: p.buyerPnl,
-        sellerPnl: p.sellerPnl,
-      })),
-    ];
-
+    // outside futures, but the `contractMode` prop allows for it). Group one
+    // row per (transactionHash, deliveryAt, pricePerDay) tuple.
     const groups = new Map<string, TradeRow>();
-    for (const p of unified) {
-      if (p.deliveryAt !== selection.deliveryAt) continue;
-
-      const isLong = sideLookupAddress
-        ? p.buyerAddress.toLowerCase() === sideLookupAddress
-        : false;
-      const positionType: "Long" | "Short" = isLong ? "Long" : "Short";
-      if (positionType !== selection.positionType) continue;
-
-      const sidePrice = isLong ? p.buyPricePerDay : p.sellPricePerDay;
-      if (sidePrice !== selection.pricePerDay) continue;
-
-      const realizedPnl = isLong ? p.buyerPnl : p.sellerPnl;
-      const counterparty = isLong ? p.sellerAddress : p.buyerAddress;
-      const key = `${p.transactionHash}-${p.deliveryAt}-${sidePrice}`;
+    for (const p of matchingPositions) {
+      const positionType: "Long" | "Short" = p.isLong ? "Long" : "Short";
+      const key = `${p.transactionHash}-${p.deliveryAt}-${p.pricePerDay}`;
 
       const existing = groups.get(key);
       if (!existing) {
@@ -190,10 +178,10 @@ export const FuturesTradesModal = ({
           id: key,
           timestamp: p.timestamp,
           closedAt: p.isActive ? null : p.closedAt,
-          pricePerDay: sidePrice,
+          pricePerDay: p.pricePerDay,
           positionType,
-          realizedPnl,
-          counterparty,
+          realizedPnl: p.pnl,
+          counterparty: null,
           quantity: 1,
           hasActive: p.isActive,
         });
@@ -201,7 +189,7 @@ export const FuturesTradesModal = ({
       }
 
       existing.quantity += 1;
-      existing.realizedPnl += realizedPnl;
+      existing.realizedPnl += p.pnl;
       if (p.isActive) {
         existing.hasActive = true;
         existing.closedAt = null;
@@ -209,9 +197,6 @@ export const FuturesTradesModal = ({
         if (!existing.closedAt || Number(p.closedAt) > Number(existing.closedAt)) {
           existing.closedAt = p.closedAt;
         }
-      }
-      if (existing.counterparty && existing.counterparty !== counterparty) {
-        existing.counterparty = null;
       }
     }
 
