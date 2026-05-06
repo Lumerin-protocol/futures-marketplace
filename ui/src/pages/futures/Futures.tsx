@@ -19,10 +19,8 @@ import { useGetMinMargin } from "../../hooks/data/useGetMinMargin";
 import { useGetMarketPrice } from "../../hooks/data/useGetMarketPrice";
 import { useHistoricalPositions } from "../../hooks/data/useHistoricalPositions";
 import { useGetFutureBalance } from "../../hooks/data/useGetFutureBalance";
-import { useGetPerpsBalance } from "../../hooks/data/perps/useGetPerpsBalance";
 import { useGetPerpsRequiredMargin } from "../../hooks/data/perps/useGetPerpsRequiredMargin";
 import { useFuturesPaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
-import { usePerpsPaymentTokenBalance } from "../../hooks/data/perps/usePerpsPaymentTokenBalance";
 import { useFundingRate } from "../../hooks/data/perps/useFundingRate";
 import { usePerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
 import { useUserPositionSessions } from "../../hooks/data/perps/useUserPositionSessions";
@@ -111,29 +109,22 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
   const isLoadingMinMargin = minMarginQuery.isLoading;
 
-  // Get balance based on contract mode
-  const futuresBalanceQuery = useGetFutureBalance(address);
-  const perpsBalanceQuery = useGetPerpsBalance(address);
-  const balanceQuery = useMemo(() => {
-    const query = contractMode === "perpetual" ? perpsBalanceQuery : futuresBalanceQuery;
-    return {
-      data: query.data,
-      isLoading: query.isLoading,
-      isSuccess: query.isSuccess,
-      refetch: query.refetch,
-    };
-  }, [contractMode, futuresBalanceQuery, perpsBalanceQuery]);
+  // Single shared balance — both Futures and Perps engines settle against the same CollateralVault,
+  // so we always read `vault.balanceOf(account)` regardless of contract mode.
+  const vaultBalanceQuery = useGetFutureBalance(address);
+  const balanceQuery = useMemo(() => ({
+    data: vaultBalanceQuery.data,
+    isLoading: vaultBalanceQuery.isLoading,
+    isSuccess: vaultBalanceQuery.isSuccess,
+    refetch: vaultBalanceQuery.refetch,
+  }), [vaultBalanceQuery]);
 
-  // Get account (wallet) payment token balance based on contract mode
-  const futuresAccountBalance = useFuturesPaymentTokenBalance(address);
-  const perpsAccountBalance = usePerpsPaymentTokenBalance(address);
-  const accountBalanceQuery = useMemo(() => {
-    const query = contractMode === "perpetual" ? perpsAccountBalance : futuresAccountBalance;
-    return {
-      data: query.data,
-      isLoading: query.isLoading,
-    };
-  }, [contractMode, futuresAccountBalance, perpsAccountBalance]);
+  // Wallet (ERC20) balance of the shared collateral token.
+  const walletPaymentTokenBalance = useFuturesPaymentTokenBalance(address);
+  const accountBalanceQuery = useMemo(() => ({
+    data: walletPaymentTokenBalance.data,
+    isLoading: walletPaymentTokenBalance.isLoading,
+  }), [walletPaymentTokenBalance]);
 
   // Get market price from contract - polls every 10 seconds
   const {
@@ -378,7 +369,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
           unrealizedPnL={totalUnrealizedPnL}
           realizedPnL30D={totalRealizedPnL30D}
           isLoadingRealizedPnL={isHistoricalPositionsLoading}
-          contractMode={contractMode}
           balanceQuery={balanceQuery}
           accountBalance={accountBalanceQuery}
         />
