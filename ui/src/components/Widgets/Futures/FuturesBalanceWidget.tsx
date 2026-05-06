@@ -10,9 +10,8 @@ import { PrimaryButton } from "../../Forms/FormButtons/Buttons.styled";
 import { ModalItem } from "../../Modal";
 import { DepositForm } from "../../Forms/DepositForm";
 import { WithdrawalForm } from "../../Forms/WithdrawalForm";
-import { WithdrawalFormPerps } from "../../Forms/WithdrawalFormPerps";
-import type { ContractMode, AccountBalance } from "../../../types/types";
-import { DepositFormPerps } from "../../Forms/DepositFormPerps";
+import type { AccountBalance } from "../../../types/types";
+import { useGetMinMargin } from "../../../hooks/data/useGetMinMargin";
 import { useGetPerpsInitialMargin } from "../../../hooks/data/perps/useGetPerpsInitialMargin";
 
 interface BalanceQueryResult {
@@ -28,10 +27,16 @@ interface FuturesBalanceWidgetProps {
   unrealizedPnL: bigint | null;
   realizedPnL30D: number | null;
   isLoadingRealizedPnL?: boolean;
-  contractMode?: ContractMode;
   balanceQuery: BalanceQueryResult;
   accountBalance?: AccountBalance;
 }
+
+// Balance lives in the shared CollateralVault, so withdraws must respect the
+// margin reserved by *both* engines simultaneously. The withdrawal form's
+// "Locked" stat reflects this combined number, while the widget's header
+// "Locked" still shows the active mode only — hence this tooltip.
+const COMBINED_LOCKED_TOOLTIP =
+  "Combined margin locked across Futures and Perpetuals. Includes futures min margin plus perpetuals initial margin (which reserves margin for open positions and resting orders).";
 
 export const FuturesBalanceWidget = ({
   minMargin,
@@ -39,7 +44,6 @@ export const FuturesBalanceWidget = ({
   unrealizedPnL,
   realizedPnL30D,
   isLoadingRealizedPnL,
-  contractMode = "futures",
   balanceQuery,
   accountBalance,
 }: FuturesBalanceWidgetProps) => {
@@ -47,13 +51,39 @@ export const FuturesBalanceWidget = ({
   const depositModal = useModal();
   const withdrawalModal = useModal();
 
-  const initialMarginQuery = useGetPerpsInitialMargin(address, {
-    enabled: withdrawalModal.isOpen && contractMode === "perpetual",
+  // Withdraws are validated by the shared CollateralVault against *both* engines'
+  // locked margin, so we can't use only the active mode's number — that would let
+  // the user attempt a withdrawal that the other engine would block. We always
+  // sum: futures min margin + perps initial margin.
+  //
+  // Only fetched while the withdrawal modal is open; wagmi dedupes the futures
+  // call against the always-on parent-level read.
+  const futuresMinMarginQuery = useGetMinMargin(address);
+  const perpsInitialMarginQuery = useGetPerpsInitialMargin(address, {
+    enabled: withdrawalModal.isOpen,
   });
-  const initialMargin =
-    initialMarginQuery.data !== undefined ? (initialMarginQuery.data as bigint) : null;
-  const isLoadingInitialMargin = initialMarginQuery.isLoading && withdrawalModal.isOpen;
-  const isInitialMarginError = initialMarginQuery.isError;
+
+  const futuresLocked = useMemo(() => {
+    const v = futuresMinMarginQuery.data as bigint | undefined;
+    // `getMinMargin` returns int256; only positive values represent locked collateral.
+    return v && v > 0n ? v : 0n;
+  }, [futuresMinMarginQuery.data]);
+
+  const perpsLocked = useMemo(() => {
+    const v = perpsInitialMarginQuery.data as bigint | undefined;
+    return v && v > 0n ? v : 0n;
+  }, [perpsInitialMarginQuery.data]);
+
+  const withdrawalLockedAmount = useMemo(
+    () => futuresLocked + perpsLocked,
+    [futuresLocked, perpsLocked],
+  );
+
+  const isLoadingWithdrawalLocked =
+    withdrawalModal.isOpen &&
+    (futuresMinMarginQuery.isLoading || perpsInitialMarginQuery.isLoading);
+  const isWithdrawalLockedError =
+    futuresMinMarginQuery.isError || perpsInitialMarginQuery.isError;
 
   const handleDepositSuccess = () => {
     balanceQuery.refetch();
@@ -100,9 +130,7 @@ export const FuturesBalanceWidget = ({
         {/* Header row */}
         <SectionHeader>
           <UsdcIcon style={{ width: "14px", flexShrink: 0 }} />
-          <SectionTitle>
-            {contractMode === "perpetual" ? "Perpetual" : "Futures"} Portfolio (USDC)
-          </SectionTitle>
+          <SectionTitle>Account Portfolio (USDC)</SectionTitle>
         </SectionHeader>
 
         {/* Not connected */}
@@ -162,35 +190,18 @@ export const FuturesBalanceWidget = ({
       </PanelSection>
 
       <ModalItem open={depositModal.isOpen} setOpen={depositModal.setOpen}>
-        {contractMode === "futures" && (
-          <DepositForm
-            closeForm={handleDepositSuccess}
-            accountBalance={accountBalance}
-            contractMode={contractMode}
-          />
-        )}
-        {contractMode === "perpetual" && (
-          <DepositFormPerps closeForm={handleDepositSuccess} accountBalance={accountBalance} />
-        )}
+        <DepositForm closeForm={handleDepositSuccess} accountBalance={accountBalance} />
       </ModalItem>
 
       <ModalItem open={withdrawalModal.isOpen} setOpen={withdrawalModal.setOpen}>
-        {contractMode === "perpetual" ? (
-          <WithdrawalFormPerps
-            closeForm={handleWithdrawalSuccess}
-            initialMargin={initialMargin}
-            isLoadingInitialMargin={isLoadingInitialMargin}
-            isInitialMarginError={isInitialMarginError}
-            balanceQuery={balanceQuery}
-          />
-        ) : (
-          <WithdrawalForm
-            closeForm={handleWithdrawalSuccess}
-            minMargin={minMargin}
-            isLoadingMinMargin={isLoadingMinMargin}
-            balanceQuery={balanceQuery}
-          />
-        )}
+        <WithdrawalForm
+          closeForm={handleWithdrawalSuccess}
+          lockedAmount={withdrawalLockedAmount}
+          isLoadingLockedAmount={isLoadingWithdrawalLocked}
+          isLockedAmountError={isWithdrawalLockedError}
+          lockedTooltip={COMBINED_LOCKED_TOOLTIP}
+          balanceQuery={balanceQuery}
+        />
       </ModalItem>
     </>
   );
