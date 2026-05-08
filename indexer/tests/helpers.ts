@@ -164,10 +164,17 @@ export function nudgeTx(event: ethereum.Event, seed: i32): void {
 }
 
 /// Like `fillAggKeyDefaultTx` but with a custom tx hash (set via `nudgeTx`).
-export function fillAggKey(txHashBytes: Bytes, user: Address, counterparty: Address): string {
+/// `sessionId` matches the deterministic PositionSession id (see `positionSessionId`).
+export function fillAggKey(
+  txHashBytes: Bytes,
+  user: Address,
+  counterparty: Address,
+  sessionId: string,
+): string {
   return txHashBytes
     .concat(changetype<Bytes>(user))
     .concat(changetype<Bytes>(counterparty))
+    .concat(Bytes.fromUTF8(sessionId))
     .toHexString();
 }
 
@@ -200,14 +207,21 @@ export function orderAggKeyDefaultTx(
     .toHexString();
 }
 
-/// Trade aggregate id: tx hash ++ user.
-export function tradeAggKeyDefaultTx(user: Address): string {
-  return MOCK_TX_HASH.concat(changetype<Bytes>(user)).toHexString();
+/// Trade aggregate id: tx hash ++ user ++ sessionId.
+export function tradeAggKeyDefaultTx(user: Address, sessionId: string): string {
+  return MOCK_TX_HASH.concat(changetype<Bytes>(user))
+    .concat(Bytes.fromUTF8(sessionId))
+    .toHexString();
 }
 
-/// Fill aggregate id: tx hash ++ user ++ counterparty.
-export function fillAggKeyDefaultTx(user: Address, counterparty: Address): string {
+/// Fill aggregate id: tx hash ++ user ++ counterparty ++ sessionId.
+export function fillAggKeyDefaultTx(
+  user: Address,
+  counterparty: Address,
+  sessionId: string,
+): string {
   return MOCK_TX_HASH.concat(changetype<Bytes>(user))
     .concat(changetype<Bytes>(counterparty))
+    .concat(Bytes.fromUTF8(sessionId))
     .toHexString();
 }

@@ -92,8 +92,8 @@ describe("handlePositionCreated", () => {
     assert.fieldEquals("UserDeliverySessionPointer", pointerKey(buyer, DELIVERY), "currentSessionId", BUYER_SESSION);
 
     // Fills: each side has one fill of qty ±1 at PRICE.
-    const sellerFillId = fillAggKeyDefaultTx(seller, buyer);
-    const buyerFillId = fillAggKeyDefaultTx(buyer, seller);
+    const sellerFillId = fillAggKeyDefaultTx(seller, buyer, SELLER_SESSION);
+    const buyerFillId = fillAggKeyDefaultTx(buyer, seller, BUYER_SESSION);
     assert.fieldEquals("Fill", sellerFillId, "fillQuantity", "-1");
     assert.fieldEquals("Fill", sellerFillId, "fillPrice", PRICE.toString());
     assert.fieldEquals("Fill", sellerFillId, "netQuantityAfter", "-1");
@@ -102,10 +102,10 @@ describe("handlePositionCreated", () => {
     assert.fieldEquals("Fill", buyerFillId, "fillQuantity", "1");
     assert.fieldEquals("Fill", buyerFillId, "netQuantityAfter", "1");
 
-    // Trade aggregate (per user) has fillCount=1.
-    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(seller), "fillCount", "1");
-    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(seller), "tradeQuantity", "-1");
-    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(buyer), "fillCount", "1");
+    // Trade aggregate (per user, per session) has fillCount=1.
+    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(seller, SELLER_SESSION), "fillCount", "1");
+    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(seller, SELLER_SESSION), "tradeQuantity", "-1");
+    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(buyer, BUYER_SESSION), "fillCount", "1");
 
     // Position canonical record links both fills.
     assert.fieldEquals("Position", bytes32Id(1).toHexString(), "buyer", buyer.toHexString());
@@ -142,15 +142,15 @@ describe("handlePositionCreated", () => {
     assert.fieldEquals("PositionSession", BUYER_SESSION, "maxQuantity", "2");
     assert.fieldEquals("PositionSession", BUYER_SESSION, "netQuantity", "2");
 
-    const sellerFillId = fillAggKeyDefaultTx(seller, buyer);
-    const buyerFillId = fillAggKeyDefaultTx(buyer, seller);
+    const sellerFillId = fillAggKeyDefaultTx(seller, buyer, SELLER_SESSION);
+    const buyerFillId = fillAggKeyDefaultTx(buyer, seller, BUYER_SESSION);
     assert.fieldEquals("Fill", sellerFillId, "fillQuantity", "-2");
     assert.fieldEquals("Fill", sellerFillId, "netQuantityAfter", "-2");
     assert.fieldEquals("Fill", buyerFillId, "fillQuantity", "2");
     assert.fieldEquals("Fill", buyerFillId, "netQuantityAfter", "2");
 
-    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(seller), "fillCount", "1");
-    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(seller), "tradeQuantity", "-2");
+    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(seller, SELLER_SESSION), "fillCount", "1");
+    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(seller, SELLER_SESSION), "tradeQuantity", "-2");
     assert.fieldEquals("Futures", "0", "totalFills", "2");
     assert.fieldEquals("Futures", "0", "totalTrades", "2");
   });
@@ -167,16 +167,17 @@ describe("handlePositionCreated", () => {
       createPositionCreatedEvent(bytes32Id(2), seller2, buyer, PRICE, DELIVERY, "u2", bytes32Id(12)),
     );
 
-    // Buyer participated in 2 fills (one per seller) but it's 1 Trade.
-    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(buyer), "fillCount", "2");
-    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(buyer), "tradeQuantity", "2");
-    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(buyer), "netQuantityAfter", "2");
+    // Buyer participated in 2 fills (one per seller) but it's 1 Trade
+    // (both fills aggregate into the same buyer session).
+    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(buyer, BUYER_SESSION), "fillCount", "2");
+    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(buyer, BUYER_SESSION), "tradeQuantity", "2");
+    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(buyer, BUYER_SESSION), "netQuantityAfter", "2");
     // One Fill per (buyer, sellerN) bucket.
-    assert.fieldEquals("Fill", fillAggKeyDefaultTx(buyer, seller1), "fillQuantity", "1");
-    assert.fieldEquals("Fill", fillAggKeyDefaultTx(buyer, seller2), "fillQuantity", "1");
-    // Each seller gets their own Trade as well.
-    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(seller1), "fillCount", "1");
-    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(seller2), "fillCount", "1");
+    assert.fieldEquals("Fill", fillAggKeyDefaultTx(buyer, seller1, BUYER_SESSION), "fillQuantity", "1");
+    assert.fieldEquals("Fill", fillAggKeyDefaultTx(buyer, seller2, BUYER_SESSION), "fillQuantity", "1");
+    // Each seller gets their own Trade as well (each opens its own session).
+    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(seller1, SELLER_SESSION), "fillCount", "1");
+    assert.fieldEquals("Trade", tradeAggKeyDefaultTx(seller2, SELLER_SESSION), "fillCount", "1");
   });
 
   test("PositionCreated for a stranger orderId (no pre-existing OrderEntry) is a safe no-op for promotion", () => {

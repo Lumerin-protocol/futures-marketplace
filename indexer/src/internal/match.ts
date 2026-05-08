@@ -334,13 +334,20 @@ function upsertFill(
 ): Bytes {
   const userAddr = changetype<Address>(user.id);
   const cpAddr = changetype<Address>(counterpartyId);
-  const fillId = fillAggregateId(txHash, userAddr, cpAddr);
+  // Fill key includes sessionId for the same reason Trade does: a single tx can
+  // span two sessions for the same (user, counterparty) pair (e.g. a flip that
+  // exits an existing position and re-opens against the same counterparty).
+  // Keying on session keeps each Fill's positionSession + realizedPnl consistent.
+  const fillId = fillAggregateId(txHash, userAddr, cpAddr, sessionId);
 
   let fill = Fill.load(fillId);
   const isNewFill = fill == null;
 
-  // Per-(tx, user) Trade aggregate (always pinned to the latest session for visibility).
-  const tradeId = tradeAggregateId(txHash, userAddr);
+  // Per-(tx, user, session) Trade aggregate. Keying on session ensures that a
+  // single tx which spans two sessions (multi-match flip: PositionExited closes
+  // session A, PositionCreated opens session B) produces two distinct Trade rows
+  // and the new session's first trade does NOT inherit the prior session's pnl.
+  const tradeId = tradeAggregateId(txHash, userAddr, sessionId);
   let trade = Trade.load(tradeId);
   const isNewTrade = trade == null;
   if (!trade) {
@@ -358,7 +365,6 @@ function upsertFill(
     trade.blockNumber = blockNumber;
     trade.transactionHash = txHash;
   }
-  trade.positionSession = sessionId;
 
   if (!fill) {
     fill = new Fill(fillId);
@@ -389,7 +395,6 @@ function upsertFill(
   fill.fillQuantity = fill.fillQuantity + fillQty;
   fill.netQuantityAfter = netQuantityAfter;
   fill.realizedPnl = fill.realizedPnl.plus(realizedPnlDelta);
-  fill.positionSession = sessionId;
   fill.save();
 
   // Trade aggregation (qty-weighted price, signed qty sum).

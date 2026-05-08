@@ -64,18 +64,30 @@ export function orderAggregateId(
     .concatI32(isBuy ? 1 : 0);
 }
 
-/// Trade aggregate id: tx hash ++ user.
-export function tradeAggregateId(txHash: Bytes, user: Address): Bytes {
-  return txHash.concat(changetype<Bytes>(user));
+/// Trade aggregate id: tx hash ++ user ++ sessionId.
+/// `sessionId` is included so that a single tx that spans more than one
+/// PositionSession (e.g. the multi-match flip case where a taker order both
+/// closes an existing session via PositionExited and opens a new one via
+/// PositionCreated) produces one Trade row per session — preventing the
+/// new session's first trade from inheriting the prior session's realizedPnl.
+export function tradeAggregateId(txHash: Bytes, user: Address, sessionId: string): Bytes {
+  return txHash.concat(changetype<Bytes>(user)).concat(Bytes.fromUTF8(sessionId));
 }
 
-/// Fill aggregate id: tx hash ++ user ++ counterparty.
+/// Fill aggregate id: tx hash ++ user ++ counterparty ++ sessionId.
+/// `sessionId` is included for the same reason as `tradeAggregateId`: it
+/// scopes each Fill to a single PositionSession so that a same-tx flip
+/// against the same counterparty doesn't collapse two distinct sessions
+/// into one Fill row (which would leak realizedPnl from the closed session
+/// into the freshly-opened one).
 export function fillAggregateId(
   txHash: Bytes,
   user: Address,
-  counterparty: Address
+  counterparty: Address,
+  sessionId: string
 ): Bytes {
   return txHash
     .concat(changetype<Bytes>(user))
-    .concat(changetype<Bytes>(counterparty));
+    .concat(changetype<Bytes>(counterparty))
+    .concat(Bytes.fromUTF8(sessionId));
 }

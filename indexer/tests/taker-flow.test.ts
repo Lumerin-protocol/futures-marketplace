@@ -30,6 +30,9 @@ import {
 
 const PRICE = BigInt.fromI64(1_000_000);
 const DELIVERY = BigInt.fromI64(1_700_000_000);
+// Matchstick mock event has block.number=1, logIndex=1.
+const MAKER_SESSION = "00000000000100000100"; // side=0 (seller)
+const TAKER_SESSION = "00000000000100000101"; // side=1 (buyer)
 
 function orderCreated(orderId: Bytes, user: Address, isBuy: boolean, dest: string): OrderCreated {
   return newTypedMockEventWithParams<OrderCreated>([
@@ -114,13 +117,13 @@ describe("taker flow: order placed and immediately filled", () => {
     assert.entityCount("Fill", 2);
     assert.fieldEquals(
       "Fill",
-      fillAggKeyDefaultTx(maker, taker),
+      fillAggKeyDefaultTx(maker, taker, MAKER_SESSION),
       "fillQuantity",
       "-1",
     );
     assert.fieldEquals(
       "Fill",
-      fillAggKeyDefaultTx(taker, maker),
+      fillAggKeyDefaultTx(taker, maker, TAKER_SESSION),
       "fillQuantity",
       "1",
     );
