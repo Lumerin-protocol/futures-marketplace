@@ -124,15 +124,11 @@ function processUserMatch(
   const isNowFlat = newNet == 0;
   const reducingExisting = !wasFlat && !isSameSignI32(oldNet, tradeQty);
 
-  // Realized PnL: take from `preComputedPnl` if supplied (PositionExited path),
-  // otherwise compute from entry/trade price differential for the close portion.
-  let realizedPnl = preComputedPnl;
-  if (realizedPnl.equals(BigInt.zero()) && reducingExisting) {
-    const settledAbs = minI32(absI32(oldNet), absI32(tradeQty));
-    const priceDiff = tradePrice.minus(oldEntry);
-    const signedSettled = oldNet > 0 ? settledAbs : -settledAbs;
-    realizedPnl = priceDiff.times(BigInt.fromI32(signedSettled));
-  }
+  // Realized PnL is supplied by the on-chain `PositionExited` event (already
+  // scaled by `deliveryDurationDays`). `applyOpenFill` always passes 0 and
+  // never reaches this with `reducingExisting == true` because the contract
+  // emits `PositionExited` before `PositionCreated`.
+  const realizedPnl = preComputedPnl;
 
   const newEntry = computeNewEntryPrice(oldEntry, tradePrice, oldNet, tradeQty, newNet);
 
