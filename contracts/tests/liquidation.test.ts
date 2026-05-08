@@ -1,14 +1,16 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { network } from "hardhat";
 import { type Account, getAddress, parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { scaleHashprice } from "./utils.ts";
 import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
+import type { NetworkConnection } from "hardhat/types";
+import { network } from "hardhat";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
-async function positionWithMarginFixture() {
+async function positionWithMarginFixture(conn: NetworkConnection) {
+  const { networkHelpers } = conn;
   const data = await networkHelpers.loadFixture(deployFuturesFixture);
   const { contracts, accounts, config } = data;
   const { futures, collateralVault } = contracts;
@@ -308,8 +310,8 @@ describe("Futures - Liquidation", function () {
     });
 
     it("should only allow validator to call marginCall", async () => {
-      const { contracts, accounts } = await positionWithMarginFixture();
-      const { futures, collateralVault } = contracts;
+      const { contracts, accounts } = await networkHelpers.loadFixture(positionWithMarginFixture);
+      const { futures } = contracts;
       const { buyer, seller } = accounts;
 
       await viem.assertions.revertWithCustomError(
@@ -363,7 +365,8 @@ describe("Futures - Liquidation", function () {
     });
 
     it("should create counterparty order when buyer is liquidated", async () => {
-      const { contracts, accounts, positionId } = await positionWithMarginFixture();
+      const { contracts, accounts, positionId } =
+        await networkHelpers.loadFixture(positionWithMarginFixture);
       const { futures, hashrateOracle, collateralVault } = contracts;
       const { seller, buyer, validator, pc } = accounts;
 
@@ -418,7 +421,8 @@ describe("Futures - Liquidation", function () {
     });
 
     it("should create counterparty order when seller is liquidated", async () => {
-      const { contracts, accounts, positionId } = await positionWithMarginFixture();
+      const { contracts, accounts, positionId } =
+        await networkHelpers.loadFixture(positionWithMarginFixture);
       const { futures, hashrateOracle, collateralVault } = contracts;
       const { seller, buyer, validator, pc } = accounts;
 

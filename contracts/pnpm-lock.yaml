@@ -4,10 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@nomicfoundation/hardhat-viem': ^3.0.4
-  hardhat: ^3.4.0
-
 patchedDependencies:
   multicall3@0.0.0:
     hash: f161cbee6da2788494364d99cafb2d9c802738f56fb89426eebbc0a14a4f4a8f
@@ -64,7 +60,7 @@ importers:
         specifier: ^3.0.0
         version: 3.0.15(hardhat@3.4.2)
       '@nomicfoundation/hardhat-viem':
-        specifier: ^3.0.4
+        specifier: ^3.0.5
         version: 3.0.6(hardhat@3.4.2)(viem@2.48.4(typescript@5.9.3)(zod@3.25.76))
       '@types/node':
         specifier: ^22.0.0
@@ -593,7 +589,7 @@ packages:
   '@nomicfoundation/hardhat-keystore@3.0.7':
     resolution: {integrity: sha512-S3PlDZYUxxLyimoADZgw8+NVffSVW2CaUICXVCcxJ/MfOkVoG1NiHncJH1x8mY6Hktku33+dJwJFNi4W4SyD+g==}
     peerDependencies:
-      hardhat: ^3.4.0
+      hardhat: ^3.0.0
 
   '@nomicfoundation/hardhat-network-helpers@3.0.6':
     resolution: {integrity: sha512-RJJhMa2cZuUiH6q7no+1ER8p/qBZoLyfEuIG0XyOwbMtlbnMXgxVJvKGbMjYyGGlFDeI3VQbWKoVk46bWl3TSg==}

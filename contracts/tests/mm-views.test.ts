@@ -28,7 +28,7 @@ describe("MM views", () => {
 
   it("getOrderIds returns the full set of resting orders for a participant", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller } = accounts;
     const deliveryDates = await futures.read.getDeliveryDates();
     const dd = deliveryDates[0];
@@ -36,6 +36,7 @@ describe("MM views", () => {
     const p1 = parseUnits("100", 6);
     const p2 = parseUnits("101", 6);
 
+    await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await refreshHashprice(contracts.hashrateOracle);
     await futures.write.createOrder([p1, dd, "", 1], { account: seller.account });
     await refreshHashprice(contracts.hashrateOracle);
@@ -47,12 +48,14 @@ describe("MM views", () => {
 
   it("getPositionIds returns positions where caller is buyer or seller", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, buyer } = accounts;
     const deliveryDates = await futures.read.getDeliveryDates();
     const dd = deliveryDates[0];
     const price = parseUnits("100", 6);
 
+    await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
+    await collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
     await refreshHashprice(contracts.hashrateOracle);
     await futures.write.createOrder([price, dd, "", -1], { account: seller.account });
     await refreshHashprice(contracts.hashrateOracle);
@@ -67,7 +70,7 @@ describe("MM views", () => {
 
   it("getBidPrices/getAskPrices include each active price exactly once", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, buyer } = accounts;
     const dd = (await futures.read.getDeliveryDates())[0];
 
@@ -75,6 +78,8 @@ describe("MM views", () => {
     const ask2 = parseUnits("101", 6);
     const bid1 = parseUnits("99", 6);
 
+    await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
+    await collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
     await refreshHashprice(contracts.hashrateOracle);
     await futures.write.createOrder([ask1, dd, "", -1], { account: seller.account });
     await refreshHashprice(contracts.hashrateOracle);
@@ -96,11 +101,12 @@ describe("MM views", () => {
 
   it("active-price set drops the level once the last order at it closes", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller } = accounts;
     const dd = (await futures.read.getDeliveryDates())[0];
     const price = parseUnits("100", 6);
 
+    await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await refreshHashprice(contracts.hashrateOracle);
     await futures.write.createOrder([price, dd, "", -1], { account: seller.account });
     await refreshHashprice(contracts.hashrateOracle);
@@ -126,10 +132,11 @@ describe("MM views", () => {
 
   it("closeOrder rejects callers that don't own the order", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+    const { futures, collateralVault } = contracts;
     const { seller, buyer } = accounts;
     const dd = (await futures.read.getDeliveryDates())[0];
 
+    await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await refreshHashprice(contracts.hashrateOracle);
     await futures.write.createOrder([parseUnits("100", 6), dd, "", -1], { account: seller.account });
     const ids = await futures.read.getOrderIds([seller.account.address]);
