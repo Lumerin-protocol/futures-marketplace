@@ -88,15 +88,15 @@ describe("handlePositionExited", () => {
     assert.fieldEquals("UserDeliverySessionPointer", pointerKey(buyer, DELIVERY), "netQuantity", "0");
     assert.fieldEquals("UserDeliverySessionPointer", pointerKey(buyer, DELIVERY), "currentSessionId", "");
 
-    const exitFillId = fillAggKey(nudgedTxHash(2), buyer, seller);
+    // Buyer's PositionSession (block=1, logIndex=1, side=1) transitions to CLOSE.
+    const buyerSession = "00000000000100000101";
+    const exitFillId = fillAggKey(nudgedTxHash(2), buyer, seller, buyerSession);
     assert.fieldEquals("Fill", exitFillId, "realizedPnl", pnl.toString());
     assert.fieldEquals("Fill", exitFillId, "fillQuantity", "-1");
     assert.fieldEquals("Fill", exitFillId, "netQuantityAfter", "0");
 
     assert.fieldEquals("User", buyer.toHexString(), "realizedPnl", pnl.toString());
 
-    // Buyer's PositionSession (block=1, logIndex=1, side=1) transitions to CLOSE.
-    const buyerSession = "00000000000100000101";
     assert.fieldEquals("PositionSession", buyerSession, "status", "CLOSE");
     assert.fieldEquals("PositionSession", buyerSession, "netQuantity", "0");
     assert.fieldEquals("PositionSession", buyerSession, "closedQuantity", "1");
@@ -121,7 +121,9 @@ describe("handlePositionExited", () => {
     assert.fieldEquals("Position", pid.toHexString(), "isExited", "true");
     assert.fieldEquals("Position", pid.toHexString(), "sellerExitPnl", pnl.toString());
 
-    const sellerExitFillId = fillAggKey(nudgedTxHash(2), seller, buyer);
+    // Historical entryPrice must survive the close (must NOT be reset to 0).
+    const sellerSession = "00000000000100000100";
+    const sellerExitFillId = fillAggKey(nudgedTxHash(2), seller, buyer, sellerSession);
     assert.fieldEquals("Position", pid.toHexString(), "sellerExitFill", sellerExitFillId);
     assert.fieldEquals("Fill", sellerExitFillId, "fillQuantity", "1");
     assert.fieldEquals("Fill", sellerExitFillId, "realizedPnl", pnl.toString());
@@ -129,8 +131,6 @@ describe("handlePositionExited", () => {
     assert.fieldEquals("UserDeliverySessionPointer", pointerKey(seller, DELIVERY), "netQuantity", "0");
     assert.fieldEquals("User", seller.toHexString(), "realizedPnl", pnl.toString());
 
-    // Historical entryPrice must survive the close (must NOT be reset to 0).
-    const sellerSession = "00000000000100000100";
     assert.fieldEquals("PositionSession", sellerSession, "status", "CLOSE");
     assert.fieldEquals("PositionSession", sellerSession, "entryPrice", ENTRY_PRICE.toString());
   });
@@ -244,6 +244,141 @@ describe("handlePositionExited", () => {
     assert.fieldEquals("PositionSession", buyerSession, "closePrice", ENTRY_PRICE.toString());
     assert.fieldEquals("PositionSession", buyerSession, "realizedPnl", "0");
     assert.fieldEquals("PositionSession", buyerSession, "entryPrice", ENTRY_PRICE.toString());
+  });
+
+  test("flip in same tx: close + reopen produce two distinct Trades with consistent pnl/session", () => {
+    // Regression for the user-reported "realized pnl for a new first trade after
+    // a position closed is > 0 (it should be 0)" bug.
+    //
+    // On-chain shape (one tx, one taker order with qty>1 from user `victim`):
+    //   1. PositionCreated #1 (in a prior tx) — victim built a long
+    //   2. victim posts a sell qty=2; first match offsets the long:
+    //      → PositionExited(participant=victim)  // closes victim's long, non-zero pnl
+    //      → PositionCreated(existingSeller, taker1)  // new pos w/o victim (not exercised here)
+    //   3. second match has nothing left to offset for victim → victim opens a new short:
+    //      → PositionCreated(seller=victim, buyer=taker2)
+    //
+    // Steps 2 + 3 occur in the SAME tx. With the fix, the Trade entity is keyed by
+    // (txHash, user, sessionId), so the close and the reopen produce TWO distinct
+    // Trade rows: one tied to the closed session (carrying the realizedPnl), and
+    // one tied to the brand-new session (with realizedPnl == 0).
+
+    const victim = userAddress(2);
+    const seller1 = userAddress(1); // counterparty of victim's original long
+    const taker2 = userAddress(3); // counterparty of victim's new short
+
+    // 1) Set up victim's long via PositionCreated in tx #1 (separate tx).
+    handlePositionCreated(positionCreated(bytes32Id(1), seller1, victim, ENTRY_PRICE));
+
+    // 2) Same tx for the close + reopen: nudge to seed=2 so both events share txHash + block.
+    const exitPnl = BigInt.fromI64(5_000_000 * DURATION_DAYS);
+    const exitEvent = positionExited(bytes32Id(1), victim, exitPnl);
+    nudgeTx(exitEvent, 2);
+    handlePositionExited(exitEvent);
+
+    // 3) Same tx (same nudgeTx seed → same txHash + block), bump logIndex so the new
+    //    session id is distinct from the old one. The reopen has victim as the SELLER.
+    const reopenPrice = BigInt.fromI64(7_000_000);
+    const reopen = positionCreated(bytes32Id(2), victim, taker2, reopenPrice);
+    nudgeTx(reopen, 2);
+    reopen.logIndex = BigInt.fromI32(5); // distinct from the exit's logIndex
+    handlePositionCreated(reopen);
+
+    // Closed session: block=1, logIndex=1, side=1 (victim was the buyer of the original long).
+    const closedSession = "00000000000100000101";
+    // New session: block=2, logIndex=5, side=0 (victim is the seller of the new short).
+    const newSession = "00000000000200000500";
+
+    assert.fieldEquals("PositionSession", closedSession, "status", "CLOSE");
+    assert.fieldEquals("PositionSession", closedSession, "realizedPnl", exitPnl.toString());
+
+    assert.fieldEquals("PositionSession", newSession, "status", "OPEN");
+    assert.fieldEquals("PositionSession", newSession, "entryPrice", reopenPrice.toString());
+    assert.fieldEquals("PositionSession", newSession, "netQuantity", "-1");
+    assert.fieldEquals("PositionSession", newSession, "closedQuantity", "0");
+    assert.fieldEquals("PositionSession", newSession, "realizedPnl", "0");
+
+    // Two Trade rows for victim in the same tx — one per session.
+    const closeTradeId = nudgedTxHash(2)
+      .concat(changetype<Bytes>(victim))
+      .concat(Bytes.fromUTF8(closedSession))
+      .toHexString();
+    const newTradeId = nudgedTxHash(2)
+      .concat(changetype<Bytes>(victim))
+      .concat(Bytes.fromUTF8(newSession))
+      .toHexString();
+
+    // Closed-session trade: pnl from the exit, points at the closed session.
+    assert.fieldEquals("Trade", closeTradeId, "positionSession", closedSession);
+    assert.fieldEquals("Trade", closeTradeId, "realizedPnl", exitPnl.toString());
+    assert.fieldEquals("Trade", closeTradeId, "tradeQuantity", "-1");
+    assert.fieldEquals("Trade", closeTradeId, "netQuantityAfter", "0");
+
+    // New-session trade: realizedPnl=0, points at the brand-new session — no leak.
+    assert.fieldEquals("Trade", newTradeId, "positionSession", newSession);
+    assert.fieldEquals("Trade", newTradeId, "realizedPnl", "0");
+    assert.fieldEquals("Trade", newTradeId, "tradeQuantity", "-1");
+    assert.fieldEquals("Trade", newTradeId, "netQuantityAfter", "-1");
+
+    // Each Trade has its own Fill, also scoped to the right session.
+    const closeFillId = fillAggKey(nudgedTxHash(2), victim, seller1, closedSession);
+    const newFillId = fillAggKey(nudgedTxHash(2), victim, taker2, newSession);
+    assert.fieldEquals("Fill", closeFillId, "positionSession", closedSession);
+    assert.fieldEquals("Fill", closeFillId, "realizedPnl", exitPnl.toString());
+    assert.fieldEquals("Fill", newFillId, "positionSession", newSession);
+    assert.fieldEquals("Fill", newFillId, "realizedPnl", "0");
+  });
+
+  test("close-then-reopen with non-zero exit pnl: new first trade has realizedPnl=0", () => {
+    const seller = userAddress(1);
+    const buyer = userAddress(2);
+
+    // 1) Open at ENTRY_PRICE.
+    handlePositionCreated(positionCreated(bytes32Id(1), seller, buyer, ENTRY_PRICE));
+
+    // 2) Exit with a sizeable non-zero pnl — this fully closes the buyer's session.
+    const exitPnl = BigInt.fromI64(5_000_000 * DURATION_DAYS);
+    const exitEvent = positionExited(bytes32Id(1), buyer, exitPnl);
+    nudgeTx(exitEvent, 2);
+    handlePositionExited(exitEvent);
+
+    // Sanity: pointer is flat after the close, buyer carries the realized pnl.
+    assert.fieldEquals("UserDeliverySessionPointer", pointerKey(buyer, DELIVERY), "netQuantity", "0");
+    assert.fieldEquals("UserDeliverySessionPointer", pointerKey(buyer, DELIVERY), "currentSessionId", "");
+    assert.fieldEquals("User", buyer.toHexString(), "realizedPnl", exitPnl.toString());
+
+    // 3) New first trade after the position closed: open at a different price.
+    const reopenPrice = BigInt.fromI64(7_000_000);
+    const reopen = positionCreated(bytes32Id(2), seller, buyer, reopenPrice);
+    nudgeTx(reopen, 3);
+    handlePositionCreated(reopen);
+
+    // The new (buyer-side) PositionSession id is bound to block=3 / logIndex=3 / side=1.
+    const newSession = "00000000000300000301";
+    assert.fieldEquals("PositionSession", newSession, "status", "OPEN");
+    assert.fieldEquals("PositionSession", newSession, "entryPrice", reopenPrice.toString());
+    assert.fieldEquals("PositionSession", newSession, "netQuantity", "1");
+    assert.fieldEquals("PositionSession", newSession, "closedQuantity", "0");
+    // The first trade of a freshly opened position cannot have realized any pnl yet.
+    assert.fieldEquals("PositionSession", newSession, "realizedPnl", "0");
+
+    // The Trade aggregate for the reopen tx must have realizedPnl=0 (fresh open, no close in this tx).
+    const reopenTradeId = nudgedTxHash(3)
+      .concat(changetype<Bytes>(buyer))
+      .concat(Bytes.fromUTF8(newSession))
+      .toHexString();
+    assert.fieldEquals("Trade", reopenTradeId, "realizedPnl", "0");
+    assert.fieldEquals("Trade", reopenTradeId, "tradeQuantity", "1");
+    assert.fieldEquals("Trade", reopenTradeId, "netQuantityAfter", "1");
+
+    // The Fill for the reopen tx must have realizedPnl=0 too.
+    const reopenFillId = fillAggKey(nudgedTxHash(3), buyer, seller, newSession);
+    assert.fieldEquals("Fill", reopenFillId, "realizedPnl", "0");
+    assert.fieldEquals("Fill", reopenFillId, "fillQuantity", "1");
+    assert.fieldEquals("Fill", reopenFillId, "fillPrice", reopenPrice.toString());
+
+    // User-level realizedPnl must be unchanged (still equal to the prior exit pnl, not doubled).
+    assert.fieldEquals("User", buyer.toHexString(), "realizedPnl", exitPnl.toString());
   });
 
   test("close-then-reopen at a different price: new session entryPrice tracks new trade price", () => {

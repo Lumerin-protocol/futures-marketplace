@@ -199,7 +199,7 @@ export type FuturesFixture = Awaited<ReturnType<typeof deployOnlyFuturesFixture>
 
 /** Convenience: oracles + Futures stack in a single fixture (the common case). */
 export async function deployFuturesFixture(conn: NetworkConnection) {
-  const data = await deployTokenOraclesAndMulticall3(conn);
+  const data = await conn.networkHelpers.loadFixture(deployTokenOraclesAndMulticall3);
   return deployOnlyFuturesFixture(conn, data);
 }
 

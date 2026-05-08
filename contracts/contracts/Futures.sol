@@ -87,7 +87,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private immutable _decimals; // decimals of the wrapped token
 
     // constants
-    string public constant VERSION = "2.6.0";
+    string public constant VERSION = "2.6.1";
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     /// @notice Maximum absolute quantity accepted in a single `createOrder` call.
     /// @dev Bounded by the int8 parameter type. Exposed as a constant so off-chain
@@ -1128,9 +1128,9 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @dev Each order in the FIFO queue contributes ±1 contract; we sum the queue size.
     ///      Returned value is unsigned (absolute aggregate quantity) for symmetry with perps.
     function getQuantityAtPrice(uint256 _deliveryDate, uint256 _price, bool _isBid) external view returns (uint256) {
-        StructuredLinkedList.List storage queue =
-            _isBid ? deliveryDatePriceOrdersLongIdQueue[_deliveryDate][_price]
-                  : deliveryDatePriceOrdersShortIdQueue[_deliveryDate][_price];
+        StructuredLinkedList.List storage queue = _isBid
+            ? deliveryDatePriceOrdersLongIdQueue[_deliveryDate][_price]
+            : deliveryDatePriceOrdersShortIdQueue[_deliveryDate][_price];
         return queue.sizeOf();
     }
 
@@ -1368,9 +1368,15 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     // Modifiers
 
     modifier onlyValidator() {
+        // inlining _onlyValidator() causes hardhat EDR to fail to recognize the custom error revert
+        // we'll keep it here for now, but we should eventually inline it into the function body
+        _onlyValidator();
+        _;
+    }
+
+    function _onlyValidator() internal view {
         if (_msgSender() != validatorAddress) {
             revert OnlyValidator();
         }
-        _;
     }
 }
