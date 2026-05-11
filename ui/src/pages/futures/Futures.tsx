@@ -215,19 +215,21 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       const activePositions = positionBookData.data.positions.filter((p) => p.isActive && !p.closedAt);
       let totalPnL = 0n;
 
+      // PnL = (mark - entry) * signedQty * deliveryDays, summed across active
+      // positions. `netQuantity` is the session's signed contract count
+      // (positive long / negative short), so the sign of each position's PnL
+      // falls out naturally — matches `getMinMarginForPositionManual` and the
+      // perps branch above. `isLong` is only used to pick the correct entry
+      // price column from the buy/sell split kept by the legacy row shape.
       activePositions.forEach((position: PositionBookPosition) => {
+        if (position.netQuantity === 0) return;
         const isLong = position.buyer.address.toLowerCase() === address.toLowerCase();
         const entryPrice = isLong ? position.buyPricePerDay : position.sellPricePerDay;
         const priceDiff = marketPrice - entryPrice;
-        const positionPnL = isLong ? priceDiff : -priceDiff;
-        totalPnL += positionPnL;
+        totalPnL += priceDiff * BigInt(position.netQuantity);
       });
 
       totalPnL = totalPnL * BigInt(contractSpecsQuery?.data?.data?.deliveryDurationDays ?? 1);
-
-      if (Math.abs(Number(totalPnL)) < 1000) {
-        return 0n;
-      }
 
       return totalPnL;
     }
