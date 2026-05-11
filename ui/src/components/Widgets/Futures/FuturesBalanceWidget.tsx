@@ -11,8 +11,6 @@ import { ModalItem } from "../../Modal";
 import { DepositForm } from "../../Forms/DepositForm";
 import { WithdrawalForm } from "../../Forms/WithdrawalForm";
 import type { AccountBalance } from "../../../types/types";
-import { useGetMinMargin } from "../../../hooks/data/useGetMinMargin";
-import { useGetPerpsInitialMargin } from "../../../hooks/data/perps/useGetPerpsInitialMargin";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -31,13 +29,6 @@ interface FuturesBalanceWidgetProps {
   accountBalance?: AccountBalance;
 }
 
-// Balance lives in the shared CollateralVault, so withdraws must respect the
-// margin reserved by *both* engines simultaneously. The withdrawal form's
-// "Locked" stat reflects this combined number, while the widget's header
-// "Locked" still shows the active mode only — hence this tooltip.
-const COMBINED_LOCKED_TOOLTIP =
-  "Combined margin locked across Futures and Perpetuals. Includes futures min margin plus perpetuals initial margin (which reserves margin for open positions and resting orders).";
-
 export const FuturesBalanceWidget = ({
   minMargin,
   isLoadingMinMargin,
@@ -50,40 +41,6 @@ export const FuturesBalanceWidget = ({
   const { address } = useAccount();
   const depositModal = useModal();
   const withdrawalModal = useModal();
-
-  // Withdraws are validated by the shared CollateralVault against *both* engines'
-  // locked margin, so we can't use only the active mode's number — that would let
-  // the user attempt a withdrawal that the other engine would block. We always
-  // sum: futures min margin + perps initial margin.
-  //
-  // Only fetched while the withdrawal modal is open; wagmi dedupes the futures
-  // call against the always-on parent-level read.
-  const futuresMinMarginQuery = useGetMinMargin(address);
-  const perpsInitialMarginQuery = useGetPerpsInitialMargin(address, {
-    enabled: withdrawalModal.isOpen,
-  });
-
-  const futuresLocked = useMemo(() => {
-    const v = futuresMinMarginQuery.data as bigint | undefined;
-    // `getMinMargin` returns int256; only positive values represent locked collateral.
-    return v && v > 0n ? v : 0n;
-  }, [futuresMinMarginQuery.data]);
-
-  const perpsLocked = useMemo(() => {
-    const v = perpsInitialMarginQuery.data as bigint | undefined;
-    return v && v > 0n ? v : 0n;
-  }, [perpsInitialMarginQuery.data]);
-
-  const withdrawalLockedAmount = useMemo(
-    () => futuresLocked + perpsLocked,
-    [futuresLocked, perpsLocked],
-  );
-
-  const isLoadingWithdrawalLocked =
-    withdrawalModal.isOpen &&
-    (futuresMinMarginQuery.isLoading || perpsInitialMarginQuery.isLoading);
-  const isWithdrawalLockedError =
-    futuresMinMarginQuery.isError || perpsInitialMarginQuery.isError;
 
   const handleDepositSuccess = () => {
     balanceQuery.refetch();
@@ -196,10 +153,8 @@ export const FuturesBalanceWidget = ({
       <ModalItem open={withdrawalModal.isOpen} setOpen={withdrawalModal.setOpen}>
         <WithdrawalForm
           closeForm={handleWithdrawalSuccess}
-          lockedAmount={withdrawalLockedAmount}
-          isLoadingLockedAmount={isLoadingWithdrawalLocked}
-          isLockedAmountError={isWithdrawalLockedError}
-          lockedTooltip={COMBINED_LOCKED_TOOLTIP}
+          lockedAmount={minMargin}
+          isLoadingLockedAmount={isLoadingMinMargin}
           balanceQuery={balanceQuery}
         />
       </ModalItem>

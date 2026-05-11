@@ -96,12 +96,7 @@ export const OrdersPositionsTabWidget = ({
   }, [historicalOrdersQuery.data?.data]);
 
   const positionHistoryCount = useMemo(() => {
-    const historicalPositions = historicalPositionsQuery.data?.data ?? [];
-    const unique = new Set<string>();
-    historicalPositions.forEach((p) => {
-      unique.add(`${p.deliveryAt.toString()}_${p.pricePerDay.toString()}`);
-    });
-    return unique.size;
+    return historicalPositionsQuery.data?.data?.length ?? 0;
   }, [historicalPositionsQuery.data?.data]);
 
   // Auto-switch to Positions tab when there are no open orders but there are open positions.
@@ -260,7 +255,12 @@ const FuturesTradesTable = ({ trades, isLoading, visibleCount, onLoadMore }: Fut
                 <td>{Math.abs(trade.tradeQuantity)}</td>
                 <td>{formatPrice(trade.tradingFee)}</td>
                 <td>
-                  <PnLText $isPositive={Number(trade.realizedPnl) >= 0}>{formatPnL(trade.realizedPnl)}</PnLText>
+                  <PnLText
+                    $isPositive={Number(trade.realizedPnl) >= 0}
+                    $isZero={Number(trade.realizedPnl) === 0}
+                  >
+                    {formatPnL(trade.realizedPnl)}
+                  </PnLText>
                 </td>
                 <td>
                   <TxLink
@@ -417,8 +417,13 @@ const EmptyState = styled("div")`
   }
 `;
 
-const PnLText = styled("span")<{ $isPositive: boolean }>`
-  color: ${(props) => (props.$isPositive ? tokens.trading.long : tokens.trading.short)};
+const PnLText = styled("span")<{ $isPositive: boolean; $isZero?: boolean }>`
+  color: ${(props) =>
+    props.$isZero
+      ? tokens.text.primary
+      : props.$isPositive
+        ? tokens.trading.long
+        : tokens.trading.short};
   font-weight: 600;
 `;
 

@@ -81,7 +81,11 @@ query UserPerpsOrdersByStatus ($address: ID!, $statuses: [String!]!)  {
 
 export const UserPerpsOrdersExcludeStatusQuery = gql`
 query UserPerpsOrdersExcludeStatus ($address: ID!, $statuses: [String!]!)  {
-  orders(where: { user: $address, status_not_in: $statuses }) {
+  orders(
+    where: { user: $address, status_not_in: $statuses }
+    orderBy: createdAt
+    orderDirection: desc
+  ) {
     blockNumber
     closedAt
     createdAt

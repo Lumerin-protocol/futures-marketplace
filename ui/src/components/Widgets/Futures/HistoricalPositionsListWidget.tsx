@@ -1,6 +1,6 @@
 import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import type { HistoricalPosition } from "../../../hooks/data/useHistoricalPositions";
 import { DateTimeCell } from "../../DateTimeCell";
@@ -19,8 +19,6 @@ export const HistoricalPositionsListWidget = ({
   participantAddress,
 }: HistoricalPositionsListWidgetProps) => {
   const [tradesSelection, setTradesSelection] = useState<FuturesTradesModalSelection | null>(null);
-  const getPositionType = (position: HistoricalPosition) =>
-    position.isLong ? "Long" : "Short";
 
   const formatPrice = (price: bigint) => {
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
@@ -31,57 +29,13 @@ export const HistoricalPositionsListWidget = ({
     return `${pnlValue.toFixed(2)}`;
   };
 
-
-  // Group positions by price (based on position type), deliveryAt, and position type.
-  //
-  // Each `HistoricalPosition` here is one closed `PositionSession`, which
-  // already carries its own `closedQuantity` (cumulative qty closed during
-  // the session). The new indexer no longer emits one record per contract,
-  // so the previous `amount += 1` row-count tally would always read `1`
-  // even for sessions that closed N contracts. Sum `closedQuantity`
-  // instead — that lets multiple sessions hitting the same
-  // (price, deliveryAt, side) over the 30-day window still collapse into
-  // one row, with the displayed quantity being the contract total across
-  // them.
-  const groupedPositions = positions.reduce(
-    (acc, position) => {
-      const positionType = getPositionType(position);
-      const pricePerDay = position.pricePerDay;
-      const pnl = position.pnl;
-      const key = `${pricePerDay}-${position.deliveryAt}-${positionType}`;
-
-      if (!acc[key]) {
-        acc[key] = {
-          pricePerDay: pricePerDay,
-          deliveryAt: position.deliveryAt,
-          positionType: positionType,
-          amount: 0,
-          realizedPnl: 0,
-          closedAt: position.closedAt,
-          timestamp: position.timestamp,
-        };
-      }
-
-      acc[key].amount += position.closedQuantity;
-      acc[key].realizedPnl += pnl;
-
-      return acc;
-    },
-    {} as Record<
-      string,
-      {
-        pricePerDay: bigint;
-        deliveryAt: string;
-        positionType: string;
-        amount: number;
-        realizedPnl: number;
-        closedAt: string | null;
-        timestamp: string;
-      }
-    >,
-  );
-
-  const groupedPositionsArray = Object.values(groupedPositions);
+  // Each `HistoricalPosition` is one closed `PositionSession` and is treated
+  // as a distinct row — no grouping. Sort most-recent first using closedAt
+  // when available, falling back to the session's opening timestamp.
+  const sortedPositions = useMemo(() => {
+    const sortKey = (p: HistoricalPosition) => Number(p.closedAt ?? p.timestamp);
+    return [...positions].sort((a, b) => sortKey(b) - sortKey(a));
+  }, [positions]);
 
   if (isLoading) {
     return (
@@ -105,7 +59,7 @@ export const HistoricalPositionsListWidget = ({
               <th>Contract Expiration</th>
               <th>Side</th>
               <th>Price (USDC)</th>
-              <th>Quantity</th>
+              <th>Max Quantity</th>
               <th>Realized PnL (USDC)</th>
               <th>Created</th>
               <th>Closed</th>
@@ -113,44 +67,46 @@ export const HistoricalPositionsListWidget = ({
             </tr>
           </thead>
           <tbody>
-            {groupedPositionsArray.map((groupedPosition, index) => (
-              <TableRow
-                key={`${groupedPosition.pricePerDay}-${groupedPosition.deliveryAt}-${groupedPosition.positionType}-${index}`}
-              >
-                <td><DateTimeCell timestamp={groupedPosition.deliveryAt} /></td>
-                <td>
-                  <TypeBadge $type={groupedPosition.positionType}>{groupedPosition.positionType}</TypeBadge>
-                </td>
-                <td>{formatPrice(groupedPosition.pricePerDay)}</td>
-                <td>{groupedPosition.amount}</td>
-                <td>
-                  <PnLCell $isPositive={groupedPosition.realizedPnl >= 0} $isZero={groupedPosition.realizedPnl === 0}>
-                    {formatPnl(groupedPosition.realizedPnl)}
-                  </PnLCell>
-                </td>
-                <td><DateTimeCell timestamp={groupedPosition.timestamp} /></td>
-                <td>{groupedPosition.closedAt ? <DateTimeCell timestamp={groupedPosition.closedAt} /> : "-"}</td>
-                <td>
-                  <TradesButton
-                    onClick={() =>
-                      setTradesSelection({
-                        pricePerDay: groupedPosition.pricePerDay,
-                        deliveryAt: groupedPosition.deliveryAt,
-                        positionType: groupedPosition.positionType as "Long" | "Short",
-                      })
-                    }
-                    title="View matching trades from the last 30 days"
-                  >
-                    Trades
-                  </TradesButton>
-                </td>
-              </TableRow>
-            ))}
+            {sortedPositions.map((position) => {
+              const positionType: "Long" | "Short" = position.isLong ? "Long" : "Short";
+              const maxQuantity = Math.abs(position.maxQuantity);
+              return (
+                <TableRow key={position.id}>
+                  <td><DateTimeCell timestamp={position.deliveryAt} /></td>
+                  <td>
+                    <TypeBadge $type={positionType}>{positionType}</TypeBadge>
+                  </td>
+                  <td>{formatPrice(position.pricePerDay)}</td>
+                  <td>{maxQuantity}</td>
+                  <td>
+                    <PnLCell $isPositive={position.pnl >= 0} $isZero={position.pnl === 0}>
+                      {formatPnl(position.pnl)}
+                    </PnLCell>
+                  </td>
+                  <td><DateTimeCell timestamp={position.timestamp} /></td>
+                  <td>{position.closedAt ? <DateTimeCell timestamp={position.closedAt} /> : "-"}</td>
+                  <td>
+                    <TradesButton
+                      onClick={() =>
+                        setTradesSelection({
+                          pricePerDay: position.pricePerDay,
+                          deliveryAt: position.deliveryAt,
+                          positionType,
+                        })
+                      }
+                      title="View matching trades from the last 30 days"
+                    >
+                      Trades
+                    </TradesButton>
+                  </td>
+                </TableRow>
+              );
+            })}
           </tbody>
         </Table>
       </TableContainer>
 
-      {groupedPositionsArray.length === 0 && (
+      {sortedPositions.length === 0 && (
         <EmptyState>
           <p>No historical positions found in the last 30 days</p>
         </EmptyState>

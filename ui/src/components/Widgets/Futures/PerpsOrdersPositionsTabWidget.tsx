@@ -981,7 +981,10 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoad
               <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
               <td>{formatPrice(trade.tradingFee)}</td>
               <td>
-                <PnLText $isPositive={Number(trade.realizedPnl) >= 0}>
+                <PnLText
+                  $isPositive={Number(trade.realizedPnl) >= 0}
+                  $isZero={Number(trade.realizedPnl) === 0}
+                >
                   {formatPnL(trade.realizedPnl)}
                 </PnLText>
               </td>
@@ -1080,7 +1083,10 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
                   <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
                   <td>{formatPrice(trade.tradingFee)}</td>
                   <td>
-                    <PnLText $isPositive={Number(trade.realizedPnl) >= 0}>
+                    <PnLText
+                      $isPositive={Number(trade.realizedPnl) >= 0}
+                      $isZero={Number(trade.realizedPnl) === 0}
+                    >
                       {formatPnL(trade.realizedPnl)}
                     </PnLText>
                   </td>
@@ -1315,8 +1321,13 @@ const EmptyState = styled("div")`
   }
 `;
 
-const PnLText = styled("span")<{ $isPositive: boolean }>`
-  color: ${(props) => (props.$isPositive ? tokens.trading.long : tokens.trading.short)};
+const PnLText = styled("span")<{ $isPositive: boolean; $isZero?: boolean }>`
+  color: ${(props) =>
+    props.$isZero
+      ? tokens.text.primary
+      : props.$isPositive
+        ? tokens.trading.long
+        : tokens.trading.short};
   font-weight: 600;
 `;
 
