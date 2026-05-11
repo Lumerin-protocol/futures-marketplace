@@ -238,7 +238,7 @@ export const FuturesTradesModal = ({
                 {matchingTrades.map((trade) => (
                   <TableRow key={trade.id}>
                     <td>
-                      <DateTimeCell timestamp={trade.timestamp} showSeconds timeOnly />
+                      <DateTimeCell timestamp={trade.timestamp} />
                     </td>
                     <td>
                       <TypeBadge $type={trade.positionType}>{trade.positionType}</TypeBadge>

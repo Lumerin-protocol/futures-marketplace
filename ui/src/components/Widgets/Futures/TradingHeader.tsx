@@ -93,19 +93,26 @@ export const TradingHeader = ({
               )}
             </>
           ) : (
-            contractSpecs?.data && (
-              <>
-                <StatItem>
-                  <StatValue>{formatSpeed(contractSpecs.data.speedHps)}</StatValue>
-                  <StatLabel>Contract Speed</StatLabel>
-                </StatItem>
-                <Divider />
-                <StatItem>
-                  <StatValue>{formatDuration(contractSpecs.data.deliveryDurationSeconds)}</StatValue>
-                  <StatLabel>Delivery Duration</StatLabel>
-                </StatItem>
-              </>
-            )
+            <>
+              <StatItem>
+                <StatValue>{currentPrice ?? "—"}</StatValue>
+                <StatLabel>Current Price (USDC)</StatLabel>
+              </StatItem>
+              {contractSpecs?.data && (
+                <>
+                  <Divider />
+                  <StatItem>
+                    <StatValue>{formatSpeed(contractSpecs.data.speedHps)}</StatValue>
+                    <StatLabel>Contract Speed</StatLabel>
+                  </StatItem>
+                  <Divider />
+                  <StatItem>
+                    <StatValue>{formatDuration(contractSpecs.data.deliveryDurationSeconds)}</StatValue>
+                    <StatLabel>Delivery Duration</StatLabel>
+                  </StatItem>
+                </>
+              )}
+            </>
           )}
         </StatsRow>
 

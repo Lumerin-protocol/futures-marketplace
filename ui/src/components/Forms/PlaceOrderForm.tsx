@@ -256,6 +256,12 @@ export const PlaceOrderForm: FC<Props> = ({
                         : "N/A"}
                     </span>
                   </div>
+                  {isMarketOrder && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-300">Slippage:</span>
+                      <span className="text-white">5%</span>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="flex justify-between">
