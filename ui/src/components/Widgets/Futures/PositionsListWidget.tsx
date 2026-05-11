@@ -109,24 +109,29 @@ export const PositionsListWidget = ({
     return `${(Number(margin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} USDC`;
   };
 
-  // Calculate PnL for a position
+  // PnL = (mark - entry) * signedQty * deliveryDays, mirroring the on-chain
+  // settlement math in `getMinMarginForPositionManual`. Signed `netQuantity`
+  // encodes side (long > 0, short < 0), so the sign of the result falls out
+  // naturally. The percentage is taken against entry notional (fixed at fill
+  // time) so it doesn't drift with the market price the way a mark-notional
+  // denominator does.
   const calculatePnL = (
     entryPrice: bigint,
-    positionType: string,
-    amount: number,
+    netQuantity: number,
   ): { pnl: number | null; percentage: number | null } => {
-    if (!latestPrice) return { pnl: null, percentage: null };
+    if (!latestPriceBigInt) return { pnl: null, percentage: null };
+    if (netQuantity === 0) return { pnl: 0, percentage: 0 };
 
-    const entryPriceNum = Number(entryPrice) / PAYMENT_TOKEN_SCALE_NUM;
-    const priceDiff = latestPrice - entryPriceNum;
+    const signedQty = BigInt(netQuantity);
+    const absQty = signedQty < 0n ? -signedQty : signedQty;
+    const days = BigInt(deliveryDurationDays);
 
-    // Long: profit when price goes up (current > entry)
-    // Short: profit when price goes down (entry > current)
-    // Multiply by deliveryDurationDays to get total PnL for the contract period
-    const pnl = (positionType === "Long" ? priceDiff * amount : -priceDiff * amount) * deliveryDurationDays;
-    // Calculate percentage based on PnL and initial investment (entry value)
-    const entryValue = latestPrice * amount * deliveryDurationDays;
-    const percentage = entryValue !== 0 ? (pnl / entryValue) * 100 : 0;
+    const pnlScaled = (latestPriceBigInt - entryPrice) * signedQty * days;
+    const entryNotionalScaled = entryPrice * absQty * days;
+
+    const pnl = Number(pnlScaled) / PAYMENT_TOKEN_SCALE_NUM;
+    const percentage =
+      entryNotionalScaled === 0n ? 0 : (Number(pnlScaled) / Number(entryNotionalScaled)) * 100;
 
     return { pnl, percentage };
   };
@@ -308,8 +313,7 @@ export const PositionsListWidget = ({
                   {(() => {
                     const { pnl, percentage } = calculatePnL(
                       groupedPosition.pricePerDay,
-                      groupedPosition.positionType,
-                      groupedPosition.amount,
+                      groupedPosition.netQuantity,
                     );
                     return <PnLCell $isPositive={pnl !== null && pnl >= 0}>{formatPnL(pnl, percentage)}</PnLCell>;
                   })()}
