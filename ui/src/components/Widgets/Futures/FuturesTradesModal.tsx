@@ -30,7 +30,6 @@ interface FuturesTradesModalProps {
 interface TradeRow {
   id: string;
   timestamp: string;
-  closedAt: string | null;
   pricePerDay: bigint;
   positionType: "Long" | "Short";
   realizedPnl: number;
@@ -42,7 +41,7 @@ interface TradeRow {
 // Normalized shape that unifies active (PositionBookPosition) and historical
 // (HistoricalPosition) positions so they can be processed by the same grouping
 // pipeline. Direction is collapsed into a single `isLong` flag and the
-// row-level price/pnl are flattened (active rows have no realized pnl yet).
+// row-level pnl is flattened (active rows have no realized pnl yet).
 interface NormalizedPosition {
   id: string;
   transactionHash: `0x${string}`;
@@ -51,7 +50,6 @@ interface NormalizedPosition {
   pricePerDay: bigint;
   isLong: boolean;
   isActive: boolean;
-  closedAt: string | null;
   pnl: number;
   trades: FuturesSessionTrade[];
 }
@@ -103,7 +101,6 @@ export const FuturesTradesModal = ({
           pricePerDay: isLong ? p.buyPricePerDay : p.sellPricePerDay,
           isLong,
           isActive: p.isActive,
-          closedAt: p.closedAt,
           pnl: 0,
           trades: p.trades ?? [],
         };
@@ -116,7 +113,6 @@ export const FuturesTradesModal = ({
         pricePerDay: p.pricePerDay,
         isLong: p.isLong,
         isActive: p.isActive,
-        closedAt: p.closedAt,
         pnl: p.pnl,
         trades: p.trades ?? [],
       })),
@@ -148,9 +144,6 @@ export const FuturesTradesModal = ({
           rows.push({
             id: trade.id,
             timestamp: trade.timestamp,
-            // Trades themselves don't have a "closed" concept — show the
-            // session's closedAt if the parent session is closed, else "-".
-            closedAt: !p.isActive ? p.closedAt : null,
             pricePerDay: trade.tradePrice,
             positionType: isLong ? "Long" : "Short",
             realizedPnl: Number(trade.realizedPnl),
@@ -177,7 +170,6 @@ export const FuturesTradesModal = ({
         groups.set(key, {
           id: key,
           timestamp: p.timestamp,
-          closedAt: p.isActive ? null : p.closedAt,
           pricePerDay: p.pricePerDay,
           positionType,
           realizedPnl: p.pnl,
@@ -192,11 +184,6 @@ export const FuturesTradesModal = ({
       existing.realizedPnl += p.pnl;
       if (p.isActive) {
         existing.hasActive = true;
-        existing.closedAt = null;
-      } else if (!existing.hasActive && p.closedAt) {
-        if (!existing.closedAt || Number(p.closedAt) > Number(existing.closedAt)) {
-          existing.closedAt = p.closedAt;
-        }
       }
     }
 
@@ -244,7 +231,6 @@ export const FuturesTradesModal = ({
                   <th>Price (USDC)</th>
                   <th>Quantity</th>
                   {/* <th>Counterparty</th> */}
-                  <th>Closed</th>
                   <th>Realized PnL</th>
                 </tr>
               </thead>
@@ -268,9 +254,6 @@ export const FuturesTradesModal = ({
                         <CounterpartyAddress>Multiple</CounterpartyAddress>
                       )}
                     </td> */}
-                    <td>
-                      {trade.closedAt ? <DateTimeCell timestamp={trade.closedAt} showSeconds /> : "-"}
-                    </td>
                     <td>
                       <PnLCell
                         $isPositive={trade.realizedPnl >= 0}
