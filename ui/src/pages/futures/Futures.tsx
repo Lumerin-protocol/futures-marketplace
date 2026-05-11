@@ -15,11 +15,10 @@ import { useBtcPriceIndexData } from "../../hooks/data/useBtcPriceIndexData";
 import { getUserFuturesOrders } from "../../hooks/data/getUserFuturesOrders";
 import { getUserFuturesPositions } from "../../hooks/data/getUserFuturesPositions";
 import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpecs";
-import { useGetMinMargin } from "../../hooks/data/useGetMinMargin";
+import { useGetPortfolioIM } from "../../hooks/data/useGetPortfolioIM";
 import { useGetMarketPrice } from "../../hooks/data/useGetMarketPrice";
 import { useHistoricalPositions } from "../../hooks/data/useHistoricalPositions";
 import { useGetFutureBalance } from "../../hooks/data/useGetFutureBalance";
-import { useGetPerpsRequiredMargin } from "../../hooks/data/perps/useGetPerpsRequiredMargin";
 import { useFuturesPaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
 import { useFundingRate } from "../../hooks/data/perps/useFundingRate";
 import { usePerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
@@ -89,21 +88,14 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     true,
   );
 
-  // Get min margin for address using hook (used for withdrawal form and locked balance)
-  const futuresMinMarginQuery = useGetMinMargin(address);
-  const perpsMinMarginQuery = useGetPerpsRequiredMargin(address);
-
-  const minMarginQuery = useMemo(() => {
-    const query = contractMode === "perpetual" ? perpsMinMarginQuery : futuresMinMarginQuery;
-    return {
-      data: query.data,
-      isLoading: query.isLoading,
-      refetch: query.refetch,
-    };
-  }, [contractMode, futuresMinMarginQuery, perpsMinMarginQuery]);
+  // Single source of truth for the user's locked collateral: portfolio IM read
+  // from the IPortfolioMarginEngine resolved via the Futures contract. This
+  // replaces the previous mode-toggle aggregation between futures `getMinMargin`
+  // and perps `getMaintenanceMargin`/`getInitialMargin`.
+  const minMarginQuery = useGetPortfolioIM(address);
 
   const minMargin = useMemo(() => {
-    if (!minMarginQuery.data) return null;
+    if (minMarginQuery.data === undefined) return null;
     return minMarginQuery.data as bigint;
   }, [minMarginQuery.data]);
 

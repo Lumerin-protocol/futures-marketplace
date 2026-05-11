@@ -15,6 +15,36 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
+  const formatStatus = (status: string) => {
+    switch (status) {
+      case "ACTIVE":
+        return "Active";
+      case "PARTIAL":
+        return "Partial";
+      case "FILLED":
+        return "Filled";
+      case "CANCELLED":
+        return "Cancelled";
+      default:
+        return status;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "ACTIVE":
+        return tokens.trading.long;
+      case "PARTIAL":
+        return tokens.trading.warning;
+      case "FILLED":
+        return tokens.text.muted;
+      case "CANCELLED":
+        return tokens.trading.short;
+      default:
+        return tokens.text.muted;
+    }
+  };
+
   if (isLoading) {
     return (
       <OrdersContainer>
@@ -38,6 +68,7 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
               <th>Side</th>
               <th>Price (USDC)</th>
               <th>Quantity</th>
+              <th>Status</th>
               <th>Created</th>
               <th>Closed</th>
             </tr>
@@ -53,6 +84,11 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
                 </td>
                 <td>{formatPrice(order.pricePerDay)}</td>
                 <td>{order.originalQuantity}</td>
+                <td>
+                  <StatusBadge $status={order.status} $color={getStatusColor(order.status)}>
+                    {formatStatus(order.status)}
+                  </StatusBadge>
+                </td>
                 <td><DateTimeCell timestamp={order.timestamp} /></td>
                 <td>{order.closedAt ? <DateTimeCell timestamp={order.closedAt} /> : "-"}</td>
               </TableRow>
@@ -155,6 +191,16 @@ const TypeBadge = styled("span")<{ $type: string }>`
   font-weight: 600;
   background-color: ${(props) => (props.$type === "Long" ? tokens.trading.longRowBg : tokens.trading.shortRowBg)};
   color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
+`;
+
+const StatusBadge = styled("span")<{ $status: string; $color: string }>`
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background-color: ${(props) => `${props.$color}33`};
+  color: ${(props) => props.$color};
 `;
 
 const EmptyState = styled("div")`
