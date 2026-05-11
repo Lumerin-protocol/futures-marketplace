@@ -243,7 +243,7 @@ const FuturesTradesTable = ({ trades, isLoading, visibleCount, onLoadMore }: Fut
             return (
               <TableRow key={trade.id}>
                 <td>
-                  <DateTimeCell timestamp={trade.timestamp} showSeconds />
+                  <DateTimeCell timestamp={trade.timestamp} />
                 </td>
                 <td>
                   <TypeBadge $type={isLong ? "Long" : "Short"}>{isLong ? "Long" : "Short"}</TypeBadge>

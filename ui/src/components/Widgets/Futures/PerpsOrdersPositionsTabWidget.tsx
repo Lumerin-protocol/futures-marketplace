@@ -970,7 +970,7 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoad
         <tbody>
           {displayedTrades.map((trade) => (
             <TableRow key={trade.id}>
-              <td><DateTimeCell timestamp={trade.timestamp} showSeconds /></td>
+              <td><DateTimeCell timestamp={trade.timestamp} /></td>
               <td>
                 <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
                   {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
@@ -1072,7 +1072,7 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
             <tbody>
               {sortedTrades.map((trade) => (
                 <TableRow key={trade.id}>
-                  <td><DateTimeCell timestamp={trade.timestamp} showSeconds /></td>
+                  <td><DateTimeCell timestamp={trade.timestamp} /></td>
                   <td>
                     <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
                       {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
