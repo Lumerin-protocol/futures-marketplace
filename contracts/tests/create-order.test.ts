@@ -115,7 +115,9 @@ describe("Order Creation", () => {
 
     const qty = 5;
     const price = await futures.read.getMarketPrice();
-    const margin = await futures.read.getMinMarginForPosition([price, BigInt(qty)]);
+    // Generous deposit: |qty| × delivery days × entry price covers any
+    // PME stress + unrealized-loss requirement at entry.
+    const margin = price * BigInt(config.deliveryDurationDays) * BigInt(qty);
     const deliveryDate = BigInt(config.deliveryDates[0]);
 
     await collateralVault.write.deposit([margin + config.orderFee], { account: seller.account });
@@ -459,7 +461,8 @@ describe("Order Creation", () => {
     const price = await futures.read.getMarketPrice();
     const deliveryDate = config.deliveryDates[0];
 
-    const minMarginForOneOrder = await futures.read.getMinMarginForPosition([price, -1n]);
+    // Single-contract IM is bounded above by entryPrice * deliveryDays.
+    const minMarginForOneOrder = price * BigInt(config.deliveryDurationDays);
 
     const orderFee = await futures.read.orderFee();
     const margin = minMarginForOneOrder + orderFee * 2n;
@@ -468,8 +471,12 @@ describe("Order Creation", () => {
 
     await futures.write.createOrder([price, deliveryDate, "", 1], { account: seller.account });
 
-    const collateralDeficit = await futures.read.getCollateralDeficit([seller.account.address]);
-    assert.equal(collateralDeficit < 0n, true);
+    // Balance must already exceed the PME-driven IM (no deficit) so the
+    // opposite-side order below isn't refused on insufficient-margin grounds.
+    const sellerAddr = seller.account.address;
+    const im = await contracts.portfolioMarginEngine.read.computePortfolioIM([sellerAddr]);
+    const balance = await collateralVault.read.balanceOf([sellerAddr]);
+    assert.ok(balance > im, "seller has surplus collateral above portfolio IM");
 
     await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
   });

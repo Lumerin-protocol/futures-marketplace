@@ -15,7 +15,7 @@ const { networkHelpers } = await network.getOrCreate();
 // CREATE (`_createPosition`) and position REMOVE (`_removePosition`). Every
 // position-closing path must terminate in `_removePosition`, otherwise the
 // trackers leak and downstream margin checks (PortfolioMarginEngine,
-// `getCollateralDeficit`, etc.) read stale values.
+// `computePortfolioIM`, etc.) read stale values.
 //
 // These tests pin the invariant for the two close paths that flow through
 // `_closeAndCashSettleDelivery`:
@@ -131,16 +131,16 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     assert.ok(sellerDeltaBefore < 0n, "seller is short");
     assert.ok(buyerDeltaBefore > 0n, "buyer is long");
 
-    // Push the market price above the seller's entry so MTM loss exceeds their
-    // maintenance margin (triggers marginCall) but stays under the seller's
-    // deposited collateral so cash-settlement actually completes — otherwise a
-    // revert would mask the post-state we want to assert on.
+    // Push the market price above the seller's entry so portfolio MM (PME)
+    // exceeds their balance and `marginCall` actually liquidates. Cash settlement
+    // still has to complete, so the move must remain bounded by the seller's
+    // collateral.
     //
-    // Seller short at `price` (100). Maintenance margin = 20% × 100 × 7 = 140.
-    // Balance ≈ 700 (less order fee). Loss at C: (C − 100) × 7. We pick
-    // C = 1.85 × price = 185 → loss = 595, which sits comfortably between the
-    // maintenance threshold and the seller's balance.
-    const targetMarketPrice = (price * 185n) / 100n;
+    // Seller short 1 contract over 7 days. PME stress MM ≈ mmSpot · spot · |Δ|/WAD
+    // (≈ 0.05 · C · 7 = 0.35·C in token units), plus unrealized loss
+    // (C − price) · 7. Balance ≈ 700. Solve 0.35·C + 7·(C − 100) > 700 ⇒ C > 190.
+    // Pick C = 1.95 × price = 195 to clear the threshold with margin to spare.
+    const targetMarketPrice = (price * 195n) / 100n;
     // market = hashpriceUsd / hashpriceScalingDivisor → hashpriceUsd = market × divisor.
     // hashpriceScalingDivisor = 10^(oracleDecimals − tokenDecimals) = 10^(8−6) = 100.
     await hashrateOracle.write.setPrice([targetMarketPrice * 100n]);

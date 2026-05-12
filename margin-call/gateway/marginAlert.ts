@@ -14,7 +14,7 @@ export async function sendDeficitAlerts(
   const entriesToSend = entries.map((entry) => ({
     walletAddress: entry.address,
     collateralBalance: entry.balance,
-    minBalance: calcMinBalance(entry.minMargin, MARGIN_UTILIZATION_WARNING_PERCENT),
+    minBalance: calcMinBalance(entry.initialMargin, MARGIN_UTILIZATION_WARNING_PERCENT),
   }));
 
   log.info(`Sending deficit alerts: ${entriesToSend.length}`);
