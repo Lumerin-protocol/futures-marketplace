@@ -125,6 +125,11 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "NotLiquidatable",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "NothingToWithdraw",
     "type": "error"
   },
@@ -150,7 +155,17 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "OrderNotBelongToParticipant",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "OrderNotBelongToSender",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OrdersStillOpen",
     "type": "error"
   },
   {
@@ -193,6 +208,11 @@ export const FuturesAbi = [
   {
     "inputs": [],
     "name": "PositionDestURLNotSet",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PositionNotBelongToParticipant",
     "type": "error"
   },
   {
@@ -314,6 +334,19 @@ export const FuturesAbi = [
     "anonymous": false,
     "inputs": [
       {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newLiquidationFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "LiquidationFeeUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
         "indexed": true,
         "internalType": "bytes32",
         "name": "orderId",
@@ -383,6 +416,37 @@ export const FuturesAbi = [
       }
     ],
     "name": "OrderFeeUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "orderId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "participant",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "liquidator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "fee",
+        "type": "uint256"
+      }
+    ],
+    "name": "OrderLiquidated",
     "type": "event"
   },
   {
@@ -520,6 +584,37 @@ export const FuturesAbi = [
       }
     ],
     "name": "PositionExited",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "positionId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "participant",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "liquidator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "fee",
+        "type": "uint256"
+      }
+    ],
+    "name": "PositionLiquidated",
     "type": "event"
   },
   {
@@ -1293,6 +1388,68 @@ export const FuturesAbi = [
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "_orderId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "liquidateOrder",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      }
+    ],
+    "name": "liquidateOrders",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "_positionId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "liquidatePosition",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "liquidationFee",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "liquidationMarginPercent",
     "outputs": [
@@ -1481,6 +1638,19 @@ export const FuturesAbi = [
       }
     ],
     "name": "setFutureDeliveryDatesCount",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_liquidationFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "setLiquidationFee",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

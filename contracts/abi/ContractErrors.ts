@@ -303,7 +303,17 @@ export const contractErrors = [
   },
   {
     "inputs": [],
+    "name": "NotLiquidatable",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "UUPSUnauthorizedCallContext",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OrderNotBelongToParticipant",
     "type": "error"
   },
   {
@@ -340,6 +350,11 @@ export const contractErrors = [
   },
   {
     "inputs": [],
+    "name": "OrdersStillOpen",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "NotAuthorized",
     "type": "error"
   },
@@ -352,6 +367,11 @@ export const contractErrors = [
       }
     ],
     "name": "ERC20InvalidReceiver",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PositionNotBelongToParticipant",
     "type": "error"
   },
   {

@@ -81,13 +81,18 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @notice Set of price levels that currently have at least one resting sell order, per delivery date.
     mapping(uint256 => EnumerableSet.UintSet) private activeAskPrices;
 
+    /// @notice Flat fee paid by the underwater participant to the caller of any permissionless
+    ///         liquidation entry point — `liquidateOrder` / `liquidateOrders` (per cancelled
+    ///         order) and `liquidatePosition` (per closed position). Settable by the owner.
+    uint256 public liquidationFee;
+
     // immutable
     /// @dev Unified collateral vault (Titan `CollateralVault` or compatible). Baked into the implementation via constructor.
     ICollateralVault public immutable collateralVault;
     uint8 private immutable _decimals; // decimals of the wrapped token
 
     // constants
-    string public constant VERSION = "2.7.0";
+    string public constant VERSION = "2.8.0";
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     /// @notice Maximum absolute quantity accepted in a single `createOrder` call.
     /// @dev Bounded by the int8 parameter type. Exposed as a constant so off-chain
@@ -173,6 +178,19 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @param account The account that could not cover its loss (typically a liquidated participant or the insurance fund)
     /// @param amount  Shortfall amount that could not be covered (token decimals)
     event BadDebt(address indexed account, uint256 amount);
+    /// @notice Emitted when a resting order is force-cancelled by a permissionless liquidator
+    ///         via `liquidateOrder` / `liquidateOrders`. `OrderClosed` is also emitted from the
+    ///         same path so order-lifecycle indexers keep working unchanged.
+    event OrderLiquidated(
+        bytes32 indexed orderId, address indexed participant, address indexed liquidator, uint256 fee
+    );
+    /// @notice Emitted when a position is force-closed by a permissionless liquidator via
+    ///         `liquidatePosition`. `PositionClosed` and `PositionExited` are still emitted by
+    ///         the underlying cash-settlement path so existing indexers keep working.
+    event PositionLiquidated(
+        bytes32 indexed positionId, address indexed participant, address indexed liquidator, uint256 fee
+    );
+    event LiquidationFeeUpdated(uint256 newLiquidationFee);
 
     // errors
     error InvalidPrice();
@@ -202,6 +220,10 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     error UnsupportedTokenDecimals(); // token decimals exceed oracle decimals
     error OracleStale(); // hashprice oracle answer older than MAX_ORACLE_STALENESS
     error InvalidOracle(); // hashprice oracle returned a non-positive answer
+    error NotLiquidatable(); // liquidate{Order,Orders,Position} called on a healthy participant
+    error OrdersStillOpen(); // liquidatePosition called while participant has resting orders
+    error OrderNotBelongToParticipant(); // liquidateOrder/liquidateOrders received an id not owned by `participant`
+    error PositionNotBelongToParticipant(); // liquidatePosition received a positionId where participant is neither buyer nor seller
 
     /// @param _collateralVault Must use the same underlying ERC20 as `token` passed to `initialize`.
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -637,6 +659,13 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         emit OrderFeeUpdated(_orderFee);
     }
 
+    /// @notice Set the flat liquidation fee paid by `liquidateOrder` / `liquidateOrders`
+    ///         (per cancelled order) and `liquidatePosition` (per closed position).
+    function setLiquidationFee(uint256 _liquidationFee) external onlyOwner {
+        liquidationFee = _liquidationFee;
+        emit LiquidationFeeUpdated(_liquidationFee);
+    }
+
     function setOracle(address addr) external onlyOwner {
         _setHashrateOracle(AggregatorV3Interface(addr));
     }
@@ -768,6 +797,120 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         if (liquidated) {
             _emitLiquidation(_participant, startOrderMargin, int256(startBalance));
         }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Permissionless keeper liquidation entry points (Phase 0 of the unified
+    // margin keeper rollout). The legacy validator-only `marginCall` above is
+    // kept in place during transition for the existing Lambda — it will be
+    // removed in a Phase 4 follow-up upgrade.
+    //
+    // Strict two-step invariant enforced on-chain:
+    //   1. clear all resting orders via `liquidateOrders(participant)` /
+    //      `liquidateOrder(participant, id)` (any caller, paid per cancel)
+    //   2. then close positions one-by-one via
+    //      `liquidatePosition(participant, positionId)` (reverts
+    //      `OrdersStillOpen` if step 1 wasn't completed)
+    //
+    // The keeper composes both steps atomically off-chain via Multicall3 and
+    // re-checks portfolio MM between them so cross-product offsets
+    // (perps/options) are honored.
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /// @dev True iff `_participant` is below the portfolio MM predicate. Used as the predicate
+    ///      for the permissionless `liquidate*` entry points (orders alone can break MM, so
+    ///      this intentionally does NOT require state to exist — `OrderNotBelongToParticipant`
+    ///      / `PositionNotBelongToParticipant` already cover the no-state cases).
+    function _underwater(address _participant) internal view returns (bool) {
+        return collateralVault.balanceOf(_participant) < marginEngine.computePortfolioMM(_participant);
+    }
+
+    /// @notice Force-cancel a single resting order owned by an underwater participant.
+    ///         Permissionless; pays `liquidationFee` from the participant's vault to
+    ///         `msg.sender`.
+    function liquidateOrder(address _participant, bytes32 _orderId) external {
+        if (!_underwater(_participant)) revert NotLiquidatable();
+
+        Order memory order = orders[_orderId];
+        if (order.participant != _participant) revert OrderNotBelongToParticipant();
+
+        _doLiquidateOrder(_participant, _orderId, order);
+    }
+
+    /// @notice Force-cancel resting orders owned by an underwater participant FIFO until they
+    ///         become healthy or the order book is empty. Permissionless; pays
+    ///         `liquidationFee` per cancel.
+    /// @dev    Reverts `NotLiquidatable` if zero orders were cancelled (caller mis-targeted or
+    ///         the participant is healthy). Cross-product MM is re-evaluated each iteration so
+    ///         cancellation stops as soon as offsets from perps / options bring the participant
+    ///         back above MM — liquidators can't drain fees on a healthy account.
+    function liquidateOrders(address _participant) external {
+        EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[_participant];
+
+        uint256 cancelled = 0;
+        // Always cancel the head of the set; `_closeOrder` swap-and-pops it out, so the next
+        // head moves to index 0. Bail early once MM is healthy.
+        while (_orders.length() > 0) {
+            if (!_underwater(_participant)) break;
+            bytes32 orderId = _orders.at(0);
+            _doLiquidateOrder(_participant, orderId, orders[orderId]);
+            cancelled++;
+        }
+
+        if (cancelled == 0) revert NotLiquidatable();
+    }
+
+    /// @notice Force-close a single position belonging to an underwater participant.
+    ///         Permissionless; pays `liquidationFee` from the participant's vault to
+    ///         `msg.sender`.
+    /// @dev    Strict orders-first invariant: reverts `OrdersStillOpen` if the participant has
+    ///         any resting orders. The keeper must clear them via `liquidateOrders` first
+    ///         (composed atomically off-chain via Multicall3).
+    function liquidatePosition(address _participant, bytes32 _positionId) external {
+        Position storage position = positions[_positionId];
+        if (position.seller == address(0)) revert PositionNotExists();
+        if (position.seller != _participant && position.buyer != _participant) {
+            revert PositionNotBelongToParticipant();
+        }
+
+        if (participantOrderIdsIndex[_participant].length() != 0) revert OrdersStillOpen();
+        if (!_underwater(_participant)) revert NotLiquidatable();
+
+        // Cash-settle through the existing `_forceLiquidatePosition` path: it builds an
+        // offsetting taker order from the counterparty side and routes PnL through the
+        // insurance fund (same path as legacy `marginCall`'s position step).
+        _forceLiquidatePosition(_positionId, position, _participant);
+
+        uint256 fee = liquidationFee;
+        uint256 paid;
+        if (fee > 0) {
+            uint256 balance = collateralVault.balanceOf(_participant);
+            paid = fee < balance ? fee : balance;
+            if (paid > 0) {
+                _internalTransfer(_participant, _msgSender(), paid);
+            }
+        }
+
+        emit PositionLiquidated(_positionId, _participant, _msgSender(), paid);
+    }
+
+    /// @dev Cancels a single order on behalf of a (verified-underwater) participant and pays
+    ///      the flat liquidation fee. Caller must have already verified `_underwater` and
+    ///      `_order.participant == _participant`.
+    function _doLiquidateOrder(address _participant, bytes32 _orderId, Order memory _order) private {
+        _closeOrder(_orderId, _order);
+
+        uint256 fee = liquidationFee;
+        uint256 paid;
+        if (fee > 0) {
+            uint256 balance = collateralVault.balanceOf(_participant);
+            paid = fee < balance ? fee : balance;
+            if (paid > 0) {
+                _internalTransfer(_participant, _msgSender(), paid);
+            }
+        }
+
+        emit OrderLiquidated(_orderId, _participant, _msgSender(), paid);
     }
 
     /// @dev Stack-saving wrapper around the `Liquidation` emit.
