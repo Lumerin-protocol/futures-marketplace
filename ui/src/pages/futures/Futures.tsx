@@ -23,6 +23,7 @@ import { useFuturesPaymentTokenBalance } from "../../hooks/data/usePaymentTokenB
 import { useFundingRate } from "../../hooks/data/perps/useFundingRate";
 import { usePerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
 import { useUserPositionSessions } from "../../hooks/data/perps/useUserPositionSessions";
+import { useUserPerpsOrders } from "../../hooks/data/perps/useUserPerpsOrders";
 import { useMaintenanceMarginPercent } from "../../hooks/data/perps/useMaintenanceMarginPercent";
 import { computeLiquidationState } from "../../hooks/data/perps/positionHelper";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
@@ -74,15 +75,32 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const btcPriceQuery = useBtcPriceIndexData({ timePeriod: chartTimePeriod });
   const contractSpecsQuery = useFuturesContractSpecs();
   const [hasOpenOrders, setHasOpenOrders] = useState(false);
+  const [hasOpenPerpsOrders, setHasOpenPerpsOrders] = useState(false);
   const { data: participantData, isLoading: isParticipantLoading } = getUserFuturesOrders(address, {
     refetch: hasOpenOrders,
   });
   const { data: positionBookData, isLoading: isPositionBookLoading } = getUserFuturesPositions(address, {
     refetch: hasOpenOrders,
   });
+  // Lifted from PerpsOrdersPositionsTabWidget so we can derive `hasOpenPerpsOrders`
+  // here and gate the perps positions/orders polling cadence (15s while open, 60s
+  // baseline for positions otherwise).
+  const perpsOpenOrdersQuery = useUserPerpsOrders(address, {
+    statuses: ["ACTIVE", "PARTIAL"],
+    refetch: hasOpenPerpsOrders,
+  });
   useEffect(() => {
     setHasOpenOrders((participantData?.data?.orders?.length ?? 0) > 0);
   }, [participantData?.data?.orders?.length]);
+  useEffect(() => {
+    const orders = perpsOpenOrdersQuery.data?.data?.orders ?? [];
+    const openCount = orders.filter(
+      (order) =>
+        (order.status === "ACTIVE" || order.status === "PARTIAL") &&
+        order.filledQuantity !== order.originalQuantity,
+    ).length;
+    setHasOpenPerpsOrders(openCount > 0);
+  }, [perpsOpenOrdersQuery.data?.data?.orders]);
   const { data: historicalPositionsData, isLoading: isHistoricalPositionsLoading } = useHistoricalPositions(
     address,
     true,
@@ -131,7 +149,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const perpsCollectionQuery = usePerpsCollection();
 
   // Fetch user position sessions for perpetual contracts
-  const positionSessionsQuery = useUserPositionSessions(address);
+  const positionSessionsQuery = useUserPositionSessions(address, { refetch: hasOpenPerpsOrders });
 
   // Active delivery date selected in the order book (used for futures entry price line)
   const [selectedDeliveryDate, setSelectedDeliveryDate] = useState<number | undefined>();
@@ -278,13 +296,21 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     new Map(),
   );
 
-  const proceedWithClosePosition = useCallback((price: string, amount: number, isBuy: boolean) => {
-    setSelectedPrice(price);
-    setSelectedAmount(amount);
-    setSelectedIsBuy(isBuy);
-    setHighlightMode("buttons");
-    setHighlightTrigger((prev) => prev + 1);
-  }, []);
+  const proceedWithClosePosition = useCallback(
+    (price: string, amount: number, isBuy: boolean, deliveryAt?: number) => {
+      setSelectedPrice(price);
+      setSelectedAmount(amount);
+      setSelectedIsBuy(isBuy);
+      // Snap the order book (and PlaceOrderWidget's externalDeliveryDate) to the
+      // closing position's expiry so the prefilled order targets the correct book.
+      if (deliveryAt && contractMode === "futures") {
+        setSelectedDeliveryDate(deliveryAt);
+      }
+      setHighlightMode("buttons");
+      setHighlightTrigger((prev) => prev + 1);
+    },
+    [contractMode],
+  );
 
   const closePositionModal = useClosePositionModal(proceedWithClosePosition);
 
@@ -352,6 +378,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
           contractSpecsQuery={contractSpecsQuery}
           previousOrderBookStateRef={previousOrderBookStateRef}
           contractMode={contractMode}
+          targetDeliveryDate={selectedDeliveryDate}
         />
       </OrderBookArea>
 
@@ -410,6 +437,8 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
               positionSessionsLoading={positionSessionsQuery.isLoading}
               perpsBalance={balanceQuery.data as bigint | undefined}
               maintenanceMarginPercent={maintenanceMarginPercent}
+              perpsOpenOrders={perpsOpenOrdersQuery.data?.data?.orders || []}
+              perpsOpenOrdersLoading={perpsOpenOrdersQuery.isLoading}
               onPositionClosed={async () => {
                 await minMarginQuery.refetch();
               }}

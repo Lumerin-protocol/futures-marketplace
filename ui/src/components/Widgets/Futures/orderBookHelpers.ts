@@ -45,7 +45,7 @@ export const createFinalOrderBookData = (
 
   // Calculate static order book data based on hashrate
   let calculatedOrderBookData: { price: number; bidUnits: number | null; askUnits: number | null }[] = [];
-  const offsetAroundBasePrice = 20;
+  const offsetAroundBasePrice = 15;
 
   if (basePrice !== null && minimumPriceIncrement !== null) {
     const staticOrderBookRows = [];

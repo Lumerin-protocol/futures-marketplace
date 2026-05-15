@@ -6,12 +6,13 @@ export const USER_POSITION_SESSIONS_QK = "UserPositionSessions";
 
 export const useUserPositionSessions = (
   address: `0x${string}` | undefined,
+  props?: { refetch?: boolean },
 ) => {
   const query = useQuery({
     queryKey: [USER_POSITION_SESSIONS_QK, address],
     queryFn: () => fetchUserPositionSessionsAsync(address!),
     enabled: !!address,
-    refetchInterval: 60_000,
+    refetchInterval: props?.refetch ? 15_000 : 60_000,
     refetchOnMount: false,
   });
 

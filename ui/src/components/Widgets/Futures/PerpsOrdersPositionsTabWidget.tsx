@@ -34,7 +34,7 @@ interface PerpsOrdersPositionsTabWidgetProps {
   ordersLoading?: boolean;
   positionsLoading?: boolean;
   participantAddress?: `0x${string}`;
-  onClosePosition?: (price: string, amount: number, isBuy: boolean) => void;
+  onClosePosition?: (price: string, amount: number, isBuy: boolean, deliveryAt?: number) => void;
   participantData?: any;
   minMargin?: bigint | null;
   accountBalance?: AccountBalance;
@@ -43,6 +43,10 @@ interface PerpsOrdersPositionsTabWidgetProps {
   positionSessionsLoading?: boolean;
   perpsBalance?: bigint;
   maintenanceMarginPercent?: bigint;
+  // Lifted from this widget into Futures.tsx so the parent can derive
+  // `hasOpenPerpsOrders` and gate polling cadence for perps orders + positions.
+  perpsOpenOrders: PerpsOrder[];
+  perpsOpenOrdersLoading?: boolean;
   onPositionClosed?: () => void | Promise<void>;
 }
 
@@ -61,6 +65,8 @@ export const PerpsOrdersPositionsTabWidget = ({
   positionSessionsLoading,
   perpsBalance,
   maintenanceMarginPercent,
+  perpsOpenOrders,
+  perpsOpenOrdersLoading,
   onPositionClosed,
 }: PerpsOrdersPositionsTabWidgetProps) => {
   const [activeTab, setActiveTab] = useState<TabType>("OPEN_ORDERS");
@@ -73,10 +79,6 @@ export const PerpsOrdersPositionsTabWidget = ({
   const queryClient = useQueryClient();
   const { cancelOrderAsync, isPending: isCancelling } = useCancelPerpsOrder();
 
-  // Fetch perps orders for Open Orders tab (ACTIVE + FILLED)
-  const openOrdersQuery = useUserPerpsOrders(participantAddress, {
-    statuses: ["ACTIVE", "PARTIAL"],
-  });
   // Fetch perps orders for Order History tab (all non-ACTIVE)
   const orderHistoryQuery = useUserPerpsOrders(participantAddress, {
     excludeStatuses: ["ACTIVE"],
@@ -107,14 +109,13 @@ export const PerpsOrdersPositionsTabWidget = ({
 
   // Count perps orders (ACTIVE + FILLED, excluding fully filled)
   const ordersCount = useMemo(() => {
-    const orders = openOrdersQuery.data?.data?.orders ?? [];
-    return orders.filter(
+    return perpsOpenOrders.filter(
       (order) =>
         (order.status === "ACTIVE" || order.status === "PARTIAL") &&
         order.filledQuantity !== order.originalQuantity
     ).length;
-  }, [openOrdersQuery.data?.data?.orders]);
-  
+  }, [perpsOpenOrders]);
+
   // Count unique positions
   const positionsCount = useMemo(() => {
     // Count open positions (status === "OPEN")
@@ -123,12 +124,12 @@ export const PerpsOrdersPositionsTabWidget = ({
 
   // Auto-switch to Positions tab when there are no open orders but there are open positions
   useEffect(() => {
-    if (!openOrdersQuery.isLoading && !positionSessionsLoading) {
+    if (!perpsOpenOrdersLoading && !positionSessionsLoading) {
       if (ordersCount === 0 && positionsCount > 0) {
         setActiveTab("POSITIONS");
       }
     }
-  }, [openOrdersQuery.isLoading, positionSessionsLoading, ordersCount, positionsCount]);
+  }, [perpsOpenOrdersLoading, positionSessionsLoading, ordersCount, positionsCount]);
 
   // Count closed positions
   const positionHistoryCount = useMemo(() => {
@@ -169,8 +170,8 @@ export const PerpsOrdersPositionsTabWidget = ({
         {activeTab === "OPEN_ORDERS" && (
           <OrdersWrapper>
             <PerpsOpenOrdersTable
-              orders={openOrdersQuery.data?.data?.orders || []}
-              isLoading={openOrdersQuery.isLoading}
+              orders={perpsOpenOrders}
+              isLoading={perpsOpenOrdersLoading}
               onCancelOrder={handleCancelOrder}
               onModifyOrder={setModifyOrder}
               isCancelling={isCancelling}

@@ -19,6 +19,10 @@ interface OrderBookTableProps {
   contractSpecsQuery: UseQueryResult<GetResponse<FuturesContractSpecs>, Error>;
   previousOrderBookStateRef: React.MutableRefObject<Map<number, { bidUnits: number | null; askUnits: number | null }>>;
   contractMode?: ContractMode;
+  // When set, the carousel snaps to the matching delivery date (futures only).
+  // Used by the close-position flow to align the order book with the position
+  // being closed.
+  targetDeliveryDate?: number;
 }
 
 export const OrderBookTable = ({
@@ -27,6 +31,7 @@ export const OrderBookTable = ({
   contractSpecsQuery,
   previousOrderBookStateRef,
   contractMode = "futures",
+  targetDeliveryDate,
 }: OrderBookTableProps) => {
   const [selectedDateIndex, setSelectedDateIndex] = useState(0);
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -58,6 +63,16 @@ export const OrderBookTable = ({
       setSelectedDateIndex(0);
     }
   }, [deliveryDates.length, selectedDateIndex]);
+
+  // Snap the carousel to a target delivery date when the parent requests it
+  // (e.g. closing a position on a different expiry than the one currently shown).
+  useEffect(() => {
+    if (!targetDeliveryDate || deliveryDates.length === 0) return;
+    const idx = deliveryDates.findIndex((d) => d.deliveryDate === targetDeliveryDate);
+    if (idx >= 0 && idx !== selectedDateIndex) {
+      setSelectedDateIndex(idx);
+    }
+  }, [targetDeliveryDate, deliveryDates]);
 
   // Get selected delivery date
   const selectedDeliveryDate = deliveryDates[selectedDateIndex]?.deliveryDate;
