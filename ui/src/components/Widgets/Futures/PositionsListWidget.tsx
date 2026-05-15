@@ -29,7 +29,7 @@ interface PositionsListWidgetProps {
   positions: PositionBookPosition[];
   isLoading?: boolean;
   participantAddress?: `0x${string}`;
-  onClosePosition?: (price: string, amount: number, isBuy: boolean) => void;
+  onClosePosition?: (price: string, amount: number, isBuy: boolean, deliveryAt?: number) => void;
   contractMode?: ContractMode;
   balanceQuery: BalanceQueryResult;
 }
@@ -172,7 +172,7 @@ export const PositionsListWidget = ({
 
     // If callback provided, use it to populate place order widget
     if (onClosePosition) {
-      onClosePosition(priceString, Math.abs(quantity), isBuy);
+      onClosePosition(priceString, Math.abs(quantity), isBuy, Number(groupedPosition.deliveryAt));
       return;
     }
 
@@ -376,15 +376,34 @@ export const PositionsListWidget = ({
                     >
                       Trades
                     </TradesButton>
-                    {groupedPosition.isActive && !groupedPosition.closedAt && (
-                      <CloseButton
-                        onClick={() => handleClosePosition(groupedPosition)}
-                        disabled={isPending}
-                        title="By creating opposite order"
-                      >
-                        Close
-                      </CloseButton>
-                    )}
+                    {groupedPosition.isActive && !groupedPosition.closedAt && (() => {
+                      // Futures positions whose delivery has already passed cannot be
+                      // closed by creating an opposing order — they are awaiting
+                      // settlement/resolution. Disable Close and surface support copy.
+                      const isExpired =
+                        contractMode === "futures" &&
+                        Number(groupedPosition.deliveryAt) > 0 &&
+                        Number(groupedPosition.deliveryAt) < Math.floor(Date.now() / 1000);
+
+                      const closeButton = (
+                        <CloseButton
+                          onClick={() => handleClosePosition(groupedPosition)}
+                          disabled={isPending || isExpired}
+                          title={isExpired ? undefined : "By creating opposite order"}
+                        >
+                          Close
+                        </CloseButton>
+                      );
+
+                      if (!isExpired) return closeButton;
+
+                      return (
+                        <Tooltip title="Status is unresolved, please contact support" arrow>
+                          {/* span wrapper is required so the tooltip still triggers on a disabled button */}
+                          <span style={{ display: "inline-flex" }}>{closeButton}</span>
+                        </Tooltip>
+                      );
+                    })()}
                   </ActionButtons>
                 </td>
               </TableRow>

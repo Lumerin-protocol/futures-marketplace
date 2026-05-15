@@ -10,6 +10,7 @@ interface ClosePositionData {
   price: string;
   amount: number;
   isBuy: boolean;
+  deliveryAt?: number;
 }
 
 interface ClosePositionModalProps {
@@ -22,22 +23,24 @@ interface ClosePositionModalProps {
 }
 
 // Hook to manage close position modal state and localStorage
-export const useClosePositionModal = (onProceedWithClose: (price: string, amount: number, isBuy: boolean) => void) => {
+export const useClosePositionModal = (
+  onProceedWithClose: (price: string, amount: number, isBuy: boolean, deliveryAt?: number) => void,
+) => {
   const [showModal, setShowModal] = useState(false);
   const [doNotShowAgain, setDoNotShowAgain] = useState(false);
   const [pendingClosePosition, setPendingClosePosition] = useState<ClosePositionData | null>(null);
 
   const handleClosePosition = useCallback(
-    (price: string, amount: number, isBuy: boolean) => {
+    (price: string, amount: number, isBuy: boolean, deliveryAt?: number) => {
       // Check if user has dismissed the modal before
       const isDismissed = localStorage.getItem(CLOSE_POSITION_MODAL_KEY) === "true";
 
       if (isDismissed) {
         // Skip modal, proceed directly with highlighting
-        onProceedWithClose(price, amount, isBuy);
+        onProceedWithClose(price, amount, isBuy, deliveryAt);
       } else {
         // Store pending data and show modal
-        setPendingClosePosition({ price, amount, isBuy });
+        setPendingClosePosition({ price, amount, isBuy, deliveryAt });
         setShowModal(true);
       }
     },
@@ -55,7 +58,12 @@ export const useClosePositionModal = (onProceedWithClose: (price: string, amount
 
     // Proceed with highlighting if we have pending data
     if (pendingClosePosition) {
-      onProceedWithClose(pendingClosePosition.price, pendingClosePosition.amount, pendingClosePosition.isBuy);
+      onProceedWithClose(
+        pendingClosePosition.price,
+        pendingClosePosition.amount,
+        pendingClosePosition.isBuy,
+        pendingClosePosition.deliveryAt,
+      );
       setPendingClosePosition(null);
     }
 
