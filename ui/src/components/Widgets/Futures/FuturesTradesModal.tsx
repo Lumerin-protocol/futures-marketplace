@@ -10,6 +10,7 @@ import { DateTimeCell } from "../../DateTimeCell";
 import { useHistoricalPositions } from "../../../hooks/data/useHistoricalPositions";
 import type { PositionBookPosition, FuturesSessionTrade } from "../../../hooks/data/getUserFuturesPositions";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { getTxUrl } from "../../../lib/indexer";
 import type { ContractMode } from "../../../types/types";
 
 export interface FuturesTradesModalSelection {
@@ -36,6 +37,7 @@ interface TradeRow {
   counterparty: `0x${string}` | null;
   quantity: number;
   hasActive: boolean;
+  transactionHash: `0x${string}`;
 }
 
 // Normalized shape that unifies active (PositionBookPosition) and historical
@@ -150,6 +152,7 @@ export const FuturesTradesModal = ({
             counterparty: null,
             quantity: Math.abs(trade.tradeQuantity),
             hasActive: p.isActive,
+            transactionHash: trade.transactionHash,
           });
         }
       }
@@ -176,6 +179,7 @@ export const FuturesTradesModal = ({
           counterparty: null,
           quantity: 1,
           hasActive: p.isActive,
+          transactionHash: p.transactionHash,
         });
         continue;
       }
@@ -232,6 +236,7 @@ export const FuturesTradesModal = ({
                   <th>Quantity</th>
                   {/* <th>Counterparty</th> */}
                   <th>Realized PnL</th>
+                  <th>Tx Hash</th>
                 </tr>
               </thead>
               <tbody>
@@ -261,6 +266,15 @@ export const FuturesTradesModal = ({
                       >
                         {formatPnl(trade.realizedPnl)}
                       </PnLCell>
+                    </td>
+                    <td>
+                      <TxLink
+                        href={getTxUrl(trade.transactionHash)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {trade.transactionHash.slice(0, 6)}...{trade.transactionHash.slice(-4)}
+                      </TxLink>
                     </td>
                   </TableRow>
                 ))}
@@ -340,7 +354,7 @@ const TradesTableContainer = styled("div")`
 const TradesTable = styled("table")`
   width: 100%;
   border-collapse: collapse;
-  min-width: 700px;
+  min-width: 800px;
 
   th {
     text-align: left;
@@ -386,6 +400,17 @@ const CounterpartyAddress = styled("span")`
   font-size: 0.8125rem;
   color: ${tokens.text.secondary};
   cursor: help;
+`;
+
+const TxLink = styled("a")`
+  color: ${tokens.trading.info};
+  text-decoration: none;
+  font-family: monospace;
+  font-size: 0.8rem;
+
+  &:hover {
+    text-decoration: underline;
+  }
 `;
 
 const PnLCell = styled("span")<{ $isPositive: boolean; $isZero: boolean }>`
