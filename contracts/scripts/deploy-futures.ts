@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { encodeFunctionData } from "viem";
+import { encodeFunctionData, getAddress } from "viem";
 import hre from "hardhat";
 import { readOptionalAddress, requireAddress, requireEnvsSet } from "../lib/env.ts";
 import { writeAndWait } from "../lib/writeContract.ts";
@@ -12,11 +12,18 @@ async function main() {
 
   const { viem } = await hre.network.getOrCreate();
 
-  const usdcAddress = requireAddress("USDC_TOKEN_ADDRESS");
+  // The Futures contract reads its underlying ERC20 (and decimals) from the
+  // collateral vault, so `USDC_TOKEN_ADDRESS` is no longer a deploy-time input.
   const collateralVaultAddress = requireAddress("VAULT_ADDRESS");
   const hashrateOracleAddress = requireAddress("HASHRATE_ORACLE_ADDRESS");
   const validatorAddress = requireAddress("VALIDATOR_ADDRESS");
   const SAFE_OWNER_ADDRESS = readOptionalAddress("SAFE_OWNER_ADDRESS");
+  // Optional: when set, wire the Futures contract into the cross-product
+  // PortfolioMarginEngine end-to-end (Futures.setMarginEngine + PME.setFutures
+  // + Vault.setAuthorizedCaller). When the deployer doesn't own the PME or the
+  // vault, the script logs the required calldata for the current owner Safe
+  // instead of executing the call.
+  const MARGIN_ENGINE_ADDRESS = readOptionalAddress("MARGIN_ENGINE_ADDRESS");
 
   const env = requireEnvsSet(
     "LIQUIDATION_MARGIN_PERCENT",
@@ -32,11 +39,20 @@ async function main() {
   const pc = await viem.getPublicClient();
   logInfo("deployer", { Address: addrUrl(pc, deployer.account.address) });
 
-  // ── Verify token contracts ──────────────────────────────────────────────
+  // ── Verify collateral vault & infer payment token ──────────────────────
+  const collateralVault = await viem.getContractAt("CollateralVault", collateralVaultAddress);
+  const paymentTokenAddress = await collateralVault.read.collateralToken();
   const paymentToken = await viem.getContractAt(
     "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol:IERC20Metadata",
-    usdcAddress,
+    paymentTokenAddress,
   );
+  const vaultOwner = await collateralVault.read.owner();
+  const deployerIsVaultOwner = getAddress(vaultOwner) === getAddress(deployer.account.address);
+  logInfo("vault", {
+    Address: addrUrl(pc, collateralVault.address),
+    Owner: vaultOwner,
+    "Deployer can wire vault": deployerIsVaultOwner ? "yes" : "no (wire via current owner)",
+  });
   logInfo("payment token", {
     Address: paymentToken.address,
     Name: await paymentToken.read.name(),
@@ -79,7 +95,6 @@ async function main() {
     abi: futuresImpl.abi,
     functionName: "initialize",
     args: [
-      usdcAddress,
       hashrateOracleAddress,
       validatorAddress,
       Number(env.LIQUIDATION_MARGIN_PERCENT),
@@ -115,7 +130,57 @@ async function main() {
     logStep("Done", txUrl(pc, receipt.transactionHash));
   }
 
-  // ── 4. Transfer ownership (optional) ────────────────────────────────────
+  // ── 4. Wire the PortfolioMarginEngine (optional) ────────────────────────
+  if (MARGIN_ENGINE_ADDRESS) {
+    const pme = await viem.getContractAt("PortfolioMarginEngine", MARGIN_ENGINE_ADDRESS);
+    const pmeOwner = await pme.read.owner();
+    const deployerIsPmeOwner = getAddress(pmeOwner) === getAddress(deployer.account.address);
+
+    logInfo("Futures.setMarginEngine", { marginEngine: MARGIN_ENGINE_ADDRESS });
+    await logPrompt("Proceed?");
+    {
+      const sim = await futures.simulate.setMarginEngine([MARGIN_ENGINE_ADDRESS]);
+      const receipt = await writeAndWait(deployer, sim);
+      logStep("Done", txUrl(pc, receipt.transactionHash));
+    }
+
+    if (deployerIsPmeOwner) {
+      logInfo("PME.setFutures", { futures: futures.address });
+      await logPrompt("Proceed?");
+      const sim = await pme.simulate.setFutures([futures.address]);
+      const receipt = await writeAndWait(deployer, sim);
+      logStep("Done", txUrl(pc, receipt.transactionHash));
+    } else {
+      const data = encodeFunctionData({
+        abi: pme.abi,
+        functionName: "setFutures",
+        args: [futures.address],
+      });
+      logInfo("PME wiring (run as PME owner)", { "PME address": pme.address, "PME owner": pmeOwner });
+      logStep(`PME.setFutures(${futures.address})`, data);
+    }
+
+    if (deployerIsVaultOwner) {
+      logInfo("Vault.setAuthorizedCaller(futures)", { caller: futures.address });
+      await logPrompt("Proceed?");
+      const sim = await collateralVault.simulate.setAuthorizedCaller([futures.address, true]);
+      const receipt = await writeAndWait(deployer, sim);
+      logStep("Done", txUrl(pc, receipt.transactionHash));
+    } else {
+      const data = encodeFunctionData({
+        abi: collateralVault.abi,
+        functionName: "setAuthorizedCaller",
+        args: [futures.address, true],
+      });
+      logInfo("Vault wiring (run as vault owner)", {
+        "Vault address": collateralVault.address,
+        "Vault owner": vaultOwner,
+      });
+      logStep(`Vault.setAuthorizedCaller(${futures.address}, true)`, data);
+    }
+  }
+
+  // ── 5. Transfer ownership (optional) ────────────────────────────────────
   if (SAFE_OWNER_ADDRESS) {
     logInfo("Transfer Futures ownership", { owner: SAFE_OWNER_ADDRESS });
     await logPrompt("Proceed?");

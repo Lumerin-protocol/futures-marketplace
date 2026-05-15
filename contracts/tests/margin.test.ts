@@ -1,9 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
-import { getAddress, parseEventLogs, parseUnits, zeroAddress } from "viem";
+import { parseEventLogs, parseUnits, zeroAddress } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
-import { scaleHashprice } from "./utils.ts";
+import { refreshHashprice, scaleHashprice } from "./utils.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -35,124 +35,79 @@ async function positionWithMarginFixture() {
   };
 }
 
-describe("Futures - getMinMargin", () => {
-  it("should return larger value when buyer is at loss", async () => {
+// All cross-product margin checks now flow through the PortfolioMarginEngine,
+// so these tests assert on `computePortfolioIM` / `computePortfolioMM` directly
+// rather than the legacy futures-only `getMinMargin` helper deleted in v2.7.
+describe("Futures - portfolio margin (PME)", () => {
+  it("buyer IM grows on adverse mark, seller IM shrinks", async () => {
     const { contracts, accounts } = await positionWithMarginFixture();
-    const { futures, hashrateOracle, collateralVault } = contracts;
+    const { hashrateOracle, portfolioMarginEngine } = contracts;
     const { buyer, seller } = accounts;
 
-    const buyerMargin = await futures.read.getMinMargin([buyer.account.address]);
-    const sellerMargin = await futures.read.getMinMargin([seller.account.address]);
+    const buyerImBefore = await portfolioMarginEngine.read.computePortfolioIM([
+      buyer.account.address,
+    ]);
+    const sellerImBefore = await portfolioMarginEngine.read.computePortfolioIM([
+      seller.account.address,
+    ]);
+    // At market both sides only carry stress IM (no unrealized loss).
+    assert.equal(sellerImBefore, buyerImBefore);
 
-    assert.equal(sellerMargin, buyerMargin); // at market price only
+    // Drop hashprice so the buyer (long) accrues an unrealized loss.
+    await scaleHashprice(hashrateOracle, 100n, 110n);
 
-    const marketPricePerDay = await futures.read.getMarketPrice();
-    await scaleHashprice(hashrateOracle, 100n, 110n); // drop ~9.09%
-    const newMarketPricePerDay = await futures.read.getMarketPrice();
-
-    assert.ok(newMarketPricePerDay < marketPricePerDay);
-    const buyerMargin2 = await futures.read.getMinMargin([buyer.account.address]);
-    const sellerMargin2 = await futures.read.getMinMargin([seller.account.address]);
-
-    assert.ok(buyerMargin2 > buyerMargin);
-    assert.ok(sellerMargin2 < sellerMargin);
+    const buyerImAfter = await portfolioMarginEngine.read.computePortfolioIM([
+      buyer.account.address,
+    ]);
+    const sellerImAfter = await portfolioMarginEngine.read.computePortfolioIM([
+      seller.account.address,
+    ]);
+    // Buyer's unrealized loss feeds into IM; seller's gain does NOT credit IM,
+    // but their stress loss shrinks because the spot moved in their favor.
+    assert.ok(buyerImAfter > buyerImBefore, "long IM grows on adverse move");
+    assert.ok(sellerImAfter <= sellerImBefore, "short IM does not increase on favorable move");
   });
 
-  it("should return smaller value when buyer is at profit", async () => {
+  it("withdraw is gated by portfolio IM", async () => {
     const { contracts, accounts } = await positionWithMarginFixture();
-    const { futures, hashrateOracle, collateralVault } = contracts;
-    const { buyer, seller } = accounts;
+    const { collateralVault, portfolioMarginEngine } = contracts;
+    const { buyer } = accounts;
 
-    const buyerMargin = await futures.read.getMinMargin([buyer.account.address]);
-    const sellerMargin = await futures.read.getMinMargin([seller.account.address]);
+    const balance = await collateralVault.read.balanceOf([buyer.account.address]);
+    const im = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
+    assert.ok(balance >= im, "fixture leaves buyer above IM");
 
-    assert.equal(sellerMargin, buyerMargin); // at market price only
-
-    const marketPricePerDay = await futures.read.getMarketPrice();
-    await scaleHashprice(hashrateOracle, 100n, 90n); // raise ~11.11%
-    const newMarketPricePerDay = await futures.read.getMarketPrice();
-
-    assert.ok(newMarketPricePerDay > marketPricePerDay);
-    const buyerMargin2 = await futures.read.getMinMargin([buyer.account.address]);
-    const sellerMargin2 = await futures.read.getMinMargin([seller.account.address]);
-    assert.ok(buyerMargin2 < buyerMargin);
-    assert.ok(sellerMargin2 > sellerMargin);
+    // Withdrawing the entire surplus is fine; one wei beyond it must revert.
+    const surplus = balance - im;
+    await collateralVault.write.withdraw([surplus], { account: buyer.account });
+    await viem.assertions.revertWithCustomError(
+      collateralVault.write.withdraw([1n], { account: buyer.account }),
+      collateralVault,
+      "MarginBreach",
+    );
   });
 
-  it("effective margin can go negative for expensive sell", async () => {
-    const { contracts } = await positionWithMarginFixture();
-    const { futures, collateralVault } = contracts;
-
-    const marketPricePerDay = await futures.read.getMarketPrice();
-
-    const buyerMargin = await futures.read.getMinMarginForPosition([marketPricePerDay * 100n, -1n]);
-    assert.ok(buyerMargin < 0n);
-  });
-
-  it("orders with positive effective margin should be considered for effective margin", async () => {
+  it("active orders increase portfolio IM", async () => {
     const { contracts, accounts, deliveryDate } = await positionWithMarginFixture();
-    const { futures, collateralVault } = contracts;
+    const { futures, collateralVault, portfolioMarginEngine } = contracts;
     const { buyer } = accounts;
 
     const marketPricePerDay = await futures.read.getMarketPrice();
     await collateralVault.write.deposit([marketPricePerDay * 10n], { account: buyer.account });
 
-    const effectiveMargin = await futures.read.getMinMargin([buyer.account.address]);
+    const imBefore = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
     await futures.write.createOrder([marketPricePerDay, deliveryDate, "", -1], {
       account: buyer.account,
     });
-    const effectiveMargin2 = await futures.read.getMinMargin([buyer.account.address]);
-    assert.ok(effectiveMargin2 > effectiveMargin);
+    const imAfter = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
+    assert.ok(imAfter > imBefore, "resting order adds order margin to IM");
   });
 
-  it("orders with negative effective margin should not be considered for effective margin", async () => {
-    const { contracts, accounts, deliveryDate } = await positionWithMarginFixture();
-    const { futures, collateralVault } = contracts;
-    const { buyer } = accounts;
-    const marketPricePerDay = await futures.read.getMarketPrice();
-    const effectiveMargin = await futures.read.getMinMargin([buyer.account.address]);
-    await futures.write.createOrder([marketPricePerDay * 100n, deliveryDate, "", -1], {
-      account: buyer.account,
-    });
-    const effectiveMargin2 = await futures.read.getMinMargin([buyer.account.address]);
-    assert.equal(effectiveMargin2, effectiveMargin);
-  });
-
-  it("party cant withdraw more than deposited collateral even if effective margin is negative", async () => {
-    const { contracts, accounts, deliveryDate } = await positionWithMarginFixture();
-    const { futures, collateralVault } = contracts;
-    const { buyer, seller } = accounts;
-    const marketPricePerDay = await futures.read.getMarketPrice();
-
-    await futures.write.createOrder([marketPricePerDay * 100n, deliveryDate, "", -1], {
-      account: seller.account,
-    });
-
-    await collateralVault.write.deposit([marketPricePerDay * 1000n], { account: buyer.account });
-    await futures.write.createOrder([marketPricePerDay * 100n, deliveryDate, "", 1], {
-      account: buyer.account,
-    });
-
-    const effectiveMargin = await futures.read.getMinMargin([seller.account.address]);
-    assert.ok(effectiveMargin < 0n);
-
-    const balance = await collateralVault.read.balanceOf([seller.account.address]);
-    await viem.assertions.revertWithCustomError(
-      collateralVault.write.withdraw([balance + 1n], { account: seller.account }),
-      collateralVault,
-      "ERC20InsufficientBalance",
-    );
-
-    await collateralVault.write.withdraw([balance], { account: seller.account });
-  });
-
-  it("outdated orders do not affect getMinMargin calculation", async () => {
+  it("outdated orders drop out of IM after expiry", async () => {
     const { contracts, accounts, config } = await positionWithMarginFixture();
-    const { futures, collateralVault } = contracts;
+    const { futures, collateralVault, hashrateOracle, portfolioMarginEngine } = contracts;
     const { buyer, tc, pc } = accounts;
     const marketPricePerDay = await futures.read.getMarketPrice();
-
-    const initialMargin = await futures.read.getMinMargin([buyer.account.address]);
 
     const futureDeliveryDate = config.deliveryDates[1];
     await collateralVault.write.deposit([marketPricePerDay * 10n], { account: buyer.account });
@@ -160,77 +115,30 @@ describe("Futures - getMinMargin", () => {
     const txHash = await futures.write.createOrder([marketPricePerDay, futureDeliveryDate, "", 1], {
       account: buyer.account,
     });
-
     const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
-    const events = parseEventLogs({
-      logs: receipt.logs,
-      abi: futures.abi,
-      eventName: "OrderCreated",
-    });
-    const orderId = events[0].args.orderId;
+    parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "OrderCreated" });
 
-    const marginWithActiveOrder = await futures.read.getMinMargin([buyer.account.address]);
-    assert.ok(marginWithActiveOrder >= initialMargin);
+    const imWithActiveOrder = await portfolioMarginEngine.read.computePortfolioIM([
+      buyer.account.address,
+    ]);
 
-    await tc.setNextBlockTimestamp({ timestamp: futureDeliveryDate + 1n });
+    // Refresh the oracle at the post-expiry timestamp so PME's `getMarketPrice`
+    // call doesn't trip the staleness guard after the time-warp.
+    await refreshHashprice(hashrateOracle, futureDeliveryDate + 1n);
+    await tc.setNextBlockTimestamp({ timestamp: futureDeliveryDate + 2n });
+    await tc.mine({ blocks: 1 });
 
-    const marginWithOutdatedOrder = await futures.read.getMinMargin([buyer.account.address]);
-    assert.ok(marginWithOutdatedOrder <= marginWithActiveOrder);
-
-    const order = await futures.read.getOrderById([orderId]);
-    assert.equal(order.participant, getAddress(buyer.account.address));
-    assert.equal(order.deliveryAt, futureDeliveryDate);
-  });
-
-  it("should calculate minimum margin for orders", async () => {
-    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault } = contracts;
-    const { seller } = accounts;
-
-    const price = await futures.read.getMarketPrice();
-    const [date1, date2] = config.deliveryDates;
-    const marginAmount = price * BigInt(config.deliveryDurationDays);
-
-    await collateralVault.write.deposit([marginAmount], { account: seller.account });
-
-    await futures.write.createOrder([price, date1, "", 1], { account: seller.account });
-
-    const minMargin = await futures.read.getMinMargin([seller.account.address]);
-    assert.ok(minMargin > 0n);
-
-    await futures.write.createOrder([price, date2, "", -1], { account: seller.account });
-
-    const minMarginAfterShort = await futures.read.getMinMargin([seller.account.address]);
-    assert.ok(minMarginAfterShort > minMargin);
-  });
-
-  it("should calculate minimum margin for positions", async () => {
-    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault } = contracts;
-    const { seller, buyer } = accounts;
-
-    const price = await futures.read.getMarketPrice();
-    const deliveryDate = config.deliveryDates[0];
-    const marginAmount = price * BigInt(config.deliveryDurationDays);
-
-    await collateralVault.write.deposit([marginAmount], { account: seller.account });
-    await collateralVault.write.deposit([marginAmount], { account: buyer.account });
-
-    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
-    await futures.write.createOrder([price, deliveryDate, "", 1], { account: buyer.account });
-
-    const sellerMinMargin = await futures.read.getMinMargin([seller.account.address]);
-    const buyerMinMargin = await futures.read.getMinMargin([buyer.account.address]);
-
-    assert.ok(sellerMinMargin > 0n);
-    assert.ok(buyerMinMargin > 0n);
+    const imWithOutdatedOrder = await portfolioMarginEngine.read.computePortfolioIM([
+      buyer.account.address,
+    ]);
+    assert.ok(imWithOutdatedOrder <= imWithActiveOrder, "expired order does not contribute to IM");
   });
 });
 
 describe("Futures - margin management", () => {
   it("should allow adding margin", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, usdcMock, collateralVault } = contracts;
+    const { usdcMock, collateralVault } = contracts;
     const { seller, pc } = accounts;
 
     const sellerBalance1 = await collateralVault.read.balanceOf([seller.account.address]);
@@ -256,7 +164,7 @@ describe("Futures - margin management", () => {
 
   it("should allow removing margin when sufficient balance", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault } = contracts;
+    const { collateralVault } = contracts;
     const { seller, pc } = accounts;
 
     const marginAmount = parseUnits("1000", 6);
@@ -277,7 +185,7 @@ describe("Futures - margin management", () => {
 
   it("should reject removing margin when insufficient balance", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault } = contracts;
+    const { collateralVault } = contracts;
     const { seller } = accounts;
 
     const marginAmount = parseUnits("1000", 6);
@@ -296,14 +204,16 @@ describe("Futures - margin management", () => {
 describe("Futures - margin call", function () {
   it("should perform margin call when margin is insufficient", async function () {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, hashrateOracle, collateralVault } = contracts;
+    const { futures, hashrateOracle, collateralVault, portfolioMarginEngine } = contracts;
     const { seller, validator, pc } = accounts;
 
     const price = await futures.read.getMarketPrice();
-    const minMargin = await futures.read.getMinMarginForPosition([price, 1n]);
+    // Tight deposit: enough to satisfy IM at entry but not after the price slide
+    // below.
+    const deposit = price * BigInt(config.deliveryDurationDays) + config.orderFee;
     const deliveryDate = config.deliveryDates[0];
 
-    await collateralVault.write.deposit([minMargin + config.orderFee], { account: seller.account });
+    await collateralVault.write.deposit([deposit], { account: seller.account });
 
     const tx = await futures.write.createOrder([price, deliveryDate, "", 1], {
       account: seller.account,
@@ -316,9 +226,15 @@ describe("Futures - margin call", function () {
     });
     const { orderId } = createdEvent.args;
 
-    // Halve the hashprice so the buy order is now collateral-deficient (equivalent
-    // to halving BTC price in the legacy oracle setup).
-    await scaleHashprice(hashrateOracle, 1n, 2n);
+    // Crash the hashprice 10× so the resting buy order's mark-to-market loss
+    // dominates the seller's deposit (PME's order-margin component grows linearly
+    // with the gap between entry and mark).
+    await scaleHashprice(hashrateOracle, 1n, 10n);
+
+    // Sanity-check: balance is now below MM.
+    const balance = await collateralVault.read.balanceOf([seller.account.address]);
+    const mm = await portfolioMarginEngine.read.computePortfolioMM([seller.account.address]);
+    assert.ok(balance < mm, "seller is below MM after price crash");
 
     const txHash = await futures.write.marginCall([seller.account.address], {
       account: validator.account,

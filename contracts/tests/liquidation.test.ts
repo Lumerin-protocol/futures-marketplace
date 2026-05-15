@@ -49,17 +49,17 @@ async function positionWithMarginFixture(conn: NetworkConnection) {
   };
 }
 
-type FuturesContract = ContractReturnType<"Futures">;
 type CollateralVaultContract = ContractReturnType<"CollateralVault">;
 
 async function getMarginDeficit(
-  futures: FuturesContract,
+  pme: ContractReturnType<"PortfolioMarginEngine">,
   collateralVault: CollateralVaultContract,
   party: Account,
 ) {
-  const partyCollateral = await collateralVault.read.balanceOf([party.address]);
-  const partyMinMargin = await futures.read.getMinMargin([party.address]);
-  return partyMinMargin - partyCollateral;
+  // Portfolio-IM driven deficit (signed). Positive = top-up required.
+  const required = await pme.read.computePortfolioIM([party.address]);
+  const balance = await collateralVault.read.balanceOf([party.address]);
+  return BigInt(required) - BigInt(balance);
 }
 
 describe("Futures - Liquidation", function () {
@@ -80,9 +80,11 @@ describe("Futures - Liquidation", function () {
       const newMarketPrice = await futures.read.getMarketPrice();
       assert.ok(newMarketPrice < entryPricePerDay);
 
-      const buyerMinMarginAfter = await futures.read.getMinMargin([buyer.account.address]);
+      const buyerMmAfter = await contracts.portfolioMarginEngine.read.computePortfolioMM([
+        buyer.account.address,
+      ]);
       const buyerCollateralAfter = await collateralVault.read.balanceOf([buyer.account.address]);
-      assert.ok(buyerCollateralAfter < buyerMinMarginAfter);
+      assert.ok(buyerCollateralAfter < buyerMmAfter, "buyer is below MM after price drop");
 
       const txHash = await futures.write.marginCall([buyer.account.address], {
         account: validator.account,
@@ -134,9 +136,11 @@ describe("Futures - Liquidation", function () {
       const newMarketPrice = await futures.read.getMarketPrice();
       assert.ok(newMarketPrice > entryPricePerDay);
 
-      const sellerMinMargin = await futures.read.getMinMargin([seller.account.address]);
+      const sellerMm = await contracts.portfolioMarginEngine.read.computePortfolioMM([
+        seller.account.address,
+      ]);
       const sellerCollateral = await collateralVault.read.balanceOf([seller.account.address]);
-      assert.ok(sellerCollateral < sellerMinMargin);
+      assert.ok(sellerCollateral < sellerMm, "seller is below MM after price rise");
 
       const txHash = await futures.write.marginCall([seller.account.address], {
         account: validator.account,
@@ -209,7 +213,7 @@ describe("Futures - Liquidation", function () {
       // Move market price down to trigger margin call
       await scaleHashprice(hashrateOracle, 100n, 150n);
 
-      const marginDeficit = await getMarginDeficit(futures, collateralVault, buyer.account);
+      const marginDeficit = await getMarginDeficit(contracts.portfolioMarginEngine, collateralVault, buyer.account);
       assert.ok(marginDeficit > 0n);
 
       const txHash = await futures.write.marginCall([buyer.account.address], {
@@ -241,7 +245,12 @@ describe("Futures - Liquidation", function () {
       const { futures, hashrateOracle, collateralVault } = contracts;
       const { seller, buyer, validator, pc } = accounts;
 
-      const margin = await futures.read.getMinMarginForPosition([entryPricePerDay, -2n]);
+      // Tight deposit sized to the PME stress IM at entry: stress shock × spot ×
+      // |Δ| (in token units). Matches the legacy `getMinMarginForPosition` value
+      // since the futures fixture pins the PME shock at `liquidationMarginPercent`.
+      const stressShockBps = BigInt(config.liquidationMarginPercent);
+      const margin =
+        (entryPricePerDay * BigInt(config.deliveryDurationDays) * 2n * stressShockBps) / 100n;
       const orderFee = await futures.read.orderFee();
       await collateralVault.write.deposit([margin + orderFee], { account: seller.account });
       await collateralVault.write.deposit([margin + orderFee], { account: buyer.account });
@@ -264,7 +273,7 @@ describe("Futures - Liquidation", function () {
       // Move market price up (seller loses on both positions)
       await scaleHashprice(hashrateOracle, 100n, 90n);
 
-      const sellerMarginDeficit = await getMarginDeficit(futures, collateralVault, seller.account);
+      const sellerMarginDeficit = await getMarginDeficit(contracts.portfolioMarginEngine, collateralVault, seller.account);
       assert.ok(sellerMarginDeficit > 0n);
 
       const txHash = await futures.write.marginCall([seller.account.address], {
@@ -279,7 +288,7 @@ describe("Futures - Liquidation", function () {
       });
       assert.equal(positionClosedEvents.length, 2);
 
-      const sellerMarginDeficit2 = await getMarginDeficit(futures, collateralVault, seller.account);
+      const sellerMarginDeficit2 = await getMarginDeficit(contracts.portfolioMarginEngine, collateralVault, seller.account);
       assert.ok(sellerMarginDeficit2 <= 0n);
     });
 
@@ -292,9 +301,11 @@ describe("Futures - Liquidation", function () {
       // Move market price slightly (small loss)
       await scaleHashprice(hashrateOracle, 100n, 105n);
 
-      const buyerMinMargin = await futures.read.getMinMargin([buyer.account.address]);
+      const buyerMm = await contracts.portfolioMarginEngine.read.computePortfolioMM([
+        buyer.account.address,
+      ]);
       const buyerCollateral = await collateralVault.read.balanceOf([buyer.account.address]);
-      assert.ok(buyerCollateral >= buyerMinMargin);
+      assert.ok(buyerCollateral >= buyerMm, "buyer is healthy under PME");
 
       const txHash = await futures.write.marginCall([buyer.account.address], {
         account: validator.account,
@@ -336,9 +347,11 @@ describe("Futures - Liquidation", function () {
       assert.ok(newMarketPrice > entryPricePerDay);
 
       const sellerBalance = await collateralVault.read.balanceOf([seller.account.address]);
-      const sellerMinMargin = await futures.read.getMinMargin([seller.account.address]);
-      if (sellerBalance > sellerMinMargin) {
-        const withdrawAmount = sellerBalance - sellerMinMargin + parseUnits("1", 6);
+      const sellerIm = await contracts.portfolioMarginEngine.read.computePortfolioIM([
+        seller.account.address,
+      ]);
+      if (sellerBalance > sellerIm) {
+        const withdrawAmount = sellerBalance - sellerIm;
         await collateralVault.write.withdraw([withdrawAmount], { account: seller.account });
       }
 
@@ -381,9 +394,11 @@ describe("Futures - Liquidation", function () {
       // Drop hashprice ~33% so buyer is at loss.
       await scaleHashprice(hashrateOracle, 100n, 150n);
 
-      const buyerMinMargin = await futures.read.getMinMargin([buyer.account.address]);
+      const buyerMm = await contracts.portfolioMarginEngine.read.computePortfolioMM([
+        buyer.account.address,
+      ]);
       const buyerCollateral = await collateralVault.read.balanceOf([buyer.account.address]);
-      assert.ok(buyerCollateral < buyerMinMargin);
+      assert.ok(buyerCollateral < buyerMm, "buyer is below MM");
 
       const txHash = await futures.write.marginCall([buyer.account.address], {
         account: validator.account,
@@ -437,9 +452,11 @@ describe("Futures - Liquidation", function () {
       // Raise hashprice ~25% so seller is at loss.
       await scaleHashprice(hashrateOracle, 100n, 80n);
 
-      const sellerMinMargin = await futures.read.getMinMargin([seller.account.address]);
+      const sellerMm = await contracts.portfolioMarginEngine.read.computePortfolioMM([
+        seller.account.address,
+      ]);
       const sellerCollateral = await collateralVault.read.balanceOf([seller.account.address]);
-      assert.ok(sellerCollateral < sellerMinMargin);
+      assert.ok(sellerCollateral < sellerMm, "seller is below MM");
 
       const txHash = await futures.write.marginCall([seller.account.address], {
         account: validator.account,

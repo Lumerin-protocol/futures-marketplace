@@ -1,4 +1,4 @@
-import { BigInt, Bytes, log } from "@graphprotocol/graph-ts";
+import { Address, BigInt, Bytes, log } from "@graphprotocol/graph-ts";
 import {
   PositionClosed,
   PositionCreated,
@@ -7,10 +7,10 @@ import {
   PositionPaid,
   PositionPaymentReceived,
 } from "../../generated/Futures/Futures";
-import { Order, OrderEntry, Position } from "../../generated/schema";
-import { OrderEntryStatus } from "../enums";
+import { Fill, Order, OrderEntry, Position, PositionSession, UserDeliverySessionPointer } from "../../generated/schema";
+import { PositionSessionStatus, OrderEntryStatus } from "../enums";
 import { recomputeOrderStatus } from "../internal/orders";
-import { getOrCreateFutures, getOrCreateUser } from "../internal/store";
+import { getOrCreateFutures, getOrCreatePointer, getOrCreateUser } from "../internal/store";
 import { applyExitFill, applyOpenFill, derivePriceFromExit } from "../internal/match";
 
 /// On-chain flow per matched unit:
@@ -140,6 +140,69 @@ export function handlePositionExited(event: PositionExited): void {
   position.save();
 }
 
+/// Apply a position closure: decrement netQuantity for the user and update session state.
+/// Called by both handlePositionClosed and handlePositionDeliveryClosed.
+/// Returns true if successful, false if referenced entities could not be loaded.
+function applyPositionClosure(
+  position: Position,
+  userId: Bytes,
+  isBuyer: boolean,
+  timestamp: BigInt,
+): boolean {
+  // Load the Fill that opened this position for the user
+  const fillId = isBuyer ? position.buyerFill : position.sellerFill;
+  const fill = Fill.load(fillId);
+  if (!fill) {
+    log.warning("applyPositionClosure: Fill not found for position {} user {}", [
+      position.id.toHexString(),
+      userId.toHexString(),
+    ]);
+    return false;
+  }
+
+  // Load the PositionSession
+  const sessionId = fill.positionSession;
+  const session = PositionSession.load(sessionId);
+  if (!session) {
+    log.warning("applyPositionClosure: PositionSession not found for position {} session {}", [
+      position.id.toHexString(),
+      sessionId,
+    ]);
+    return false;
+  }
+
+  // Get user address and deliveryAt to find the pointer
+  const userAddr = changetype<Address>(userId);
+  const deliveryAt = position.deliveryAt;
+
+  // Load the UserDeliverySessionPointer
+  const pointer = getOrCreatePointer(userAddr, deliveryAt);
+
+  // Decrement netQuantity by 1 (position closed means one unit removed)
+  const closeQty = isBuyer ? -1 : 1; // Buyer was +1, now subtract -1 to get back to 0; Seller was -1, now add +1
+  const newNet = pointer.netQuantity + closeQty;
+
+  // Update pointer
+  pointer.netQuantity = newNet;
+  if (newNet == 0) {
+    pointer.currentSessionId = "";
+    pointer.aggregatedEntryPrice = BigInt.zero();
+  }
+  pointer.save();
+
+  // Update session
+  session.netQuantity = newNet;
+  if (newNet == 0) {
+    session.status = PositionSessionStatus.CLOSE;
+  }
+  // Increment closedQuantity
+  session.closedQuantity = session.closedQuantity + 1;
+  session.lastTradeAt = timestamp;
+  session.save();
+
+  return true;
+}
+
 export function handlePositionClosed(event: PositionClosed): void {
   const position = Position.load(event.params.positionId);
   if (!position) {
@@ -151,6 +214,10 @@ export function handlePositionClosed(event: PositionClosed): void {
   position.isClosed = true;
   position.closedAt = event.block.timestamp;
   position.save();
+
+  // Update netQuantity bookkeeping for both buyer and seller
+  applyPositionClosure(position, position.seller, /* isBuyer */ false, event.block.timestamp);
+  applyPositionClosure(position, position.buyer, /* isBuyer */ true, event.block.timestamp);
 }
 
 export function handlePositionDeliveryClosed(event: PositionDeliveryClosed): void {
@@ -164,6 +231,10 @@ export function handlePositionDeliveryClosed(event: PositionDeliveryClosed): voi
   position.isDeliveryClosed = true;
   position.closedBy = event.params.closedBy;
   position.save();
+
+  // Update netQuantity bookkeeping for both buyer and seller
+  applyPositionClosure(position, position.seller, /* isBuyer */ false, event.block.timestamp);
+  applyPositionClosure(position, position.buyer, /* isBuyer */ true, event.block.timestamp);
 }
 
 export function handlePositionPaid(event: PositionPaid): void {
@@ -190,7 +261,7 @@ export function handlePositionPaymentReceived(event: PositionPaymentReceived): v
 
 /// If a `PositionCreated` references an orderId we previously marked CANCELLED
 /// in `handleOrderClosed`, this was actually a match. Flip the entry to MATCHED
-/// and rebalance the parent Order's filled/cancelled counters.
+/// and rebalance the parent Order's counters.
 function promoteRestingOrderToMatched(restingOrderId: Bytes, timestamp: BigInt): void {
   const entry = OrderEntry.load(restingOrderId);
   if (!entry) return;
