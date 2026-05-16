@@ -8,7 +8,7 @@ import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { read } from "matchstick-ts";
-import { deployFuturesFixture } from "futures-contracts/test-api";
+import { deployFuturesFixture } from "../../contracts/tests/fixtures.ts";
 
 const conn = await network.getOrCreate();
 

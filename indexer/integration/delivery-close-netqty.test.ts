@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { parseEventLogs, parseUnits, concatHex, type Hex } from "viem";
 import { read } from "matchstick-ts";
-import { deployFuturesFixture } from "futures-contracts/test-api";
+import { deployFuturesFixture } from "../../contracts/tests/fixtures.ts";
 import { quantizePrice, refreshHashprice } from "../../contracts/tests/utils.ts";
 
 type AnyContract = Parameters<typeof refreshHashprice>[0];
