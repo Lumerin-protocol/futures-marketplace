@@ -7,6 +7,10 @@
   "engines": {
     "node": "24.x"
   },
+  "exports": {
+    "./abi/*": "./abi/*.ts",
+    "./test-api": "./src/test-api/index.ts"
+  },
   "scripts": {
     "format:sol": "forge fmt ./contracts/**/*.sol",
     "compile": "hardhat compile",

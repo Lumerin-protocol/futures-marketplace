@@ -1,5 +1,77 @@
 import type { NetworkConnection } from "hardhat/types/network";
-import { parseUnits, maxUint256, encodeFunctionData, formatUnits, parseEventLogs } from "viem";
+import type { ArtifactMap } from "hardhat/types/artifacts";
+import {
+  parseUnits,
+  maxUint256,
+  encodeFunctionData,
+  formatUnits,
+  parseEventLogs,
+  getContract,
+} from "viem";
+import type { Abi, Address, PublicClient, WalletClient, GetContractReturnType } from "viem";
+
+// Contract ABIs mapping from Hardhat's artifact map
+type ContractAbis = {
+  [K in keyof ArtifactMap]: ArtifactMap[K] extends { abi: infer A } ? A : never;
+};
+
+// Return type for a deployed contract
+type ContractInstance<ContractName extends keyof ContractAbis> = GetContractReturnType<
+  ContractAbis[ContractName],
+  { public: PublicClient; wallet: WalletClient },
+  Address
+>;
+
+/**
+ * Deploy a contract using raw viem with dynamically loaded artifact.
+ * The contract name is used as a generic to provide full type inference.
+ *
+ * @param walletClient - Viem wallet client
+ * @param publicClient - Viem public client (for waiting on receipt)
+ * @param artifactPath - Relative path to artifact JSON, e.g., "../artifacts/Contract.json"
+ * @param args - Constructor arguments
+ * @returns Typed contract instance
+ */
+export async function deployContract<ContractName extends keyof ContractAbis>(
+  walletClient: WalletClient,
+  publicClient: PublicClient,
+  artifactPath: string,
+  args: unknown[] = [],
+): Promise<ContractInstance<ContractName>> {
+  // Load artifact dynamically
+  const { readFile } = await import("node:fs/promises");
+  const content = await readFile(new URL(artifactPath, import.meta.url), "utf-8");
+  const artifact = JSON.parse(content);
+
+  const abi = artifact.abi as Abi;
+  const bytecode = (artifact.bytecode?.object ?? artifact.bytecode) as `0x${string}`;
+
+  // Deploy contract
+  const { deployContract: viemDeploy } = await import("viem/actions");
+  if (walletClient.account === undefined) {
+    throw new Error("Wallet client must have an account");
+  }
+  const txHash = await viemDeploy(walletClient, {
+    abi,
+    bytecode,
+    args,
+    account: walletClient.account,
+    chain: walletClient.chain,
+  });
+
+  // Wait for receipt to get the contract address
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+  if (!receipt.contractAddress) {
+    throw new Error(`Contract deployment failed: no contract address in receipt`);
+  }
+
+  // Return typed contract instance
+  return getContract({
+    address: receipt.contractAddress,
+    abi,
+    client: { public: publicClient, wallet: walletClient, chain: walletClient.chain },
+  }) as unknown as ContractInstance<ContractName>;
+}
 
 const BITCOIN_DECIMALS = 8;
 const USDC_DECIMALS = 6;
@@ -17,28 +89,45 @@ export async function deployTokenOraclesAndMulticall3(conn: NetworkConnection) {
   const pc = await viem.getPublicClient();
   const tc = await viem.getTestClient();
 
-  // 1. Deploy Multicall3
-  const multicall3 = await viem.deployContract("Multicall3", []);
+  // 1. Deploy Multicall3 using raw viem with dynamically loaded artifact
+  const [walletClient] = await viem.getWalletClients();
+  const multicall3 = await deployContract<"Multicall3">(
+    walletClient,
+    pc,
+    "../artifacts/multicall3/src/Multicall3.sol/Multicall3.json",
+    [],
+  );
 
   // 2. Deploy USDC Mock
-  const usdcMockRaw = await viem.deployContract("USDCMock", []);
-  const usdcMock = await viem.getContractAt(
-    "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol:IERC20Metadata",
-    usdcMockRaw.address,
+  const usdcMock = await deployContract<"USDCMock">(
+    walletClient,
+    pc,
+    "../artifacts/contracts/mocks/USDCMock.sol/USDCMock.json",
+    [],
   );
 
   for (const w of [buyer, buyer2, seller, defaultBuyer, unregistered]) {
-    await usdcMock.write.transfer([w.account.address, TOP_UP_BALANCE_USDC]);
+    await usdcMock.write.transfer([w.account.address, TOP_UP_BALANCE_USDC], {
+      account: walletClient.account.address,
+      chain: walletClient.chain,
+    });
   }
 
   // 3. Deploy BTC/USD Feed
-  const hashrateOracle = await viem.deployContract("PriceFeedMock", [
-    HASHPRICE_DECIMALS,
-    "The price of 100 TH/s per day in USD",
-  ]);
+  const hashrateOracle = await deployContract<"PriceFeedMock">(
+    walletClient,
+    pc,
+    "../artifacts/contracts/mocks/PriceFeedMock.sol/PriceFeedMock.json",
+    [HASHPRICE_DECIMALS, "The price of 100 TH/s per day in USD"],
+  );
   const hashpriceUsdFeedDecimals = await hashrateOracle.read.decimals();
   const hashpriceUsdFeedPrice = parseUnits("3.44", hashpriceUsdFeedDecimals);
-  await hashrateOracle.write.setPrice([hashpriceUsdFeedPrice]);
+  await (
+    hashrateOracle.write.setPrice as (
+      args: [bigint],
+      opts?: { account?: unknown },
+    ) => Promise<unknown>
+  )([hashpriceUsdFeedPrice], { account: walletClient.account });
 
   return {
     config: { oracle: { hashpriceUsdFeedDecimals, hashpriceUsdFeedPrice } },
@@ -84,58 +173,107 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
   const collateralAmount = parseUnits("10000", USDC_DECIMALS);
   const validatorURL = "//shev8.validator:anything@stratum.braiins.com:3333";
 
-  const vaultImpl = await viem.deployContract("CollateralVault", []);
+  // Get wallet client for deployments
+  const [walletClient] = await viem.getWalletClients();
+
+  const vaultImpl = await deployContract<"CollateralVault">(
+    walletClient,
+    pc,
+    "../artifacts/collateral-margin/contracts/contracts/CollateralVault.sol/CollateralVault.json",
+    [],
+  );
   const collateralVaultInit = encodeFunctionData({
     abi: vaultImpl.abi,
     functionName: "initialize",
     args: [usdcMock.address],
   });
-  const collateralVaultProxy = await viem.deployContract("ERC1967Proxy", [
-    vaultImpl.address,
-    collateralVaultInit,
-  ]);
-  const collateralVault = await viem.getContractAt("CollateralVault", collateralVaultProxy.address);
+  const collateralVaultProxy = await deployContract<"ERC1967Proxy">(
+    walletClient,
+    pc,
+    "../artifacts/@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol/ERC1967Proxy.json",
+    [vaultImpl.address, collateralVaultInit],
+  );
+  const collateralVault = getContract({
+    abi: vaultImpl.abi,
+    address: collateralVaultProxy.address,
+    client: { public: pc, wallet: walletClient },
+  });
 
-  const futuresImpl = await viem.deployContract("Futures", [collateralVault.address]);
-  const futuresProxy = await viem.deployContract("ERC1967Proxy", [
-    futuresImpl.address,
-    encodeFunctionData({
-      abi: futuresImpl.abi,
-      functionName: "initialize",
-      args: [
-        hashrateOracle.address,
-        validator.account.address,
-        liquidationMarginPercent,
-        speedHps,
-        priceLadderStep,
-        deliveryDurationDays,
-        deliveryDurationDays,
-        futureDeliveryDatesCount,
-        firstFutureDeliveryDate,
-      ],
-    }),
-  ]);
-  const futures = await viem.getContractAt("Futures", futuresProxy.address);
+  const futuresImpl = await deployContract<"Futures">(
+    walletClient,
+    pc,
+    "../artifacts/contracts/Futures.sol/Futures.json",
+    [collateralVault.address],
+  );
+  const futuresProxy = await deployContract<"ERC1967Proxy">(
+    walletClient,
+    pc,
+    "../artifacts/@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol/ERC1967Proxy.json",
+    [
+      futuresImpl.address,
+      encodeFunctionData({
+        abi: futuresImpl.abi,
+        functionName: "initialize",
+        args: [
+          hashrateOracle.address,
+          validator.account.address,
+          liquidationMarginPercent,
+          speedHps,
+          priceLadderStep,
+          deliveryDurationDays,
+          deliveryDurationDays,
+          futureDeliveryDatesCount,
+          firstFutureDeliveryDate,
+        ],
+      }),
+    ],
+  );
+  const futures = getContract({
+    abi: futuresImpl.abi,
+    address: futuresProxy.address,
+    client: { public: pc, wallet: walletClient },
+  });
   await collateralVault.write.setAuthorizedCaller([futures.address, true], {
     account: owner.account,
   });
 
   // PME stack with stub mocks for the non-futures products.
-  const perpsDEXMock = await viem.deployContract("PerpsDEXMock", []);
-  const optionsEngineMock = await viem.deployContract("OptionsEngineMock", []);
-  const portfolioMarginEngineImpl = await viem.deployContract("PortfolioMarginEngine", []);
-  const portfolioMarginEngineProxy = await viem.deployContract("ERC1967Proxy", [
-    portfolioMarginEngineImpl.address,
-    encodeFunctionData({
-      abi: portfolioMarginEngineImpl.abi,
-      functionName: "initialize",
-      args: [collateralVault.address],
-    }),
-  ]);
-  const portfolioMarginEngine = await viem.getContractAt(
-    "PortfolioMarginEngine",
-    portfolioMarginEngineProxy.address,
+  const perpsDEXMock = await deployContract<"PerpsDEXMock">(
+    walletClient,
+    pc,
+    "../artifacts/collateral-margin/contracts/contracts/mocks/PerpsDEXMock.sol/PerpsDEXMock.json",
+    [],
   );
+  const optionsEngineMock = await deployContract<"OptionsEngineMock">(
+    walletClient,
+    pc,
+    "../artifacts/collateral-margin/contracts/contracts/mocks/OptionsEngineMock.sol/OptionsEngineMock.json",
+    [],
+  );
+  const portfolioMarginEngineImpl = await deployContract<"PortfolioMarginEngine">(
+    walletClient,
+    pc,
+    "../artifacts/collateral-margin/contracts/contracts/PortfolioMarginEngine.sol/PortfolioMarginEngine.json",
+    [],
+  );
+  const portfolioMarginEngineProxy = await deployContract<"ERC1967Proxy">(
+    walletClient,
+    pc,
+    "../artifacts/@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol/ERC1967Proxy.json",
+    [
+      portfolioMarginEngineImpl.address,
+      encodeFunctionData({
+        abi: portfolioMarginEngineImpl.abi,
+        functionName: "initialize",
+        args: [collateralVault.address],
+      }),
+    ],
+  );
+  const portfolioMarginEngine = getContract({
+    abi: portfolioMarginEngineImpl.abi,
+    address: portfolioMarginEngineProxy.address,
+    client: { public: pc, wallet: walletClient },
+  });
 
   // Seed the perps mock's market price for any test that opts in to perps add-ons.
   // The mock is intentionally NOT registered on the PME by default: registering it
@@ -144,7 +282,12 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
   // hashprice oracle the futures tests move around. Tests that need a perps leg
   // can call `pme.setPerps(perpsDEXMock.address)` themselves.
   const marketPrice = await futures.read.getMarketPrice();
-  await perpsDEXMock.write.setMarketPrice([marketPrice]);
+  await (
+    perpsDEXMock.write.setMarketPrice as (
+      args: [bigint],
+      opts?: { account?: unknown },
+    ) => Promise<unknown>
+  )([marketPrice], { account: walletClient.account });
 
   // Register futures so PME picks up the cross-product margin path used by
   // `marginCall` / `computePortfolioMM`.

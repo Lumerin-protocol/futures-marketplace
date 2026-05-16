@@ -12,7 +12,11 @@ import {
   PositionDeliveryClosed,
   PositionClosed,
 } from "../generated/Futures/Futures";
-import { handlePositionCreated, handlePositionDeliveryClosed, handlePositionClosed } from "../src/handlers/positions";
+import {
+  handlePositionCreated,
+  handlePositionDeliveryClosed,
+  handlePositionClosed,
+} from "../src/handlers/positions";
 import {
   bytes32Id,
   paramAddr,
@@ -67,6 +71,15 @@ function createPositionClosedEvent(positionId: Bytes): PositionClosed {
   ]);
 }
 
+/// `PositionDeliveryClosed` is metadata-only at the indexer level — the
+/// on-chain `closeDelivery` path emits `PositionExited` for BOTH sides BEFORE
+/// `PositionClosed` (which co-fires with `PositionDeliveryClosed`), so the
+/// netQuantity decrement is owned by `handlePositionExited`. See the
+/// `applyPositionClosure` doc comment in `src/handlers/positions.ts` for the
+/// full call-site map.
+///
+/// `handlePositionClosed` falls back to decrementing only when no
+/// `PositionExited` ran for that side (the `resetState` admin path).
 describe("PositionClosed/PositionDeliveryClosed netQuantity bookkeeping", () => {
   beforeEach(() => {
     clearStore();
@@ -74,19 +87,17 @@ describe("PositionClosed/PositionDeliveryClosed netQuantity bookkeeping", () => 
     setupFutures(/* deliveryDurationDays */ 30);
   });
 
-  test("PositionDeliveryClosed decrements UserDeliverySessionPointer.netQuantity for both sides", () => {
+  test("PositionDeliveryClosed alone only stamps metadata (closeDelivery decrement happens via PositionExited)", () => {
     const seller = userAddress(1);
     const buyer = userAddress(2);
     const positionId = bytes32Id(1);
     const orderId = bytes32Id(11);
     const takerOrderId = bytes32Id(21);
 
-    // 1. Open a position: seller -1, buyer +1
     handlePositionCreated(
       createPositionCreatedEvent(positionId, seller, buyer, orderId, takerOrderId),
     );
 
-    // Verify initial state
     assert.fieldEquals(
       "UserDeliverySessionPointer",
       pointerKey(seller, DELIVERY),
@@ -99,48 +110,41 @@ describe("PositionClosed/PositionDeliveryClosed netQuantity bookkeeping", () => 
       "netQuantity",
       "1",
     );
-    assert.fieldEquals("PositionSession", SELLER_SESSION, "netQuantity", "-1");
-    assert.fieldEquals("PositionSession", BUYER_SESSION, "netQuantity", "1");
 
-    // 2. Close via delivery (this is the bug - netQuantity should go back to 0)
     handlePositionDeliveryClosed(createPositionDeliveryClosedEvent(positionId, buyer));
 
-    // After delivery close, net quantities should be 0 for both sides
-    // THIS IS THE BUG: currently the indexer does NOT update these values
+    // netQuantity is unchanged — `PositionExited` (not modeled in this isolated
+    // unit test) is what would zero it out on the real chain.
     assert.fieldEquals(
       "UserDeliverySessionPointer",
       pointerKey(seller, DELIVERY),
       "netQuantity",
-      "0",
+      "-1",
     );
     assert.fieldEquals(
       "UserDeliverySessionPointer",
       pointerKey(buyer, DELIVERY),
       "netQuantity",
-      "0",
+      "1",
     );
-    assert.fieldEquals("PositionSession", SELLER_SESSION, "netQuantity", "0");
-    assert.fieldEquals("PositionSession", BUYER_SESSION, "netQuantity", "0");
-    assert.fieldEquals("PositionSession", SELLER_SESSION, "status", "CLOSE");
-    assert.fieldEquals("PositionSession", BUYER_SESSION, "status", "CLOSE");
+    // Metadata IS stamped: position is flagged as delivery-closed.
+    assert.fieldEquals("Position", positionId.toHexString(), "isDeliveryClosed", "true");
+    assert.fieldEquals("Position", positionId.toHexString(), "closedBy", buyer.toHexString());
   });
 
-  test("PositionClosed decrements UserDeliverySessionPointer.netQuantity for both sides", () => {
+  test("PositionClosed without a prior PositionExited decrements both sides (resetState path)", () => {
     const seller = userAddress(3);
     const buyer = userAddress(4);
     const positionId = bytes32Id(2);
     const orderId = bytes32Id(12);
     const takerOrderId = bytes32Id(22);
 
-    // 1. Open a position
     handlePositionCreated(
       createPositionCreatedEvent(positionId, seller, buyer, orderId, takerOrderId),
     );
 
-    // 2. Close via PositionClosed
     handlePositionClosed(createPositionClosedEvent(positionId));
 
-    // After close, net quantities should be 0
     assert.fieldEquals(
       "UserDeliverySessionPointer",
       pointerKey(seller, DELIVERY),
@@ -153,14 +157,15 @@ describe("PositionClosed/PositionDeliveryClosed netQuantity bookkeeping", () => 
       "netQuantity",
       "0",
     );
+    assert.fieldEquals("PositionSession", SELLER_SESSION, "status", "CLOSE");
+    assert.fieldEquals("PositionSession", BUYER_SESSION, "status", "CLOSE");
   });
 
-  test("multiple positions: closing one decrements netQuantity correctly", () => {
+  test("multiple positions: PositionDeliveryClosed alone does not move netQuantity", () => {
     const seller = userAddress(5);
     const buyer1 = userAddress(6);
     const buyer2 = userAddress(7);
 
-    // Create two positions: seller sells 2 units total
     handlePositionCreated(
       createPositionCreatedEvent(bytes32Id(1), seller, buyer1, bytes32Id(11), bytes32Id(21)),
     );
@@ -168,7 +173,6 @@ describe("PositionClosed/PositionDeliveryClosed netQuantity bookkeeping", () => 
       createPositionCreatedEvent(bytes32Id(2), seller, buyer2, bytes32Id(12), bytes32Id(22)),
     );
 
-    // Seller should have netQuantity = -2
     assert.fieldEquals(
       "UserDeliverySessionPointer",
       pointerKey(seller, DELIVERY),
@@ -176,26 +180,23 @@ describe("PositionClosed/PositionDeliveryClosed netQuantity bookkeeping", () => 
       "-2",
     );
 
-    // Close first position
+    // Delivery-closing without the co-emitted PositionExited leaves netQuantity
+    // exactly where PositionExited would have left it on the real chain (here:
+    // unchanged, because we don't simulate the exit step).
     handlePositionDeliveryClosed(createPositionDeliveryClosedEvent(bytes32Id(1), buyer1));
-
-    // Seller should now have netQuantity = -1 (only second position remains)
     assert.fieldEquals(
       "UserDeliverySessionPointer",
       pointerKey(seller, DELIVERY),
       "netQuantity",
-      "-1",
+      "-2",
     );
 
-    // Close second position
     handlePositionDeliveryClosed(createPositionDeliveryClosedEvent(bytes32Id(2), buyer2));
-
-    // Seller should now have netQuantity = 0
     assert.fieldEquals(
       "UserDeliverySessionPointer",
       pointerKey(seller, DELIVERY),
       "netQuantity",
-      "0",
+      "-2",
     );
   });
 });

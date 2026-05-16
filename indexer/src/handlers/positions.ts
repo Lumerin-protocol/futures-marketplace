@@ -141,7 +141,24 @@ export function handlePositionExited(event: PositionExited): void {
 }
 
 /// Apply a position closure: decrement netQuantity for the user and update session state.
-/// Called by both handlePositionClosed and handlePositionDeliveryClosed.
+///
+/// Called from `handlePositionClosed` ONLY for sides that did NOT already see
+/// a `PositionExited` event in this position's lifecycle. Three call sites in
+/// `Futures.sol` reach `_removePosition`:
+///
+///   1. `_offsetExistingPosition` — emits `PositionExited(participant)` first,
+///      so the offsetting side has already been decremented. The counterparty
+///      side was not touched and is decremented here.
+///   2. `_closeAndCashSettleDelivery` (closeDelivery path) — emits
+///      `PositionExited(seller)` AND `PositionExited(buyer)` first, so neither
+///      side needs another decrement; `PositionClosed` and the co-emitted
+///      `PositionDeliveryClosed` are both metadata-only for this path.
+///   3. `resetState` — emits no `PositionExited`, so both sides are decremented
+///      here.
+///
+/// We discriminate via `position.{seller,buyer}ExitFill`, which is non-null iff
+/// `handlePositionExited` already ran for that side.
+///
 /// Returns true if successful, false if referenced entities could not be loaded.
 function applyPositionClosure(
   position: Position,
@@ -215,12 +232,20 @@ export function handlePositionClosed(event: PositionClosed): void {
   position.closedAt = event.block.timestamp;
   position.save();
 
-  // Update netQuantity bookkeeping for both buyer and seller
-  applyPositionClosure(position, position.seller, /* isBuyer */ false, event.block.timestamp);
-  applyPositionClosure(position, position.buyer, /* isBuyer */ true, event.block.timestamp);
+  // Decrement netQuantity only for sides not already exited via PositionExited.
+  // See `applyPositionClosure` doc comment for the three on-chain call sites.
+  if (position.sellerExitFill === null) {
+    applyPositionClosure(position, position.seller, /* isBuyer */ false, event.block.timestamp);
+  }
+  if (position.buyerExitFill === null) {
+    applyPositionClosure(position, position.buyer, /* isBuyer */ true, event.block.timestamp);
+  }
 }
 
 export function handlePositionDeliveryClosed(event: PositionDeliveryClosed): void {
+  // `closeDelivery` co-emits `PositionClosed`, which already decrements
+  // `netQuantity` via `applyPositionClosure`. This handler only stamps the
+  // delivery-specific metadata so we don't double-decrement.
   const position = Position.load(event.params.positionId);
   if (!position) {
     log.warning("PositionDeliveryClosed for unknown positionId {}", [
@@ -231,10 +256,6 @@ export function handlePositionDeliveryClosed(event: PositionDeliveryClosed): voi
   position.isDeliveryClosed = true;
   position.closedBy = event.params.closedBy;
   position.save();
-
-  // Update netQuantity bookkeeping for both buyer and seller
-  applyPositionClosure(position, position.seller, /* isBuyer */ false, event.block.timestamp);
-  applyPositionClosure(position, position.buyer, /* isBuyer */ true, event.block.timestamp);
 }
 
 export function handlePositionPaid(event: PositionPaid): void {

@@ -8,7 +8,7 @@ on:
       - main
     paths:
       - "indexer/**"
-      - "contracts/abi/**"
+      - "contracts/**"
       - ".github/workflows/test-indexer.yml"
   push:
     branches:
@@ -17,7 +17,7 @@ on:
       - main
     paths:
       - "indexer/**"
-      - "contracts/abi/**"
+      - "contracts/**"
       - ".github/workflows/test-indexer.yml"
 
 concurrency:
@@ -28,9 +28,6 @@ jobs:
   test:
     name: 🧪 Indexer Tests
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./indexer
 
     steps:
       - name: Checkout code
@@ -46,12 +43,31 @@ jobs:
         with:
           node-version: "24"
           cache: "pnpm"
-          cache-dependency-path: indexer/pnpm-lock.yaml
+          # Hash both lockfiles — integration tests pull in `futures-contracts`
+          # (which has its own pnpm-lock.yaml) for the deployment fixture.
+          cache-dependency-path: |
+            indexer/pnpm-lock.yaml
+            contracts/pnpm-lock.yaml
 
-      - name: Install dependencies
+      - name: Install indexer dependencies
+        working-directory: ./indexer
         run: pnpm install --frozen-lockfile
 
+      - name: Install contracts dependencies
+        working-directory: ./contracts
+        run: pnpm install --frozen-lockfile
+
+      # Integration tests deploy the real Futures stack via
+      # `deployFuturesFixture` from `futures-contracts/test-api`, which reads
+      # JSON artifacts from `contracts/artifacts/`. Compile both contracts
+      # workspaces (futures + transitive collateral-margin) so the fixture can
+      # load their bytecode.
+      - name: Compile contracts
+        working-directory: ./contracts
+        run: pnpm compile
+
       - name: Render subgraph manifest
+        working-directory: ./indexer
         env:
           NETWORK: arbitrum-sepolia
           FUTURES_ADDRESS: "0x0000000000000000000000000000000000000000"
@@ -59,7 +75,13 @@ jobs:
         run: pnpm prepare:env
 
       - name: Generate types
+        working-directory: ./indexer
         run: pnpm codegen
 
-      - name: Run tests
+      - name: Run unit tests
+        working-directory: ./indexer
         run: pnpm test
+
+      - name: Run integration tests
+        working-directory: ./indexer
+        run: pnpm test:integration

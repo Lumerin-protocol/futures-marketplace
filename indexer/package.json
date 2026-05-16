@@ -1,6 +1,7 @@
 {
   "name": "futures",
   "license": "UNLICENSED",
+  "type": "module",
   "scripts": {
     "clean": "rm -rf data generated build",
     "codegen": "graph codegen",
@@ -13,7 +14,9 @@
     "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 --version-label 0 futures",
     "setup-local": "pnpm prepare-local && pnpm codegen && pnpm build && pnpm create-local && pnpm deploy-local",
     "test": "graph test",
-    "indexer": "docker-compose up"
+    "indexer": "docker-compose up",
+    "test:integration": "hardhat test nodejs",
+    "test:integration:debug": "KEEP_TEMP=1 hardhat test nodejs"
   },
   "dependencies": {
     "@graphprotocol/graph-ts": "0.37.0",
@@ -23,8 +26,22 @@
   },
   "devDependencies": {
     "@graphprotocol/graph-cli": "^0.98.1",
+    "@nomicfoundation/hardhat-network-helpers": "^3.0.8",
+    "@nomicfoundation/hardhat-node-test-runner": "^3.0.8",
+    "@nomicfoundation/hardhat-viem": "^3.0.7",
     "assemblyscript": "^0.19.23",
+    "futures-contracts": "link:../contracts",
+    "hardhat": "^3.4.0",
     "matchstick-as": "0.6.0",
-    "typescript": "^5.9.3"
+    "matchstick-ts": "github:lsheva/matchstick-ts#main&path:packages/matchstick-ts",
+    "hardhat-matchstick-ts": "github:lsheva/matchstick-ts#main&path:packages/hardhat-matchstick-ts",
+    "typescript": "^5.9.3",
+    "yaml": "^2.5.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "matchstick-ts",
+      "hardhat-matchstick-ts"
+    ]
   }
 }
