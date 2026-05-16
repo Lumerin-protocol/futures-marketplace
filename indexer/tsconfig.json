@@ -19,5 +19,5 @@
     }
   },
   "include": ["src", "tests"],
-  "exclude": ["node_modules", "generated", "build"]
+  "exclude": ["node_modules", "generated", "build", "tests/.tmp"]
 }
