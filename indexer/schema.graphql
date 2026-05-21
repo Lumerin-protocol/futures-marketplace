@@ -58,6 +58,8 @@ type User @entity(immutable: false) {
   orders: [Order!]! @derivedFrom(field: "user")
   trades: [Trade!]! @derivedFrom(field: "user")
   fills: [Fill!]! @derivedFrom(field: "user")
+  "Historical lot ids where this user participated as buyer or seller."
+  lots: [Lot!]!
   positionSessions: [PositionSession!]! @derivedFrom(field: "user")
   "Per-(user, deliveryAt) running net qty + open-session pointers, one entry per delivery date the user has touched."
   deliveryPointers: [UserDeliverySessionPointer!]! @derivedFrom(field: "user")
@@ -85,7 +87,6 @@ type Order @entity(immutable: false) {
   originalQuantity: Int! # initial qty across all entries
   filledQuantity: Int! # entries that became Fills
   cancelledQuantity: Int! # entries closed without matching
-
   status: OrderStatus!
   entries: [OrderEntry!]! @derivedFrom(field: "order")
 
@@ -118,6 +119,9 @@ enum OrderEntryStatus {
   ACTIVE
   MATCHED
   CANCELLED
+  EXPIRED
+  LIQUIDATED
+  RESET
 }
 
 # Aggregate of all fills (across counterparties) in a single tx for one user.
@@ -143,64 +147,75 @@ type Trade @entity(immutable: false) {
   transactionHash: Bytes!
 }
 
-# Aggregate of qty=1 PositionCreated/PositionExited events with the same (user, counterparty) in one tx.
+# Aggregate of Lot open/close legs with the same (tx, user, counterparty, session).
 type Fill @entity(immutable: false) {
-  id: Bytes! # tx hash + user + counterparty
+  id: Bytes! # tx hash + user + counterparty + sessionId
   trade: Trade!
   user: User!
   counterparty: User!
   positionSession: PositionSession!
   deliveryAt: BigInt!
 
-  fillPrice: BigInt! # weighted-average match price across the aggregated units
-  fillQuantity: Int! # signed: + buy / - sell, summed across underlying positions
-  netQuantityAfter: Int! # signed (user, deliveryAt) net qty after this fill
-  realizedPnl: BigInt! # accumulated pnl (from PositionExited offsets and forced cash-settle)
-
-  # On-chain positions where the user is the buyer / seller and that were OPENED via this Fill
-  # (i.e. PositionCreated in the same tx with this counterparty).
-  positionsAsBuyer: [Position!]! @derivedFrom(field: "buyerFill")
-  positionsAsSeller: [Position!]! @derivedFrom(field: "sellerFill")
-  # On-chain positions that were EXITED in this fill (PositionExited offset by this user's opposing trade).
-  positionsExitedAsBuyer: [Position!]! @derivedFrom(field: "buyerExitFill")
-  positionsExitedAsSeller: [Position!]! @derivedFrom(field: "sellerExitFill")
-
+  fillPrice: BigInt! # qty-weighted average fill price
+  fillQuantity: Int! # signed sum for this user (+buy / -sell)
+  netQuantityAfter: Int! # user's (deliveryAt) net qty after this fill
+  realizedPnl: BigInt! # accumulated pnl on this fill aggregation
   # Metadata
   timestamp: BigInt!
   blockNumber: BigInt!
   transactionHash: Bytes!
 }
 
-# Canonical mirror of the on-chain Position struct, keyed by positionId.
-# Lifecycle (paid / exited / breached / closed) is recorded here as a single source of truth.
-# References both the buyer's Fill and the seller's Fill that opened the position; if the position
-# is later exited via an opposing trade, references the buyer/seller exit Fills as well.
-type Position @entity(immutable: false) {
-  id: Bytes! # on-chain positionId
+# Canonical mirror of on-chain lot state keyed by lotId.
+type Lot @entity(immutable: false) {
+  id: Bytes! # on-chain lotId
   seller: User!
   buyer: User!
   destURL: String!
   sellPricePerDay: BigInt!
   buyPricePerDay: BigInt!
+  pricePerDay: BigInt!
   deliveryAt: BigInt!
+  makerOrderId: Bytes!
+  takerOrderId: Bytes!
 
-  buyerFill: Fill! # Fill on the buyer's side at the moment this position was created
-  sellerFill: Fill! # Fill on the seller's side at the moment this position was created
-  buyerExitFill: Fill # Fill on the buyer's side that exited this position via offset
-  sellerExitFill: Fill # Fill on the seller's side that exited this position via offset
+  status: LotStatus!
+  isClosed: Boolean!
+  closeReason: LotCloseReason
 
-  isPaid: Boolean! # PositionPaid sets true; PositionPaymentReceived flips back to false
-  isExited: Boolean! # PositionExited at least once (a participant offset out of this position)
-  buyerExitPnl: BigInt # signed pnl for the buyer if they exited
-  sellerExitPnl: BigInt # signed pnl for the seller if they exited
-  isDeliveryClosed: Boolean! # PositionDeliveryClosed (delivery breach close)
+  isPaid: Boolean!
+  isWithdrawn: Boolean!
+  sellerPnl: BigInt
+  buyerPnl: BigInt
   closedBy: Bytes
-  isClosed: Boolean! # PositionClosed (final tombstone)
+  liquidatedParticipant: Bytes
+  liquidator: Bytes
+  liquidationFee: BigInt
 
   createdAt: BigInt!
+  updatedAt: BigInt!
+  paidAt: BigInt
+  withdrawnAt: BigInt
   closedAt: BigInt
   blockNumber: BigInt!
   transactionHash: Bytes!
+  closeTransactionHash: Bytes
+  paymentTransactionHash: Bytes
+  withdrawalTransactionHash: Bytes
+}
+
+enum LotStatus {
+  OPEN
+  REPLACED
+  CLOSED
+}
+
+enum LotCloseReason {
+  MUTUAL_EXIT
+  LIQUIDATION
+  BREACH
+  SETTLED
+  RESET
 }
 
 # Open→close cycle for a (user, deliveryAt) pair.

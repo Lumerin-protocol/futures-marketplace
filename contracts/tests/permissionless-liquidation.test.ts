@@ -56,9 +56,9 @@ async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
   const [positionEvt] = parseEventLogs({
     logs: matchReceipt.logs,
     abi: futures.abi,
-    eventName: "PositionCreated",
+    eventName: "LotCreated",
   });
-  const positionId = positionEvt.args.positionId;
+  const positionId = positionEvt.args.lotId;
 
   // Two extra resting BUY orders for buyer at the matched price. Same-side as the
   // position so they aren't auto-offset; once the hashprice drops they go deeply
@@ -384,11 +384,11 @@ describe("Futures - permissionless liquidation entry points", function () {
       assert.equal(after.seller, "0x0000000000000000000000000000000000000000");
 
       const events = parseEventLogs({ logs: receipt.logs, abi: futures.abi });
-      const positionClosed = events.find((e: any) => e.eventName === "PositionClosed") as any;
-      const positionLiquidated = events.find((e: any) => e.eventName === "PositionLiquidated") as any;
-      assert.ok(positionClosed, "PositionClosed should be emitted for indexer compatibility");
+      const positionClosed = events.find((e: any) => e.eventName === "LotClosed") as any;
+      const positionLiquidated = events.find((e: any) => e.eventName === "LotLiquidated") as any;
+      assert.ok(positionClosed, "LotClosed should be emitted for indexer compatibility");
       assert.ok(positionLiquidated);
-      assert.equal(positionLiquidated.args.positionId, positionId);
+      assert.equal(positionLiquidated.args.lotId, positionId);
 
       const liqBalAfter = await collateralVault.read.balanceOf([buyer2.account.address]);
       // Liquidator gets at most the fee (could be less if buyer's vault was wiped by PnL).

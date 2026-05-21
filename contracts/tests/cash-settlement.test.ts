@@ -63,11 +63,11 @@ describe("Futures - Offset & Cash Settlement", () => {
     const positionCreatedEvents = parseEventLogs({
       logs: offsetReceipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotTransferred",
     });
 
     assert.ok(positionCreatedEvents.length > 0);
-    const newPositionId = positionCreatedEvents[0].args.positionId;
+    const newPositionId = positionCreatedEvents[0].args.newLotId;
 
     // Buyer profits — contract pays out from balance.
     const buyerBalanceAfterOffset = await collateralVault.read.balanceOf([buyer.account.address]);
@@ -136,11 +136,11 @@ describe("Futures - Offset & Cash Settlement", () => {
     const positionCreatedEvents = parseEventLogs({
       logs: offsetReceipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotTransferred",
     });
 
     assert.ok(positionCreatedEvents.length > 0);
-    const newPositionId = positionCreatedEvents[0].args.positionId;
+    const newPositionId = positionCreatedEvents[0].args.newLotId;
 
     const buyerBalanceAfterOffset = await collateralVault.read.balanceOf([buyer.account.address]);
     const contractBalanceAfterOffset = await totalContractBalance(contracts);

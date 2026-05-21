@@ -1,0 +1,5 @@
+{
+  "extends": "../../contracts/tsconfig.json",
+  "include": ["./**/*.ts", "../../contracts/tests/**/*.ts"],
+  "exclude": ["node_modules"]
+}

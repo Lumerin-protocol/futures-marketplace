@@ -35,10 +35,10 @@ async function positionWithMarginFixture(conn: NetworkConnection) {
   const positionCreatedEvents = parseEventLogs({
     logs: receipt.logs,
     abi: futures.abi,
-    eventName: "PositionCreated",
+    eventName: "LotCreated",
   });
   const positionId =
-    positionCreatedEvents.length > 0 ? positionCreatedEvents[0].args.positionId : null;
+    positionCreatedEvents.length > 0 ? positionCreatedEvents[0].args.lotId : null;
 
   return {
     ...data,
@@ -94,10 +94,10 @@ describe("Futures - Liquidation", function () {
       const positionClosedEvents = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "PositionClosed",
+        eventName: "LotClosed",
       });
       assert.equal(positionClosedEvents.length, 1);
-      assert.equal(positionClosedEvents[0].args.positionId, positionId);
+      assert.equal(positionClosedEvents[0].args.lotId, positionId);
 
       const buyerPnL = (BigInt(newMarketPrice) - BigInt(entryPricePerDay)) * 7n;
 
@@ -150,10 +150,10 @@ describe("Futures - Liquidation", function () {
       const positionClosedEvents = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "PositionClosed",
+        eventName: "LotClosed",
       });
       assert.equal(positionClosedEvents.length, 1);
-      assert.equal(positionClosedEvents[0].args.positionId, positionId);
+      assert.equal(positionClosedEvents[0].args.lotId, positionId);
 
       const buyerPnL = (BigInt(newMarketPrice) - BigInt(entryPricePerDay)) * 7n;
 
@@ -229,7 +229,7 @@ describe("Futures - Liquidation", function () {
       const positionClosedEvents = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "PositionClosed",
+        eventName: "LotClosed",
       });
 
       assert.equal(orderClosedEvents.length, 2);
@@ -266,7 +266,7 @@ describe("Futures - Liquidation", function () {
       const positionCreatedEvents = parseEventLogs({
         logs: receipt1.logs,
         abi: futures.abi,
-        eventName: "PositionCreated",
+        eventName: "LotCreated",
       });
       assert.equal(positionCreatedEvents.length, 2);
 
@@ -284,7 +284,7 @@ describe("Futures - Liquidation", function () {
       const positionClosedEvents = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "PositionClosed",
+        eventName: "LotClosed",
       });
       assert.equal(positionClosedEvents.length, 2);
 
@@ -315,7 +315,7 @@ describe("Futures - Liquidation", function () {
       const positionClosedEvents = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "PositionClosed",
+        eventName: "LotClosed",
       });
       assert.equal(positionClosedEvents.length, 0);
     });
@@ -408,10 +408,10 @@ describe("Futures - Liquidation", function () {
       const positionClosedEvents = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "PositionClosed",
+        eventName: "LotClosed",
       });
       assert.equal(positionClosedEvents.length, 1);
-      assert.equal(positionClosedEvents[0].args.positionId, positionId);
+      assert.equal(positionClosedEvents[0].args.lotId, positionId);
 
       const orderCreatedEvents = parseEventLogs({
         logs: receipt.logs,
@@ -466,10 +466,10 @@ describe("Futures - Liquidation", function () {
       const positionClosedEvents = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "PositionClosed",
+        eventName: "LotClosed",
       });
       assert.equal(positionClosedEvents.length, 1);
-      assert.equal(positionClosedEvents[0].args.positionId, positionId);
+      assert.equal(positionClosedEvents[0].args.lotId, positionId);
 
       const orderCreatedEvents = parseEventLogs({
         logs: receipt.logs,

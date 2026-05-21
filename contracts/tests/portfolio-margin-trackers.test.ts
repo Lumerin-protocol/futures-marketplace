@@ -45,9 +45,9 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     const [posCreated] = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotCreated",
     });
-    const positionId = posCreated.args.positionId;
+    const positionId = posCreated.args.lotId;
 
     const sellerDeltaSinglePosition = await futures.read.getNetPositionDelta([
       seller.account.address,

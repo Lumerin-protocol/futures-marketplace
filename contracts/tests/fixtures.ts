@@ -199,6 +199,12 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
     client: { public: pc, wallet: walletClient },
   });
 
+  await usdcMock.write.approve([collateralVault.address, collateralAmount], {
+    account: owner.account,
+    chain: owner.chain,
+  });
+  await collateralVault.write.depositInsuranceFund([collateralAmount], { account: owner.account });
+
   const futuresImpl = await deployContract<"Futures">(
     walletClient,
     pc,
@@ -282,12 +288,10 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
   // hashprice oracle the futures tests move around. Tests that need a perps leg
   // can call `pme.setPerps(perpsDEXMock.address)` themselves.
   const marketPrice = await futures.read.getMarketPrice();
-  await (
-    perpsDEXMock.write.setMarketPrice as (
-      args: [bigint],
-      opts?: { account?: unknown },
-    ) => Promise<unknown>
-  )([marketPrice], { account: walletClient.account });
+  await perpsDEXMock.write.setMarketPrice([marketPrice], {
+    account: walletClient.account,
+    chain: walletClient.chain,
+  });
 
   // Register futures so PME picks up the cross-product margin path used by
   // `marginCall` / `computePortfolioMM`.
@@ -315,7 +319,10 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
 
   // `depositFor` pulls USDC via the vault — approve the vault, not Futures.
   for (const w of [seller, buyer, buyer2, validator, owner]) {
-    await usdcMock.write.approve([collateralVault.address, maxUint256], { account: w.account });
+    await usdcMock.write.approve([collateralVault.address, maxUint256], {
+      account: w.account,
+      chain: w.chain,
+    });
   }
 
   await collateralVault.write.depositInsuranceFund([collateralAmount], {
@@ -361,9 +368,11 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
 export type FuturesFixture = Awaited<ReturnType<typeof deployOnlyFuturesFixture>>;
 
 /** Convenience: oracles + Futures stack in a single fixture (the common case). */
-export async function deployFuturesFixture(conn: NetworkConnection) {
+export async function deployFuturesFixture(
+  conn: NetworkConnection,
+): ReturnType<typeof deployOnlyFuturesFixture> {
   const data = await conn.networkHelpers.loadFixture(deployTokenOraclesAndMulticall3);
-  return deployOnlyFuturesFixture(conn, data);
+  return await deployOnlyFuturesFixture(conn, data);
 }
 
 /** Futures stack pre-loaded with sample orders and a paid position. Used by deploy-local. */
@@ -402,9 +411,9 @@ export async function deployOnlyFuturesWithDummyData(
   const [event] = parseEventLogs({
     logs: receipt.logs,
     abi: futures.abi,
-    eventName: "PositionCreated",
+    eventName: "LotCreated",
   });
-  const positionId = event.args.positionId;
+  const { lotId: positionId } = event.args;
 
   const totalPayment = mp * BigInt(config.deliveryDurationDays);
   const buyerBalance = await contracts.usdcMock.read.balanceOf([buyer.account.address]);

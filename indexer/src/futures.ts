@@ -12,12 +12,12 @@ export {
 export { handleOrderClosed, handleOrderCreated } from "./handlers/orders";
 
 export {
-  handlePositionClosed,
-  handlePositionCreated,
-  handlePositionDeliveryClosed,
-  handlePositionExited,
-  handlePositionPaid,
-  handlePositionPaymentReceived,
-} from "./handlers/positions";
+  handleLotClosed,
+  handleLotCreated,
+  handleLotLiquidated,
+  handleLotPaid,
+  handleLotPaymentWithdrawn,
+  handleLotTransferred,
+} from "./handlers/lots";
 
 export { handleBadDebt, handleLiquidation } from "./handlers/liquidation";

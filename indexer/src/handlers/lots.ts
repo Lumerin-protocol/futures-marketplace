@@ -1,0 +1,301 @@
+import { Address, BigInt, Bytes, log } from "@graphprotocol/graph-ts";
+import {
+  LotClosed,
+  LotCreated,
+  LotLiquidated,
+  LotPaid,
+  LotPaymentWithdrawn,
+  LotTransferred,
+} from "../../generated/Futures/Futures";
+import { Lot, OrderEntry, User } from "../../generated/schema";
+import { LotCloseReason, LotStatus } from "../enums";
+import { applyExitFill, applyOpenFill } from "../internal/match";
+import { getOrCreateFutures, getOrCreateUser } from "../internal/store";
+import { stringifyParameters } from "../internal/utils";
+
+export function handleLotCreated(event: LotCreated): void {
+  log.debug("lot created event {}", [stringifyParameters(event)]);
+
+  const seller = getOrCreateUser(event.params.seller, event.block.timestamp);
+  const buyer = getOrCreateUser(event.params.buyer, event.block.timestamp);
+
+  const lot = new Lot(event.params.lotId);
+  lot.seller = seller.id;
+  lot.buyer = buyer.id;
+  lot.destURL = resolveLotDestURL(event.params.makerOrderId, event.params.takerOrderId);
+  lot.sellPricePerDay = event.params.pricePerDay;
+  lot.buyPricePerDay = event.params.pricePerDay;
+  lot.pricePerDay = event.params.pricePerDay;
+  lot.deliveryAt = event.params.deliveryAt;
+  lot.makerOrderId = event.params.makerOrderId;
+  lot.takerOrderId = event.params.takerOrderId;
+  lot.status = LotStatus.OPEN;
+  lot.isClosed = false;
+  lot.isPaid = false;
+  lot.isWithdrawn = false;
+  lot.createdAt = event.block.timestamp;
+  lot.updatedAt = event.block.timestamp;
+  lot.blockNumber = event.block.number;
+  lot.transactionHash = event.transaction.hash;
+  lot.save();
+
+  appendLot(seller, lot);
+  appendLot(buyer, lot);
+
+  applyOpenFill(
+    seller,
+    buyer.id,
+    -1,
+    event.params.pricePerDay,
+    event.params.deliveryAt,
+    event.transaction.hash,
+    event.block.number,
+    event.block.timestamp,
+    event.logIndex,
+    0,
+  );
+  applyOpenFill(
+    buyer,
+    seller.id,
+    1,
+    event.params.pricePerDay,
+    event.params.deliveryAt,
+    event.transaction.hash,
+    event.block.number,
+    event.block.timestamp,
+    event.logIndex,
+    1,
+  );
+
+  const futures = getOrCreateFutures();
+  const volume = event.params.pricePerDay.times(BigInt.fromI32(futures.deliveryDurationDays));
+  futures.totalVolume = futures.totalVolume.plus(volume);
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+export function handleLotTransferred(event: LotTransferred): void {
+  log.debug("lot transferred event {}", [stringifyParameters(event)]);
+
+  const oldLot = Lot.load(event.params.oldLotId);
+  if (!oldLot) {
+    log.warning("LotTransferred for unknown oldLotId {}", [event.params.oldLotId.toHexString()]);
+    return;
+  }
+
+  const exitingParticipant = event.params.exitingParticipant;
+  const exitingAsSeller = oldLot.seller.equals(exitingParticipant);
+  const exitingAsBuyer = oldLot.buyer.equals(exitingParticipant);
+  if (!exitingAsSeller && !exitingAsBuyer) {
+    log.warning("LotTransferred exiting participant {} not in lot {}", [
+      exitingParticipant.toHexString(),
+      oldLot.id.toHexString(),
+    ]);
+    return;
+  }
+
+  oldLot.status = LotStatus.REPLACED;
+  oldLot.isClosed = true;
+  oldLot.updatedAt = event.block.timestamp;
+  oldLot.closedAt = event.block.timestamp;
+  oldLot.closeTransactionHash = event.transaction.hash;
+  oldLot.save();
+
+  const newSeller = exitingAsSeller
+    ? event.params.newParticipant
+    : Address.fromBytes(oldLot.seller);
+  const newBuyer = exitingAsBuyer ? event.params.newParticipant : Address.fromBytes(oldLot.buyer);
+  const newLot = new Lot(event.params.newLotId);
+  newLot.seller = newSeller;
+  newLot.buyer = newBuyer;
+  newLot.destURL = resolveLotDestURL(event.params.makerOrderId, event.params.takerOrderId);
+  newLot.sellPricePerDay = event.params.newPricePerDay;
+  newLot.buyPricePerDay = event.params.newPricePerDay;
+  newLot.pricePerDay = event.params.newPricePerDay;
+  newLot.deliveryAt = oldLot.deliveryAt;
+  newLot.makerOrderId = event.params.makerOrderId;
+  newLot.takerOrderId = event.params.takerOrderId;
+  newLot.status = LotStatus.OPEN;
+  newLot.isClosed = false;
+  newLot.isPaid = false;
+  newLot.isWithdrawn = false;
+  newLot.createdAt = event.block.timestamp;
+  newLot.updatedAt = event.block.timestamp;
+  newLot.blockNumber = event.block.number;
+  newLot.transactionHash = event.transaction.hash;
+  newLot.save();
+
+  const newSellerUser = getOrCreateUser(newSeller, event.block.timestamp);
+  const newBuyerUser = getOrCreateUser(newBuyer, event.block.timestamp);
+  appendLot(newSellerUser, newLot);
+  appendLot(newBuyerUser, newLot);
+
+  const exitingUser = getOrCreateUser(exitingParticipant, event.block.timestamp);
+  const entrantUser = getOrCreateUser(event.params.newParticipant, event.block.timestamp);
+  const counterpartyId = exitingAsBuyer ? oldLot.seller : oldLot.buyer;
+  const exitingSignedQty = exitingAsBuyer ? -1 : 1;
+  const entrantSignedQty = -exitingSignedQty;
+
+  applyExitFill(
+    exitingUser,
+    counterpartyId,
+    exitingSignedQty,
+    event.params.newPricePerDay,
+    event.params.exitPnl,
+    oldLot.deliveryAt,
+    event.transaction.hash,
+    event.block.number,
+    event.block.timestamp,
+    event.logIndex,
+    0,
+  );
+  applyOpenFill(
+    entrantUser,
+    counterpartyId,
+    entrantSignedQty,
+    event.params.newPricePerDay,
+    oldLot.deliveryAt,
+    event.transaction.hash,
+    event.block.number,
+    event.block.timestamp,
+    event.logIndex,
+    1,
+  );
+
+  const futures = getOrCreateFutures();
+  const volume = event.params.newPricePerDay.times(BigInt.fromI32(futures.deliveryDurationDays));
+  futures.totalVolume = futures.totalVolume.plus(volume);
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+export function handleLotClosed(event: LotClosed): void {
+  log.debug("lot closed event {}", [stringifyParameters(event)]);
+
+  const lot = Lot.load(event.params.lotId);
+  if (!lot) {
+    log.warning("LotClosed for unknown lotId {}", [event.params.lotId.toHexString()]);
+    return;
+  }
+
+  lot.status = LotStatus.CLOSED;
+  lot.isClosed = true;
+  lot.closeReason = mapLotCloseReason(event.params.reason);
+  lot.sellerPnl = event.params.sellerPnl;
+  lot.buyerPnl = event.params.buyerPnl;
+  lot.closedBy = event.params.closedBy;
+  lot.closedAt = event.block.timestamp;
+  lot.updatedAt = event.block.timestamp;
+  lot.closeTransactionHash = event.transaction.hash;
+  lot.save();
+
+  const seller = getOrCreateUser(event.params.seller, event.block.timestamp);
+  const buyer = getOrCreateUser(event.params.buyer, event.block.timestamp);
+
+  applyExitFill(
+    seller,
+    buyer.id,
+    1,
+    lot.pricePerDay,
+    event.params.sellerPnl,
+    lot.deliveryAt,
+    event.transaction.hash,
+    event.block.number,
+    event.block.timestamp,
+    event.logIndex,
+    0,
+  );
+  applyExitFill(
+    buyer,
+    seller.id,
+    -1,
+    lot.pricePerDay,
+    event.params.buyerPnl,
+    lot.deliveryAt,
+    event.transaction.hash,
+    event.block.number,
+    event.block.timestamp,
+    event.logIndex,
+    1,
+  );
+
+  const futures = getOrCreateFutures();
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+export function handleLotPaid(event: LotPaid): void {
+  log.debug("lot paid event {}", [stringifyParameters(event)]);
+  const lot = Lot.load(event.params.lotId);
+  if (!lot) {
+    log.warning("LotPaid for unknown lotId {}", [event.params.lotId.toHexString()]);
+    return;
+  }
+  lot.isPaid = true;
+  lot.paidAt = event.block.timestamp;
+  lot.updatedAt = event.block.timestamp;
+  lot.paymentTransactionHash = event.transaction.hash;
+  lot.save();
+}
+
+export function handleLotPaymentWithdrawn(event: LotPaymentWithdrawn): void {
+  log.debug("lot payment withdrawn event {}", [stringifyParameters(event)]);
+  const lot = Lot.load(event.params.lotId);
+  if (!lot) {
+    log.warning("LotPaymentWithdrawn for unknown lotId {}", [event.params.lotId.toHexString()]);
+    return;
+  }
+  lot.isWithdrawn = true;
+  lot.withdrawnAt = event.block.timestamp;
+  lot.updatedAt = event.block.timestamp;
+  lot.withdrawalTransactionHash = event.transaction.hash;
+  lot.save();
+}
+
+export function handleLotLiquidated(event: LotLiquidated): void {
+  log.debug("lot liquidated event {}", [stringifyParameters(event)]);
+  const lot = Lot.load(event.params.lotId);
+  if (!lot) {
+    log.warning("LotLiquidated for unknown lotId {}", [event.params.lotId.toHexString()]);
+    return;
+  }
+  lot.liquidatedParticipant = event.params.participant;
+  lot.liquidator = event.params.liquidator;
+  lot.liquidationFee = event.params.fee;
+  lot.updatedAt = event.block.timestamp;
+  lot.save();
+}
+
+function mapLotCloseReason(reason: i32): string {
+  if (reason == 0) return LotCloseReason.MUTUAL_EXIT;
+  if (reason == 1) return LotCloseReason.LIQUIDATION;
+  if (reason == 2) return LotCloseReason.BREACH;
+  if (reason == 3) return LotCloseReason.SETTLED;
+  if (reason == 4) return LotCloseReason.RESET;
+  return LotCloseReason.RESET;
+}
+
+function resolveLotDestURL(makerOrderId: Bytes, takerOrderId: Bytes): string {
+  const takerEntry = OrderEntry.load(takerOrderId);
+  if (takerEntry && takerEntry.destURL.length > 0) {
+    return takerEntry.destURL;
+  }
+
+  const makerEntry = OrderEntry.load(makerOrderId);
+  if (makerEntry) {
+    return makerEntry.destURL;
+  }
+
+  return "";
+}
+
+/// Append-only history of lots a user has participated in. Must persist
+/// independently because some callers (e.g. the remaining party on a
+/// LotTransferred rewire) never reach `applyOpenFill`/`applyExitFill`, so
+/// relying on a downstream `user.save()` would silently drop the append.
+function appendLot(user: User, lot: Lot): void {
+  const lotIds = user.lots;
+  lotIds.push(lot.id);
+  user.lots = lotIds;
+  user.save();
+}

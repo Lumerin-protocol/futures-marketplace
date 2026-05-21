@@ -36,9 +36,9 @@ describe("Futures Delivery", () => {
     const [orderEvent] = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotCreated",
     });
-    const { positionId } = orderEvent.args;
+    const { lotId: positionId } = orderEvent.args;
 
     return {
       ...data,
@@ -82,10 +82,10 @@ describe("Futures Delivery", () => {
     const [orderEvent] = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotCreated",
     });
 
-    const { positionId } = orderEvent.args;
+    const { lotId: positionId } = orderEvent.args;
 
     await tc.setNextBlockTimestamp({
       timestamp: deliveryDate + BigInt(config.deliveryDurationSeconds) + 1n,
@@ -121,10 +121,10 @@ describe("Position Management", () => {
     const [positionEvent] = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotCreated",
     });
 
-    const { positionId } = positionEvent.args;
+    const { lotId: positionId } = positionEvent.args;
 
     await viem.assertions.revertWithCustomError(
       futures.write.closeDelivery([positionId, false], { account: buyer.account }),
@@ -154,10 +154,10 @@ describe("Position Management", () => {
     const [createdEvent] = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotCreated",
     });
 
-    const { positionId } = createdEvent.args;
+    const { lotId: positionId } = createdEvent.args;
 
     await viem.assertions.revertWithCustomError(
       futures.write.closeDelivery([positionId, false], { account: seller.account }),
@@ -186,10 +186,10 @@ describe("Position Management", () => {
     const [createdEvent] = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotCreated",
     });
 
-    const { positionId } = createdEvent.args;
+    const { lotId: positionId } = createdEvent.args;
 
     await viem.assertions.revertWithCustomError(
       futures.write.closeDelivery([positionId, false], { account: buyer2.account }),

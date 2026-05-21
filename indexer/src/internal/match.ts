@@ -15,8 +15,7 @@ import { getOrCreateFutures, getOrCreatePointer } from "./store";
 // Public entry points
 // ============================================================================
 
-/// PositionCreated leg: user is opening or scaling into a position at
-/// `tradePrice`. Returns the Fill id so the canonical `Position` can backlink.
+/// LotCreated leg: user is opening or scaling into a lot at `tradePrice`.
 export function applyOpenFill(
   user: User,
   counterpartyId: Bytes,
@@ -44,8 +43,7 @@ export function applyOpenFill(
   );
 }
 
-/// PositionExited leg: user is closing one unit of an existing position. The
-/// realized pnl is supplied directly by the on-chain event.
+/// LotClosed/LotTransferred leg: user is closing one unit of an existing lot.
 export function applyExitFill(
   user: User,
   counterpartyId: Bytes,
@@ -75,9 +73,7 @@ export function applyExitFill(
 }
 
 /// pnl_event = side_sign * (trigger_price - entry_price) * deliveryDurationDays
-/// where side_sign = +1 for buyer-exit, -1 for seller-exit. Inverting recovers
-/// the trigger price; if `deliveryDurationDays` is unset we fall back to the
-/// entry price (degenerate but valid case).
+/// where side_sign = +1 for buyer-exit, -1 for seller-exit.
 export function derivePriceFromExit(wasBuyer: boolean, pnl: BigInt, entryPrice: BigInt): BigInt {
   const futures = getOrCreateFutures();
   const days = futures.deliveryDurationDays;
@@ -92,14 +88,8 @@ export function derivePriceFromExit(wasBuyer: boolean, pnl: BigInt, entryPrice: 
 
 /// Applies one signed-unit fill against the user's `(user, deliveryAt)` session
 /// pointer, opening / scaling / closing the session as needed and upserting the
-/// per-(tx, user, counterparty) Fill and per-(tx, user) Trade aggregates.
-///
-/// Note: a single fill cannot flip the position because both PositionCreated
-/// and PositionExited are emitted with implied qty=1 per event. With unit
-/// fills, |newNet| ≤ |oldNet| + 1, so newNet either reaches 0 or stays
-/// same-signed — never crosses zero in one step.
-///
-/// Returns the Fill id.
+/// per-(tx, user, counterparty, session) Fill and per-(tx, user, session) Trade
+/// aggregates. Returns the Fill id.
 function processUserMatch(
   user: User,
   counterpartyId: Bytes,
@@ -124,12 +114,7 @@ function processUserMatch(
   const isNowFlat = newNet == 0;
   const reducingExisting = !wasFlat && !isSameSignI32(oldNet, tradeQty);
 
-  // Realized PnL is supplied by the on-chain `PositionExited` event (already
-  // scaled by `deliveryDurationDays`). `applyOpenFill` always passes 0 and
-  // never reaches this with `reducingExisting == true` because the contract
-  // emits `PositionExited` before `PositionCreated`.
   const realizedPnl = preComputedPnl;
-
   const newEntry = computeNewEntryPrice(oldEntry, tradePrice, oldNet, tradeQty, newNet);
 
   const fillId = handleFill(
@@ -166,8 +151,6 @@ function processUserMatch(
   return fillId;
 }
 
-/// New aggregated entry price. Open → trade price. Scale-in → weighted avg over
-/// abs(oldNet) and abs(tradeQty). Reduce same-direction → unchanged. Flat → 0.
 function computeNewEntryPrice(
   oldEntry: BigInt,
   tradePrice: BigInt,
@@ -186,7 +169,6 @@ function computeNewEntryPrice(
       .plus(tradePrice.times(BigInt.fromI32(addAbs)))
       .div(BigInt.fromI32(newAbs));
   }
-  // Reducing same-direction position: keep entry price unchanged.
   return oldEntry;
 }
 
@@ -194,7 +176,6 @@ function computeNewEntryPrice(
 // Session lifecycle
 // ============================================================================
 
-/// Open / scale / partial-close / full-close — all share one session.
 function handleFill(
   user: User,
   pointer: UserDeliverySessionPointer,
@@ -229,7 +210,6 @@ function handleFill(
         pointer.currentSessionId,
         deliveryAt.toString(),
       ]);
-      // Should never happen, but recover by minting a fresh session.
       const id = positionSessionId(blockNumber, logIndex, sideIndex);
       session = openSession(id, user.id, deliveryAt, newEntry, newNet, timestamp);
       pointer.currentSessionId = id;
@@ -238,8 +218,6 @@ function handleFill(
     }
   }
 
-  // Preserve the historical entry price once the session is closing — `newEntry`
-  // is 0 when the position goes flat (correct for the pointer, wrong for the session).
   if (!isNowFlat) session.entryPrice = newEntry;
   session.netQuantity = newNet;
   session.lastTradeAt = timestamp;
@@ -251,9 +229,6 @@ function handleFill(
     pointer.currentSessionId = "";
   }
 
-  // Close-bookkeeping fires whenever the trade reduces or closes an existing
-  // position — break-even closes (priceDiff == 0) still close units, so this
-  // must not be gated on realizedPnl != 0.
   if (reducingExisting) {
     const settledAbs = minI32(absI32(oldNet), absI32(tradeQty));
     const oldClosed = session.closedQuantity;
@@ -312,9 +287,6 @@ function openSession(
 // Fill + Trade aggregation
 // ============================================================================
 
-/// Upsert the per-(tx, user, counterparty) Fill (qty-weighted price) and the
-/// per-(tx, user) Trade aggregate. Bumps global + user fill/trade counters
-/// only on first creation.
 function upsertFill(
   user: User,
   counterpartyId: Bytes,
@@ -330,19 +302,11 @@ function upsertFill(
 ): Bytes {
   const userAddr = changetype<Address>(user.id);
   const cpAddr = changetype<Address>(counterpartyId);
-  // Fill key includes sessionId for the same reason Trade does: a single tx can
-  // span two sessions for the same (user, counterparty) pair (e.g. a flip that
-  // exits an existing position and re-opens against the same counterparty).
-  // Keying on session keeps each Fill's positionSession + realizedPnl consistent.
   const fillId = fillAggregateId(txHash, userAddr, cpAddr, sessionId);
 
   let fill = Fill.load(fillId);
   const isNewFill = fill == null;
 
-  // Per-(tx, user, session) Trade aggregate. Keying on session ensures that a
-  // single tx which spans two sessions (multi-match flip: PositionExited closes
-  // session A, PositionCreated opens session B) produces two distinct Trade rows
-  // and the new session's first trade does NOT inherit the prior session's pnl.
   const tradeId = tradeAggregateId(txHash, userAddr, sessionId);
   let trade = Trade.load(tradeId);
   const isNewTrade = trade == null;
@@ -378,7 +342,6 @@ function upsertFill(
     fill.transactionHash = txHash;
   }
 
-  // Qty-weighted price aggregation across the units already in this Fill.
   const oldAbs = absI32(fill.fillQuantity);
   const addAbs = absI32(fillQty);
   const newAbs = oldAbs + addAbs;
@@ -393,7 +356,6 @@ function upsertFill(
   fill.realizedPnl = fill.realizedPnl.plus(realizedPnlDelta);
   fill.save();
 
-  // Trade aggregation (qty-weighted price, signed qty sum).
   const tradeOldAbs = absI32(trade.tradeQuantity);
   const tradeAddAbs = absI32(fillQty);
   const tradeNewAbs = tradeOldAbs + tradeAddAbs;

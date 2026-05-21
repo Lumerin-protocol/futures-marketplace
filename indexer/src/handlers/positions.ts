@@ -1,4 +1,4 @@
-import { Address, BigInt, Bytes, log } from "@graphprotocol/graph-ts";
+import { Address, BigInt, Bytes, ethereum, log } from "@graphprotocol/graph-ts";
 import {
   PositionClosed,
   PositionCreated,
@@ -7,11 +7,26 @@ import {
   PositionPaid,
   PositionPaymentReceived,
 } from "../../generated/Futures/Futures";
-import { Fill, Order, OrderEntry, Position, PositionSession, UserDeliverySessionPointer } from "../../generated/schema";
+import {
+  Fill,
+  Order,
+  OrderEntry,
+  Position,
+  PositionSession,
+  UserDeliverySessionPointer,
+} from "../../generated/schema";
 import { PositionSessionStatus, OrderEntryStatus } from "../enums";
 import { recomputeOrderStatus } from "../internal/orders";
 import { getOrCreateFutures, getOrCreatePointer, getOrCreateUser } from "../internal/store";
-import { applyExitFill, applyOpenFill, derivePriceFromExit } from "../internal/match";
+import {
+  applyExitFill,
+  applyExitPnlOnly,
+  applyOpenFill,
+  derivePriceFromExit,
+} from "../internal/match";
+import { stringifyParameters } from "../internal/utils";
+import { positionSessionId } from "../ids";
+import { userAddress } from "../../tests/helpers";
 
 /// On-chain flow per matched unit:
 ///   1. `OrderCreated(takerOrderId, taker)` + `OrderClosed(takerOrderId, taker)`
@@ -23,6 +38,8 @@ import { applyExitFill, applyOpenFill, derivePriceFromExit } from "../internal/m
 /// We aggregate per-(user, counterparty, tx) into a Fill, per-(user, tx) into a
 /// Trade, and maintain a `(user, deliveryAt)` PositionSession.
 export function handlePositionCreated(event: PositionCreated): void {
+  log.debug("position created event {}", [stringifyParameters(event)]);
+
   // Both the maker and taker entries were marked CANCELLED by the prior
   // OrderClosed events; promote both to MATCHED now that we know it was a fill.
   promoteRestingOrderToMatched(event.params.orderId, event.block.timestamp);
@@ -84,60 +101,107 @@ export function handlePositionCreated(event: PositionCreated): void {
   futures.save();
 }
 
+export function handlePositionClosed(event: PositionClosed): void {
+  log.debug("position closed event {}", [stringifyParameters(event)]);
+
+  const position = Position.load(event.params.positionId);
+  if (!position) {
+    log.warning("PositionClosed for unknown positionId {}", [
+      event.params.positionId.toHexString(),
+    ]);
+    return;
+  }
+  position.isClosed = true;
+  position.closedAt = event.block.timestamp;
+  position.save();
+
+  bindingClosurePositionSession(
+    Address.fromBytes(position.seller),
+    position.deliveryAt,
+    event,
+    false,
+  );
+  bindingClosurePositionSession(
+    Address.fromBytes(position.buyer),
+    position.deliveryAt,
+    event,
+    true,
+  );
+}
+
 /// PositionExited: a participant offset out of an existing position via an
 /// opposing trade in the same delivery date. Closes one unit of their net qty
 /// at the trigger trade's price, generating a closing Fill against the OTHER
 /// party of the original position (their original counterparty).
 export function handlePositionExited(event: PositionExited): void {
-  const position = Position.load(event.params.positionId);
-  if (!position) {
-    log.warning("PositionExited for unknown positionId {}", [
-      event.params.positionId.toHexString(),
-    ]);
-    return;
-  }
-
-  const participant = event.params.participant;
-  const exitPnl = event.params.pnl;
-  const wasBuyer = position.buyer.equals(participant);
-  const counterpartyId = wasBuyer ? position.seller : position.buyer;
-
-  position.isExited = true;
-  if (wasBuyer) {
-    position.buyerExitPnl = exitPnl;
-  } else {
-    position.sellerExitPnl = exitPnl;
-  }
-
-  // Closing trade: long → flat means selling (-1), short → flat means buying (+1).
-  const closeQty = wasBuyer ? -1 : 1;
-  const exitPrice = derivePriceFromExit(
-    wasBuyer,
-    exitPnl,
-    wasBuyer ? position.buyPricePerDay : position.sellPricePerDay,
-  );
-
-  const user = getOrCreateUser(participant, event.block.timestamp);
-  const fillRef = applyExitFill(
-    user,
-    counterpartyId,
-    closeQty,
-    exitPrice,
-    exitPnl,
-    position.deliveryAt,
-    event.transaction.hash,
-    event.block.number,
-    event.block.timestamp,
-    event.logIndex,
-    /* sideIndex */ wasBuyer ? 1 : 0,
-  );
-
-  if (wasBuyer) {
-    position.buyerExitFill = fillRef;
-  } else {
-    position.sellerExitFill = fillRef;
-  }
-  position.save();
+  // log.debug("position exited event {}", [stringifyParameters(event)]);
+  // const position = Position.load(event.params.positionId);
+  // if (!position) {
+  //   log.warning("PositionExited for unknown positionId {}", [
+  //     event.params.positionId.toHexString(),
+  //   ]);
+  //   return;
+  // }
+  // const participant = event.params.participant;
+  // const exitPnl = event.params.pnl.neg(); // in the contract negative means profit
+  // const wasBuyer = position.buyer.equals(participant);
+  // const counterpartyId = wasBuyer ? position.seller : position.buyer;
+  // position.isExited = true;
+  // if (wasBuyer) {
+  //   position.buyerExitPnl = exitPnl;
+  // } else {
+  //   position.sellerExitPnl = exitPnl;
+  // }
+  // const closeQty = wasBuyer ? -1 : 1;
+  // const exitPrice = derivePriceFromExit(
+  //   wasBuyer,
+  //   exitPnl,
+  //   wasBuyer ? position.buyPricePerDay : position.sellPricePerDay,
+  // );
+  // const user = getOrCreateUser(participant, event.block.timestamp);
+  // let fillRef: Bytes;
+  // if (position.isClosed) {
+  //   // Offset path: `_maybeExitExistingPosition` emits PositionClosed (via
+  //   // `_removePosition`) BEFORE PositionExited. `handlePositionClosed` already
+  //   // decremented netQty via `applyPositionClosure`. We only record pnl here.
+  //   const openFillId = wasBuyer ? position.buyerFill : position.sellerFill;
+  //   const openFill = Fill.load(openFillId);
+  //   const sessionId = openFill ? openFill.positionSession : "";
+  //   fillRef = applyExitPnlOnly(
+  //     user,
+  //     counterpartyId,
+  //     closeQty,
+  //     exitPrice,
+  //     exitPnl,
+  //     sessionId,
+  //     position.deliveryAt,
+  //     event.transaction.hash,
+  //     event.block.number,
+  //     event.block.timestamp,
+  //   );
+  // } else {
+  //   // Delivery path: `_closeAndCashSettleDelivery` emits both PositionExited
+  //   // events BEFORE PositionClosed. Normal netQty + pnl update.
+  //   fillRef = applyExitFill(
+  //     user,
+  //     counterpartyId,
+  //     closeQty,
+  //     exitPrice,
+  //     exitPnl,
+  //     position.deliveryAt,
+  //     event.transaction.hash,
+  //     event.block.number,
+  //     event.block.timestamp,
+  //     event.logIndex,
+  //     /* sideIndex */ wasBuyer ? 1 : 0,
+  //   );
+  // }
+  // if (wasBuyer) {
+  //   position.buyerExitFill = fillRef;
+  // } else {
+  //   position.sellerExitFill = fillRef;
+  // }
+  // position.save();
 }
 
 /// Apply a position closure: decrement netQuantity for the user and update session state.
@@ -220,29 +284,44 @@ function applyPositionClosure(
   return true;
 }
 
-export function handlePositionClosed(event: PositionClosed): void {
-  const position = Position.load(event.params.positionId);
-  if (!position) {
-    log.warning("PositionClosed for unknown positionId {}", [
-      event.params.positionId.toHexString(),
-    ]);
-    return;
+function getOrCreatePositionSession(
+  pointer: UserDeliverySessionPointer,
+  event: ethereum.Event,
+  isBuyer: boolean,
+): PositionSession {
+  if (!pointer.currentSessionId) {
+    return new PositionSession(
+      positionSessionId(event.block.number, event.logIndex, isBuyer ? 0 : 1),
+    );
   }
-  position.isClosed = true;
-  position.closedAt = event.block.timestamp;
-  position.save();
+  const posSession = PositionSession.load(pointer.currentSessionId);
+  if (!posSession) {
+    throw new Error(
+      "PositionSession invariant violated: sessionId is set but session is not found",
+    );
+  }
+  return posSession;
+}
 
-  // Decrement netQuantity only for sides not already exited via PositionExited.
-  // See `applyPositionClosure` doc comment for the three on-chain call sites.
-  if (position.sellerExitFill === null) {
-    applyPositionClosure(position, position.seller, /* isBuyer */ false, event.block.timestamp);
+function bindingClosurePositionSession(
+  user: Address,
+  deliveryAt: BigInt,
+  event: ethereum.Event,
+  isBuyer: boolean,
+): void {
+  const pointer = getOrCreatePointer(user, deliveryAt);
+  const session = getOrCreatePositionSession(pointer, event, isBuyer);
+  session.netQuantity += isBuyer ? -1 : 1;
+  pointer.currentSessionId = session.id;
+  if (session.netQuantity == 0) {
+    pointer.currentSessionId = "";
   }
-  if (position.buyerExitFill === null) {
-    applyPositionClosure(position, position.buyer, /* isBuyer */ true, event.block.timestamp);
-  }
+  session.save();
+  pointer.save();
 }
 
 export function handlePositionDeliveryClosed(event: PositionDeliveryClosed): void {
+  log.debug("position delivery closed event {}", [stringifyParameters(event)]);
   // `closeDelivery` co-emits `PositionClosed`, which already decrements
   // `netQuantity` via `applyPositionClosure`. This handler only stamps the
   // delivery-specific metadata so we don't double-decrement.
@@ -259,6 +338,7 @@ export function handlePositionDeliveryClosed(event: PositionDeliveryClosed): voi
 }
 
 export function handlePositionPaid(event: PositionPaid): void {
+  log.debug("position paid event {}", [stringifyParameters(event)]);
   const position = Position.load(event.params.positionId);
   if (!position) {
     log.warning("PositionPaid for unknown positionId {}", [event.params.positionId.toHexString()]);
@@ -269,6 +349,8 @@ export function handlePositionPaid(event: PositionPaid): void {
 }
 
 export function handlePositionPaymentReceived(event: PositionPaymentReceived): void {
+  log.debug("position payment received event {}", [stringifyParameters(event)]);
+
   const position = Position.load(event.params.positionId);
   if (!position) {
     log.warning("PositionPaymentReceived for unknown positionId {}", [

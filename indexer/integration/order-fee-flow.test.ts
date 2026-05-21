@@ -21,6 +21,7 @@ describe("Futures OrderFeeUpdated Integration", () => {
     const { owner } = accounts;
 
     conn.matchstick.bind("Futures", futures.address, futures.abi);
+    await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
     const newFee = 12345n;

@@ -6,8 +6,10 @@ import {
   ValidatorURLUpdated,
 } from "../../generated/Futures/Futures";
 import { getOrCreateFutures, loadFuturesFromContract } from "../internal/store";
+import { stringifyParameters } from "../internal/utils";
 
 export function handleInitialized(event: Initialized): void {
+  log.debug("initialized event ", [stringifyParameters(event)]);
   log.info("Futures initialized: version {}", [event.params.version.toString()]);
   const futures = getOrCreateFutures();
   futures.initializedAt = event.block.timestamp;
@@ -17,6 +19,7 @@ export function handleInitialized(event: Initialized): void {
 }
 
 export function handleUpgraded(event: Upgraded): void {
+  log.debug("upgraded event ", [stringifyParameters(event)]);
   log.info("Futures upgraded to {}", [event.params.implementation.toHexString()]);
   const futures = getOrCreateFutures();
   futures.lastUpdatedAt = event.block.timestamp;
@@ -25,6 +28,7 @@ export function handleUpgraded(event: Upgraded): void {
 }
 
 export function handleOrderFeeUpdated(event: OrderFeeUpdated): void {
+  log.debug("order fee updated event ", [stringifyParameters(event)]);
   const futures = getOrCreateFutures();
   futures.orderFee = event.params.orderFee;
   futures.lastUpdatedAt = event.block.timestamp;
@@ -32,6 +36,7 @@ export function handleOrderFeeUpdated(event: OrderFeeUpdated): void {
 }
 
 export function handleValidatorURLUpdated(event: ValidatorURLUpdated): void {
+  log.debug("validator url updated event ", [stringifyParameters(event)]);
   const futures = getOrCreateFutures();
   futures.validatorURL = event.params.validatorURL;
   futures.lastUpdatedAt = event.block.timestamp;

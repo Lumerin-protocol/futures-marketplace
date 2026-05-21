@@ -5,6 +5,7 @@ import { OrderEntryStatus, OrderStatus } from "../enums";
 import { orderAggregateId } from "../ids";
 import { recomputeOrderStatus } from "../internal/orders";
 import { getOrCreateFutures, getOrCreatePriceLevel, getOrCreateUser } from "../internal/store";
+import { stringifyParameters } from "../internal/utils";
 
 /// `OrderCreated` fires once per qty=1 unit that rests in the book — taker
 /// matches don't emit OrderCreated. Multiple events from one
@@ -12,6 +13,8 @@ import { getOrCreateFutures, getOrCreatePriceLevel, getOrCreateUser } from "../i
 /// (tx, user, price, deliveryAt, side) and aggregate into one `Order` entity
 /// with N `OrderEntry` children, one per on-chain orderId.
 export function handleOrderCreated(event: OrderCreated): void {
+  log.debug("order created event {}", [stringifyParameters(event)]);
+
   const user = getOrCreateUser(event.params.participant, event.block.timestamp);
   const aggId = orderAggregateId(
     event.transaction.hash,
@@ -38,10 +41,18 @@ export function handleOrderCreated(event: OrderCreated): void {
     order.blockNumber = event.block.number;
     order.transactionHash = event.transaction.hash;
   }
+  // Detect a "resurrection": the aggregate exists but was at qty=0 because a
+  // previous taker synthetic OrderClosed dropped it back to 0. This happens
+  // when a multi-unit taker order emits N OrderCreated+OrderClosed pairs in
+  // the same tx — only the first pair has isNewAggregate=true, but each
+  // subsequent pair must also re-increment the active counters.
+  const priorQuantity = order.quantity;
   order.quantity += 1;
   order.originalQuantity += 1;
   order.updatedAt = event.block.timestamp;
   order.save();
+
+  const isReactivation = !isNewAggregate && priorQuantity == 0;
 
   const entry = new OrderEntry(event.params.orderId);
   entry.order = order.id;
@@ -52,6 +63,8 @@ export function handleOrderCreated(event: OrderCreated): void {
   user.lastActivityAt = event.block.timestamp;
   if (isNewAggregate) {
     user.orderCount++;
+    user.activeOrderCount++;
+  } else if (isReactivation) {
     user.activeOrderCount++;
   }
   user.save();
@@ -68,17 +81,15 @@ export function handleOrderCreated(event: OrderCreated): void {
   if (isNewAggregate) {
     futures.totalOrders++;
     futures.activeOrders++;
+  } else if (isReactivation) {
+    futures.activeOrders++;
   }
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
 }
 
-/// `OrderClosed` is fired in cancel-by-self, cancel-as-outdated, liquidation,
-/// AND match contexts. At emit time we cannot tell the difference, so we mark
-/// the entry CANCELLED optimistically. If a `PositionCreated` later in the same
-/// tx references this orderId, `handlePositionCreated` upgrades it to MATCHED
-/// and rebalances the parent Order's counters.
 export function handleOrderClosed(event: OrderClosed): void {
+  log.debug("order closed event {}", [stringifyParameters(event)]);
   const entry = OrderEntry.load(event.params.orderId);
   if (!entry) {
     log.warning("OrderClosed for unknown orderId {}", [event.params.orderId.toHexString()]);
@@ -94,13 +105,20 @@ export function handleOrderClosed(event: OrderClosed): void {
     return;
   }
 
-  entry.status = OrderEntryStatus.CANCELLED;
+  const entryStatus = mapOrderEntryStatus(event.params.reason);
+  const matched = entryStatus == OrderEntryStatus.MATCHED;
+
+  entry.status = entryStatus;
   entry.closedAt = event.block.timestamp;
   entry.closedBy = event.transaction.from;
   entry.save();
 
   order.quantity -= 1;
-  order.cancelledQuantity += 1;
+  if (matched) {
+    order.filledQuantity += 1;
+  } else {
+    order.cancelledQuantity += 1;
+  }
   order.updatedAt = event.block.timestamp;
   recomputeOrderStatus(order, event.block.timestamp);
   order.save();
@@ -121,4 +139,13 @@ export function handleOrderClosed(event: OrderClosed): void {
     futures.lastUpdatedAt = event.block.timestamp;
     futures.save();
   }
+}
+
+function mapOrderEntryStatus(reason: i32): string {
+  if (reason == 0) return OrderEntryStatus.MATCHED;
+  if (reason == 1) return OrderEntryStatus.CANCELLED;
+  if (reason == 2) return OrderEntryStatus.EXPIRED;
+  if (reason == 3) return OrderEntryStatus.LIQUIDATED;
+  if (reason == 4) return OrderEntryStatus.RESET;
+  return OrderEntryStatus.CANCELLED;
 }

@@ -1,3 +1,4 @@
+import { log } from "@graphprotocol/graph-ts";
 import {
   BadDebt as BadDebtEventLog,
   Liquidation as LiquidationEvent,
@@ -5,8 +6,10 @@ import {
 import { BadDebtEvent, Liquidation } from "../../generated/schema";
 import { createEventId } from "../ids";
 import { getOrCreateFutures, getOrCreateUser } from "../internal/store";
+import { stringifyParameters } from "../internal/utils";
 
 export function handleLiquidation(event: LiquidationEvent): void {
+  log.debug("liquidation event {}", [stringifyParameters(event)]);
   const user = getOrCreateUser(event.params.participant, event.block.timestamp);
   const liquidator = getOrCreateUser(event.params.liquidator, event.block.timestamp);
 
@@ -20,7 +23,6 @@ export function handleLiquidation(event: LiquidationEvent): void {
   liq.transactionHash = event.transaction.hash;
   liq.save();
 
-  user.realizedPnl = user.realizedPnl.plus(event.params.realizedPnl);
   user.lastActivityAt = event.block.timestamp;
   user.save();
 

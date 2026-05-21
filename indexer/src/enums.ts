@@ -13,9 +13,26 @@ export namespace OrderEntryStatus {
   export const ACTIVE: string = "ACTIVE";
   export const MATCHED: string = "MATCHED";
   export const CANCELLED: string = "CANCELLED";
+  export const EXPIRED: string = "EXPIRED";
+  export const LIQUIDATED: string = "LIQUIDATED";
+  export const RESET: string = "RESET";
 }
 
 export namespace PositionSessionStatus {
   export const OPEN: string = "OPEN";
   export const CLOSE: string = "CLOSE";
+}
+
+export namespace LotStatus {
+  export const OPEN: string = "OPEN";
+  export const REPLACED: string = "REPLACED";
+  export const CLOSED: string = "CLOSED";
+}
+
+export namespace LotCloseReason {
+  export const MUTUAL_EXIT: string = "MUTUAL_EXIT";
+  export const LIQUIDATION: string = "LIQUIDATION";
+  export const BREACH: string = "BREACH";
+  export const SETTLED: string = "SETTLED";
+  export const RESET: string = "RESET";
 }

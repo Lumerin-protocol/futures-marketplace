@@ -107,6 +107,7 @@ export function getOrCreateUser(address: Address, timestamp: BigInt): User {
     user.tradeCount = 0;
     user.fillCount = 0;
     user.realizedPnl = BigInt.zero();
+    user.lots = [];
     user.createdAt = timestamp;
     user.lastActivityAt = timestamp;
 
