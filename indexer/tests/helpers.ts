@@ -99,7 +99,8 @@ export function mockFuturesContractCallsAsReverted(): void {
     ["validatorAddress", "validatorAddress():(address)"],
     ["validatorURL", "validatorURL():(string)"],
     ["minimumPriceIncrement", "minimumPriceIncrement():(uint256)"],
-    ["orderFee", "orderFee():(uint256)"],
+    ["makerFee", "makerFee():(uint256)"],
+    ["takerFee", "takerFee():(uint256)"],
     ["liquidationMarginPercent", "liquidationMarginPercent():(uint8)"],
     ["speedHps", "speedHps():(uint256)"],
     ["deliveryDurationDays", "deliveryDurationDays():(uint8)"],
@@ -126,7 +127,8 @@ export function setupFutures(deliveryDurationDays: i32 = 30): void {
   f.validatorURL = "";
   f.startBlock = BigInt.zero();
   f.minimumPriceIncrement = BigInt.zero();
-  f.orderFee = BigInt.zero();
+  f.makerFee = BigInt.zero();
+  f.takerFee = BigInt.zero();
   f.liquidationMarginPercent = 0;
   f.speedHps = BigInt.zero();
   f.deliveryDurationDays = deliveryDurationDays;

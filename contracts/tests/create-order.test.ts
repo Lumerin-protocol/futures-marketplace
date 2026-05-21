@@ -120,7 +120,8 @@ describe("Order Creation", () => {
     const margin = price * BigInt(config.deliveryDurationDays) * BigInt(qty);
     const deliveryDate = BigInt(config.deliveryDates[0]);
 
-    await collateralVault.write.deposit([margin + config.orderFee], { account: seller.account });
+    // Resting orders carry no maker/taker fee under the post-2.9 model.
+    await collateralVault.write.deposit([margin], { account: seller.account });
 
     const txHash = await futures.write.createOrder([price, deliveryDate, "", qty], {
       account: seller.account,
@@ -178,7 +179,7 @@ describe("Order Creation", () => {
     }
   });
 
-  it("should collect order fee, when order is created or matched, but not when it is offsetted (closed)", async () => {
+  it("should not collect maker/taker fees on plain resting orders or on own opposite-side cancels", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, pc } = accounts;
@@ -192,31 +193,32 @@ describe("Order Creation", () => {
     const initialSellerBalance = await collateralVault.read.balanceOf([seller.account.address]);
     const initialContractBalance = await collateralVault.read.balanceOf([futures.address]);
 
+    // 5 fresh resting buys — no opposites on the book → no fee charged.
     const txHash = await futures.write.createOrder([price, deliveryDate, "", 5], {
       account: seller.account,
     });
+    assert.equal((await pc.waitForTransactionReceipt({ hash: txHash })).status, "success");
 
-    const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
-    assert.equal(receipt.status, "success");
+    assert.equal(
+      await collateralVault.read.balanceOf([seller.account.address]),
+      initialSellerBalance,
+    );
+    assert.equal(await collateralVault.read.balanceOf([futures.address]), initialContractBalance);
 
-    const finalSellerBalance = await collateralVault.read.balanceOf([seller.account.address]);
-    assert.equal(finalSellerBalance, initialSellerBalance - config.orderFee);
-
-    const finalContractBalance = await collateralVault.read.balanceOf([futures.address]);
-    assert.equal(finalContractBalance, initialContractBalance + config.orderFee);
-
+    // 5 opposite-side qty by the same participant → all 5 self-cancel, no fee charged.
     const sellOrderTxHash = await futures.write.createOrder([price, deliveryDate, "", -5], {
       account: seller.account,
     });
+    assert.equal(
+      (await pc.waitForTransactionReceipt({ hash: sellOrderTxHash })).status,
+      "success",
+    );
 
-    const sellOrderReceipt = await pc.waitForTransactionReceipt({ hash: sellOrderTxHash });
-    assert.equal(sellOrderReceipt.status, "success");
-
-    const finalSellerBalance2 = await collateralVault.read.balanceOf([seller.account.address]);
-    assert.equal(finalSellerBalance2, finalSellerBalance);
-
-    const finalContractBalance2 = await collateralVault.read.balanceOf([futures.address]);
-    assert.equal(finalContractBalance2, finalContractBalance);
+    assert.equal(
+      await collateralVault.read.balanceOf([seller.account.address]),
+      initialSellerBalance,
+    );
+    assert.equal(await collateralVault.read.balanceOf([futures.address]), initialContractBalance);
   });
 
   it("should reject order creation with zero price", async () => {
@@ -462,10 +464,8 @@ describe("Order Creation", () => {
     const deliveryDate = config.deliveryDates[0];
 
     // Single-contract IM is bounded above by entryPrice * deliveryDays.
-    const minMarginForOneOrder = price * BigInt(config.deliveryDurationDays);
-
-    const orderFee = await futures.read.orderFee();
-    const margin = minMarginForOneOrder + orderFee * 2n;
+    // Resting + self-cancel paths charge no maker/taker fee, so only the IM matters.
+    const margin = price * BigInt(config.deliveryDurationDays);
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 

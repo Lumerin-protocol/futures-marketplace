@@ -210,7 +210,8 @@ describe("Futures - margin call", function () {
     const price = await futures.read.getMarketPrice();
     // Tight deposit: enough to satisfy IM at entry but not after the price slide
     // below.
-    const deposit = price * BigInt(config.deliveryDurationDays) + config.orderFee;
+    // Resting orders carry no maker/taker fee under the post-2.9 model.
+    const deposit = price * BigInt(config.deliveryDurationDays);
     const deliveryDate = config.deliveryDates[0];
 
     await collateralVault.write.deposit([deposit], { account: seller.account });

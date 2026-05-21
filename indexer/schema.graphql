@@ -15,7 +15,8 @@ type Futures @entity(immutable: false) {
 
   # Configuration
   minimumPriceIncrement: BigInt!
-  orderFee: BigInt!
+  makerFee: BigInt!
+  takerFee: BigInt!
   liquidationMarginPercent: Int!
   speedHps: BigInt!
   deliveryDurationDays: Int!

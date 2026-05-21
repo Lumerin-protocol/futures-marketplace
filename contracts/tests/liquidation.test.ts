@@ -251,9 +251,12 @@ describe("Futures - Liquidation", function () {
       const stressShockBps = BigInt(config.liquidationMarginPercent);
       const margin =
         (entryPricePerDay * BigInt(config.deliveryDurationDays) * 2n * stressShockBps) / 100n;
-      const orderFee = await futures.read.orderFee();
-      await collateralVault.write.deposit([margin + orderFee], { account: seller.account });
-      await collateralVault.write.deposit([margin + orderFee], { account: buyer.account });
+      const takerFee = await futures.read.takerFee();
+      // Seller places the resting -2 first (no fee under post-2.9 model); buyer is taker on
+      // both fills and pays 2× takerFee. makerFee defaults to 0 in the fixture, so seller
+      // doesn't need extra headroom.
+      await collateralVault.write.deposit([margin], { account: seller.account });
+      await collateralVault.write.deposit([margin + takerFee * 2n], { account: buyer.account });
 
       await futures.write.createOrder([entryPricePerDay, deliveryDate, "", -2], {
         account: seller.account,

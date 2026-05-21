@@ -155,8 +155,10 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     const expectedProfit = (exitPrice - price) * BigInt(deliveryDurationDays);
     const account2Profit = account2BalanceAfter - account2BalanceBefore;
 
-    const orderFee = await futures.read.orderFee();
-    assert.equal(account2Profit + orderFee, expectedProfit);
+    // account2 placed a resting -1 at exitPrice (no fee) and was the maker on account3's
+    // taker fill. With the default makerFee=0 the only fee on this flow is account3's
+    // takerFee — account2's balance change equals the realized profit exactly.
+    assert.equal(account2Profit, expectedProfit);
   });
 
   it("should exit position with loss and verify accounting is correct", async () => {
@@ -233,12 +235,14 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     const expectedLoss = (price - exitPrice) * BigInt(deliveryDurationDays);
     const account2BalanceChange = account2BalanceAfter - account2BalanceBefore;
 
-    const orderFee = await futures.read.orderFee();
-    assert.equal(account2BalanceChange, -expectedLoss - orderFee);
+    // account2 placed a resting -1 (no fee) and was the maker (makerFee=0) on account3's
+    // taker fill, so its balance change equals the realized loss exactly.
+    assert.equal(account2BalanceChange, -expectedLoss);
 
-    // account2's exit order fee already in `contractBalanceBefore`, so only account3's fee is new.
-    const expectedContractBalanceChange = expectedLoss + orderFee;
-    assert.equal(contractBalanceAfter - contractBalanceBefore, expectedContractBalanceChange);
+    // account3 paid takerFee on the matching fill; the loss flows from account2 into the
+    // insurance fund. `totalContractBalance` sums futures + insurance fund.
+    const takerFee = await futures.read.takerFee();
+    assert.equal(contractBalanceAfter - contractBalanceBefore, expectedLoss + takerFee);
   });
 
   it("should handle exiting positions", async () => {

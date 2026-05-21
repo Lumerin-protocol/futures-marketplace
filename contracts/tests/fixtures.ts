@@ -166,7 +166,8 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
   const deliveryDurationDays = 7;
   const deliveryDurationSeconds = deliveryDurationDays * 24 * 3600;
   const priceLadderStep = parseUnits("0.01", USDC_DECIMALS);
-  const orderFee = parseUnits("1", USDC_DECIMALS);
+  const makerFee = 0n;
+  const takerFee = parseUnits("1", USDC_DECIMALS);
   const { timestamp: now } = await pc.getBlock({ blockTag: "latest" });
   const futureDeliveryDatesCount = 10;
   const firstFutureDeliveryDate = now + BigInt(deliveryDurationSeconds);
@@ -313,7 +314,8 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
     account: owner.account,
   });
 
-  await futures.write.setOrderFee([orderFee], { account: owner.account });
+  await futures.write.setMakerFee([makerFee], { account: owner.account });
+  await futures.write.setTakerFee([takerFee], { account: owner.account });
   await futures.write.setValidatorURL([validatorURL], { account: owner.account });
   const deliveryDates = await futures.read.getDeliveryDates();
 
@@ -336,7 +338,8 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
       liquidationMarginPercent,
       deliveryDurationSeconds,
       priceLadderStep,
-      orderFee,
+      makerFee,
+      takerFee,
       deliveryDates,
       futureDeliveryDatesCount,
       firstFutureDeliveryDate,

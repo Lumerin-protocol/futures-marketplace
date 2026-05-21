@@ -24,7 +24,7 @@ import { getMinMarginForPositionManual } from "../../hooks/data/getMinMarginForP
 import { predefinedPools } from "./BuyerForms/predefinedPools";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
-import { useOrderFee } from "../../hooks/data/useOrderFee";
+import { useMakerTakerFees } from "../../hooks/data/useMakerTakerFees";
 import type { PerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
 import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE, QUANTITY_SCALE_NUM } from "../../lib/units";
 
@@ -72,7 +72,7 @@ export const PlaceOrderForm: FC<Props> = ({
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const contractSpecsQuery = useFuturesContractSpecs();
-  const { orderFeeUSDC, isLoading: isOrderFeeLoading } = useOrderFee(address);
+  const { makerFeeUSDC, takerFeeUSDC, isLoading: isFeesLoading } = useMakerTakerFees();
 
   // Determine order type from quantity sign
   const isBuy = quantity > 0;
@@ -264,12 +264,28 @@ export const PlaceOrderForm: FC<Props> = ({
                   )}
                 </>
               ) : (
-                <div className="flex justify-between">
-                  <span className="text-gray-300">Order Creation Fee:</span>
-                  <span className="text-white">
-                    {orderFeeUSDC !== null ? `${orderFeeUSDC.toFixed(2)} USDC` : isOrderFeeLoading ? "Loading..." : "N/A"}
-                  </span>
-                </div>
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Maker Fee:</span>
+                    <span className="text-white">
+                      {makerFeeUSDC !== null
+                        ? `${makerFeeUSDC.toFixed(2)} USDC`
+                        : isFeesLoading
+                          ? "Loading..."
+                          : "N/A"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Taker Fee:</span>
+                    <span className="text-white">
+                      {takerFeeUSDC !== null
+                        ? `${takerFeeUSDC.toFixed(2)} USDC`
+                        : isFeesLoading
+                          ? "Loading..."
+                          : "N/A"}
+                    </span>
+                  </div>
+                </>
               )}
             </div>
           </div>

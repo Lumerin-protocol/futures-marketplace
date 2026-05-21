@@ -557,6 +557,19 @@ export const FuturesAbi = [
     "anonymous": false,
     "inputs": [
       {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "makerFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "MakerFeeUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
         "indexed": true,
         "internalType": "bytes32",
         "name": "orderId",
@@ -625,19 +638,6 @@ export const FuturesAbi = [
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "orderFee",
-        "type": "uint256"
-      }
-    ],
-    "name": "OrderFeeUpdated",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
         "indexed": true,
         "internalType": "bytes32",
         "name": "orderId",
@@ -682,6 +682,19 @@ export const FuturesAbi = [
       }
     ],
     "name": "OwnershipTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "takerFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "TakerFeeUpdated",
     "type": "event"
   },
   {
@@ -1167,25 +1180,6 @@ export const FuturesAbi = [
         "type": "address"
       }
     ],
-    "name": "getOrderFee",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_participant",
-        "type": "address"
-      }
-    ],
     "name": "getOrderIds",
     "outputs": [
       {
@@ -1504,6 +1498,19 @@ export const FuturesAbi = [
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "makerFee",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "address",
@@ -1559,19 +1566,6 @@ export const FuturesAbi = [
       }
     ],
     "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "orderFee",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -1655,24 +1649,6 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "_address",
-        "type": "address"
-      },
-      {
-        "internalType": "uint8",
-        "name": "_feeDiscountPercent",
-        "type": "uint8"
-      }
-    ],
-    "name": "setFeeDiscountPercent",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
         "internalType": "uint8",
         "name": "_futureDeliveryDatesCount",
         "type": "uint8"
@@ -1712,6 +1688,19 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "_makerFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "setMakerFee",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "_marginEngine",
         "type": "address"
@@ -1739,11 +1728,11 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "_orderFee",
+        "name": "_takerFee",
         "type": "uint256"
       }
     ],
-    "name": "setOrderFee",
+    "name": "setTakerFee",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1777,6 +1766,19 @@ export const FuturesAbi = [
   {
     "inputs": [],
     "name": "speedHps",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "takerFee",
     "outputs": [
       {
         "internalType": "uint256",

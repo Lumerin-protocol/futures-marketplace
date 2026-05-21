@@ -4,7 +4,8 @@
 
 export {
   handleInitialized,
-  handleOrderFeeUpdated,
+  handleMakerFeeUpdated,
+  handleTakerFeeUpdated,
   handleUpgraded,
   handleValidatorURLUpdated,
 } from "./handlers/admin";

@@ -15,7 +15,8 @@ export function getOrCreateFutures(): Futures {
     futures.validatorURL = "";
     futures.startBlock = readStartBlockFromContext();
     futures.minimumPriceIncrement = BigInt.zero();
-    futures.orderFee = BigInt.zero();
+    futures.makerFee = BigInt.zero();
+    futures.takerFee = BigInt.zero();
     futures.liquidationMarginPercent = 0;
     futures.speedHps = BigInt.zero();
     futures.deliveryDurationDays = 0;
@@ -69,8 +70,11 @@ export function loadFuturesFromContract(futures: Futures): void {
   const minPx = contract.try_minimumPriceIncrement();
   if (!minPx.reverted) futures.minimumPriceIncrement = minPx.value;
 
-  const orderFee = contract.try_orderFee();
-  if (!orderFee.reverted) futures.orderFee = orderFee.value;
+  const makerFee = contract.try_makerFee();
+  if (!makerFee.reverted) futures.makerFee = makerFee.value;
+
+  const takerFee = contract.try_takerFee();
+  if (!takerFee.reverted) futures.takerFee = takerFee.value;
 
   const liqMargin = contract.try_liquidationMarginPercent();
   if (!liqMargin.reverted) futures.liquidationMarginPercent = liqMargin.value;

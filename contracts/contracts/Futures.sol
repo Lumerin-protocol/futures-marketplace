@@ -42,7 +42,9 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     ///         and no longer participates in market-price calculation. Retained as state for ABI back-compat.
     uint256 public speedHps;
     uint256 public minimumPriceIncrement; // difference between two closest prices in the order table
-    uint256 public orderFee; // fee for creating an order in tokens
+    /// @notice Flat fee charged to the taker (the incoming order's owner) on every matched unit.
+    /// @dev Occupies the storage slot previously named `orderFee` so existing on-chain fee values are preserved across upgrade.
+    uint256 public takerFee;
     uint256 private nonce = 0; // nonce for the order id
 
     address private _gap;
@@ -61,7 +63,9 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     string public validatorURL;
     uint256 public collectedFeesBalance;
     uint256 private _gap2;
-    mapping(address => uint8) private addressFeeDiscountPercent;
+    /// @dev Reserved slot — previously `mapping(address => uint8) addressFeeDiscountPercent`. Kept to preserve
+    ///      storage layout for variables that follow. Stale entries from before the upgrade are unreadable.
+    mapping(address => uint8) private _gap4;
     /// @notice Precomputed divisor used to rebase oracle answers from `oracle.decimals()` to the wrapped
     ///         token's decimals. Recomputed whenever the oracle is set.
     /// @dev Equals 10^(oracle.decimals() - token.decimals()). Reverts on `setOracle` if the oracle has
@@ -84,13 +88,17 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     ///         order) and `liquidatePosition` (per closed position). Settable by the owner.
     uint256 public liquidationFee;
 
+    /// @notice Flat fee charged to the maker (the resting order's owner) on every matched unit.
+    /// @dev Appended at the end of storage during the maker/taker fee upgrade.
+    uint256 public makerFee;
+
     // immutable
     /// @dev Unified collateral vault (Titan `CollateralVault` or compatible). Baked into the implementation via constructor.
     ICollateralVault public immutable collateralVault;
     uint8 private immutable _decimals; // decimals of the wrapped token
 
     // constants
-    string public constant VERSION = "2.8.0";
+    string public constant VERSION = "2.9.0";
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     /// @notice Maximum absolute quantity accepted in a single `createOrder` call.
     /// @dev Bounded by the int8 parameter type. Exposed as a constant so off-chain
@@ -162,7 +170,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     ///                LIQUIDATED — margin-call; RESET — admin reset.
     event OrderClosed(bytes32 indexed orderId, address indexed participant, OrderCloseReason reason);
 
-    event OrderFeeUpdated(uint256 orderFee);
+    event MakerFeeUpdated(uint256 makerFee);
+    event TakerFeeUpdated(uint256 takerFee);
 
     /// @notice Fired when a new matched unit (qty=1) is created.
     /// @param lotId         The on-chain position ID of this matched unit.
@@ -321,10 +330,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         EnumerableSet.Bytes32Set storage participantPriceOrderIds =
             participantDeliveryDatePriceOrderIdsIndex[_msgSender()][_deliveryDate][_price];
 
-        bool orderCreatedOrMatched = false;
-
         for (uint8 i = 0; i < abs8(_qty); i++) {
-            bool created = _createOrMatchSingleOrder(
+            _createOrMatchSingleOrder(
                 orderIndex,
                 oppositeOrderIndex,
                 participantPriceOrderIds,
@@ -332,42 +339,34 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
                 _price,
                 _deliveryDate,
                 _destURL,
-                _isBuy
+                _isBuy,
+                true
             );
-            if (created) {
-                orderCreatedOrMatched = true;
-            }
         }
 
-        // order fee only for created or matched orders
-        if (orderCreatedOrMatched) {
-            _payOrderFee(_msgSender());
-        }
         ensureNoCollateralDeficit(_msgSender());
     }
 
-    function getOrderFee(address _participant) public view returns (uint256) {
-        uint8 feeDiscountPercent = addressFeeDiscountPercent[_participant];
-        return orderFee - orderFee * feeDiscountPercent / 100;
-    }
-
-    function _payOrderFee(address _participant) private {
-        uint256 fee = getOrderFee(_participant);
-        collectedFeesBalance += fee;
-        if (fee > 0) {
-            _internalTransfer(_participant, address(this), fee);
+    /// @dev Charges flat maker and taker fees, transferring them from the participants' vault balances
+    ///      into `address(this)` and crediting `collectedFeesBalance`. Called only on actual matches
+    ///      (not on plain order placement and not on liquidation-driven matches).
+    function _chargeMatchFees(address _maker, address _taker) private {
+        uint256 makerAmt = makerFee;
+        uint256 takerAmt = takerFee;
+        if (makerAmt > 0) {
+            collectedFeesBalance += makerAmt;
+            _internalTransfer(_maker, address(this), makerAmt);
         }
-    }
-
-    function setFeeDiscountPercent(address _address, uint8 _feeDiscountPercent) external onlyOwner {
-        if (_feeDiscountPercent > 100) {
-            revert ValueOutOfRange(0, 100);
+        if (takerAmt > 0) {
+            collectedFeesBalance += takerAmt;
+            _internalTransfer(_taker, address(this), takerAmt);
         }
-        addressFeeDiscountPercent[_address] = _feeDiscountPercent;
     }
 
     /// @notice Creates or matches a single order
     /// @dev Creates a new order if no matching order is found, otherwise matches the order
+    /// @param _chargeFees When true and a match occurs, maker/taker fees are charged. Set to false for
+    ///                    liquidation-driven matches that must not impose trading fees on either side.
     /// @return orderCreated Return true if the order was created or matched, false if it offsetted existing order (closed)
     function _createOrMatchSingleOrder(
         StructuredLinkedList.List storage orderIndexId,
@@ -377,7 +376,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         uint256 _price,
         uint256 _deliveryDate,
         string memory _destURL,
-        bool _isBuy
+        bool _isBuy,
+        bool _chargeFees
     ) private returns (bool orderCreated) {
         //
         // No matching order found
@@ -421,6 +421,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
         // delete matching order
         _closeOrder(oppositeOrderId, oppositeOrder, OrderCloseReason.MATCHED);
+
+        // charge maker/taker fees on the fill (skipped for liquidation-driven matches).
+        if (_chargeFees) {
+            _chargeMatchFees(oppositeOrder.participant, _participant);
+        }
 
         // create new position
         _createPosition(oppositeOrderId, oppositeOrder, _participant, _destURL, takerOrderId);
@@ -716,9 +721,16 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         futureDeliveryDatesCount = _futureDeliveryDatesCount;
     }
 
-    function setOrderFee(uint256 _orderFee) external onlyOwner {
-        orderFee = _orderFee;
-        emit OrderFeeUpdated(_orderFee);
+    /// @notice Set the flat maker fee charged to the resting order's owner on every matched unit.
+    function setMakerFee(uint256 _makerFee) external onlyOwner {
+        makerFee = _makerFee;
+        emit MakerFeeUpdated(_makerFee);
+    }
+
+    /// @notice Set the flat taker fee charged to the incoming order's owner on every matched unit.
+    function setTakerFee(uint256 _takerFee) external onlyOwner {
+        takerFee = _takerFee;
+        emit TakerFeeUpdated(_takerFee);
     }
 
     /// @notice Set the flat liquidation fee paid by `liquidateOrder` / `liquidateOrders`
@@ -1133,7 +1145,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             orderPricePerDay,
             position.deliveryAt,
             position.destURL,
-            isBuy
+            isBuy,
+            false
         );
 
         _closeAndCashSettleDelivery(_positionId, position, LotCloseReason.LIQUIDATION, address(0));

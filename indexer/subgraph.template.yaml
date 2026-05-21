@@ -58,8 +58,10 @@ dataSources:
           handler: handleLotPaymentWithdrawn
         - event: LotLiquidated(indexed bytes32,indexed address,indexed address,uint256)
           handler: handleLotLiquidated
-        - event: OrderFeeUpdated(uint256)
-          handler: handleOrderFeeUpdated
+        - event: MakerFeeUpdated(uint256)
+          handler: handleMakerFeeUpdated
+        - event: TakerFeeUpdated(uint256)
+          handler: handleTakerFeeUpdated
         - event: ValidatorURLUpdated(string)
           handler: handleValidatorURLUpdated
         - event: Liquidation(indexed address,indexed address,int256,int256)

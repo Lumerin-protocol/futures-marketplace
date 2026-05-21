@@ -179,9 +179,15 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
       <SpecSection>
         <SectionTitle>FEES & LIMITS</SectionTitle>
         <SpecItem>
-          <SpecLabel>Order Fee</SpecLabel>
+          <SpecLabel>Maker Fee</SpecLabel>
           <SpecValue>
-            {contractConstants.orderFeeFormatted?.toFixed(2) ?? "..."} {tokenSymbol}
+            {contractConstants.makerFeeFormatted?.toFixed(2) ?? "..."} {tokenSymbol}
+          </SpecValue>
+        </SpecItem>
+        <SpecItem>
+          <SpecLabel>Taker Fee</SpecLabel>
+          <SpecValue>
+            {contractConstants.takerFeeFormatted?.toFixed(2) ?? "..."} {tokenSymbol}
           </SpecValue>
         </SpecItem>
 

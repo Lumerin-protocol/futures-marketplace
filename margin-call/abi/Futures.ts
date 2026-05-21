@@ -125,6 +125,11 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "NotLiquidatable",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "NothingToWithdraw",
     "type": "error"
   },
@@ -150,7 +155,17 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "OrderNotBelongToParticipant",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "OrderNotBelongToSender",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OrdersStillOpen",
     "type": "error"
   },
   {
@@ -193,6 +208,11 @@ export const FuturesAbi = [
   {
     "inputs": [],
     "name": "PositionDestURLNotSet",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PositionNotBelongToParticipant",
     "type": "error"
   },
   {
@@ -314,6 +334,242 @@ export const FuturesAbi = [
     "anonymous": false,
     "inputs": [
       {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newLiquidationFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "LiquidationFeeUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "lotId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "seller",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "buyer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "sellerPnl",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "buyerPnl",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "closedBy",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum Futures.LotCloseReason",
+        "name": "reason",
+        "type": "uint8"
+      }
+    ],
+    "name": "LotClosed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "lotId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "seller",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "buyer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "pricePerDay",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "deliveryAt",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "makerOrderId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "takerOrderId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "LotCreated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "lotId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "participant",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "liquidator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "fee",
+        "type": "uint256"
+      }
+    ],
+    "name": "LotLiquidated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "lotId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "LotPaid",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "lotId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "LotPaymentWithdrawn",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "oldLotId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "newLotId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "exitingParticipant",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "newParticipant",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "exitPnl",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newPricePerDay",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "makerOrderId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "takerOrderId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "LotTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "makerFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "MakerFeeUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
         "indexed": true,
         "internalType": "bytes32",
         "name": "orderId",
@@ -324,6 +580,12 @@ export const FuturesAbi = [
         "internalType": "address",
         "name": "participant",
         "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum Futures.OrderCloseReason",
+        "name": "reason",
+        "type": "uint8"
       }
     ],
     "name": "OrderClosed",
@@ -376,13 +638,31 @@ export const FuturesAbi = [
     "anonymous": false,
     "inputs": [
       {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "orderId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "participant",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "liquidator",
+        "type": "address"
+      },
+      {
         "indexed": false,
         "internalType": "uint256",
-        "name": "orderFee",
+        "name": "fee",
         "type": "uint256"
       }
     ],
-    "name": "OrderFeeUpdated",
+    "name": "OrderLiquidated",
     "type": "event"
   },
   {
@@ -408,144 +688,13 @@ export const FuturesAbi = [
     "anonymous": false,
     "inputs": [
       {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "positionId",
-        "type": "bytes32"
-      }
-    ],
-    "name": "PositionClosed",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "positionId",
-        "type": "bytes32"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "seller",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "buyer",
-        "type": "address"
-      },
-      {
         "indexed": false,
         "internalType": "uint256",
-        "name": "sellPricePerDay",
+        "name": "takerFee",
         "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "buyPricePerDay",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "deliveryAt",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "string",
-        "name": "destURL",
-        "type": "string"
-      },
-      {
-        "indexed": false,
-        "internalType": "bytes32",
-        "name": "orderId",
-        "type": "bytes32"
-      },
-      {
-        "indexed": false,
-        "internalType": "bytes32",
-        "name": "takerOrderId",
-        "type": "bytes32"
       }
     ],
-    "name": "PositionCreated",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "positionId",
-        "type": "bytes32"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "closedBy",
-        "type": "address"
-      }
-    ],
-    "name": "PositionDeliveryClosed",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "positionId",
-        "type": "bytes32"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "participant",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "int256",
-        "name": "pnl",
-        "type": "int256"
-      }
-    ],
-    "name": "PositionExited",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "positionId",
-        "type": "bytes32"
-      }
-    ],
-    "name": "PositionPaid",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "positionId",
-        "type": "bytes32"
-      }
-    ],
-    "name": "PositionPaymentReceived",
+    "name": "TakerFeeUpdated",
     "type": "event"
   },
   {
@@ -1031,25 +1180,6 @@ export const FuturesAbi = [
         "type": "address"
       }
     ],
-    "name": "getOrderFee",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_participant",
-        "type": "address"
-      }
-    ],
     "name": "getOrderIds",
     "outputs": [
       {
@@ -1293,6 +1423,68 @@ export const FuturesAbi = [
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "_orderId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "liquidateOrder",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      }
+    ],
+    "name": "liquidateOrders",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "_positionId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "liquidatePosition",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "liquidationFee",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "liquidationMarginPercent",
     "outputs": [
@@ -1300,6 +1492,19 @@ export const FuturesAbi = [
         "internalType": "uint8",
         "name": "",
         "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "makerFee",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -1361,19 +1566,6 @@ export const FuturesAbi = [
       }
     ],
     "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "orderFee",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -1457,24 +1649,6 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "_address",
-        "type": "address"
-      },
-      {
-        "internalType": "uint8",
-        "name": "_feeDiscountPercent",
-        "type": "uint8"
-      }
-    ],
-    "name": "setFeeDiscountPercent",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
         "internalType": "uint8",
         "name": "_futureDeliveryDatesCount",
         "type": "uint8"
@@ -1488,12 +1662,38 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "_liquidationFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "setLiquidationFee",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "uint8",
         "name": "_liquidationMarginPercent",
         "type": "uint8"
       }
     ],
     "name": "setLiquidationMarginPercent",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_makerFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "setMakerFee",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1528,11 +1728,11 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "_orderFee",
+        "name": "_takerFee",
         "type": "uint256"
       }
     ],
-    "name": "setOrderFee",
+    "name": "setTakerFee",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1566,6 +1766,19 @@ export const FuturesAbi = [
   {
     "inputs": [],
     "name": "speedHps",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "takerFee",
     "outputs": [
       {
         "internalType": "uint256",

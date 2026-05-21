@@ -1,7 +1,8 @@
 import { log } from "@graphprotocol/graph-ts";
 import {
   Initialized,
-  OrderFeeUpdated,
+  MakerFeeUpdated,
+  TakerFeeUpdated,
   Upgraded,
   ValidatorURLUpdated,
 } from "../../generated/Futures/Futures";
@@ -27,10 +28,18 @@ export function handleUpgraded(event: Upgraded): void {
   futures.save();
 }
 
-export function handleOrderFeeUpdated(event: OrderFeeUpdated): void {
-  log.debug("order fee updated event ", [stringifyParameters(event)]);
+export function handleMakerFeeUpdated(event: MakerFeeUpdated): void {
+  log.debug("maker fee updated event ", [stringifyParameters(event)]);
   const futures = getOrCreateFutures();
-  futures.orderFee = event.params.orderFee;
+  futures.makerFee = event.params.makerFee;
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+export function handleTakerFeeUpdated(event: TakerFeeUpdated): void {
+  log.debug("taker fee updated event ", [stringifyParameters(event)]);
+  const futures = getOrCreateFutures();
+  futures.takerFee = event.params.takerFee;
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
 }

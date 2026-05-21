@@ -8,11 +8,13 @@ import {
 import { newTypedMockEventWithParams } from "matchstick-as/assembly/defaults";
 import { BigInt } from "@graphprotocol/graph-ts";
 import {
-  OrderFeeUpdated,
+  MakerFeeUpdated,
+  TakerFeeUpdated,
   ValidatorURLUpdated,
 } from "../generated/Futures/Futures";
 import {
-  handleOrderFeeUpdated,
+  handleMakerFeeUpdated,
+  handleTakerFeeUpdated,
   handleValidatorURLUpdated,
 } from "../src/handlers/admin";
 import {
@@ -30,12 +32,20 @@ describe("admin handlers", () => {
     setupFutures();
   });
 
-  test("handleOrderFeeUpdated updates Futures.orderFee", () => {
+  test("handleMakerFeeUpdated updates Futures.makerFee", () => {
     const fee = BigInt.fromI64(42);
-    handleOrderFeeUpdated(
-      newTypedMockEventWithParams<OrderFeeUpdated>([paramUint("orderFee", fee)]),
+    handleMakerFeeUpdated(
+      newTypedMockEventWithParams<MakerFeeUpdated>([paramUint("makerFee", fee)]),
     );
-    assert.fieldEquals("Futures", "0", "orderFee", fee.toString());
+    assert.fieldEquals("Futures", "0", "makerFee", fee.toString());
+  });
+
+  test("handleTakerFeeUpdated updates Futures.takerFee", () => {
+    const fee = BigInt.fromI64(7);
+    handleTakerFeeUpdated(
+      newTypedMockEventWithParams<TakerFeeUpdated>([paramUint("takerFee", fee)]),
+    );
+    assert.fieldEquals("Futures", "0", "takerFee", fee.toString());
   });
 
   test("handleValidatorURLUpdated updates Futures.validatorURL", () => {
@@ -57,8 +67,8 @@ describe("Futures.startBlock from data source context", () => {
     mockFuturesContractCallsAsReverted();
     // No setupFutures() — first handler invocation creates the singleton and
     // must read startBlock from the mocked data source context.
-    handleOrderFeeUpdated(
-      newTypedMockEventWithParams<OrderFeeUpdated>([paramUint("orderFee", BigInt.fromI32(1))]),
+    handleTakerFeeUpdated(
+      newTypedMockEventWithParams<TakerFeeUpdated>([paramUint("takerFee", BigInt.fromI32(1))]),
     );
     assert.fieldEquals("Futures", "0", "startBlock", startBlock.toString());
   });
