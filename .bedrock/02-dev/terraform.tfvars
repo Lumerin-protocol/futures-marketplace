@@ -27,17 +27,6 @@ market_maker = {
   min_usdc_balance            = "10000000"            # 10 USDC (10n * 10n ** 6n)
 }
 
-margin_call_lambda = {
-  create                             = true
-  log_level                          = "debug"
-  job_interval                       = "15"
-  timeout                            = 300
-  memory_size                        = 512
-  margin_utilization_warning_percent = "80"
-  daily_schedule_hour                = "0"           # UTC hour (0-23). Examples: 0=midnight UTC, 14=09:00 EST/10:00 EDT, 21=16:00 EST/17:00 EDT
-  daily_schedule_minute              = "0"           # UTC minute (0-59)
-}
-
 notifications_service = {
   create                     = true
   protect                    = false

@@ -10,7 +10,7 @@ import {
 import { Lot, OrderEntry, User } from "../../generated/schema";
 import { LotCloseReason, LotStatus } from "../enums";
 import { applyExitFill, applyOpenFill, flushFuturesCounters } from "../internal/match";
-import { getOrCreateFutures, getOrCreateUser } from "../internal/store";
+import { getOrCreateFutures, getOrCreateUser, markLiquidationTx } from "../internal/store";
 import { stringifyParameters } from "../internal/utils";
 
 export function handleLotCreated(event: LotCreated): void {
@@ -279,6 +279,14 @@ export function handleLotLiquidated(event: LotLiquidated): void {
   lot.liquidationFee = event.params.fee;
   lot.updatedAt = event.block.timestamp;
   lot.save();
+
+  if (markLiquidationTx(event.transaction.hash)) {
+    const futures = getOrCreateFutures();
+    flushFuturesCounters(futures);
+    futures.totalLiquidations++;
+    futures.lastUpdatedAt = event.block.timestamp;
+    futures.save();
+  }
 }
 
 /// Empty string sentinel = unknown reason. Caller logs + skips so a future

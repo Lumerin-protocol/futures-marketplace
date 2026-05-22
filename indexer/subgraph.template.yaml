@@ -62,8 +62,6 @@ dataSources:
           handler: handleOrderLiquidated
         - event: ConfigUpdated((uint256,uint256,uint256,uint256,uint256,uint8,uint8,address,address,address,string))
           handler: handleConfigUpdated
-        - event: Liquidation(indexed address,indexed address,int256,int256)
-          handler: handleLiquidation
         - event: BadDebt(indexed address,uint256)
           handler: handleBadDebt
       file: ./src/futures.ts

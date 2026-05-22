@@ -6,6 +6,7 @@ export namespace OrderStatus {
   export const ACTIVE: string = "ACTIVE";
   export const PARTIAL: string = "PARTIAL";
   export const FILLED: string = "FILLED";
+  export const PARTIALLY_FILLED: string = "PARTIALLY_FILLED";
   export const CANCELLED: string = "CANCELLED";
 }
 

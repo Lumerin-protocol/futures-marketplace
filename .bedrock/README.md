@@ -55,12 +55,6 @@ The Futures Marketplace consists of four main services:
 - Internal ALB for service-to-service communication
 - Singleton deployment (Telegram bot requirement)
 
-### 4. Margin Call Lambda
-- Scheduled Lambda function for position monitoring
-- Runs on configurable interval (default: 15 minutes)
-- Daily execution with `executeMarginCall` flag
-- Triggers notifications when margin thresholds exceeded
-
 ## Deployment Flow
 
 ### UI Deployment
@@ -187,15 +181,6 @@ Shared Fargate cluster for all services:
 - **Security Groups**: ALB, ECS, and RDS security groups with proper rules
 - **DNS**: `notifyint.{env}.lumerin.io` (internal)
 
-### Margin Call Lambda
-
-- **Lambda Function**: Node.js 22.x runtime
-- **VPC Configuration**: Runs in private subnets for ALB access
-- **EventBridge Rules**: 
-  - Interval schedule (default: 15 minutes)
-  - Daily schedule with `executeMarginCall` flag
-- **IAM Role**: Secrets access, VPC execution, basic Lambda execution
-
 ### Secrets Management
 
 Three secrets stored in AWS Secrets Manager:
@@ -219,7 +204,7 @@ notifications-secrets-v3-{env}
 
 ### Monitoring
 
-Comprehensive monitoring with 17+ component alarms organized by service:
+Comprehensive monitoring with 14+ component alarms organized by service:
 
 #### Futures UI Alarms (3)
 - `futures-ui-5xx-errors`: CloudFront 5xx error rate
@@ -244,11 +229,6 @@ Comprehensive monitoring with 17+ component alarms organized by service:
 #### Notifications ALB Alarms (2)
 - `notifications-alb-5xx`: ALB 5xx errors
 - `notifications-alb-unhealthy`: Unhealthy host count
-
-#### Margin Call Lambda Alarms (3)
-- `margin-call-errors`: Lambda invocation errors
-- `margin-call-duration`: Execution duration high
-- `margin-call-throttles`: Lambda throttling
 
 #### Composite Alarms
 - Aggregated health status per service
@@ -301,17 +281,6 @@ market_maker = {
   grid_levels      = 5
   loop_interval_ms = 15000
   # ... additional config
-}
-
-# Margin Call Lambda
-margin_call_lambda = {
-  create                             = true
-  job_interval                       = "15"
-  timeout                            = 300
-  memory_size                        = 512
-  margin_utilization_warning_percent = "80"
-  daily_schedule_hour                = "0"
-  daily_schedule_minute              = "0"
 }
 
 # Notifications Service
@@ -475,7 +444,6 @@ terragrunt destroy
 │   ├── 03_ecs_cluster.tf              # ECS Cluster with Container Insights
 │   ├── 04_futures_ui.tf               # S3/CloudFront static website
 │   ├── 06_notifications_service.tf    # Notifications ECS + RDS + ALB
-│   ├── 07_margin_call_lambda.tf       # Margin Call Lambda function
 │   ├── 10_market_maker_svc.tf         # Market Maker ECS service
 │   ├── 70_monitoring_common.tf        # Monitoring locals, Route53 health check
 │   ├── 71_metric_filters.tf           # CloudWatch metric filters

@@ -67,8 +67,6 @@ type User @entity(immutable: false) {
   "Per-(user, deliveryAt) running net qty + open-session pointers, one entry per delivery date the user has touched."
   deliveryPointers: [UserDeliverySessionPointer!]! @derivedFrom(field: "user")
   badDebts: [BadDebtEvent!]! @derivedFrom(field: "user")
-  liquidationsAsUser: [Liquidation!]! @derivedFrom(field: "user")
-  liquidationsAsLiquidator: [Liquidation!]! @derivedFrom(field: "liquidator")
 
   # Timestamps
   createdAt: BigInt!
@@ -102,9 +100,15 @@ type Order @entity(immutable: false) {
 }
 
 enum OrderStatus {
+  "Still ACTIVE entries left; no terminal events yet."
   ACTIVE
+  "Non-terminal: still has ACTIVE entries plus at least one filled or cancelled."
   PARTIAL
+  "Terminal: every entry matched."
   FILLED
+  "Terminal: at least one entry matched AND at least one was cancelled."
+  PARTIALLY_FILLED
+  "Terminal: every entry cancelled (no fills)."
   CANCELLED
 }
 
@@ -254,16 +258,12 @@ enum PositionSessionStatus {
   CLOSE
 }
 
-# Liquidation event (driven by the new on-chain Liquidation event).
-type Liquidation @entity(immutable: true) {
-  id: Bytes! # tx hash + log index
-  user: User!
-  liquidator: User!
-  reclaimedMargin: BigInt!
-  realizedPnl: BigInt! # signed: net change in user collateral from forced position closes
-  timestamp: BigInt!
-  blockNumber: BigInt!
-  transactionHash: Bytes!
+# Per-tx sentinel used by handleOrderLiquidated / handleLotLiquidated to bump
+# `Futures.totalLiquidations` exactly once regardless of how many legs the
+# keeper liquidation tx contained. The entity itself carries no data — its
+# existence is the dedup signal.
+type LiquidationTx @entity(immutable: true) {
+  id: Bytes! # transaction hash
 }
 
 # Bad debt event when a participant or the insurance fund cannot cover a loss.

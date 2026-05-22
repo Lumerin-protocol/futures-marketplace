@@ -140,11 +140,6 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "OnlyValidator",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "OnlyValidatorOrPositionParticipant",
     "type": "error"
   },
@@ -367,37 +362,6 @@ export const FuturesAbi = [
       }
     ],
     "name": "Initialized",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "participant",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "liquidator",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "int256",
-        "name": "reclaimedMargin",
-        "type": "int256"
-      },
-      {
-        "indexed": false,
-        "internalType": "int256",
-        "name": "realizedPnl",
-        "type": "int256"
-      }
-    ],
-    "name": "Liquidation",
     "type": "event"
   },
   {
@@ -1526,19 +1490,6 @@ export const FuturesAbi = [
       }
     ],
     "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_participant",
-        "type": "address"
-      }
-    ],
-    "name": "marginCall",
-    "outputs": [],
-    "stateMutability": "nonpayable",
     "type": "function"
   },
   {

@@ -6,7 +6,7 @@
  * still map correctly:
  *   - EXPIRED:    after `deliveryAt`, `removeOutdatedOrdersForParticipant`
  *                 sweeps stale orders. (`OrderCloseReason = 2`)
- *   - LIQUIDATED: `marginCall` force-closes resting orders before touching
+ *   - LIQUIDATED: permissionless `liquidateOrders` force-cancels resting orders before touching
  *                 positions. (`OrderCloseReason = 3`)
  *
  * (The RESET status is covered by `lot-reset.test.ts`.)
@@ -111,10 +111,10 @@ describe("OrderEntryStatus.EXPIRED: removeOutdatedOrdersForParticipant", () => {
   });
 });
 
-describe("OrderEntryStatus.LIQUIDATED: marginCall force-closes resting orders", () => {
+describe("OrderEntryStatus.LIQUIDATED: liquidateOrders force-cancels resting orders", () => {
   after(() => matchstick.reset());
 
-  it("flips resting OrderEntry.status to LIQUIDATED before touching positions", async () => {
+  it("flips a resting OrderEntry.status to LIQUIDATED via permissionless liquidateOrders", async () => {
     const { contracts, accounts, config } = await conn.networkHelpers.loadFixture(
       deployFuturesFixture,
     );
@@ -151,7 +151,7 @@ describe("OrderEntryStatus.LIQUIDATED: marginCall force-closes resting orders", 
     // 3. Crash the market so the seller's portfolio MM is breached.
     await scaleHashprice(hashrateOracle, 40n, 1n);
 
-    const liqTx = await futures.write.marginCall([seller.account.address], {
+    const liqTx = await futures.write.liquidateOrders([seller.account.address], {
       account: validator.account,
     });
     const liqReceipt = await pc.waitForTransactionReceipt({ hash: liqTx });
@@ -165,11 +165,11 @@ describe("OrderEntryStatus.LIQUIDATED: marginCall force-closes resting orders", 
     const liquidatedClose = orderClosedEvents.find(
       (e) => e.args.orderId.toLowerCase() === restingOrderId,
     );
-    assert.ok(liquidatedClose, "the resting order must be closed during marginCall");
+    assert.ok(liquidatedClose, "the resting order must be closed during liquidateOrders");
     assert.equal(
       liquidatedClose.args.reason,
       3,
-      "marginCall must emit OrderClosed with reason=3 (LIQUIDATED) on the resting order",
+      "liquidateOrders must emit OrderClosed with reason=3 (LIQUIDATED) on the resting order",
     );
 
     const snap = await matchstick.indexSnapshot([read("OrderEntry", restingOrderId)]);

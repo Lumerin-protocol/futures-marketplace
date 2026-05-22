@@ -7,53 +7,16 @@ import {
 } from "matchstick-as/assembly/index";
 import { newTypedMockEventWithParams } from "matchstick-as/assembly/defaults";
 import { BigInt } from "@graphprotocol/graph-ts";
-import { BadDebt, Liquidation } from "../generated/Futures/Futures";
-import { handleBadDebt, handleLiquidation } from "../src/handlers/liquidation";
+import { BadDebt } from "../generated/Futures/Futures";
+import { handleBadDebt } from "../src/handlers/liquidation";
 import {
   eventIdHex,
   paramAddr,
-  paramInt,
   paramUint,
   setupDataSourceMock,
   setupFutures,
   userAddress,
 } from "./helpers";
-
-describe("handleLiquidation", () => {
-  beforeEach(() => {
-    clearStore();
-    setupDataSourceMock();
-    setupFutures();
-  });
-
-  test("creates a Liquidation entity, bumps user pnl + Futures.totalLiquidations", () => {
-    const user = userAddress(1);
-    const liquidator = userAddress(2);
-    const reclaim = BigInt.fromI64(500_000);
-    const pnl = BigInt.fromI64(-250_000);
-
-    handleLiquidation(
-      newTypedMockEventWithParams<Liquidation>([
-        paramAddr("participant", user),
-        paramAddr("liquidator", liquidator),
-        paramInt("reclaimedMargin", reclaim),
-        paramInt("realizedPnl", pnl),
-      ]),
-    );
-
-    const id = eventIdHex();
-    assert.entityCount("Liquidation", 1);
-    assert.fieldEquals("Liquidation", id, "user", user.toHexString());
-    assert.fieldEquals("Liquidation", id, "liquidator", liquidator.toHexString());
-    assert.fieldEquals("Liquidation", id, "reclaimedMargin", reclaim.toString());
-    assert.fieldEquals("Liquidation", id, "realizedPnl", pnl.toString());
-
-    // User.realizedPnl is driven by per-lot LotClosed/LotTransferred handlers
-    // (via applyExitFill), not the aggregate Liquidation event, to avoid
-    // double-counting. The Liquidation entity itself records the aggregate.
-    assert.fieldEquals("Futures", "0", "totalLiquidations", "1");
-  });
-});
 
 describe("handleBadDebt", () => {
   beforeEach(() => {

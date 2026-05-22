@@ -79,7 +79,8 @@ const fetchHistoricalOrders = async (
     deliveryAt: BigInt(order.deliveryAt),
     pricePerDay: BigInt(order.price),
     isBuy: order.isBuy,
-    // Anything coming back from this query is FILLED or CANCELLED — never active.
+    // Anything coming back from this query is in a terminal state (FILLED,
+    // PARTIALLY_FILLED, or CANCELLED) — never active.
     isActive: false,
     status: order.status,
     closedAt: order.closedAt,

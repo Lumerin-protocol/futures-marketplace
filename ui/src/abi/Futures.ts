@@ -140,11 +140,6 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "OnlyValidator",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "OnlyValidatorOrPositionParticipant",
     "type": "error"
   },
@@ -290,6 +285,76 @@ export const FuturesAbi = [
     "anonymous": false,
     "inputs": [
       {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "makerFee",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "takerFee",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "liquidationFee",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "breachPenaltyRatePerDay",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "minimumPriceIncrement",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint8",
+            "name": "liquidationMarginPercent",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "futureDeliveryDatesCount",
+            "type": "uint8"
+          },
+          {
+            "internalType": "address",
+            "name": "validatorAddress",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "hashrateOracle",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "marginEngine",
+            "type": "address"
+          },
+          {
+            "internalType": "string",
+            "name": "validatorURL",
+            "type": "string"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct Futures.Config",
+        "name": "config",
+        "type": "tuple"
+      }
+    ],
+    "name": "ConfigUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
         "indexed": false,
         "internalType": "uint64",
         "name": "version",
@@ -297,50 +362,6 @@ export const FuturesAbi = [
       }
     ],
     "name": "Initialized",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "participant",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "liquidator",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "int256",
-        "name": "reclaimedMargin",
-        "type": "int256"
-      },
-      {
-        "indexed": false,
-        "internalType": "int256",
-        "name": "realizedPnl",
-        "type": "int256"
-      }
-    ],
-    "name": "Liquidation",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "newLiquidationFee",
-        "type": "uint256"
-      }
-    ],
-    "name": "LiquidationFeeUpdated",
     "type": "event"
   },
   {
@@ -534,7 +555,13 @@ export const FuturesAbi = [
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "newPricePerDay",
+        "name": "newSellPricePerDay",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newBuyPricePerDay",
         "type": "uint256"
       },
       {
@@ -557,29 +584,10 @@ export const FuturesAbi = [
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "makerFee",
-        "type": "uint256"
-      }
-    ],
-    "name": "MakerFeeUpdated",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
         "indexed": true,
         "internalType": "bytes32",
         "name": "orderId",
         "type": "bytes32"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "participant",
-        "type": "address"
       },
       {
         "indexed": false,
@@ -688,19 +696,6 @@ export const FuturesAbi = [
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "takerFee",
-        "type": "uint256"
-      }
-    ],
-    "name": "TakerFeeUpdated",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
         "indexed": true,
         "internalType": "address",
         "name": "implementation",
@@ -708,19 +703,6 @@ export const FuturesAbi = [
       }
     ],
     "name": "Upgraded",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "string",
-        "name": "validatorURL",
-        "type": "string"
-      }
-    ],
-    "name": "ValidatorURLUpdated",
     "type": "event"
   },
   {
@@ -1508,19 +1490,6 @@ export const FuturesAbi = [
       }
     ],
     "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_participant",
-        "type": "address"
-      }
-    ],
-    "name": "marginCall",
-    "outputs": [],
-    "stateMutability": "nonpayable",
     "type": "function"
   },
   {

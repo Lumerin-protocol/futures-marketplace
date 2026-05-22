@@ -47,11 +47,6 @@ export const contractErrors = [
     "type": "error"
   },
   {
-    "inputs": [],
-    "name": "OnlyValidator",
-    "type": "error"
-  },
-  {
     "inputs": [
       {
         "internalType": "address",

@@ -1,7 +1,14 @@
 import { Address, BigInt, Bytes, dataSource } from "@graphprotocol/graph-ts";
 import { Futures as FuturesContract } from "../../generated/Futures/Futures";
-import { Futures, PriceLevel, User, UserDeliverySessionPointer } from "../../generated/schema";
+import {
+  Futures,
+  LiquidationTx,
+  PriceLevel,
+  User,
+  UserDeliverySessionPointer,
+} from "../../generated/schema";
 import { priceLevelId, userDeliveryPointerId } from "../ids";
+import { recordNewUser } from "./match";
 
 /// Singleton row keyed by `id = 0`. All contract-wide config + counters live here.
 export function getOrCreateFutures(): Futures {
@@ -123,9 +130,11 @@ export function getOrCreateUser(address: Address, timestamp: BigInt): User {
     user.createdAt = timestamp;
     user.lastActivityAt = timestamp;
 
-    const futures = getOrCreateFutures();
-    futures.totalUsers++;
-    futures.save();
+    // Deferred Futures-singleton write: the totalUsers bump is queued into a
+    // module-level delta and flushed by `flushFuturesCounters` alongside other
+    // per-handler `Futures` updates, keeping the singleton at one save per
+    // handler invocation.
+    recordNewUser();
   }
   return user;
 }
@@ -145,6 +154,17 @@ export function getOrCreatePriceLevel(
     level.totalQuantity = 0;
   }
   return level;
+}
+
+/// Idempotent per-tx marker used by `handleOrderLiquidated` / `handleLotLiquidated`
+/// to bump `Futures.totalLiquidations` exactly once per tx. Returns true iff this
+/// invocation created the marker (i.e. it's the first leg seen in this tx); subsequent
+/// legs in the same tx return false and the caller skips the counter increment.
+export function markLiquidationTx(txHash: Bytes): boolean {
+  if (LiquidationTx.load(txHash) != null) return false;
+  const marker = new LiquidationTx(txHash);
+  marker.save();
+  return true;
 }
 
 /// Per-(user, deliveryAt) bookkeeping pointer: the running net qty, weighted

@@ -295,12 +295,12 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
   });
 
   // Register futures so PME picks up the cross-product margin path used by
-  // `marginCall` / `computePortfolioMM`.
+  // `liquidate*` / `computePortfolioMM`.
   await portfolioMarginEngine.write.setFutures([futures.address], { account: owner.account });
 
   // Align the PME stress shocks with the legacy futures `liquidationMarginPercent`
   // so test fixtures that previously calibrated deposits/moves around the
-  // futures-only `getMinMargin` formula continue to trigger margin calls under
+  // futures-only `getMinMargin` formula continue to trigger liquidations under
   // the cross-product PME model. The default PME shocks (10% IM / 5% MM) are
   // tuned for perps and would otherwise let the futures-only test cases stay
   // healthy through moves the legacy contract treated as liquidatable.

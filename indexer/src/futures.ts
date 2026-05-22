@@ -23,4 +23,4 @@ export {
   handleLotTransferred,
 } from "./handlers/lots";
 
-export { handleBadDebt, handleLiquidation } from "./handlers/liquidation";
+export { handleBadDebt } from "./handlers/liquidation";

@@ -196,11 +196,11 @@ resource "aws_iam_role_policy" "github_ecs_update" {
 }
 
 ################################################################################
-# LAMBDA UPDATE POLICY (for Margin Call and Market Maker Lambdas)
+# LAMBDA UPDATE POLICY (for Market Maker Lambda)
 ################################################################################
 
 resource "aws_iam_role_policy" "github_lambda_update" {
-  count = var.margin_call_lambda.create || var.market_maker.create ? 1 : 0
+  count = var.market_maker.create ? 1 : 0
   name  = "lambda-update-futures-lambdas"
   role  = aws_iam_role.github_actions_futures[count.index].id
 
@@ -218,7 +218,6 @@ resource "aws_iam_role_policy" "github_lambda_update" {
           "lambda:InvokeFunction" # Allow testing the Lambda function
         ]
         Resource = compact([
-          var.margin_call_lambda.create ? aws_lambda_function.margin_call[0].arn : null,
           var.market_maker.create ? aws_lambda_function.market_maker[0].arn : null
         ])
       },
@@ -229,7 +228,6 @@ resource "aws_iam_role_policy" "github_lambda_update" {
           "lambda:UpdateFunctionConfiguration"
         ]
         Resource = compact([
-          var.margin_call_lambda.create ? aws_lambda_function.margin_call[0].arn : null,
           var.market_maker.create ? aws_lambda_function.market_maker[0].arn : null
         ])
       }

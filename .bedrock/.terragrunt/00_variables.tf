@@ -46,12 +46,6 @@ variable "market_maker_eth_node_url" {
   default     = ""
 }
 
-variable "margin_call_lambda" {
-  description = "Margin Call Lambda Service Variables"
-  type        = map(any)
-  default     = {}
-}
-
 variable "notifications_service" {
   description = "Notifications Service Variables"
   type        = map(any)
@@ -70,7 +64,7 @@ variable "telegram_bot_token" {
 ################################################################################
 
 variable "ethereum_rpc_url" {
-  description = "Ethereum RPC URL (used by oracle lambda, indexer, and margin call)"
+  description = "Ethereum RPC URL (used by oracle lambda and indexer)"
   type        = string
   sensitive   = true
   default     = ""
@@ -121,13 +115,13 @@ variable "clone_factory_address" {
 }
 
 variable "hashrate_oracle_address" {
-  description = "Hashrate Oracle contract address (used by oracle lambda, indexer, and margin call)"
+  description = "Hashrate Oracle contract address (used by oracle lambda and indexer)"
   type        = string
   default     = ""
 }
 
 variable "futures_address" {
-  description = "Futures Marketplace contract address (used by margin call lambda)"
+  description = "Futures Marketplace contract address (used by market maker)"
   type        = string
   default     = ""
 }

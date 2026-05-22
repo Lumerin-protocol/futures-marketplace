@@ -4,7 +4,13 @@ import { Order, OrderEntry, User } from "../../generated/schema";
 import { OrderEntryStatus, OrderStatus } from "../enums";
 import { orderAggregateId } from "../ids";
 import { recomputeOrderStatus } from "../internal/orders";
-import { getOrCreateFutures, getOrCreatePriceLevel, getOrCreateUser } from "../internal/store";
+import { flushFuturesCounters } from "../internal/match";
+import {
+  getOrCreateFutures,
+  getOrCreatePriceLevel,
+  getOrCreateUser,
+  markLiquidationTx,
+} from "../internal/store";
 import { stringifyParameters } from "../internal/utils";
 
 /// `OrderCreated` fires once per qty=1 unit that rests in the book — taker
@@ -71,6 +77,7 @@ export function handleOrderCreated(event: OrderCreated): void {
   level.save();
 
   const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
   if (isNewAggregate) {
     futures.totalOrders++;
   }
@@ -135,6 +142,7 @@ export function handleOrderClosed(event: OrderClosed): void {
     user.save();
   }
   const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
   futures.activeOrders--;
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
@@ -143,7 +151,8 @@ export function handleOrderClosed(event: OrderClosed): void {
 /// Overlays per-liquidation attribution onto the OrderEntry. Always fires in the same tx
 /// (and after) the paired `OrderClosed(LIQUIDATED)` so the entry already exists. Kept as a
 /// separate event so the much hotter `OrderClosed` topic doesn't pay for liquidator/fee
-/// bytes on every cancel/match/expire.
+/// bytes on every cancel/match/expire. Also drives `Futures.totalLiquidations`, deduped
+/// per tx via the `LiquidationTx` sentinel so multi-leg liquidation txs count once.
 export function handleOrderLiquidated(event: OrderLiquidated): void {
   log.debug("order liquidated event {}", [stringifyParameters(event)]);
   const entry = OrderEntry.load(event.params.orderId);
@@ -154,6 +163,14 @@ export function handleOrderLiquidated(event: OrderLiquidated): void {
   entry.liquidator = event.params.liquidator;
   entry.liquidationFee = event.params.fee;
   entry.save();
+
+  if (markLiquidationTx(event.transaction.hash)) {
+    const futures = getOrCreateFutures();
+    flushFuturesCounters(futures);
+    futures.totalLiquidations++;
+    futures.lastUpdatedAt = event.block.timestamp;
+    futures.save();
+  }
 }
 
 /// Empty string sentinel = unknown reason. Caller logs + skips so a future

@@ -5,7 +5,7 @@
 
 # IAM policy to allow ECS task execution role to read service secrets
 resource "aws_iam_policy" "futures_marketplace_secret_access" {
-  count       = (var.create_core || var.market_maker.create || var.notifications_service.create || var.margin_call_lambda.create) ? 1 : 0
+  count       = (var.create_core || var.market_maker.create || var.notifications_service.create) ? 1 : 0
   provider    = aws.use1
   name        = "${local.shortname}-secret-access-${substr(var.account_shortname, 8, 3)}"
   description = "Allow ECS tasks to read Futures Marketplace secrets from Secrets Manager"
@@ -22,8 +22,7 @@ resource "aws_iam_policy" "futures_marketplace_secret_access" {
         Resource = compact([
           var.create_core ? aws_secretsmanager_secret.futures.arn : "",
           var.market_maker.create ? aws_secretsmanager_secret.market_maker[0].arn : "",
-          var.notifications_service.create ? aws_secretsmanager_secret.notifications.arn : "",
-          var.margin_call_lambda.create ? aws_secretsmanager_secret.margin_call.arn : ""
+          var.notifications_service.create ? aws_secretsmanager_secret.notifications.arn : ""
         ])
       }
     ]
@@ -41,7 +40,7 @@ resource "aws_iam_policy" "futures_marketplace_secret_access" {
 
 # Attach the policy to the bedrock foundation role
 resource "aws_iam_role_policy_attachment" "futures_marketplace_secret_access" {
-  count      = (var.create_core || var.market_maker.create || var.notifications_service.create || var.margin_call_lambda.create) ? 1 : 0
+  count      = (var.create_core || var.market_maker.create || var.notifications_service.create) ? 1 : 0
   provider   = aws.use1
   role       = "bedrock-foundation-role"
   policy_arn = aws_iam_policy.futures_marketplace_secret_access[0].arn
@@ -139,25 +138,3 @@ resource "aws_secretsmanager_secret_version" "notifications" {
   })
 }
 
-################################################################################
-# MARGIN CALL LAMBDA SECRETS
-################################################################################
-# Separate secret for Margin Call Lambda
-# Contains futures subgraph URL (constructed from API key and subgraph ID)
-
-resource "aws_secretsmanager_secret" "margin_call" {
-  name        = "margin-call-secrets-v3-${substr(var.account_shortname, 8, 3)}"
-  description = "Secrets for Margin Call Lambda (subgraph URL)"
-  tags = merge(var.default_tags, var.foundation_tags, {
-    Name = "margin-call-secrets-v3-${substr(var.account_shortname, 8, 3)}"
-  })
-}
-
-resource "aws_secretsmanager_secret_version" "margin_call" {
-  count = var.margin_call_lambda.create ? 1 : 0
-  # lifecycle {ignore_changes = [secret_string]}
-  secret_id = aws_secretsmanager_secret.margin_call.id
-  secret_string = jsonencode({
-    futures_subgraph_url = lookup(var.gs_subgraphs, "futures", "")
-  })
-}

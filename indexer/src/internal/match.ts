@@ -17,18 +17,27 @@ import { getOrCreateFutures, getOrCreatePointer } from "./store";
 // ----------------------------------------------------------------------------
 // `upsertFill` used to read + write the `Futures` singleton for every Fill leg
 // it processed, which produced multiple redundant store writes per handler
-// invocation (each LotCreated/LotClosed processes two legs).
-// Now `upsertFill` only accumulates new-fill / new-trade deltas into these
-// module-level counters; callers flush them via `flushFuturesCounters` after
-// every other handler-specific write to `Futures`.
+// invocation (each LotCreated/LotClosed processes two legs). Similarly,
+// `getOrCreateUser` used to `Futures.save()` whenever a brand-new user was
+// minted. Both paths now defer the write: they accumulate deltas into these
+// module-level counters and callers flush them via `flushFuturesCounters`
+// alongside other handler-specific Futures writes.
 // ============================================================================
 let pendingNewFills: i32 = 0;
 let pendingNewTrades: i32 = 0;
+let pendingNewUsers: i32 = 0;
 
-/// Applies any pending fill/trade counter deltas onto an in-memory `Futures`
-/// singleton and resets the module-level counters. Caller is responsible for
-/// saving the singleton (lets the same call site also batch in `totalVolume`
-/// / `lastUpdatedAt` updates without an extra store write).
+/// Bumps the deferred `totalUsers` counter. Invoked by `getOrCreateUser` when
+/// it mints a fresh `User` row; the actual `Futures.save()` is batched until
+/// the surrounding handler calls `flushFuturesCounters`.
+export function recordNewUser(): void {
+  pendingNewUsers += 1;
+}
+
+/// Applies any pending fill/trade/user counter deltas onto an in-memory
+/// `Futures` singleton and resets the module-level counters. Caller is
+/// responsible for saving the singleton (lets the same call site also batch in
+/// `totalVolume` / `lastUpdatedAt` updates without an extra store write).
 export function flushFuturesCounters(futures: Futures): void {
   if (pendingNewFills != 0) {
     futures.totalFills += pendingNewFills;
@@ -37,6 +46,10 @@ export function flushFuturesCounters(futures: Futures): void {
   if (pendingNewTrades != 0) {
     futures.totalTrades += pendingNewTrades;
     pendingNewTrades = 0;
+  }
+  if (pendingNewUsers != 0) {
+    futures.totalUsers += pendingNewUsers;
+    pendingNewUsers = 0;
   }
 }
 

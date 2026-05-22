@@ -20,7 +20,7 @@ const { networkHelpers } = await network.getOrCreate();
 // These tests pin the invariant for the two close paths that flow through
 // `_closeAndCashSettleDelivery`:
 //   1. `closeDelivery` → `_closeAndCashSettleDeliveryAndPenalize`
-//   2. `marginCall` → `_forceLiquidatePosition`
+//   2. `liquidatePosition` → `_forceLiquidatePosition`
 describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
   it("trackers stay consistent across closeDelivery → reopen at a new date", async () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
@@ -103,11 +103,11 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     );
   });
 
-  it("trackers clear after marginCall liquidates a position pre-delivery", async () => {
+  it("trackers clear after permissionless liquidatePosition pre-delivery", async () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts, config } = data;
     const { futures, collateralVault, hashrateOracle } = contracts;
-    const { seller, buyer, validator, pc, tc } = accounts;
+    const { seller, buyer, pc, tc } = accounts;
 
     const deliveryDate = config.deliveryDates[0];
     const dst = "https://destination-url.com";
@@ -124,7 +124,13 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     const tx = await futures.write.createOrder([price, deliveryDate, dst, 1], {
       account: buyer.account,
     });
-    await pc.waitForTransactionReceipt({ hash: tx });
+    const matchReceipt = await pc.waitForTransactionReceipt({ hash: tx });
+    const [lotCreated] = parseEventLogs({
+      logs: matchReceipt.logs,
+      abi: futures.abi,
+      eventName: "LotCreated",
+    });
+    const positionId = lotCreated.args.lotId;
 
     const sellerDeltaBefore = await futures.read.getNetPositionDelta([seller.account.address]);
     const buyerDeltaBefore = await futures.read.getNetPositionDelta([buyer.account.address]);
@@ -132,9 +138,9 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     assert.ok(buyerDeltaBefore > 0n, "buyer is long");
 
     // Push the market price above the seller's entry so portfolio MM (PME)
-    // exceeds their balance and `marginCall` actually liquidates. Cash settlement
-    // still has to complete, so the move must remain bounded by the seller's
-    // collateral.
+    // exceeds their balance and `liquidatePosition` actually liquidates. Cash
+    // settlement still has to complete, so the move must remain bounded by the
+    // seller's collateral.
     //
     // Seller short 1 contract over 7 days. PME stress MM ≈ mmSpot · spot · |Δ|/WAD
     // (≈ 0.05 · C · 7 = 0.35·C in token units), plus unrealized loss
@@ -146,7 +152,7 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     await hashrateOracle.write.setPrice([targetMarketPrice * 100n]);
     await tc.mine({ blocks: 1 });
 
-    await futures.write.marginCall([seller.account.address], { account: validator.account });
+    await futures.write.liquidatePosition([seller.account.address, positionId]);
 
     // The position's delivery date is still in the future-iteration window of
     // `getNetPositionDelta`, so any tracker leak is directly observable.

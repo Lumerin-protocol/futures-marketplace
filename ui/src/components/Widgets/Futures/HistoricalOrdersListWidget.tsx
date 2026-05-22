@@ -23,6 +23,8 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
         return "Partial";
       case "FILLED":
         return "Filled";
+      case "PARTIALLY_FILLED":
+        return "Partially Filled";
       case "CANCELLED":
         return "Cancelled";
       default:
@@ -37,6 +39,8 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
       case "PARTIAL":
         return tokens.trading.warning;
       case "FILLED":
+        return tokens.text.muted;
+      case "PARTIALLY_FILLED":
         return tokens.text.muted;
       case "CANCELLED":
         return tokens.trading.short;

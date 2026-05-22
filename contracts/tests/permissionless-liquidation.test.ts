@@ -9,18 +9,14 @@ import { scaleHashprice } from "./utils.ts";
 const { viem, networkHelpers } = await network.getOrCreate();
 
 /**
- * Phase 0 of the unified margin keeper plan: permissionless `liquidateOrder`,
- * `liquidateOrders`, `liquidatePosition` with strict orders-first invariant.
+ * Permissionless liquidation suite: `liquidateOrder`, `liquidateOrders`,
+ * `liquidatePosition` with the strict orders-first invariant.
  *
  * Surface under test:
  *   - liquidateOrder(participant, id)
  *   - liquidateOrders(participant)              — FIFO sweep until healthy
  *   - liquidatePosition(participant, positionId) — reverts OrdersStillOpen if any orders remain
  *   - setLiquidationFee — single flat fee charged per cancelled order and per closed position
- *
- * The legacy validator-only `marginCall` entry point is exercised by
- * `liquidation.test.ts` and continues to work for the existing Lambda; it is
- * kept in place during the cutover and removed in a Phase 4 follow-up.
  */
 async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
   const data = await networkHelpers.loadFixture(deployFuturesFixture);

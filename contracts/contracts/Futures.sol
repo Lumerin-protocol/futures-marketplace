@@ -53,7 +53,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     ///      Variable name retained from v1.x for storage / ABI backwards compatibility; semantically this is a
     ///      hashprice (not hashrate) feed.
     AggregatorV3Interface public hashrateOracle;
-    address public validatorAddress; // address of the validator that can close orders that are not delivered and regularly calls marginCall function
+    address public validatorAddress; // address of the validator authorized to close delivery on behalf of either participant during the delivery window
 
     uint8 public deliveryDurationDays; // duration of the delivery in seconds
     uint8 public deliveryIntervalDays; // interval between two closest delivery dates in days
@@ -172,7 +172,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     ///      When `reason == LIQUIDATED` a paired `OrderLiquidated` carries the liquidator /
     ///      fee context; merging those fields here would tax every cancel/match/expire.
     /// @param reason  MATCHED — part of a fill; CANCELLED — user cancel; EXPIRED — past deliveryAt;
-    ///                LIQUIDATED — margin-call; RESET — admin reset.
+    ///                LIQUIDATED — permissionless liquidation; RESET — admin reset.
     event OrderClosed(bytes32 indexed orderId, OrderCloseReason reason);
 
     /// @notice Snapshot of every owner-settable configuration field. Emitted by `ConfigUpdated`
@@ -250,11 +250,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @notice Seller withdrew escrowed payment after delivery window (replaces PositionPaymentReceived).
     event LotPaymentWithdrawn(bytes32 indexed lotId);
 
-    /// @notice Emitted at the end of `marginCall` when at least one order or position was force-closed.
-    event Liquidation(
-        address indexed participant, address indexed liquidator, int256 reclaimedMargin, int256 realizedPnl
-    );
-
     /// @notice Emitted when a transfer cannot be fully covered by the payer's vault balance during PnL settlement.
     event BadDebt(address indexed account, uint256 amount);
 
@@ -265,9 +260,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         bytes32 indexed orderId, address indexed participant, address indexed liquidator, uint256 fee
     );
 
-    /// @notice Emitted when a lot is force-closed by a permissionless liquidator (or by the
-    ///         legacy validator-driven `marginCall`). Paired with `LotClosed(LIQUIDATION)` in
-    ///         the same tx.
+    /// @notice Emitted when a lot is force-closed by a permissionless liquidator. Paired with
+    ///         `LotClosed(LIQUIDATION)` in the same tx.
     event LotLiquidated(
         bytes32 indexed lotId, address indexed participant, address indexed liquidator, uint256 fee
     );
@@ -279,7 +273,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     error DeliveryDateNotAvailable();
     error OrderNotBelongToSender();
     error InsufficientMarginBalance();
-    error OnlyValidator(); // when the function is called by a non-validator address
     error OnlyValidatorOrPositionParticipant();
     error PositionNotExists();
     error PositionDeliveryNotStartedYet();
@@ -813,8 +806,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         _emitConfigUpdated();
     }
 
-    /// @notice Sets the validator address
-    /// @dev Limits access to the functions with onlyValidator modifier
+    /// @notice Sets the validator address authorized to call `closeDelivery` on behalf of either participant.
     function setValidatorAddress(address _validatorAddress) external onlyOwner {
         validatorAddress = _validatorAddress;
         _emitConfigUpdated();
@@ -892,70 +884,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         return collateralVault.balanceOf(_participant) < marginEngine.computePortfolioMM(_participant);
     }
 
-    /// @notice Force-close orders FIFO, then positions FIFO, until the account is healthy
-    ///         (`balance >= computePortfolioMM`). Re-evaluates the PME-driven MM after each
-    ///         step so cross-product offsets (perps/options) are honored when sizing the
-    ///         number of legs that need to be closed.
-    /// @dev    Trigger condition is now portfolio-MM based. The cash-settlement path
-    ///         (`_forceLiquidatePosition` → `_closeAndCashSettleDelivery`) is unchanged —
-    ///         only the termination predicate moved from the legacy `getMinMargin` to
-    ///         `marginEngine.computePortfolioMM`. `reclaimedMargin` is reported as the
-    ///         drop in PME-reported futures order margin between entry and exit; this is
-    ///         a tighter analogue of "margin freed by closing resting orders" under the
-    ///         new model than the per-order maintenance reconstruction the v2.6 path used.
-    function marginCall(address _participant) external onlyValidator {
-        uint256 startBalance = collateralVault.balanceOf(_participant);
-        uint256 startMM = marginEngine.computePortfolioMM(_participant);
-
-        if (startBalance >= startMM) {
-            return;
-        }
-
-        // PME-reported futures order margin before any closes; the post-liquidation
-        // delta is reported as `reclaimedMargin` so observers can see how much locked
-        // collateral was freed by force-closing resting orders.
-        uint256 startOrderMargin = address(marginEngine) != address(0) ? getFuturesOrderMargin(_participant) : 0;
-        bool liquidated;
-
-        // 1. Force-close resting orders FIFO until healthy.
-        EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[_participant];
-        while (_orders.length() > 0) {
-            bytes32 orderId = _orders.at(0);
-            _closeOrder(orderId, orders[orderId], OrderCloseReason.LIQUIDATED);
-            liquidated = true;
-            if (collateralVault.balanceOf(_participant) >= marginEngine.computePortfolioMM(_participant)) {
-                _emitLiquidation(_participant, startOrderMargin, int256(startBalance));
-                return;
-            }
-        }
-
-        // 2. Force-close positions FIFO until healthy.
-        EnumerableSet.Bytes32Set storage _positions = participantPositionIdsIndex[_participant];
-        while (_positions.length() > 0) {
-            bytes32 positionId = _positions.at(0);
-            Position storage position = positions[positionId];
-            _forceLiquidatePosition(positionId, position, _participant);
-            // Validator-driven liquidation does not charge a per-lot fee; emit LotLiquidated
-            // with fee=0 so the indexer can attribute per-lot metadata identically to the
-            // permissionless `liquidatePosition` path.
-            emit LotLiquidated(positionId, _participant, _msgSender(), 0);
-            liquidated = true;
-            if (collateralVault.balanceOf(_participant) >= marginEngine.computePortfolioMM(_participant)) {
-                _emitLiquidation(_participant, startOrderMargin, int256(startBalance));
-                return;
-            }
-        }
-
-        if (liquidated) {
-            _emitLiquidation(_participant, startOrderMargin, int256(startBalance));
-        }
-    }
-
     // ──────────────────────────────────────────────────────────────────────────
-    // Permissionless keeper liquidation entry points (Phase 0 of the unified
-    // margin keeper rollout). The legacy validator-only `marginCall` above is
-    // kept in place during transition for the existing Lambda — it will be
-    // removed in a Phase 4 follow-up upgrade.
+    // Permissionless keeper liquidation entry points.
     //
     // Strict two-step invariant enforced on-chain:
     //   1. clear all resting orders via `liquidateOrders(participant)` /
@@ -1028,9 +958,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         if (participantOrderIdsIndex[_participant].length() != 0) revert OrdersStillOpen();
         if (!_underwater(_participant)) revert NotLiquidatable();
 
-        // Cash-settle through the existing `_forceLiquidatePosition` path: it builds an
-        // offsetting taker order from the counterparty side and routes PnL through the
-        // insurance fund (same path as legacy `marginCall`'s position step).
+        // Cash-settle through `_forceLiquidatePosition`: it builds an offsetting taker
+        // order from the counterparty side and routes PnL through the insurance fund.
         _forceLiquidatePosition(_positionId, position, _participant);
 
         uint256 fee = liquidationFee;
@@ -1063,17 +992,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         }
 
         emit OrderLiquidated(_orderId, _participant, _msgSender(), paid);
-    }
-
-    /// @dev Stack-saving wrapper around the `Liquidation` emit.
-    ///      `reclaimedMargin = startOrderMargin - currentOrderMargin` (PME-reported,
-    ///      always non-negative because closes only release order margin).
-    ///      `realizedPnl    = currentBalance - startBalance`.
-    function _emitLiquidation(address _participant, uint256 _startOrderMargin, int256 _startBalance) private {
-        uint256 endOrderMargin = address(marginEngine) != address(0) ? getFuturesOrderMargin(_participant) : 0;
-        int256 reclaimedMargin = int256(_startOrderMargin) - int256(endOrderMargin);
-        int256 realizedPnl = int256(collateralVault.balanceOf(_participant)) - _startBalance;
-        emit Liquidation(_participant, _msgSender(), reclaimedMargin, realizedPnl);
     }
 
     /**
@@ -1629,16 +1547,4 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     // Modifiers
 
-    modifier onlyValidator() {
-        // inlining _onlyValidator() causes hardhat EDR to fail to recognize the custom error revert
-        // we'll keep it here for now, but we should eventually inline it into the function body
-        _onlyValidator();
-        _;
-    }
-
-    function _onlyValidator() internal view {
-        if (_msgSender() != validatorAddress) {
-            revert OnlyValidator();
-        }
-    }
 }
