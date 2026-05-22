@@ -7,6 +7,7 @@ type Futures @entity(immutable: false) {
   contractAddress: Bytes!
   collateralToken: Bytes!
   hashrateOracleAddress: Bytes!
+  marginEngineAddress: Bytes!
   validatorAddress: Bytes!
   validatorURL: String!
 
@@ -15,7 +16,9 @@ type Futures @entity(immutable: false) {
 
   # Configuration
   minimumPriceIncrement: BigInt!
-  orderFee: BigInt!
+  makerFee: BigInt!
+  takerFee: BigInt!
+  liquidationFee: BigInt!
   liquidationMarginPercent: Int!
   speedHps: BigInt!
   deliveryDurationDays: Int!
@@ -30,7 +33,7 @@ type Futures @entity(immutable: false) {
   # Stats
   totalUsers: Int!
   totalOrders: Int! # aggregate Order entities created
-  activeOrders: Int! # Order entities not yet fully filled/cancelled
+  activeOrders: Int! # count of currently-ACTIVE OrderEntry units (per on-chain orderId), NOT Order aggregates
   totalTrades: Int!
   totalFills: Int!
   totalVolume: BigInt!
@@ -49,7 +52,7 @@ type User @entity(immutable: false) {
 
   # Stats
   orderCount: Int! # aggregate Orders ever created
-  activeOrderCount: Int! # Orders currently ACTIVE/PARTIAL
+  activeOrderCount: Int! # count of currently-ACTIVE OrderEntry units (per on-chain orderId), NOT Order aggregates
   tradeCount: Int!
   fillCount: Int!
   realizedPnl: BigInt!
@@ -58,12 +61,12 @@ type User @entity(immutable: false) {
   orders: [Order!]! @derivedFrom(field: "user")
   trades: [Trade!]! @derivedFrom(field: "user")
   fills: [Fill!]! @derivedFrom(field: "user")
+  "Historical lot ids where this user participated as buyer or seller."
+  lots: [Lot!]!
   positionSessions: [PositionSession!]! @derivedFrom(field: "user")
   "Per-(user, deliveryAt) running net qty + open-session pointers, one entry per delivery date the user has touched."
   deliveryPointers: [UserDeliverySessionPointer!]! @derivedFrom(field: "user")
   badDebts: [BadDebtEvent!]! @derivedFrom(field: "user")
-  liquidationsAsUser: [Liquidation!]! @derivedFrom(field: "user")
-  liquidationsAsLiquidator: [Liquidation!]! @derivedFrom(field: "liquidator")
 
   # Timestamps
   createdAt: BigInt!
@@ -85,7 +88,6 @@ type Order @entity(immutable: false) {
   originalQuantity: Int! # initial qty across all entries
   filledQuantity: Int! # entries that became Fills
   cancelledQuantity: Int! # entries closed without matching
-
   status: OrderStatus!
   entries: [OrderEntry!]! @derivedFrom(field: "order")
 
@@ -98,9 +100,15 @@ type Order @entity(immutable: false) {
 }
 
 enum OrderStatus {
+  "Still ACTIVE entries left; no terminal events yet."
   ACTIVE
+  "Non-terminal: still has ACTIVE entries plus at least one filled or cancelled."
   PARTIAL
+  "Terminal: every entry matched."
   FILLED
+  "Terminal: at least one entry matched AND at least one was cancelled."
+  PARTIALLY_FILLED
+  "Terminal: every entry cancelled (no fills)."
   CANCELLED
 }
 
@@ -111,13 +119,21 @@ type OrderEntry @entity(immutable: false) {
   destURL: String!
   status: OrderEntryStatus!
   closedAt: BigInt
-  closedBy: Bytes
+  "EOA that sent the tx where this entry closed (tx.from). NOT necessarily the participant — for liquidations it's the keeper, for expiry it's whoever placed the next order. Use `liquidator` / Lot.closedBy for semantic close attribution."
+  closedByTx: Bytes
+  "Keeper that triggered the close, populated only when status = LIQUIDATED (from the paired OrderLiquidated event)."
+  liquidator: Bytes
+  "Fee paid by the order's participant to `liquidator`; populated only when status = LIQUIDATED."
+  liquidationFee: BigInt
 }
 
 enum OrderEntryStatus {
   ACTIVE
   MATCHED
   CANCELLED
+  EXPIRED
+  LIQUIDATED
+  RESET
 }
 
 # Aggregate of all fills (across counterparties) in a single tx for one user.
@@ -143,64 +159,74 @@ type Trade @entity(immutable: false) {
   transactionHash: Bytes!
 }
 
-# Aggregate of qty=1 PositionCreated/PositionExited events with the same (user, counterparty) in one tx.
+# Aggregate of Lot open/close legs with the same (tx, user, counterparty, session).
 type Fill @entity(immutable: false) {
-  id: Bytes! # tx hash + user + counterparty
+  id: Bytes! # tx hash + user + counterparty + sessionId
   trade: Trade!
   user: User!
   counterparty: User!
   positionSession: PositionSession!
   deliveryAt: BigInt!
 
-  fillPrice: BigInt! # weighted-average match price across the aggregated units
-  fillQuantity: Int! # signed: + buy / - sell, summed across underlying positions
-  netQuantityAfter: Int! # signed (user, deliveryAt) net qty after this fill
-  realizedPnl: BigInt! # accumulated pnl (from PositionExited offsets and forced cash-settle)
-
-  # On-chain positions where the user is the buyer / seller and that were OPENED via this Fill
-  # (i.e. PositionCreated in the same tx with this counterparty).
-  positionsAsBuyer: [Position!]! @derivedFrom(field: "buyerFill")
-  positionsAsSeller: [Position!]! @derivedFrom(field: "sellerFill")
-  # On-chain positions that were EXITED in this fill (PositionExited offset by this user's opposing trade).
-  positionsExitedAsBuyer: [Position!]! @derivedFrom(field: "buyerExitFill")
-  positionsExitedAsSeller: [Position!]! @derivedFrom(field: "sellerExitFill")
-
+  fillPrice: BigInt! # qty-weighted average fill price
+  fillQuantity: Int! # signed sum for this user (+buy / -sell)
+  netQuantityAfter: Int! # user's (deliveryAt) net qty after this fill
+  realizedPnl: BigInt! # accumulated pnl on this fill aggregation
   # Metadata
   timestamp: BigInt!
   blockNumber: BigInt!
   transactionHash: Bytes!
 }
 
-# Canonical mirror of the on-chain Position struct, keyed by positionId.
-# Lifecycle (paid / exited / breached / closed) is recorded here as a single source of truth.
-# References both the buyer's Fill and the seller's Fill that opened the position; if the position
-# is later exited via an opposing trade, references the buyer/seller exit Fills as well.
-type Position @entity(immutable: false) {
-  id: Bytes! # on-chain positionId
+# Canonical mirror of on-chain lot state keyed by lotId.
+type Lot @entity(immutable: false) {
+  id: Bytes! # on-chain lotId
   seller: User!
   buyer: User!
   destURL: String!
   sellPricePerDay: BigInt!
   buyPricePerDay: BigInt!
   deliveryAt: BigInt!
+  makerOrderId: Bytes!
+  takerOrderId: Bytes!
 
-  buyerFill: Fill! # Fill on the buyer's side at the moment this position was created
-  sellerFill: Fill! # Fill on the seller's side at the moment this position was created
-  buyerExitFill: Fill # Fill on the buyer's side that exited this position via offset
-  sellerExitFill: Fill # Fill on the seller's side that exited this position via offset
+  status: LotStatus!
+  isClosed: Boolean!
+  closeReason: LotCloseReason
 
-  isPaid: Boolean! # PositionPaid sets true; PositionPaymentReceived flips back to false
-  isExited: Boolean! # PositionExited at least once (a participant offset out of this position)
-  buyerExitPnl: BigInt # signed pnl for the buyer if they exited
-  sellerExitPnl: BigInt # signed pnl for the seller if they exited
-  isDeliveryClosed: Boolean! # PositionDeliveryClosed (delivery breach close)
+  isPaid: Boolean!
+  isWithdrawn: Boolean!
+  sellerPnl: BigInt
+  buyerPnl: BigInt
   closedBy: Bytes
-  isClosed: Boolean! # PositionClosed (final tombstone)
+  liquidatedParticipant: Bytes
+  liquidator: Bytes
+  liquidationFee: BigInt
 
   createdAt: BigInt!
+  updatedAt: BigInt!
+  paidAt: BigInt
+  withdrawnAt: BigInt
   closedAt: BigInt
   blockNumber: BigInt!
   transactionHash: Bytes!
+  closeTransactionHash: Bytes
+  paymentTransactionHash: Bytes
+  withdrawalTransactionHash: Bytes
+}
+
+enum LotStatus {
+  OPEN
+  REPLACED
+  CLOSED
+}
+
+enum LotCloseReason {
+  MUTUAL_EXIT
+  LIQUIDATION
+  BREACH
+  SETTLED
+  RESET
 }
 
 # Open→close cycle for a (user, deliveryAt) pair.
@@ -232,16 +258,12 @@ enum PositionSessionStatus {
   CLOSE
 }
 
-# Liquidation event (driven by the new on-chain Liquidation event).
-type Liquidation @entity(immutable: true) {
-  id: Bytes! # tx hash + log index
-  user: User!
-  liquidator: User!
-  reclaimedMargin: BigInt!
-  realizedPnl: BigInt! # signed: net change in user collateral from forced position closes
-  timestamp: BigInt!
-  blockNumber: BigInt!
-  transactionHash: Bytes!
+# Per-tx sentinel used by handleOrderLiquidated / handleLotLiquidated to bump
+# `Futures.totalLiquidations` exactly once regardless of how many legs the
+# keeper liquidation tx contained. The entity itself carries no data — its
+# existence is the dedup signal.
+type LiquidationTx @entity(immutable: true) {
+  id: Bytes! # transaction hash
 }
 
 # Bad debt event when a participant or the insurance fund cannot cover a loss.

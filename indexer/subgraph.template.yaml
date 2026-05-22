@@ -28,7 +28,7 @@ dataSources:
         - OrderEntry
         - Trade
         - Fill
-        - Position
+        - Lot
         - PositionSession
         - PriceLevel
         - Liquidation
@@ -44,26 +44,24 @@ dataSources:
           handler: handleUpgraded
         - event: OrderCreated(indexed bytes32,indexed address,string,uint256,uint256,bool)
           handler: handleOrderCreated
-        - event: OrderClosed(indexed bytes32,indexed address)
+        - event: OrderClosed(indexed bytes32,uint8)
           handler: handleOrderClosed
-        - event: PositionCreated(indexed bytes32,indexed address,indexed address,uint256,uint256,uint256,string,bytes32,bytes32)
-          handler: handlePositionCreated
-        - event: PositionClosed(indexed bytes32)
-          handler: handlePositionClosed
-        - event: PositionExited(indexed bytes32,indexed address,int256)
-          handler: handlePositionExited
-        - event: PositionDeliveryClosed(indexed bytes32,indexed address)
-          handler: handlePositionDeliveryClosed
-        - event: PositionPaid(indexed bytes32)
-          handler: handlePositionPaid
-        - event: PositionPaymentReceived(indexed bytes32)
-          handler: handlePositionPaymentReceived
-        - event: OrderFeeUpdated(uint256)
-          handler: handleOrderFeeUpdated
-        - event: ValidatorURLUpdated(string)
-          handler: handleValidatorURLUpdated
-        - event: Liquidation(indexed address,indexed address,int256,int256)
-          handler: handleLiquidation
+        - event: LotCreated(indexed bytes32,indexed address,indexed address,uint256,uint256,bytes32,bytes32)
+          handler: handleLotCreated
+        - event: LotTransferred(indexed bytes32,indexed bytes32,address,address,int256,uint256,uint256,bytes32,bytes32)
+          handler: handleLotTransferred
+        - event: LotClosed(indexed bytes32,indexed address,indexed address,int256,int256,address,uint8)
+          handler: handleLotClosed
+        - event: LotPaid(indexed bytes32)
+          handler: handleLotPaid
+        - event: LotPaymentWithdrawn(indexed bytes32)
+          handler: handleLotPaymentWithdrawn
+        - event: LotLiquidated(indexed bytes32,indexed address,indexed address,uint256)
+          handler: handleLotLiquidated
+        - event: OrderLiquidated(indexed bytes32,indexed address,indexed address,uint256)
+          handler: handleOrderLiquidated
+        - event: ConfigUpdated((uint256,uint256,uint256,uint256,uint256,uint8,uint8,address,address,address,string))
+          handler: handleConfigUpdated
         - event: BadDebt(indexed address,uint256)
           handler: handleBadDebt
       file: ./src/futures.ts

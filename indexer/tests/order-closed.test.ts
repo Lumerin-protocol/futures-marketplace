@@ -41,10 +41,13 @@ function createOrderCreatedEvent(
   ]);
 }
 
-function createOrderClosedEvent(orderId: Bytes, participant: Address): OrderClosed {
+function createOrderClosedEvent(
+  orderId: Bytes,
+  reason: i32 = 1, // CANCELLED
+): OrderClosed {
   return newTypedMockEventWithParams<OrderClosed>([
     paramBytes("orderId", orderId),
-    paramAddr("participant", participant),
+    paramUint("reason", BigInt.fromI32(reason)),
   ]);
 }
 
@@ -59,7 +62,7 @@ describe("handleOrderClosed", () => {
     const user = userAddress(1);
     const oid = bytes32Id(1);
     handleOrderCreated(createOrderCreatedEvent(oid, user, true));
-    handleOrderClosed(createOrderClosedEvent(oid, user));
+    handleOrderClosed(createOrderClosedEvent(oid));
 
     const aggId = orderAggKeyDefaultTx(user, PRICE, DELIVERY, true);
     assert.fieldEquals("Order", aggId, "quantity", "0");
@@ -78,7 +81,7 @@ describe("handleOrderClosed", () => {
     handleOrderCreated(createOrderCreatedEvent(bytes32Id(1), user, true));
     handleOrderCreated(createOrderCreatedEvent(bytes32Id(2), user, true));
 
-    handleOrderClosed(createOrderClosedEvent(bytes32Id(1), user));
+    handleOrderClosed(createOrderClosedEvent(bytes32Id(1)));
 
     const aggId = orderAggKeyDefaultTx(user, PRICE, DELIVERY, true);
     assert.fieldEquals("Order", aggId, "quantity", "1");
@@ -91,7 +94,7 @@ describe("handleOrderClosed", () => {
   });
 
   test("OrderClosed for unknown id is a no-op", () => {
-    handleOrderClosed(createOrderClosedEvent(bytes32Id(42), userAddress(1)));
+    handleOrderClosed(createOrderClosedEvent(bytes32Id(42)));
     assert.entityCount("OrderEntry", 0);
     assert.entityCount("Order", 0);
   });

@@ -163,74 +163,11 @@ resource "aws_cloudwatch_dashboard" "futures_marketplace" {
         },
       ] : widget if var.market_maker.create],
       [
-        # Row 3: Margin Call Lambda
+        # Row 3: Notifications Service
         {
           type   = "metric"
           x      = 0
           y      = 12
-          width  = 6
-          height = 6
-          properties = {
-            title  = "Margin Call - Invocations & Errors"
-            region = var.default_region
-            stat   = "Sum"
-            period = var.monitoring.dashboard_period
-            metrics = [
-              ["AWS/Lambda", "Invocations", "FunctionName", local.margin_call_function_name, { label = "Invocations" }],
-              [".", "Errors", ".", ".", { label = "Errors", color = "#ff0000" }]
-            ]
-          }
-        },
-        {
-          type   = "metric"
-          x      = 6
-          y      = 12
-          width  = 6
-          height = 6
-          properties = {
-            title  = "Margin Call - Duration"
-            region = var.default_region
-            stat   = "Average"
-            period = var.monitoring.dashboard_period
-            metrics = [
-              ["AWS/Lambda", "Duration", "FunctionName", local.margin_call_function_name]
-            ]
-          }
-        },
-        {
-          type   = "metric"
-          x      = 12
-          y      = 12
-          width  = 6
-          height = 6
-          properties = {
-            title  = "Margin Call - Business Metrics"
-            region = var.default_region
-            stat   = "Sum"
-            period = var.monitoring.dashboard_period
-            metrics = [
-              [local.monitoring_namespace, "ParticipantsChecked", { label = "Participants Checked" }],
-              [".", "MarginCallsTriggered", { label = "Margin Calls Triggered", color = "#ff9900" }],
-              [".", "HighMarginUtilization", { label = "High Utilization Events" }]
-            ]
-          }
-        },
-        {
-          type   = "text"
-          x      = 18
-          y      = 12
-          width  = 6
-          height = 6
-          properties = {
-            markdown = "## Margin Call Status\n\n**Function**: ${local.margin_call_function_name}\n\n**Schedule**: Every 15 minutes\n\n**Composite Alarm**: `margin-call-unhealthy-${local.env_suffix}`\n\n---\n*Monitors participant positions and triggers margin calls*"
-          }
-        },
-
-        # Row 4: Notifications Service
-        {
-          type   = "metric"
-          x      = 0
-          y      = 18
           width  = 6
           height = 6
           properties = {
@@ -246,7 +183,7 @@ resource "aws_cloudwatch_dashboard" "futures_marketplace" {
         {
           type   = "metric"
           x      = 6
-          y      = 18
+          y      = 12
           width  = 6
           height = 6
           properties = {
@@ -263,7 +200,7 @@ resource "aws_cloudwatch_dashboard" "futures_marketplace" {
         {
           type   = "metric"
           x      = 12
-          y      = 18
+          y      = 12
           width  = 6
           height = 6
           properties = {
@@ -280,7 +217,7 @@ resource "aws_cloudwatch_dashboard" "futures_marketplace" {
         {
           type   = "metric"
           x      = 18
-          y      = 18
+          y      = 12
           width  = 6
           height = 6
           properties = {
@@ -294,11 +231,11 @@ resource "aws_cloudwatch_dashboard" "futures_marketplace" {
           }
         },
 
-        # Row 5: RDS PostgreSQL
+        # Row 4: RDS PostgreSQL
         {
           type   = "metric"
           x      = 0
-          y      = 24
+          y      = 18
           width  = 6
           height = 6
           properties = {
@@ -314,7 +251,7 @@ resource "aws_cloudwatch_dashboard" "futures_marketplace" {
         {
           type   = "metric"
           x      = 6
-          y      = 24
+          y      = 18
           width  = 6
           height = 6
           properties = {
@@ -330,7 +267,7 @@ resource "aws_cloudwatch_dashboard" "futures_marketplace" {
         {
           type   = "metric"
           x      = 12
-          y      = 24
+          y      = 18
           width  = 6
           height = 6
           properties = {
@@ -346,7 +283,7 @@ resource "aws_cloudwatch_dashboard" "futures_marketplace" {
         {
           type   = "metric"
           x      = 18
-          y      = 24
+          y      = 18
           width  = 6
           height = 6
           properties = {

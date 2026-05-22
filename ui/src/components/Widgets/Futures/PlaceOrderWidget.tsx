@@ -35,7 +35,7 @@ import type { PerpsCollection } from "../../../hooks/data/perps/usePerpsCollecti
 import { useAccount } from "wagmi";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
 import { handleNumericDecimalInput, handleNumericDecimalInput6Decimals } from "../../Forms/Shared/AmountInputForm";
-import { useOrderFee } from "../../../hooks/data/useOrderFee";
+import { useMakerTakerFees } from "../../../hooks/data/useMakerTakerFees";
 import { ModeToggle, ModeButton, type AmountMode } from "./PerpsOrderFormFields";
 import { useSimulatePerpsOrder } from "../../../hooks/data/perps/useSimulatePerpsOrder";
 import { useGetPerpsInitialMargin } from "../../../hooks/data/perps/useGetPerpsInitialMargin";
@@ -118,7 +118,7 @@ export const PlaceOrderWidget = ({
 
   const [perpsMarginSide, setPerpsMarginSide] = useState<"buy" | "sell">("buy");
   const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
-  const { data: orderFeeRaw } = useOrderFee(address);
+  const { worstCaseFee: worstCaseFeeRaw } = useMakerTakerFees();
 
   // Calculate price step from contract specs
   const priceStep = contractSpecsQuery.data?.data?.minimumPriceIncrement
@@ -304,11 +304,13 @@ export const PlaceOrderWidget = ({
       return maxSize;
     }
 
-    const orderFee = orderFeeRaw ?? 0n;
+    // Reserve the larger of maker/taker fee for IM headroom — we don't yet
+    // know whether this order will match (taker) or rest and later fill (maker).
+    const reservedFee = worstCaseFeeRaw ?? 0n;
 
-    if (availableBalance <= orderFee) return 0;
+    if (availableBalance <= reservedFee) return 0;
 
-    const balanceForMargin = availableBalance - orderFee;
+    const balanceForMargin = availableBalance - reservedFee;
 
     // Binary search to find maximum quantity for futures mode
     let low = 0;
@@ -692,13 +694,13 @@ export const PlaceOrderWidget = ({
       deliveryDurationDays,
     );
 
-    // Include order fee in the balance check
-    const orderFee = orderFeeRaw ?? 0n;
-    const totalRequired = requiredMargin + orderFee;
+    // Reserve the larger of maker/taker fee — see comment on `useMakerTakerFees`.
+    const reservedFee = worstCaseFeeRaw ?? 0n;
+    const totalRequired = requiredMargin + reservedFee;
 
     if (totalRequired > availableBalance) {
       const requiredMarginFormatted = (Number(requiredMargin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      const orderFeeFormatted = (Number(orderFee) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+      const reservedFeeFormatted = (Number(reservedFee) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const totalRequiredFormatted = (Number(totalRequired) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const totalBalanceFormatted = (Number(totalBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const lockedBalanceFormatted = (Number(lockedBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
@@ -706,7 +708,7 @@ export const PlaceOrderWidget = ({
       const accountBalance = accountBalanceQuery.data ?? 0n;
       const accountBalanceFormatted = (Number(accountBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       alert(
-        `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${requiredMarginFormatted} USDC\nOrder fee: ${orderFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
+        `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${requiredMarginFormatted} USDC\nReserved trading fee (max of maker/taker): ${reservedFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
       );
       return;
     }
@@ -785,13 +787,13 @@ export const PlaceOrderWidget = ({
       deliveryDurationDays,
     );
 
-    // Include order fee in the balance check
-    const orderFee = orderFeeRaw ?? 0n;
-    const totalRequired = requiredMargin + orderFee;
+    // Reserve the larger of maker/taker fee — see comment on `useMakerTakerFees`.
+    const reservedFee = worstCaseFeeRaw ?? 0n;
+    const totalRequired = requiredMargin + reservedFee;
 
     if (totalRequired > availableBalance) {
       const requiredMarginFormatted = (Number(requiredMargin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      const orderFeeFormatted = (Number(orderFee) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+      const reservedFeeFormatted = (Number(reservedFee) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const totalRequiredFormatted = (Number(totalRequired) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const totalBalanceFormatted = (Number(totalBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const lockedBalanceFormatted = (Number(lockedBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
@@ -799,7 +801,7 @@ export const PlaceOrderWidget = ({
       const accountBalance = accountBalanceQuery.data ?? 0n;
       const accountBalanceFormatted = (Number(accountBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       alert(
-        `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${requiredMarginFormatted} USDC\nOrder fee: ${orderFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
+        `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${requiredMarginFormatted} USDC\nReserved trading fee (max of maker/taker): ${reservedFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
       );
       return;
     }

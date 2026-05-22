@@ -41,15 +41,22 @@ export function priceLevelId(
   );
 }
 
-/// (user, deliveryAt) pointer key: 20-byte address ++ 8-byte deliveryAt (big-endian seconds since epoch fits in u64).
+/// Fixed-width 32-byte big-endian encoding of a non-negative BigInt. Used in
+/// composite entity ids so they remain collision-free regardless of value
+/// magnitude (and don't truncate timestamps past the i32 horizon — Jan 2038).
+function bigIntToFixed32(value: BigInt): Bytes {
+  return Bytes.fromHexString(padLeft(value.toHexString().slice(2), 64, "0")) as Bytes;
+}
+
+/// (user, deliveryAt) pointer key: 20-byte address ++ 32-byte deliveryAt (full BigInt range).
 export function userDeliveryPointerId(
   user: Address,
   deliveryAt: BigInt
 ): Bytes {
-  return changetype<Bytes>(user).concatI32(deliveryAt.toI32());
+  return changetype<Bytes>(user).concat(bigIntToFixed32(deliveryAt));
 }
 
-/// Order aggregate id: tx hash ++ user ++ price ++ deliveryAt ++ side.
+/// Order aggregate id: tx hash ++ user ++ price (32B) ++ deliveryAt (32B) ++ side (1B).
 export function orderAggregateId(
   txHash: Bytes,
   user: Address,
@@ -57,24 +64,36 @@ export function orderAggregateId(
   deliveryAt: BigInt,
   isBuy: boolean
 ): Bytes {
+  const sideByte = Bytes.fromHexString(isBuy ? "0x01" : "0x00") as Bytes;
   return txHash
     .concat(changetype<Bytes>(user))
-    .concat(changetype<Bytes>(Bytes.fromHexString(padLeft(price.toHexString().slice(2), 64, "0"))))
-    .concatI32(deliveryAt.toI32())
-    .concatI32(isBuy ? 1 : 0);
+    .concat(bigIntToFixed32(price))
+    .concat(bigIntToFixed32(deliveryAt))
+    .concat(sideByte);
 }
 
-/// Trade aggregate id: tx hash ++ user ++ sessionId.
+/// Sentinel byte placed between concatenated id components. `0xff` is chosen
+/// because `positionSessionId` digits (UTF-8 encoded) cannot contain it — so a
+/// `0xff` byte cannot accidentally appear inside a component. Without a
+/// separator, components like `Address` (always 20 B) and `sessionId` (variable
+/// length string) could in principle collide across different inputs.
+const ID_SEP: Bytes = Bytes.fromHexString("0xff") as Bytes;
+
+/// Trade aggregate id: tx hash ++ sep ++ user ++ sep ++ sessionId.
 /// `sessionId` is included so that a single tx that spans more than one
 /// PositionSession (e.g. the multi-match flip case where a taker order both
 /// closes an existing session via PositionExited and opens a new one via
 /// PositionCreated) produces one Trade row per session — preventing the
 /// new session's first trade from inheriting the prior session's realizedPnl.
 export function tradeAggregateId(txHash: Bytes, user: Address, sessionId: string): Bytes {
-  return txHash.concat(changetype<Bytes>(user)).concat(Bytes.fromUTF8(sessionId));
+  return txHash
+    .concat(ID_SEP)
+    .concat(changetype<Bytes>(user))
+    .concat(ID_SEP)
+    .concat(Bytes.fromUTF8(sessionId));
 }
 
-/// Fill aggregate id: tx hash ++ user ++ counterparty ++ sessionId.
+/// Fill aggregate id: tx hash ++ sep ++ user ++ sep ++ counterparty ++ sep ++ sessionId.
 /// `sessionId` is included for the same reason as `tradeAggregateId`: it
 /// scopes each Fill to a single PositionSession so that a same-tx flip
 /// against the same counterparty doesn't collapse two distinct sessions
@@ -87,7 +106,10 @@ export function fillAggregateId(
   sessionId: string
 ): Bytes {
   return txHash
+    .concat(ID_SEP)
     .concat(changetype<Bytes>(user))
+    .concat(ID_SEP)
     .concat(changetype<Bytes>(counterparty))
+    .concat(ID_SEP)
     .concat(Bytes.fromUTF8(sessionId));
 }

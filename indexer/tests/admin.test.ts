@@ -6,44 +6,83 @@ import {
   test,
 } from "matchstick-as/assembly/index";
 import { newTypedMockEventWithParams } from "matchstick-as/assembly/defaults";
-import { BigInt } from "@graphprotocol/graph-ts";
-import {
-  OrderFeeUpdated,
-  ValidatorURLUpdated,
-} from "../generated/Futures/Futures";
-import {
-  handleOrderFeeUpdated,
-  handleValidatorURLUpdated,
-} from "../src/handlers/admin";
+import { Address, BigInt, ethereum } from "@graphprotocol/graph-ts";
+import { ConfigUpdated } from "../generated/Futures/Futures";
+import { handleConfigUpdated } from "../src/handlers/admin";
 import {
   mockFuturesContractCallsAsReverted,
-  paramString,
-  paramUint,
   setupDataSourceMock,
   setupFutures,
+  userAddress,
 } from "./helpers";
 
-describe("admin handlers", () => {
+function buildConfigParam(
+  makerFee: BigInt,
+  takerFee: BigInt,
+  liquidationFee: BigInt,
+  breachPenaltyRatePerDay: BigInt,
+  minimumPriceIncrement: BigInt,
+  liquidationMarginPercent: i32,
+  futureDeliveryDatesCount: i32,
+  validatorAddress: Address,
+  hashrateOracle: Address,
+  marginEngine: Address,
+  validatorURL: string,
+): ethereum.EventParam {
+  // Tuple field order MUST mirror the Solidity `Config` struct definition in
+  // Futures.sol; matchstick decodes by position, not by name.
+  const tuple = changetype<ethereum.Tuple>([
+    ethereum.Value.fromUnsignedBigInt(makerFee),
+    ethereum.Value.fromUnsignedBigInt(takerFee),
+    ethereum.Value.fromUnsignedBigInt(liquidationFee),
+    ethereum.Value.fromUnsignedBigInt(breachPenaltyRatePerDay),
+    ethereum.Value.fromUnsignedBigInt(minimumPriceIncrement),
+    ethereum.Value.fromI32(liquidationMarginPercent),
+    ethereum.Value.fromI32(futureDeliveryDatesCount),
+    ethereum.Value.fromAddress(validatorAddress),
+    ethereum.Value.fromAddress(hashrateOracle),
+    ethereum.Value.fromAddress(marginEngine),
+    ethereum.Value.fromString(validatorURL),
+  ]);
+  return new ethereum.EventParam("config", ethereum.Value.fromTuple(tuple));
+}
+
+describe("handleConfigUpdated", () => {
   beforeEach(() => {
     clearStore();
     setupDataSourceMock();
     setupFutures();
   });
 
-  test("handleOrderFeeUpdated updates Futures.orderFee", () => {
-    const fee = BigInt.fromI64(42);
-    handleOrderFeeUpdated(
-      newTypedMockEventWithParams<OrderFeeUpdated>([paramUint("orderFee", fee)]),
-    );
-    assert.fieldEquals("Futures", "0", "orderFee", fee.toString());
-  });
+  test("overwrites every config field with the event snapshot", () => {
+    const ev = newTypedMockEventWithParams<ConfigUpdated>([
+      buildConfigParam(
+        BigInt.fromI64(42),
+        BigInt.fromI64(7),
+        BigInt.fromI64(99),
+        BigInt.fromI64(12345),
+        BigInt.fromI64(100),
+        80,
+        4,
+        userAddress(11),
+        userAddress(12),
+        userAddress(13),
+        "https://newvalidator.example",
+      ),
+    ]);
 
-  test("handleValidatorURLUpdated updates Futures.validatorURL", () => {
-    handleValidatorURLUpdated(
-      newTypedMockEventWithParams<ValidatorURLUpdated>([
-        paramString("validatorURL", "https://newvalidator.example"),
-      ]),
-    );
+    handleConfigUpdated(ev);
+
+    assert.fieldEquals("Futures", "0", "makerFee", "42");
+    assert.fieldEquals("Futures", "0", "takerFee", "7");
+    assert.fieldEquals("Futures", "0", "liquidationFee", "99");
+    assert.fieldEquals("Futures", "0", "breachPenaltyRatePerDay", "12345");
+    assert.fieldEquals("Futures", "0", "minimumPriceIncrement", "100");
+    assert.fieldEquals("Futures", "0", "liquidationMarginPercent", "80");
+    assert.fieldEquals("Futures", "0", "futureDeliveryDatesCount", "4");
+    assert.fieldEquals("Futures", "0", "validatorAddress", userAddress(11).toHexString());
+    assert.fieldEquals("Futures", "0", "hashrateOracleAddress", userAddress(12).toHexString());
+    assert.fieldEquals("Futures", "0", "marginEngineAddress", userAddress(13).toHexString());
     assert.fieldEquals("Futures", "0", "validatorURL", "https://newvalidator.example");
   });
 });
@@ -57,9 +96,22 @@ describe("Futures.startBlock from data source context", () => {
     mockFuturesContractCallsAsReverted();
     // No setupFutures() — first handler invocation creates the singleton and
     // must read startBlock from the mocked data source context.
-    handleOrderFeeUpdated(
-      newTypedMockEventWithParams<OrderFeeUpdated>([paramUint("orderFee", BigInt.fromI32(1))]),
-    );
+    const ev = newTypedMockEventWithParams<ConfigUpdated>([
+      buildConfigParam(
+        BigInt.zero(),
+        BigInt.zero(),
+        BigInt.zero(),
+        BigInt.zero(),
+        BigInt.zero(),
+        0,
+        1,
+        Address.zero(),
+        Address.zero(),
+        Address.zero(),
+        "",
+      ),
+    ]);
+    handleConfigUpdated(ev);
     assert.fieldEquals("Futures", "0", "startBlock", startBlock.toString());
   });
 });

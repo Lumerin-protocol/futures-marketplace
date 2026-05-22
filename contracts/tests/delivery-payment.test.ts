@@ -32,10 +32,10 @@ describe("Futures Delivery Payment", () => {
       const [positionEvent] = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "PositionCreated",
+        eventName: "LotCreated",
       });
 
-      const { positionId } = positionEvent.args;
+      const { lotId: positionId } = positionEvent.args;
 
       const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
       const contractBalanceBefore = await collateralVault.read.balanceOf([futures.address]);
@@ -79,9 +79,9 @@ describe("Futures Delivery Payment", () => {
       const [positionEvent] = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "PositionCreated",
+        eventName: "LotCreated",
       });
-      const { positionId } = positionEvent.args;
+      const { lotId: positionId } = positionEvent.args;
 
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
 
@@ -118,9 +118,9 @@ describe("Futures Delivery Payment", () => {
         const [event] = parseEventLogs({
           logs: receipt.logs,
           abi: futures.abi,
-          eventName: "PositionCreated",
+          eventName: "LotCreated",
         });
-        return event.args.positionId;
+        return event.args.lotId;
       };
 
       const positionId1 = await createPosition(seller.account, "https://dest1.com");
@@ -171,13 +171,13 @@ describe("Futures Delivery Payment", () => {
       const [positionEvent] = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "PositionCreated",
+        eventName: "LotCreated",
       });
 
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
 
       await viem.assertions.revertWithCustomError(
-        futures.write.depositDeliveryPayment([[positionEvent.args.positionId]], {
+        futures.write.depositDeliveryPayment([[positionEvent.args.lotId]], {
           account: buyer.account,
         }),
         futures,
@@ -207,11 +207,11 @@ describe("Futures Delivery Payment", () => {
       const [positionEvent] = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "PositionCreated",
+        eventName: "LotCreated",
       });
 
       await viem.assertions.revertWithCustomError(
-        futures.write.depositDeliveryPayment([[positionEvent.args.positionId]], {
+        futures.write.depositDeliveryPayment([[positionEvent.args.lotId]], {
           account: seller.account,
         }),
         futures,
@@ -241,15 +241,15 @@ describe("Futures Delivery Payment", () => {
       const [positionEvent] = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "PositionCreated",
+        eventName: "LotCreated",
       });
 
-      await futures.write.depositDeliveryPayment([[positionEvent.args.positionId]], {
+      await futures.write.depositDeliveryPayment([[positionEvent.args.lotId]], {
         account: buyer.account,
       });
 
       await viem.assertions.revertWithCustomError(
-        futures.write.depositDeliveryPayment([[positionEvent.args.positionId]], {
+        futures.write.depositDeliveryPayment([[positionEvent.args.lotId]], {
           account: buyer.account,
         }),
         futures,
@@ -279,11 +279,11 @@ describe("Futures Delivery Payment", () => {
       const [positionEvent] = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "PositionCreated",
+        eventName: "LotCreated",
       });
 
       await viem.assertions.revertWithCustomError(
-        futures.write.depositDeliveryPayment([[positionEvent.args.positionId]], {
+        futures.write.depositDeliveryPayment([[positionEvent.args.lotId]], {
           account: buyer.account,
         }),
         futures,
@@ -316,10 +316,10 @@ describe("Futures Delivery Payment", () => {
       const [positionEvent] = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "PositionCreated",
+        eventName: "LotCreated",
       });
 
-      const { positionId } = positionEvent.args;
+      const { lotId: positionId } = positionEvent.args;
 
       await futures.write.depositDeliveryPaymentV2([positionId], { account: buyer.account });
 
@@ -343,7 +343,7 @@ describe("Futures Delivery Payment", () => {
       assert.equal(contractBalanceAfter, contractBalanceBefore - totalPayment);
 
       const position = await futures.read.getPositionById([positionId]);
-      assert.equal(position.paid, false);
+      assert.equal(position.seller, "0x0000000000000000000000000000000000000000");
     });
 
     it("should reject withdrawal before delivery is finished", async () => {
@@ -368,10 +368,10 @@ describe("Futures Delivery Payment", () => {
       const [positionEvent] = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "PositionCreated",
+        eventName: "LotCreated",
       });
 
-      await futures.write.depositDeliveryPaymentV2([positionEvent.args.positionId], {
+      await futures.write.depositDeliveryPaymentV2([positionEvent.args.lotId], {
         account: buyer.account,
       });
 
@@ -416,20 +416,20 @@ describe("Futures Delivery Payment", () => {
       const [positionEvent1] = parseEventLogs({
         logs: receipt1.logs,
         abi: futures.abi,
-        eventName: "PositionCreated",
+        eventName: "LotCreated",
       });
 
       const receipt2 = await pc.waitForTransactionReceipt({ hash: txHash2 });
       const [positionEvent2] = parseEventLogs({
         logs: receipt2.logs,
         abi: futures.abi,
-        eventName: "PositionCreated",
+        eventName: "LotCreated",
       });
 
-      await futures.write.depositDeliveryPaymentV2([positionEvent1.args.positionId], {
+      await futures.write.depositDeliveryPaymentV2([positionEvent1.args.lotId], {
         account: buyer.account,
       });
-      await futures.write.depositDeliveryPaymentV2([positionEvent2.args.positionId], {
+      await futures.write.depositDeliveryPaymentV2([positionEvent2.args.lotId], {
         account: buyer.account,
       });
 
@@ -481,18 +481,18 @@ describe("Futures Delivery Payment", () => {
       const [positionEvent1] = parseEventLogs({
         logs: receipt1.logs,
         abi: futures.abi,
-        eventName: "PositionCreated",
+        eventName: "LotCreated",
       });
 
       const receipt2 = await pc.waitForTransactionReceipt({ hash: txHash2 });
       const [positionEvent2] = parseEventLogs({
         logs: receipt2.logs,
         abi: futures.abi,
-        eventName: "PositionCreated",
+        eventName: "LotCreated",
       });
 
       // Only buyer deposits, buyer2 does not.
-      await futures.write.depositDeliveryPaymentV2([positionEvent1.args.positionId], {
+      await futures.write.depositDeliveryPaymentV2([positionEvent1.args.lotId], {
         account: buyer.account,
       });
 
@@ -506,9 +506,9 @@ describe("Futures Delivery Payment", () => {
       const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
       assert.equal(sellerBalanceAfter, sellerBalanceBefore + totalPayment);
 
-      const position1 = await futures.read.getPositionById([positionEvent1.args.positionId]);
-      const position2 = await futures.read.getPositionById([positionEvent2.args.positionId]);
-      assert.equal(position1.paid, false);
+      const position1 = await futures.read.getPositionById([positionEvent1.args.lotId]);
+      const position2 = await futures.read.getPositionById([positionEvent2.args.lotId]);
+      assert.equal(position1.seller, "0x0000000000000000000000000000000000000000");
       assert.equal(position2.paid, false);
     });
   });
@@ -536,10 +536,10 @@ describe("Futures Delivery Payment", () => {
       const [positionEvent] = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "PositionCreated",
+        eventName: "LotCreated",
       });
 
-      const { positionId } = positionEvent.args;
+      const { lotId: positionId } = positionEvent.args;
 
       const positionBefore = await futures.read.getPositionById([positionId]);
       assert.equal(positionBefore.paid, false);
@@ -558,10 +558,11 @@ describe("Futures Delivery Payment", () => {
       const [closeEvent] = parseEventLogs({
         logs: closeReceipt.logs,
         abi: futures.abi,
-        eventName: "PositionDeliveryClosed",
+        eventName: "LotClosed",
       });
 
-      assert.equal(closeEvent.args.positionId, positionId);
+      assert.equal(closeEvent.args.lotId, positionId);
+      assert.equal(closeEvent.args.reason, 2);
 
       const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
       const buyerBalanceAfter = await collateralVault.read.balanceOf([buyer.account.address]);
@@ -593,10 +594,10 @@ describe("Futures Delivery Payment", () => {
       const [positionEvent] = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "PositionCreated",
+        eventName: "LotCreated",
       });
 
-      const { positionId } = positionEvent.args;
+      const { lotId: positionId } = positionEvent.args;
 
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
       await refreshHashprice(contracts.hashrateOracle);
@@ -609,10 +610,11 @@ describe("Futures Delivery Payment", () => {
       const [closeEvent] = parseEventLogs({
         logs: closeReceipt.logs,
         abi: futures.abi,
-        eventName: "PositionDeliveryClosed",
+        eventName: "LotClosed",
       });
 
-      assert.equal(closeEvent.args.positionId, positionId);
+      assert.equal(closeEvent.args.lotId, positionId);
+      assert.equal(closeEvent.args.reason, 2);
       assert.equal(getAddress(closeEvent.args.closedBy), getAddress(buyer.account.address));
     });
 
@@ -638,10 +640,10 @@ describe("Futures Delivery Payment", () => {
       const [positionEvent] = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "PositionCreated",
+        eventName: "LotCreated",
       });
 
-      const { positionId } = positionEvent.args;
+      const { lotId: positionId } = positionEvent.args;
 
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
       await refreshHashprice(contracts.hashrateOracle);
@@ -654,11 +656,77 @@ describe("Futures Delivery Payment", () => {
       const [closeEvent] = parseEventLogs({
         logs: closeReceipt.logs,
         abi: futures.abi,
-        eventName: "PositionDeliveryClosed",
+        eventName: "LotClosed",
       });
 
-      assert.equal(closeEvent.args.positionId, positionId);
+      assert.equal(closeEvent.args.lotId, positionId);
+      assert.equal(closeEvent.args.reason, 2);
       assert.equal(getAddress(closeEvent.args.closedBy), getAddress(seller.account.address));
+    });
+  });
+
+  describe("BREACH with buyer prepayment", () => {
+    it("should settle from escrow and refund buyer instead of charging buyer vault again", async () => {
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures, collateralVault } = contracts;
+      const { owner, seller, buyer, validator, pc, tc } = accounts;
+
+      const price = await futures.read.getMarketPrice();
+      const marginAmount = parseUnits("10000", 6);
+      const deliveryDate = config.deliveryDates[0];
+      const totalPayment = price * BigInt(config.deliveryDurationDays);
+
+      await collateralVault.write.deposit([marginAmount], { account: seller.account });
+      await collateralVault.write.deposit([marginAmount], { account: buyer.account });
+
+      await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
+      const txHash = await futures.write.createOrder([price, deliveryDate, "https://dest.com", 1], {
+        account: buyer.account,
+      });
+
+      const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
+      const [lotEvent] = parseEventLogs({
+        logs: receipt.logs,
+        abi: futures.abi,
+        eventName: "LotCreated",
+      });
+
+      const { lotId: positionId } = lotEvent.args;
+
+      // Neutralize breach penalty so balance delta only reflects escrow delivery/refund flow.
+      await futures.write.setBreachPenaltyRatePerDay([0n], { account: owner.account });
+
+      const contractBalanceBeforeDeposit = await collateralVault.read.balanceOf([futures.address]);
+      await futures.write.depositDeliveryPaymentV2([positionId], { account: buyer.account });
+
+      const buyerBalanceAfterDeposit = await collateralVault.read.balanceOf([buyer.account.address]);
+      const contractBalanceAfterDeposit = await collateralVault.read.balanceOf([futures.address]);
+      assert.equal(contractBalanceAfterDeposit - contractBalanceBeforeDeposit, totalPayment);
+
+      await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
+      await refreshHashprice(contracts.hashrateOracle);
+
+      const closeTxHash = await futures.write.closeDelivery([positionId, false], {
+        account: validator.account,
+      });
+      const closeReceipt = await pc.waitForTransactionReceipt({ hash: closeTxHash });
+      const [closeEvent] = parseEventLogs({
+        logs: closeReceipt.logs,
+        abi: futures.abi,
+        eventName: "LotClosed",
+      });
+
+      assert.equal(closeEvent.args.lotId, positionId);
+      assert.equal(closeEvent.args.reason, 2); // BREACH
+
+      const buyerBalanceAfterClose = await collateralVault.read.balanceOf([buyer.account.address]);
+      const contractBalanceAfterClose = await collateralVault.read.balanceOf([futures.address]);
+
+      // Escrow delta should be fully consumed (seller payment + buyer refund).
+      assert.equal(contractBalanceAfterClose, contractBalanceBeforeDeposit);
+      // Critical regression check: closeDelivery should not take additional payment from buyer vault.
+      assert.ok(buyerBalanceAfterClose > buyerBalanceAfterDeposit);
     });
   });
 });

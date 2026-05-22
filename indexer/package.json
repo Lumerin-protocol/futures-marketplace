@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "clean": "rm -rf data generated build",
+    "postinstall": "node scripts/patch-matchstick-ts.mjs",
     "codegen": "graph codegen",
     "prepare:env": "envsubst < subgraph.template.yaml > subgraph.yaml",
     "prepare-local": "set -a && source ../.env && set +a && envsubst < subgraph.template.yaml > subgraph.yaml",
@@ -13,10 +14,11 @@
     "remove-local": "graph remove --node http://localhost:8020/ futures",
     "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 --version-label 0 futures",
     "setup-local": "pnpm prepare-local && pnpm codegen && pnpm build && pnpm create-local && pnpm deploy-local",
-    "test": "graph test",
+    "test": "pnpm test:integration",
+    "test:unit": "graph test",
     "indexer": "docker-compose up",
     "test:integration": "hardhat test nodejs",
-    "test:integration:debug": "KEEP_TEMP=1 hardhat test nodejs"
+    "test:integration:debug": "MATCHSTICK_VERBOSE=true hardhat test nodejs"
   },
   "dependencies": {
     "@graphprotocol/graph-ts": "0.37.0",

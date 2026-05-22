@@ -249,13 +249,13 @@ export const HistoricalPositionsQuery = gql`
 
 // Historical (closed) Orders for the last 30 days, paged with first/skip.
 // Mirrors the active `UserFuturesOrdersByStatusQuery` shape — the only difference
-// is the status filter (`FILLED`/`CANCELLED`) and the deliveryAt cutoff.
+// is the status filter (terminal states) and the deliveryAt cutoff.
 export const HistoricalOrdersQuery = gql`
   query HistoricalOrdersQuery($address: ID!, $thirtyDaysAgo: BigInt!, $first: Int!, $skip: Int!) {
     orders(
       where: {
         user: $address
-        status_in: ["FILLED", "CANCELLED"]
+        status_in: ["FILLED", "PARTIALLY_FILLED", "CANCELLED"]
         deliveryAt_gte: $thirtyDaysAgo
       }
       first: $first

@@ -1,10 +1,17 @@
-import { log } from "@graphprotocol/graph-ts";
-import { OrderClosed, OrderCreated } from "../../generated/Futures/Futures";
+import { BigInt, log } from "@graphprotocol/graph-ts";
+import { OrderClosed, OrderCreated, OrderLiquidated } from "../../generated/Futures/Futures";
 import { Order, OrderEntry, User } from "../../generated/schema";
 import { OrderEntryStatus, OrderStatus } from "../enums";
 import { orderAggregateId } from "../ids";
 import { recomputeOrderStatus } from "../internal/orders";
-import { getOrCreateFutures, getOrCreatePriceLevel, getOrCreateUser } from "../internal/store";
+import { flushFuturesCounters } from "../internal/match";
+import {
+  getOrCreateFutures,
+  getOrCreatePriceLevel,
+  getOrCreateUser,
+  markLiquidationTx,
+} from "../internal/store";
+import { stringifyParameters } from "../internal/utils";
 
 /// `OrderCreated` fires once per qty=1 unit that rests in the book — taker
 /// matches don't emit OrderCreated. Multiple events from one
@@ -12,6 +19,8 @@ import { getOrCreateFutures, getOrCreatePriceLevel, getOrCreateUser } from "../i
 /// (tx, user, price, deliveryAt, side) and aggregate into one `Order` entity
 /// with N `OrderEntry` children, one per on-chain orderId.
 export function handleOrderCreated(event: OrderCreated): void {
+  log.debug("order created event {}", [stringifyParameters(event)]);
+
   const user = getOrCreateUser(event.params.participant, event.block.timestamp);
   const aggId = orderAggregateId(
     event.transaction.hash,
@@ -49,11 +58,14 @@ export function handleOrderCreated(event: OrderCreated): void {
   entry.status = OrderEntryStatus.ACTIVE;
   entry.save();
 
+  // activeOrderCount / activeOrders count individual ACTIVE OrderEntry units (one per
+  // on-chain orderId), so every OrderCreated bumps by 1 regardless of aggregate state.
+  // orderCount stays per-aggregate.
   user.lastActivityAt = event.block.timestamp;
   if (isNewAggregate) {
     user.orderCount++;
-    user.activeOrderCount++;
   }
+  user.activeOrderCount++;
   user.save();
 
   const level = getOrCreatePriceLevel(
@@ -65,20 +77,17 @@ export function handleOrderCreated(event: OrderCreated): void {
   level.save();
 
   const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
   if (isNewAggregate) {
     futures.totalOrders++;
-    futures.activeOrders++;
   }
+  futures.activeOrders++;
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
 }
 
-/// `OrderClosed` is fired in cancel-by-self, cancel-as-outdated, liquidation,
-/// AND match contexts. At emit time we cannot tell the difference, so we mark
-/// the entry CANCELLED optimistically. If a `PositionCreated` later in the same
-/// tx references this orderId, `handlePositionCreated` upgrades it to MATCHED
-/// and rebalances the parent Order's counters.
 export function handleOrderClosed(event: OrderClosed): void {
+  log.debug("order closed event {}", [stringifyParameters(event)]);
   const entry = OrderEntry.load(event.params.orderId);
   if (!entry) {
     log.warning("OrderClosed for unknown orderId {}", [event.params.orderId.toHexString()]);
@@ -94,13 +103,28 @@ export function handleOrderClosed(event: OrderClosed): void {
     return;
   }
 
-  entry.status = OrderEntryStatus.CANCELLED;
+  const entryStatus = mapOrderEntryStatus(event.params.reason);
+  if (entryStatus.length == 0) {
+    log.error("OrderClosed: unknown reason {} for orderId {} (tx {})", [
+      BigInt.fromI32(event.params.reason).toString(),
+      event.params.orderId.toHexString(),
+      event.transaction.hash.toHexString(),
+    ]);
+    return;
+  }
+  const matched = entryStatus == OrderEntryStatus.MATCHED;
+
+  entry.status = entryStatus;
   entry.closedAt = event.block.timestamp;
-  entry.closedBy = event.transaction.from;
+  entry.closedByTx = event.transaction.from;
   entry.save();
 
   order.quantity -= 1;
-  order.cancelledQuantity += 1;
+  if (matched) {
+    order.filledQuantity += 1;
+  } else {
+    order.cancelledQuantity += 1;
+  }
   order.updatedAt = event.block.timestamp;
   recomputeOrderStatus(order, event.block.timestamp);
   order.save();
@@ -109,16 +133,53 @@ export function handleOrderClosed(event: OrderClosed): void {
   level.totalQuantity -= 1;
   level.save();
 
-  if (order.quantity == 0) {
-    const user = User.load(order.user);
-    if (user) {
-      user.activeOrderCount--;
-      user.lastActivityAt = event.block.timestamp;
-      user.save();
-    }
+  // activeOrderCount / activeOrders track ACTIVE OrderEntry units (not aggregates),
+  // so every OrderClosed of a previously-ACTIVE entry decrements by 1.
+  const user = User.load(order.user);
+  if (user) {
+    user.activeOrderCount--;
+    user.lastActivityAt = event.block.timestamp;
+    user.save();
+  }
+  const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
+  futures.activeOrders--;
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+/// Overlays per-liquidation attribution onto the OrderEntry. Always fires in the same tx
+/// (and after) the paired `OrderClosed(LIQUIDATED)` so the entry already exists. Kept as a
+/// separate event so the much hotter `OrderClosed` topic doesn't pay for liquidator/fee
+/// bytes on every cancel/match/expire. Also drives `Futures.totalLiquidations`, deduped
+/// per tx via the `LiquidationTx` sentinel so multi-leg liquidation txs count once.
+export function handleOrderLiquidated(event: OrderLiquidated): void {
+  log.debug("order liquidated event {}", [stringifyParameters(event)]);
+  const entry = OrderEntry.load(event.params.orderId);
+  if (!entry) {
+    log.warning("OrderLiquidated for unknown orderId {}", [event.params.orderId.toHexString()]);
+    return;
+  }
+  entry.liquidator = event.params.liquidator;
+  entry.liquidationFee = event.params.fee;
+  entry.save();
+
+  if (markLiquidationTx(event.transaction.hash)) {
     const futures = getOrCreateFutures();
-    futures.activeOrders--;
+    flushFuturesCounters(futures);
+    futures.totalLiquidations++;
     futures.lastUpdatedAt = event.block.timestamp;
     futures.save();
   }
+}
+
+/// Empty string sentinel = unknown reason. Caller logs + skips so a future
+/// on-chain enum extension fails loudly instead of being silently mislabelled.
+function mapOrderEntryStatus(reason: i32): string {
+  if (reason == 0) return OrderEntryStatus.MATCHED;
+  if (reason == 1) return OrderEntryStatus.CANCELLED;
+  if (reason == 2) return OrderEntryStatus.EXPIRED;
+  if (reason == 3) return OrderEntryStatus.LIQUIDATED;
+  if (reason == 4) return OrderEntryStatus.RESET;
+  return "";
 }

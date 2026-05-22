@@ -140,9 +140,9 @@ export const FuturesBalanceWidget = ({
         )}
 
         {shouldHighlight && (
-          <MarginCallWarning>
-            ⚠️ Margin Call Warning: Add Funds to Avoid Liquidation
-          </MarginCallWarning>
+          <LiquidationWarning>
+            ⚠️ Low Margin: Add Funds to Avoid Liquidation
+          </LiquidationWarning>
         )}
       </PanelSection>
 
@@ -233,7 +233,7 @@ const ActionButton = styled(PrimaryButton)`
   min-width: 0;
 `;
 
-const MarginCallWarning = styled("div")`
+const LiquidationWarning = styled("div")`
   padding: 0.35rem 0.5rem;
   background-color: ${tokens.perps.highlightBg};
   border: 1px solid ${tokens.perps.highlightBorderSoft};

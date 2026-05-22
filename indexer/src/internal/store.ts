@@ -1,7 +1,14 @@
 import { Address, BigInt, Bytes, dataSource } from "@graphprotocol/graph-ts";
 import { Futures as FuturesContract } from "../../generated/Futures/Futures";
-import { Futures, PriceLevel, User, UserDeliverySessionPointer } from "../../generated/schema";
+import {
+  Futures,
+  LiquidationTx,
+  PriceLevel,
+  User,
+  UserDeliverySessionPointer,
+} from "../../generated/schema";
 import { priceLevelId, userDeliveryPointerId } from "../ids";
+import { recordNewUser } from "./match";
 
 /// Singleton row keyed by `id = 0`. All contract-wide config + counters live here.
 export function getOrCreateFutures(): Futures {
@@ -11,11 +18,14 @@ export function getOrCreateFutures(): Futures {
     futures.contractAddress = dataSource.address();
     futures.collateralToken = Bytes.empty();
     futures.hashrateOracleAddress = Bytes.empty();
+    futures.marginEngineAddress = Bytes.empty();
     futures.validatorAddress = Bytes.empty();
     futures.validatorURL = "";
     futures.startBlock = readStartBlockFromContext();
     futures.minimumPriceIncrement = BigInt.zero();
-    futures.orderFee = BigInt.zero();
+    futures.makerFee = BigInt.zero();
+    futures.takerFee = BigInt.zero();
+    futures.liquidationFee = BigInt.zero();
     futures.liquidationMarginPercent = 0;
     futures.speedHps = BigInt.zero();
     futures.deliveryDurationDays = 0;
@@ -69,8 +79,17 @@ export function loadFuturesFromContract(futures: Futures): void {
   const minPx = contract.try_minimumPriceIncrement();
   if (!minPx.reverted) futures.minimumPriceIncrement = minPx.value;
 
-  const orderFee = contract.try_orderFee();
-  if (!orderFee.reverted) futures.orderFee = orderFee.value;
+  const makerFee = contract.try_makerFee();
+  if (!makerFee.reverted) futures.makerFee = makerFee.value;
+
+  const takerFee = contract.try_takerFee();
+  if (!takerFee.reverted) futures.takerFee = takerFee.value;
+
+  const liquidationFee = contract.try_liquidationFee();
+  if (!liquidationFee.reverted) futures.liquidationFee = liquidationFee.value;
+
+  const marginEngine = contract.try_marginEngine();
+  if (!marginEngine.reverted) futures.marginEngineAddress = marginEngine.value;
 
   const liqMargin = contract.try_liquidationMarginPercent();
   if (!liqMargin.reverted) futures.liquidationMarginPercent = liqMargin.value;
@@ -107,12 +126,15 @@ export function getOrCreateUser(address: Address, timestamp: BigInt): User {
     user.tradeCount = 0;
     user.fillCount = 0;
     user.realizedPnl = BigInt.zero();
+    user.lots = [];
     user.createdAt = timestamp;
     user.lastActivityAt = timestamp;
 
-    const futures = getOrCreateFutures();
-    futures.totalUsers++;
-    futures.save();
+    // Deferred Futures-singleton write: the totalUsers bump is queued into a
+    // module-level delta and flushed by `flushFuturesCounters` alongside other
+    // per-handler `Futures` updates, keeping the singleton at one save per
+    // handler invocation.
+    recordNewUser();
   }
   return user;
 }
@@ -132,6 +154,17 @@ export function getOrCreatePriceLevel(
     level.totalQuantity = 0;
   }
   return level;
+}
+
+/// Idempotent per-tx marker used by `handleOrderLiquidated` / `handleLotLiquidated`
+/// to bump `Futures.totalLiquidations` exactly once per tx. Returns true iff this
+/// invocation created the marker (i.e. it's the first leg seen in this tx); subsequent
+/// legs in the same tx return false and the caller skips the counter increment.
+export function markLiquidationTx(txHash: Bytes): boolean {
+  if (LiquidationTx.load(txHash) != null) return false;
+  const marker = new LiquidationTx(txHash);
+  marker.save();
+  return true;
 }
 
 /// Per-(user, deliveryAt) bookkeeping pointer: the running net qty, weighted

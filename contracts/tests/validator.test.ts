@@ -29,9 +29,9 @@ describe("Validator Functions", () => {
     const [orderEvent] = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotCreated",
     });
-    const { positionId } = orderEvent.args;
+    const { lotId: positionId } = orderEvent.args;
 
     // Move time to after start time but before expiration
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n }); // 1 day + 1 second
@@ -45,10 +45,11 @@ describe("Validator Functions", () => {
     const [closeEvent] = parseEventLogs({
       logs: closeReceipt.logs,
       abi: futures.abi,
-      eventName: "PositionDeliveryClosed",
+      eventName: "LotClosed",
     });
 
-    assert.equal(closeEvent.args.positionId, positionId);
+    assert.equal(closeEvent.args.lotId, positionId);
+    assert.equal(closeEvent.args.reason, 2);
     assert.equal(getAddress(closeEvent.args.closedBy), getAddress(validator.account.address));
   });
 
@@ -72,9 +73,9 @@ describe("Validator Functions", () => {
     const [createdEvent] = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotCreated",
     });
-    const { positionId } = createdEvent.args;
+    const { lotId: positionId } = createdEvent.args;
 
     await viem.assertions.revertWithCustomError(
       futures.write.closeDelivery([positionId, true], { account: validator.account }),
@@ -103,9 +104,9 @@ describe("Validator Functions", () => {
     const [orderEvent] = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotCreated",
     });
-    const { positionId } = orderEvent.args;
+    const { lotId: positionId } = orderEvent.args;
 
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate + 1n });
 

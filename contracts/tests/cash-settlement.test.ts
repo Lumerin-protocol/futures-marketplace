@@ -63,25 +63,26 @@ describe("Futures - Offset & Cash Settlement", () => {
     const positionCreatedEvents = parseEventLogs({
       logs: offsetReceipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotTransferred",
     });
 
     assert.ok(positionCreatedEvents.length > 0);
-    const newPositionId = positionCreatedEvents[0].args.positionId;
+    const newPositionId = positionCreatedEvents[0].args.newLotId;
 
     // Buyer profits — contract pays out from balance.
     const buyerBalanceAfterOffset = await collateralVault.read.balanceOf([buyer.account.address]);
     const contractBalanceAfterOffset = await totalContractBalance(contracts);
 
     const expectedPnL = (exitPrice - initialPrice) * BigInt(config.deliveryDurationDays);
-    const orderFee = await futures.read.orderFee();
-    // Buyer placed 2 orders, so 2× orderFee deducted.
-    const expectedBuyerBalanceChange = expectedPnL - orderFee * 2n;
+    const takerFee = await futures.read.takerFee();
+    // Under the post-2.9 model only takers pay (makerFee defaults to 0): buyer was taker on
+    // step 2 (entry) and maker on step 4 (exit, via LotTransferred), so only 1× takerFee deducted.
+    const expectedBuyerBalanceChange = expectedPnL - takerFee;
     assert.equal(buyerBalanceAfterOffset - buyerBalanceBefore, expectedBuyerBalanceChange);
 
-    // Total fees collected: seller (1) + buyer (2) + buyer2 (1) = 4.
-    const totalOrderFees = orderFee * 4n;
-    const expectedContractBalanceChange = expectedPnL - totalOrderFees;
+    // Total fees collected: 2 taker fills (buyer entry, buyer2 entry).
+    const totalFees = takerFee * 2n;
+    const expectedContractBalanceChange = expectedPnL - totalFees;
     assert.equal(contractBalanceBefore - contractBalanceAfterOffset, expectedContractBalanceChange);
 
     await refreshHashprice(contracts.hashrateOracle, deliveryDate);
@@ -90,7 +91,7 @@ describe("Futures - Offset & Cash Settlement", () => {
     await futures.write.closeDelivery([newPositionId, false], { account: validator.account });
 
     const contractBalanceAfterSettlement = await totalContractBalance(contracts);
-    assert.equal(contractBalanceBefore + totalOrderFees, contractBalanceAfterSettlement);
+    assert.equal(contractBalanceBefore + totalFees, contractBalanceAfterSettlement);
   });
 
   it("should handle position offset and settlement with contract balance correctly when buyer exits at loss", async () => {
@@ -136,22 +137,23 @@ describe("Futures - Offset & Cash Settlement", () => {
     const positionCreatedEvents = parseEventLogs({
       logs: offsetReceipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotTransferred",
     });
 
     assert.ok(positionCreatedEvents.length > 0);
-    const newPositionId = positionCreatedEvents[0].args.positionId;
+    const newPositionId = positionCreatedEvents[0].args.newLotId;
 
     const buyerBalanceAfterOffset = await collateralVault.read.balanceOf([buyer.account.address]);
     const contractBalanceAfterOffset = await totalContractBalance(contracts);
 
     const expectedPnL = (exitPrice - initialPrice) * BigInt(config.deliveryDurationDays);
-    const orderFee = await futures.read.orderFee();
-    const expectedBuyerBalanceChange = expectedPnL - orderFee * 2n;
+    const takerFee = await futures.read.takerFee();
+    // Only takers pay (makerFee=0 by default): buyer was taker on step 2 and maker on step 4.
+    const expectedBuyerBalanceChange = expectedPnL - takerFee;
     assert.equal(buyerBalanceAfterOffset - buyerBalanceBefore, expectedBuyerBalanceChange);
 
-    const totalOrderFees = orderFee * 4n;
-    const expectedContractBalanceChange = expectedPnL - totalOrderFees;
+    const totalFees = takerFee * 2n;
+    const expectedContractBalanceChange = expectedPnL - totalFees;
     assert.equal(contractBalanceBefore - contractBalanceAfterOffset, expectedContractBalanceChange);
 
     // Step 6: Move time forward to delivery date and settle the new position
@@ -168,7 +170,7 @@ describe("Futures - Offset & Cash Settlement", () => {
     await futures.write.closeDelivery([newPositionId, false], { account: validator.account });
 
     const contractBalanceAfterSettlement = await totalContractBalance(contracts);
-    assert.equal(contractBalanceBefore + totalOrderFees, contractBalanceAfterSettlement);
+    assert.equal(contractBalanceBefore + totalFees, contractBalanceAfterSettlement);
     const marketPrice = await futures.read.getMarketPrice();
 
     const sellerBalance = await collateralVault.read.balanceOf([seller.account.address]);

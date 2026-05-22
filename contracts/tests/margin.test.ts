@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
-import { parseEventLogs, parseUnits, zeroAddress } from "viem";
+import { parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { refreshHashprice, scaleHashprice } from "./utils.ts";
 
@@ -201,75 +201,3 @@ describe("Futures - margin management", () => {
   });
 });
 
-describe("Futures - margin call", function () {
-  it("should perform margin call when margin is insufficient", async function () {
-    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, hashrateOracle, collateralVault, portfolioMarginEngine } = contracts;
-    const { seller, validator, pc } = accounts;
-
-    const price = await futures.read.getMarketPrice();
-    // Tight deposit: enough to satisfy IM at entry but not after the price slide
-    // below.
-    const deposit = price * BigInt(config.deliveryDurationDays) + config.orderFee;
-    const deliveryDate = config.deliveryDates[0];
-
-    await collateralVault.write.deposit([deposit], { account: seller.account });
-
-    const tx = await futures.write.createOrder([price, deliveryDate, "", 1], {
-      account: seller.account,
-    });
-    const rec = await pc.waitForTransactionReceipt({ hash: tx });
-    const [createdEvent] = parseEventLogs({
-      logs: rec.logs,
-      abi: futures.abi,
-      eventName: "OrderCreated",
-    });
-    const { orderId } = createdEvent.args;
-
-    // Crash the hashprice 10× so the resting buy order's mark-to-market loss
-    // dominates the seller's deposit (PME's order-margin component grows linearly
-    // with the gap between entry and mark).
-    await scaleHashprice(hashrateOracle, 1n, 10n);
-
-    // Sanity-check: balance is now below MM.
-    const balance = await collateralVault.read.balanceOf([seller.account.address]);
-    const mm = await portfolioMarginEngine.read.computePortfolioMM([seller.account.address]);
-    assert.ok(balance < mm, "seller is below MM after price crash");
-
-    const txHash = await futures.write.marginCall([seller.account.address], {
-      account: validator.account,
-    });
-
-    const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
-    assert.equal(receipt.status, "success");
-
-    const [closedEvent] = parseEventLogs({
-      logs: receipt.logs,
-      abi: futures.abi,
-      eventName: "OrderClosed",
-    });
-    assert.equal(closedEvent.args.orderId, orderId);
-
-    const order = await futures.read.getOrderById([orderId]);
-    assert.equal(order.participant, zeroAddress);
-  });
-
-  it("should reject margin call by non-validator", async () => {
-    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault } = contracts;
-    const { seller } = accounts;
-
-    const price = parseUnits("100", 6);
-    const margin = parseUnits("10000", 6);
-    const deliveryDate = config.deliveryDates[0];
-
-    await collateralVault.write.deposit([margin], { account: seller.account });
-    await futures.write.createOrder([price, deliveryDate, "", 1], { account: seller.account });
-
-    await viem.assertions.revertWithCustomError(
-      futures.write.marginCall([seller.account.address], { account: seller.account }),
-      futures,
-      "OnlyValidator",
-    );
-  });
-});

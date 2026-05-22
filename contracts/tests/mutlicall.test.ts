@@ -63,8 +63,5 @@ describe("Futures - multicall write", () => {
       eventName: "OrderClosed",
     });
     assert.equal(closeEvents.length, 2);
-    for (const event of closeEvents) {
-      assert.equal(event.args.participant, getAddress(seller.account.address));
-    }
   });
 });

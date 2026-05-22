@@ -9,18 +9,14 @@ import { scaleHashprice } from "./utils.ts";
 const { viem, networkHelpers } = await network.getOrCreate();
 
 /**
- * Phase 0 of the unified margin keeper plan: permissionless `liquidateOrder`,
- * `liquidateOrders`, `liquidatePosition` with strict orders-first invariant.
+ * Permissionless liquidation suite: `liquidateOrder`, `liquidateOrders`,
+ * `liquidatePosition` with the strict orders-first invariant.
  *
  * Surface under test:
  *   - liquidateOrder(participant, id)
  *   - liquidateOrders(participant)              — FIFO sweep until healthy
  *   - liquidatePosition(participant, positionId) — reverts OrdersStillOpen if any orders remain
  *   - setLiquidationFee — single flat fee charged per cancelled order and per closed position
- *
- * The legacy validator-only `marginCall` entry point is exercised by
- * `liquidation.test.ts` and continues to work for the existing Lambda; it is
- * kept in place during the cutover and removed in a Phase 4 follow-up.
  */
 async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
   const data = await networkHelpers.loadFixture(deployFuturesFixture);
@@ -56,9 +52,9 @@ async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
   const [positionEvt] = parseEventLogs({
     logs: matchReceipt.logs,
     abi: futures.abi,
-    eventName: "PositionCreated",
+    eventName: "LotCreated",
   });
-  const positionId = positionEvt.args.positionId;
+  const positionId = positionEvt.args.lotId;
 
   // Two extra resting BUY orders for buyer at the matched price. Same-side as the
   // position so they aren't auto-offset; once the hashprice drops they go deeply
@@ -99,7 +95,7 @@ describe("Futures - permissionless liquidation entry points", function () {
       );
     });
 
-    it("emits LiquidationFeeUpdated and persists the new value", async function () {
+    it("emits ConfigUpdated with the new liquidation fee and persists the value", async function () {
       const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
       const { futures } = contracts;
       const { owner, pc } = accounts;
@@ -111,9 +107,9 @@ describe("Futures - permissionless liquidation entry points", function () {
       const [event] = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "LiquidationFeeUpdated",
+        eventName: "ConfigUpdated",
       });
-      assert.equal(event.args.newLiquidationFee, liqFee);
+      assert.equal(event.args.config.liquidationFee, liqFee);
 
       assert.equal(await futures.read.liquidationFee(), liqFee);
     });
@@ -384,11 +380,11 @@ describe("Futures - permissionless liquidation entry points", function () {
       assert.equal(after.seller, "0x0000000000000000000000000000000000000000");
 
       const events = parseEventLogs({ logs: receipt.logs, abi: futures.abi });
-      const positionClosed = events.find((e: any) => e.eventName === "PositionClosed") as any;
-      const positionLiquidated = events.find((e: any) => e.eventName === "PositionLiquidated") as any;
-      assert.ok(positionClosed, "PositionClosed should be emitted for indexer compatibility");
+      const positionClosed = events.find((e: any) => e.eventName === "LotClosed") as any;
+      const positionLiquidated = events.find((e: any) => e.eventName === "LotLiquidated") as any;
+      assert.ok(positionClosed, "LotClosed should be emitted for indexer compatibility");
       assert.ok(positionLiquidated);
-      assert.equal(positionLiquidated.args.positionId, positionId);
+      assert.equal(positionLiquidated.args.lotId, positionId);
 
       const liqBalAfter = await collateralVault.read.balanceOf([buyer2.account.address]);
       // Liquidator gets at most the fee (could be less if buyer's vault was wiped by PnL).

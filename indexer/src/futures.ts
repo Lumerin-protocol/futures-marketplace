@@ -3,21 +3,24 @@
 // is split into `handlers/` (per-event) and `internal/` (shared helpers).
 
 export {
+  handleConfigUpdated,
   handleInitialized,
-  handleOrderFeeUpdated,
   handleUpgraded,
-  handleValidatorURLUpdated,
 } from "./handlers/admin";
 
-export { handleOrderClosed, handleOrderCreated } from "./handlers/orders";
+export {
+  handleOrderClosed,
+  handleOrderCreated,
+  handleOrderLiquidated,
+} from "./handlers/orders";
 
 export {
-  handlePositionClosed,
-  handlePositionCreated,
-  handlePositionDeliveryClosed,
-  handlePositionExited,
-  handlePositionPaid,
-  handlePositionPaymentReceived,
-} from "./handlers/positions";
+  handleLotClosed,
+  handleLotCreated,
+  handleLotLiquidated,
+  handleLotPaid,
+  handleLotPaymentWithdrawn,
+  handleLotTransferred,
+} from "./handlers/lots";
 
-export { handleBadDebt, handleLiquidation } from "./handlers/liquidation";
+export { handleBadDebt } from "./handlers/liquidation";

@@ -38,15 +38,14 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     const events = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotCreated",
     });
 
     assert.equal(events.length, 2);
     for (const orderEvent of events) {
       assert.equal(getAddress(orderEvent.args.seller), getAddress(seller.account.address));
       assert.equal(getAddress(orderEvent.args.buyer), getAddress(buyer.account.address));
-      assert.equal(orderEvent.args.sellPricePerDay, price);
-      assert.equal(orderEvent.args.buyPricePerDay, price);
+      assert.equal(orderEvent.args.pricePerDay, price);
       assert.equal(orderEvent.args.deliveryAt, BigInt(deliveryDate));
     }
   });
@@ -73,15 +72,14 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     const events = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotCreated",
     });
 
     assert.equal(events.length, 2);
     for (const event of events) {
       assert.equal(getAddress(event.args.seller), getAddress(seller.account.address));
       assert.equal(getAddress(event.args.buyer), getAddress(buyer.account.address));
-      assert.equal(event.args.sellPricePerDay, price);
-      assert.equal(event.args.buyPricePerDay, price);
+      assert.equal(event.args.pricePerDay, price);
       assert.equal(event.args.deliveryAt, BigInt(deliveryDate));
     }
   });
@@ -109,10 +107,10 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     const [initialPositionCreatedEvent] = parseEventLogs({
       logs: initialReceipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotCreated",
     });
 
-    const initialPositionId = initialPositionCreatedEvent.args.positionId;
+    const initialPositionId = initialPositionCreatedEvent.args.lotId;
     assert.equal(
       getAddress(initialPositionCreatedEvent.args.seller),
       getAddress(account1.account.address),
@@ -136,38 +134,34 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
 
     const account2BalanceAfter = await collateralVault.read.balanceOf([account2.account.address]);
 
-    const [positionClosedEvent] = parseEventLogs({
+    const [lotTransferredEvent] = parseEventLogs({
       logs: exitReceipt.logs,
       abi: futures.abi,
-      eventName: "PositionClosed",
+      eventName: "LotTransferred",
     });
 
-    assert.equal(positionClosedEvent.args.positionId, initialPositionId);
-
-    const [newPositionCreatedEvent] = parseEventLogs({
-      logs: exitReceipt.logs,
-      abi: futures.abi,
-      eventName: "PositionCreated",
-    });
-
+    assert.equal(lotTransferredEvent.args.oldLotId, initialPositionId);
     assert.equal(
-      getAddress(newPositionCreatedEvent.args.seller),
-      getAddress(account1.account.address),
+      getAddress(lotTransferredEvent.args.exitingParticipant),
+      getAddress(account2.account.address),
     );
     assert.equal(
-      getAddress(newPositionCreatedEvent.args.buyer),
+      getAddress(lotTransferredEvent.args.newParticipant),
       getAddress(account3.account.address),
     );
-    assert.equal(newPositionCreatedEvent.args.sellPricePerDay, price);
-    assert.equal(newPositionCreatedEvent.args.buyPricePerDay, exitPrice);
-    assert.equal(newPositionCreatedEvent.args.deliveryAt, BigInt(deliveryDate));
+    // Exiting party was the buyer, so the remaining seller's price is carried over
+    // and only the buyer leg gets the new match price.
+    assert.equal(lotTransferredEvent.args.newSellPricePerDay, price);
+    assert.equal(lotTransferredEvent.args.newBuyPricePerDay, exitPrice);
 
     const deliveryDurationDays = await futures.read.deliveryDurationDays();
     const expectedProfit = (exitPrice - price) * BigInt(deliveryDurationDays);
     const account2Profit = account2BalanceAfter - account2BalanceBefore;
 
-    const orderFee = await futures.read.orderFee();
-    assert.equal(account2Profit + orderFee, expectedProfit);
+    // account2 placed a resting -1 at exitPrice (no fee) and was the maker on account3's
+    // taker fill. With the default makerFee=0 the only fee on this flow is account3's
+    // takerFee — account2's balance change equals the realized profit exactly.
+    assert.equal(account2Profit, expectedProfit);
   });
 
   it("should exit position with loss and verify accounting is correct", async () => {
@@ -193,10 +187,10 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     const [initialPositionCreatedEvent] = parseEventLogs({
       logs: initialReceipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotCreated",
     });
 
-    const initialPositionId = initialPositionCreatedEvent.args.positionId;
+    const initialPositionId = initialPositionCreatedEvent.args.lotId;
     assert.equal(
       getAddress(initialPositionCreatedEvent.args.seller),
       getAddress(account1.account.address),
@@ -223,42 +217,36 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     const account2BalanceAfter = await collateralVault.read.balanceOf([account2.account.address]);
     const contractBalanceAfter = await totalContractBalance(contracts);
 
-    const [positionClosedEvent] = parseEventLogs({
+    const [lotTransferredEvent] = parseEventLogs({
       logs: exitReceipt.logs,
       abi: futures.abi,
-      eventName: "PositionClosed",
+      eventName: "LotTransferred",
     });
 
-    assert.equal(positionClosedEvent.args.positionId, initialPositionId);
-
-    const [newPositionCreatedEvent] = parseEventLogs({
-      logs: exitReceipt.logs,
-      abi: futures.abi,
-      eventName: "PositionCreated",
-    });
-
+    assert.equal(lotTransferredEvent.args.oldLotId, initialPositionId);
     assert.equal(
-      getAddress(newPositionCreatedEvent.args.seller),
-      getAddress(account1.account.address),
+      getAddress(lotTransferredEvent.args.exitingParticipant),
+      getAddress(account2.account.address),
     );
     assert.equal(
-      getAddress(newPositionCreatedEvent.args.buyer),
+      getAddress(lotTransferredEvent.args.newParticipant),
       getAddress(account3.account.address),
     );
-    assert.equal(newPositionCreatedEvent.args.sellPricePerDay, price);
-    assert.equal(newPositionCreatedEvent.args.buyPricePerDay, exitPrice);
-    assert.equal(newPositionCreatedEvent.args.deliveryAt, BigInt(deliveryDate));
+    assert.equal(lotTransferredEvent.args.newSellPricePerDay, price);
+    assert.equal(lotTransferredEvent.args.newBuyPricePerDay, exitPrice);
 
     const deliveryDurationDays = await futures.read.deliveryDurationDays();
     const expectedLoss = (price - exitPrice) * BigInt(deliveryDurationDays);
     const account2BalanceChange = account2BalanceAfter - account2BalanceBefore;
 
-    const orderFee = await futures.read.orderFee();
-    assert.equal(account2BalanceChange, -expectedLoss - orderFee);
+    // account2 placed a resting -1 (no fee) and was the maker (makerFee=0) on account3's
+    // taker fill, so its balance change equals the realized loss exactly.
+    assert.equal(account2BalanceChange, -expectedLoss);
 
-    // account2's exit order fee already in `contractBalanceBefore`, so only account3's fee is new.
-    const expectedContractBalanceChange = expectedLoss + orderFee;
-    assert.equal(contractBalanceAfter - contractBalanceBefore, expectedContractBalanceChange);
+    // account3 paid takerFee on the matching fill; the loss flows from account2 into the
+    // insurance fund. `totalContractBalance` sums futures + insurance fund.
+    const takerFee = await futures.read.takerFee();
+    assert.equal(contractBalanceAfter - contractBalanceBefore, expectedLoss + takerFee);
   });
 
   it("should handle exiting positions", async () => {
@@ -283,7 +271,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     const [createdEvent] = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotCreated",
     });
 
     const newPrice = price * 2n;
@@ -302,34 +290,26 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
 
     const receipt2 = await pc.waitForTransactionReceipt({ hash: txHash2 });
 
-    const [closedEvent] = parseEventLogs({
+    const [lotTransferredEvent] = parseEventLogs({
       logs: receipt2.logs,
       abi: futures.abi,
-      eventName: "PositionClosed",
+      eventName: "LotTransferred",
     });
-    assert.equal(closedEvent.args.positionId, createdEvent.args.positionId);
-
-    const [createdEvent2] = parseEventLogs({
-      logs: receipt2.logs,
-      abi: futures.abi,
-      eventName: "PositionCreated",
-    });
-    assert.equal(createdEvent2.args.seller, getAddress(seller.account.address));
-    assert.equal(createdEvent2.args.buyer, getAddress(buyer2.account.address));
-    assert.equal(createdEvent2.args.sellPricePerDay, price);
-    assert.equal(createdEvent2.args.buyPricePerDay, newPrice);
-    assert.equal(createdEvent2.args.deliveryAt, deliveryDate);
-    assert.equal(createdEvent2.args.orderId, order2CreatedEvent.args.orderId);
-
-    const [buyerRealizedProfitEvent] = parseEventLogs({
-      logs: receipt2.logs,
-      abi: futures.abi,
-      eventName: "PositionExited",
-      args: { participant: buyer.account.address },
-    });
+    assert.equal(lotTransferredEvent.args.oldLotId, createdEvent.args.lotId);
+    assert.equal(
+      getAddress(lotTransferredEvent.args.exitingParticipant),
+      getAddress(buyer.account.address),
+    );
+    assert.equal(
+      getAddress(lotTransferredEvent.args.newParticipant),
+      getAddress(buyer2.account.address),
+    );
+    assert.equal(lotTransferredEvent.args.newSellPricePerDay, price);
+    assert.equal(lotTransferredEvent.args.newBuyPricePerDay, newPrice);
+    assert.equal(lotTransferredEvent.args.makerOrderId, order2CreatedEvent.args.orderId);
 
     const pnl = (newPrice - price) * BigInt(config.deliveryDurationDays);
-    assert.equal(buyerRealizedProfitEvent.args.pnl, pnl);
+    assert.equal(lotTransferredEvent.args.exitPnl, pnl);
   });
 
   it("emits a paired OrderCreated+OrderClosed for the taker on an immediate fill", async () => {
@@ -377,7 +357,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     const [positionCreated] = parseEventLogs({
       logs: takeReceipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "LotCreated",
     });
 
     assert.equal(ordersCreated.length, 1);
@@ -395,9 +375,9 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     assert.equal(closedIds.has(takerOrderCreated.args.orderId), true);
     assert.equal(closedIds.has(makerCreated.args.orderId), true);
 
-    // PositionCreated wires both order ids together.
-    assert.equal(positionCreated.args.orderId, makerCreated.args.orderId);
+    // LotCreated wires both order ids together.
+    assert.equal(positionCreated.args.makerOrderId, makerCreated.args.orderId);
     assert.equal(positionCreated.args.takerOrderId, takerOrderCreated.args.orderId);
-    assert.notEqual(positionCreated.args.orderId, positionCreated.args.takerOrderId);
+    assert.notEqual(positionCreated.args.makerOrderId, positionCreated.args.takerOrderId);
   });
 });

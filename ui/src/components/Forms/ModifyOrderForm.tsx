@@ -13,7 +13,7 @@ import styled from "@mui/material/styles/styled";
 import { tokens } from "../../styles/tokens";
 import { handleNumericDecimalInput } from "./Shared/AmountInputForm";
 import { getMinMarginForPositionManual } from "../../hooks/data/getMinMarginForPositionManual";
-import { useOrderFee } from "../../hooks/data/useOrderFee";
+import { useMakerTakerFees } from "../../hooks/data/useMakerTakerFees";
 import type { AccountBalance, ContractMode } from "../../types/types";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 
@@ -65,7 +65,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
     const qc = useQueryClient();
     const { address } = useAccount();
     const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
-    const { data: orderFeeRaw } = useOrderFee(address);
+    const { worstCaseFee: worstCaseFeeRaw } = useMakerTakerFees();
 
     // Determine order type from quantity sign
     const isBuy = order.isBuy;
@@ -127,13 +127,13 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
         deliveryDurationDays,
       );
 
-      // Include order fee in the balance check
-      const orderFee = orderFeeRaw ?? 0n;
-      const totalRequired = requiredMargin + orderFee;
+      // Reserve the larger of maker/taker fee — see comment on `useMakerTakerFees`.
+      const reservedFee = worstCaseFeeRaw ?? 0n;
+      const totalRequired = requiredMargin + reservedFee;
 
       if (totalRequired > availableBalance) {
         const requiredMarginFormatted = (Number(requiredMargin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-        const orderFeeFormatted = (Number(orderFee) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+        const reservedFeeFormatted = (Number(reservedFee) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
         const totalRequiredFormatted = (Number(totalRequired) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
         const totalBalanceFormatted = (Number(totalBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
         const lockedBalanceFormatted = (Number(lockedBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
@@ -141,7 +141,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
         const accountBalance = accountBalanceQuery.data ?? 0n;
         const accountBalanceFormatted = (Number(accountBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
         alert(
-          `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${requiredMarginFormatted} USDC\nOrder fee: ${orderFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
+          `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${requiredMarginFormatted} USDC\nReserved trading fee (max of maker/taker): ${reservedFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
         );
         return false;
       }

@@ -4,7 +4,8 @@ import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 
 /**
  * Hook to get additional futures contract constants
- * Fetches: futureDeliveryDatesCount, deliveryIntervalDays, MAX_ORDERS_PER_PARTICIPANT, orderFee
+ * Fetches: futureDeliveryDatesCount, deliveryIntervalDays, MAX_ORDERS_PER_PARTICIPANT,
+ *          makerFee, takerFee
  */
 export function useFuturesContractConstants() {
   const futuresAddress = process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`;
@@ -29,7 +30,12 @@ export function useFuturesContractConstants() {
       {
         address: futuresAddress,
         abi: FuturesAbi,
-        functionName: "orderFee",
+        functionName: "makerFee",
+      },
+      {
+        address: futuresAddress,
+        abi: FuturesAbi,
+        functionName: "takerFee",
       },
     ],
     query: {
@@ -43,14 +49,19 @@ export function useFuturesContractConstants() {
   const futureDeliveryDatesCount = result.data?.[0]?.result as number | undefined;
   const deliveryIntervalDays = result.data?.[1]?.result as number | undefined;
   const maxOrdersPerParticipant = result.data?.[2]?.result as number | undefined;
-  const orderFee = result.data?.[3]?.result as bigint | undefined;
+  const makerFee = result.data?.[3]?.result as bigint | undefined;
+  const takerFee = result.data?.[4]?.result as bigint | undefined;
 
   return {
     ...result,
     futureDeliveryDatesCount,
     deliveryIntervalDays,
     maxOrdersPerParticipant,
-    orderFee,
-    orderFeeFormatted: orderFee ? Number(orderFee) / PAYMENT_TOKEN_SCALE_NUM : null,
+    makerFee,
+    takerFee,
+    makerFeeFormatted:
+      makerFee !== undefined ? Number(makerFee) / PAYMENT_TOKEN_SCALE_NUM : null,
+    takerFeeFormatted:
+      takerFee !== undefined ? Number(takerFee) / PAYMENT_TOKEN_SCALE_NUM : null,
   };
 }

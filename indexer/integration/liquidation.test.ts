@@ -1,0 +1,327 @@
+/**
+ * Integration tests: liquidation + bad-debt events under the permissionless
+ * keeper flow.
+ *
+ * Verifies that `LotLiquidated` + `LotClosed(LIQUIDATION)` populate the Lot
+ * entity (liquidator / liquidationFee / liquidatedParticipant), that
+ * `BadDebtEvent` is created when losses exceed coverage, and that
+ * `Futures.totalLiquidations` is incremented once per tx via the
+ * `LiquidationTx` dedup sentinel (regardless of how many legs the tx
+ * contained).
+ */
+import { describe, it, after } from "node:test";
+import assert from "node:assert/strict";
+import { network } from "hardhat";
+import { parseEventLogs, parseUnits } from "viem";
+import { EntityFields, read } from "matchstick-ts";
+import { deployFuturesFixture } from "../../contracts/tests/fixtures.ts";
+import { quantizePrice, scaleHashprice } from "../../contracts/tests/utils.ts";
+
+const conn = await network.create({ override: { loggingEnabled: true } });
+const { matchstick } = conn;
+
+// ---------------------------------------------------------------------------
+// Test 1: permissionless liquidatePosition — Lot closed, seller netQty=0
+// ---------------------------------------------------------------------------
+describe("liquidatePosition: Lot closed with LIQUIDATION, seller netQty=0", () => {
+  after(() => matchstick.reset());
+
+  it("populates Lot liquidator/fee + bumps Futures.totalLiquidations once per tx", async () => {
+    const { contracts, accounts, config } =
+      await conn.networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures, collateralVault, hashrateOracle } = contracts;
+    const { seller, buyer, validator, pc } = accounts;
+
+    const price = quantizePrice(await futures.read.getMarketPrice(), config.priceLadderStep);
+    const deliveryDate = config.deliveryDates[0];
+    const margin = parseUnits("1000", 6);
+
+    await collateralVault.write.deposit([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: buyer.account });
+
+    matchstick.bind("Futures", futures.address, futures.abi);
+    await matchstick.captureViewMocks();
+
+    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
+    const buyTx = await futures.write.createOrder([price, deliveryDate, "dst", 1], {
+      account: buyer.account,
+    });
+    const buyReceipt = await pc.waitForTransactionReceipt({ hash: buyTx });
+    const [lotCreated] = parseEventLogs({
+      logs: buyReceipt.logs,
+      abi: futures.abi,
+      eventName: "LotCreated",
+    });
+    const lotId = lotCreated.args.lotId.toLowerCase() as `0x${string}`;
+
+    // Crash hashprice 40x so seller is deeply underwater (PME-MM breached)
+    await scaleHashprice(hashrateOracle, 40n, 1n);
+
+    const liqTx = await futures.write.liquidatePosition([seller.account.address, lotId], {
+      account: validator.account,
+    });
+    const liqReceipt = await pc.waitForTransactionReceipt({ hash: liqTx });
+
+    const lotLiquidatedEvents = parseEventLogs({
+      logs: liqReceipt.logs,
+      abi: futures.abi,
+      eventName: "LotLiquidated",
+    });
+    assert.equal(lotLiquidatedEvents.length, 1, "must emit exactly 1 LotLiquidated");
+    const lotLiquidated = lotLiquidatedEvents[0];
+    assert.equal(lotLiquidated.args.lotId.toLowerCase(), lotId);
+
+    const sellerAddr = seller.account.address.toLowerCase() as `0x${string}`;
+    const validatorAddr = validator.account.address.toLowerCase() as `0x${string}`;
+
+    const snap = await matchstick.indexSnapshot([]);
+
+    const lot = snap.entity("Lot", lotId);
+    assert.ok(lot);
+    assert.equal(lot.status, "CLOSED", "Lot must be closed after liquidation");
+    assert.equal(lot.closeReason, "LIQUIDATION");
+    assert.equal(lot.isClosed, true);
+    assert.equal(
+      String(lot.liquidatedParticipant).toLowerCase(),
+      sellerAddr,
+      "Lot.liquidatedParticipant must match the LotLiquidated event participant",
+    );
+    assert.equal(
+      String(lot.liquidator).toLowerCase(),
+      validatorAddr,
+      "Lot.liquidator must match the LotLiquidated event liquidator (msg.sender)",
+    );
+    assert.equal(
+      String(lot.liquidationFee),
+      String(lotLiquidated.args.fee),
+      "Lot.liquidationFee must mirror the on-chain LotLiquidated.fee",
+    );
+
+    let sellerPtr: EntityFields | undefined;
+    let buyerPtr: EntityFields | undefined;
+    for (const ptr of snap.saved("UserDeliverySessionPointer")) {
+      if (ptr.user === sellerAddr) {
+        sellerPtr = ptr;
+      } else {
+        buyerPtr = ptr;
+      }
+    }
+    assert.ok(sellerPtr);
+    assert.equal(String(sellerPtr.netQuantity), "0", "seller netQty must be 0 after liquidation");
+    assert.ok(buyerPtr);
+    assert.equal(
+      String(buyerPtr.netQuantity),
+      "0",
+      "buyer netQty must be 0 (cash-settled both sides)",
+    );
+
+    const futuresEntity = snap.entity("Futures", "0");
+    assert.ok(futuresEntity);
+    assert.equal(
+      String(futuresEntity.totalLiquidations),
+      "1",
+      "Futures.totalLiquidations must be 1 after one liquidation tx",
+    );
+
+    // Dedup sentinel created exactly once per tx
+    const liquidationTxs = snap.saved("LiquidationTx");
+    assert.equal(liquidationTxs.length, 1, "exactly 1 LiquidationTx sentinel per liquidation tx");
+
+    const sellerUser = snap.entity("User", sellerAddr);
+    assert.ok(sellerUser);
+    assert.ok(
+      BigInt(String(sellerUser.realizedPnl)) < 0n,
+      `seller User.realizedPnl must be negative after liquidation: got ${sellerUser.realizedPnl}`,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 2: BadDebt — BadDebtEvent entity when losses exceed coverage
+// ---------------------------------------------------------------------------
+describe("BadDebt: BadDebtEvent when losses exceed participant balance + insurance fund", () => {
+  after(() => matchstick.reset());
+
+  it("BadDebtEvent is created and Futures.totalBadDebt is non-zero", async () => {
+    const { contracts, accounts, config } =
+      await conn.networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures, collateralVault, hashrateOracle } = contracts;
+    const { seller, buyer, validator, pc } = accounts;
+
+    const price = quantizePrice(await futures.read.getMarketPrice(), config.priceLadderStep);
+    const deliveryDate = config.deliveryDates[0];
+    const margin = parseUnits("1000", 6);
+
+    await collateralVault.write.deposit([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: buyer.account });
+    matchstick.bind("Futures", futures.address, futures.abi);
+    await matchstick.captureViewMocks();
+    await matchstick.anchor();
+
+    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
+    const buyTx = await futures.write.createOrder([price, deliveryDate, "dst", 1], {
+      account: buyer.account,
+    });
+    const buyReceipt = await pc.waitForTransactionReceipt({ hash: buyTx });
+    const [lotCreated] = parseEventLogs({
+      logs: buyReceipt.logs,
+      abi: futures.abi,
+      eventName: "LotCreated",
+    });
+    const lotId = lotCreated.args.lotId.toLowerCase() as `0x${string}`;
+
+    // Spike price 500x — loss (~12 015 USDC) exceeds seller (1 000) + insurance fund (10 000)
+    await scaleHashprice(hashrateOracle, 500n, 1n);
+
+    const liqTx = await futures.write.liquidatePosition([seller.account.address, lotId], {
+      account: validator.account,
+    });
+    const liqReceipt = await pc.waitForTransactionReceipt({ hash: liqTx });
+
+    const badDebtEvents = parseEventLogs({
+      logs: liqReceipt.logs,
+      abi: futures.abi,
+      eventName: "BadDebt",
+    });
+    assert.equal(badDebtEvents.length, 1, "must emit exactly 1 BadDebt event");
+    const onChainAmount = badDebtEvents[0].args.amount;
+
+    const sellerAddr = seller.account.address.toLowerCase() as `0x${string}`;
+
+    const snap = await matchstick.indexSnapshot([]);
+
+    const badDebtEntities = snap.saved("BadDebtEvent");
+    assert.equal(badDebtEntities.length, 1, "exactly 1 BadDebtEvent entity");
+    const badDebt = badDebtEntities[0];
+    assert.equal(badDebt.user, sellerAddr, "BadDebtEvent.user must be the seller");
+    assert.equal(
+      badDebt.amount,
+      onChainAmount.toString(),
+      "BadDebtEvent.amount must match on-chain event",
+    );
+
+    const futuresEntity = snap.entity("Futures", "0");
+    assert.ok(futuresEntity);
+    assert.equal(
+      futuresEntity.totalBadDebt,
+      onChainAmount.toString(),
+      "Futures.totalBadDebt must equal the bad-debt amount",
+    );
+    assert.ok(
+      BigInt(String(futuresEntity.totalBadDebt)) > 0n,
+      "Futures.totalBadDebt must be positive",
+    );
+    assert.equal(
+      String(futuresEntity.totalLiquidations),
+      "1",
+      "totalLiquidations still bumps once for the same tx",
+    );
+
+    const lotLiquidatedEvents = parseEventLogs({
+      logs: liqReceipt.logs,
+      abi: futures.abi,
+      eventName: "LotLiquidated",
+    });
+    assert.equal(lotLiquidatedEvents.length, 1, "must emit exactly 1 LotLiquidated");
+    const lotLiquidated = lotLiquidatedEvents[0];
+    const validatorAddr = validator.account.address.toLowerCase() as `0x${string}`;
+
+    const lot = snap.entity("Lot", lotId);
+    assert.ok(lot);
+    assert.equal(lot.status, "CLOSED");
+    assert.equal(
+      lot.closeReason,
+      "LIQUIDATION",
+      "bad-debt path must still surface closeReason=LIQUIDATION",
+    );
+    assert.equal(lot.isClosed, true);
+    assert.equal(String(lot.liquidatedParticipant).toLowerCase(), sellerAddr);
+    assert.equal(String(lot.liquidator).toLowerCase(), validatorAddr);
+    assert.equal(String(lot.liquidationFee), String(lotLiquidated.args.fee));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 3: multi-position liquidation across two txs — Futures.totalLiquidations counts txs
+// ---------------------------------------------------------------------------
+//
+// Each `liquidatePosition` call is its own tx, so two underwater positions
+// liquidate in two txs. The `LiquidationTx` dedup sentinel keeps the counter
+// in lockstep with tx count (not leg count).
+describe("multi-position permissionless liquidation: per-tx dedup", () => {
+  after(() => matchstick.reset());
+
+  it("two liquidatePosition txs → 2 LotLiquidated, totalLiquidations=2", async () => {
+    const { contracts, accounts, config } =
+      await conn.networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures, collateralVault, hashrateOracle } = contracts;
+    const { seller, buyer, validator, pc } = accounts;
+
+    const price1 = quantizePrice(await futures.read.getMarketPrice(), config.priceLadderStep);
+    const price2 = price1 + config.priceLadderStep;
+    const deliveryDate = config.deliveryDates[0];
+    const margin = parseUnits("1000", 6);
+
+    await collateralVault.write.deposit([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: buyer.account });
+
+    matchstick.bind("Futures", futures.address, futures.abi);
+    await matchstick.captureViewMocks();
+
+    await futures.write.createOrder([price1, deliveryDate, "", -1], { account: seller.account });
+    const buy1 = await futures.write.createOrder([price1, deliveryDate, "dst", 1], {
+      account: buyer.account,
+    });
+    const r1 = await pc.waitForTransactionReceipt({ hash: buy1 });
+    const [created1] = parseEventLogs({ logs: r1.logs, abi: futures.abi, eventName: "LotCreated" });
+
+    await futures.write.createOrder([price2, deliveryDate, "", -1], { account: seller.account });
+    const buy2 = await futures.write.createOrder([price2, deliveryDate, "dst", 1], {
+      account: buyer.account,
+    });
+    const r2 = await pc.waitForTransactionReceipt({ hash: buy2 });
+    const [created2] = parseEventLogs({ logs: r2.logs, abi: futures.abi, eventName: "LotCreated" });
+
+    const lot1Id = created1.args.lotId.toLowerCase() as `0x${string}`;
+    const lot2Id = created2.args.lotId.toLowerCase() as `0x${string}`;
+    assert.notEqual(lot1Id, lot2Id, "two open lots must have distinct ids");
+
+    await scaleHashprice(hashrateOracle, 40n, 1n);
+
+    const liqTx1 = await futures.write.liquidatePosition([seller.account.address, lot1Id], {
+      account: validator.account,
+    });
+    await pc.waitForTransactionReceipt({ hash: liqTx1 });
+
+    const liqTx2 = await futures.write.liquidatePosition([seller.account.address, lot2Id], {
+      account: validator.account,
+    });
+    await pc.waitForTransactionReceipt({ hash: liqTx2 });
+
+    const sellerAddr = seller.account.address.toLowerCase() as `0x${string}`;
+    const snap = await matchstick.indexSnapshot([read("Lot", lot1Id), read("Lot", lot2Id)]);
+
+    for (const id of [lot1Id, lot2Id]) {
+      const lot = snap.entity("Lot", id);
+      assert.ok(lot, `Lot ${id} must exist`);
+      assert.equal(lot.status, "CLOSED");
+      assert.equal(lot.closeReason, "LIQUIDATION");
+      assert.equal(String(lot.liquidatedParticipant).toLowerCase(), sellerAddr);
+    }
+
+    const liquidationTxs = snap.saved("LiquidationTx");
+    assert.equal(
+      liquidationTxs.length,
+      2,
+      "one LiquidationTx sentinel per liquidatePosition tx (two txs in this test)",
+    );
+
+    const futuresEntity = snap.entity("Futures", "0");
+    assert.ok(futuresEntity);
+    assert.equal(
+      String(futuresEntity.totalLiquidations),
+      "2",
+      "Futures.totalLiquidations bumps once per liquidation tx (two txs here)",
+    );
+  });
+});

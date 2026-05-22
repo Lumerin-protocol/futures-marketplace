@@ -86,41 +86,6 @@ resource "aws_cloudwatch_composite_alarm" "market_maker_unhealthy" {
 }
 
 ################################################################################
-# MARGIN CALL UNHEALTHY
-################################################################################
-
-resource "aws_cloudwatch_composite_alarm" "margin_call_unhealthy" {
-  count             = var.monitoring.create && var.monitoring.create_alarms && var.margin_call_lambda.create ? 1 : 0
-  alarm_name        = "margin-call-${local.env_suffix}"
-  alarm_description = "Margin Call monitoring is failing - Lambda errors or throttling"
-
-  # Alarm rule: ANY of the Margin Call component alarms in ALARM state
-  alarm_rule = join(" OR ", [
-    "ALARM(${aws_cloudwatch_metric_alarm.margin_call_errors[0].alarm_name})",
-    "ALARM(${aws_cloudwatch_metric_alarm.margin_call_duration[0].alarm_name})",
-    "ALARM(${aws_cloudwatch_metric_alarm.margin_call_throttles[0].alarm_name})"
-  ])
-
-  alarm_actions = local.composite_alarm_actions
-  ok_actions    = local.composite_alarm_actions
-
-  tags = merge(
-    var.default_tags,
-    var.foundation_tags,
-    {
-      Name       = "Margin Call Unhealthy Composite Alarm",
-      Capability = "Monitoring",
-    },
-  )
-
-  depends_on = [
-    aws_cloudwatch_metric_alarm.margin_call_errors,
-    aws_cloudwatch_metric_alarm.margin_call_duration,
-    aws_cloudwatch_metric_alarm.margin_call_throttles
-  ]
-}
-
-################################################################################
 # NOTIFICATIONS UNHEALTHY
 ################################################################################
 

@@ -44,13 +44,11 @@ locals {
 
   # Service names for metric dimensions
   notifications_service_name = var.notifications_service.create ? "svc-${var.notifications_service["svc_name"]}-${local.env_suffix}" : ""
-  margin_call_function_name  = var.margin_call_lambda.create ? "margin-call-v2-${local.env_suffix}" : ""
   market_maker_function_name = var.market_maker.create ? "market-maker-${local.env_suffix}" : ""
 
   # Log group names for metric filters
   market_maker_log_group  = var.market_maker.create ? "/aws/lambda/market-maker-${local.env_suffix}" : ""
   notifications_log_group = var.notifications_service.create ? "/ecs/${var.notifications_service["svc_name"]}-${local.env_suffix}" : ""
-  margin_call_log_group   = var.margin_call_lambda.create ? "/aws/lambda/margin-call-v2-${local.env_suffix}" : ""
 
   # RDS instance identifier
   notifications_rds_identifier = var.notifications_service.create ? "notifications-v2-${local.env_suffix}" : ""
