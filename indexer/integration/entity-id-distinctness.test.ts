@@ -32,9 +32,8 @@ describe("PositionSession ID rotation: close → re-open on same (user, delivery
   after(() => conn.matchstick.reset());
 
   it("creates two distinct PositionSession entities, one CLOSE then one OPEN", async () => {
-    const { contracts, accounts, config } = await conn.networkHelpers.loadFixture(
-      deployFuturesFixture,
-    );
+    const { contracts, accounts, config } =
+      await conn.networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, buyer, pc } = accounts;
 
@@ -144,9 +143,8 @@ describe("Trade.id is per-tx: two trade txs by one user", () => {
   after(() => conn.matchstick.reset());
 
   it("produces two distinct Trade entities and User.tradeCount = 2", async () => {
-    const { contracts, accounts, config } = await conn.networkHelpers.loadFixture(
-      deployFuturesFixture,
-    );
+    const { contracts, accounts, config } =
+      await conn.networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, buyer, pc } = accounts;
 
@@ -201,11 +199,7 @@ describe("Trade.id is per-tx: two trade txs by one user", () => {
 
     // IDs must be distinct — they share user+session but differ on tx hash.
     const sellerTradeIds = sellerTrades.map((t: EntityFields) => String(t.id));
-    assert.equal(
-      new Set(sellerTradeIds).size,
-      2,
-      "seller Trade ids must be distinct across txs",
-    );
+    assert.equal(new Set(sellerTradeIds).size, 2, "seller Trade ids must be distinct across txs");
 
     // Trade txHashes must differ between the two trades.
     const sellerTxHashes = sellerTrades.map((t: EntityFields) => String(t.transactionHash));
@@ -231,9 +225,8 @@ describe("Order.id is per-tx: identical-shape orders in different txs", () => {
   after(() => conn.matchstick.reset());
 
   it("creates two distinct Order aggregates even with identical (user, price, deliveryAt, side)", async () => {
-    const { contracts, accounts, config } = await conn.networkHelpers.loadFixture(
-      deployFuturesFixture,
-    );
+    const { contracts, accounts, config } =
+      await conn.networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, pc } = accounts;
 
