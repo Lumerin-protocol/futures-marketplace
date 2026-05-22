@@ -1,6 +1,7 @@
 import { Address, BigInt, Bytes, log } from "@graphprotocol/graph-ts";
 import {
   Fill,
+  Futures,
   PositionSession,
   Trade,
   User,
@@ -10,6 +11,34 @@ import { PositionSessionStatus } from "../enums";
 import { absI32, isSameSignI32, minI32 } from "../lib";
 import { fillAggregateId, positionSessionId, tradeAggregateId } from "../ids";
 import { getOrCreateFutures, getOrCreatePointer } from "./store";
+
+// ============================================================================
+// Pending Futures-singleton counter deltas
+// ----------------------------------------------------------------------------
+// `upsertFill` used to read + write the `Futures` singleton for every Fill leg
+// it processed, which produced multiple redundant store writes per handler
+// invocation (each LotCreated/LotClosed processes two legs).
+// Now `upsertFill` only accumulates new-fill / new-trade deltas into these
+// module-level counters; callers flush them via `flushFuturesCounters` after
+// every other handler-specific write to `Futures`.
+// ============================================================================
+let pendingNewFills: i32 = 0;
+let pendingNewTrades: i32 = 0;
+
+/// Applies any pending fill/trade counter deltas onto an in-memory `Futures`
+/// singleton and resets the module-level counters. Caller is responsible for
+/// saving the singleton (lets the same call site also batch in `totalVolume`
+/// / `lastUpdatedAt` updates without an extra store write).
+export function flushFuturesCounters(futures: Futures): void {
+  if (pendingNewFills != 0) {
+    futures.totalFills += pendingNewFills;
+    pendingNewFills = 0;
+  }
+  if (pendingNewTrades != 0) {
+    futures.totalTrades += pendingNewTrades;
+    pendingNewTrades = 0;
+  }
+}
 
 // ============================================================================
 // Public entry points
@@ -371,11 +400,10 @@ function upsertFill(
   if (isNewFill) trade.fillCount++;
   trade.save();
 
-  const futures = getOrCreateFutures();
-  futures.totalFills += isNewFill ? 1 : 0;
-  futures.totalTrades += isNewTrade ? 1 : 0;
-  futures.lastUpdatedAt = timestamp;
-  futures.save();
+  // Deferred Futures-singleton write: caller calls `flushFuturesCounters` once
+  // per handler invocation (see handlers/lots.ts).
+  if (isNewFill) pendingNewFills += 1;
+  if (isNewTrade) pendingNewTrades += 1;
 
   if (isNewFill) user.fillCount++;
   if (isNewTrade) user.tradeCount++;

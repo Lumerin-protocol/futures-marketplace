@@ -4,19 +4,12 @@ import type { EntityFields } from "matchstick-ts";
 
 /**
  * Mirrors `userDeliveryPointerId` in `src/ids.ts`:
- *   20-byte address ++ 4-byte little-endian i32(deliveryAt)
+ *   20-byte address ++ 32-byte big-endian deliveryAt
  *
- * graph-ts `Bytes.concatI32` writes the i32 in little-endian byte order,
- * so the 4-byte tail is LSB-first.
+ * Full BigInt range — does NOT truncate past the i32 horizon (Jan 2038).
  */
 export function pointerId(user: Hex, deliveryAt: bigint): Hex {
-  const value = Number(deliveryAt) | 0; // wrap to i32, same as BigInt.toI32() in AS
-  const buf = new Uint8Array(4);
-  buf[0] = value & 0xff;
-  buf[1] = (value >>> 8) & 0xff;
-  buf[2] = (value >>> 16) & 0xff;
-  buf[3] = (value >>> 24) & 0xff;
-  const tail = `0x${Array.from(buf, (b) => b.toString(16).padStart(2, "0")).join("")}` as Hex;
+  const tail = `0x${deliveryAt.toString(16).padStart(64, "0")}` as Hex;
   return concatHex([user, tail]).toLowerCase() as Hex;
 }
 

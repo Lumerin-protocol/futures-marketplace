@@ -11,12 +11,14 @@ export function getOrCreateFutures(): Futures {
     futures.contractAddress = dataSource.address();
     futures.collateralToken = Bytes.empty();
     futures.hashrateOracleAddress = Bytes.empty();
+    futures.marginEngineAddress = Bytes.empty();
     futures.validatorAddress = Bytes.empty();
     futures.validatorURL = "";
     futures.startBlock = readStartBlockFromContext();
     futures.minimumPriceIncrement = BigInt.zero();
     futures.makerFee = BigInt.zero();
     futures.takerFee = BigInt.zero();
+    futures.liquidationFee = BigInt.zero();
     futures.liquidationMarginPercent = 0;
     futures.speedHps = BigInt.zero();
     futures.deliveryDurationDays = 0;
@@ -75,6 +77,12 @@ export function loadFuturesFromContract(futures: Futures): void {
 
   const takerFee = contract.try_takerFee();
   if (!takerFee.reverted) futures.takerFee = takerFee.value;
+
+  const liquidationFee = contract.try_liquidationFee();
+  if (!liquidationFee.reverted) futures.liquidationFee = liquidationFee.value;
+
+  const marginEngine = contract.try_marginEngine();
+  if (!marginEngine.reverted) futures.marginEngineAddress = marginEngine.value;
 
   const liqMargin = contract.try_liquidationMarginPercent();
   if (!liqMargin.reverted) futures.liquidationMarginPercent = liqMargin.value;

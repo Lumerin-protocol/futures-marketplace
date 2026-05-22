@@ -44,11 +44,11 @@ dataSources:
           handler: handleUpgraded
         - event: OrderCreated(indexed bytes32,indexed address,string,uint256,uint256,bool)
           handler: handleOrderCreated
-        - event: OrderClosed(indexed bytes32,indexed address,uint8)
+        - event: OrderClosed(indexed bytes32,uint8)
           handler: handleOrderClosed
         - event: LotCreated(indexed bytes32,indexed address,indexed address,uint256,uint256,bytes32,bytes32)
           handler: handleLotCreated
-        - event: LotTransferred(indexed bytes32,indexed bytes32,address,address,int256,uint256,bytes32,bytes32)
+        - event: LotTransferred(indexed bytes32,indexed bytes32,address,address,int256,uint256,uint256,bytes32,bytes32)
           handler: handleLotTransferred
         - event: LotClosed(indexed bytes32,indexed address,indexed address,int256,int256,address,uint8)
           handler: handleLotClosed
@@ -58,12 +58,10 @@ dataSources:
           handler: handleLotPaymentWithdrawn
         - event: LotLiquidated(indexed bytes32,indexed address,indexed address,uint256)
           handler: handleLotLiquidated
-        - event: MakerFeeUpdated(uint256)
-          handler: handleMakerFeeUpdated
-        - event: TakerFeeUpdated(uint256)
-          handler: handleTakerFeeUpdated
-        - event: ValidatorURLUpdated(string)
-          handler: handleValidatorURLUpdated
+        - event: OrderLiquidated(indexed bytes32,indexed address,indexed address,uint256)
+          handler: handleOrderLiquidated
+        - event: ConfigUpdated((uint256,uint256,uint256,uint256,uint256,uint8,uint8,address,address,address,string))
+          handler: handleConfigUpdated
         - event: Liquidation(indexed address,indexed address,int256,int256)
           handler: handleLiquidation
         - event: BadDebt(indexed address,uint256)

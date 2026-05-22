@@ -7,6 +7,7 @@ type Futures @entity(immutable: false) {
   contractAddress: Bytes!
   collateralToken: Bytes!
   hashrateOracleAddress: Bytes!
+  marginEngineAddress: Bytes!
   validatorAddress: Bytes!
   validatorURL: String!
 
@@ -17,6 +18,7 @@ type Futures @entity(immutable: false) {
   minimumPriceIncrement: BigInt!
   makerFee: BigInt!
   takerFee: BigInt!
+  liquidationFee: BigInt!
   liquidationMarginPercent: Int!
   speedHps: BigInt!
   deliveryDurationDays: Int!
@@ -31,7 +33,7 @@ type Futures @entity(immutable: false) {
   # Stats
   totalUsers: Int!
   totalOrders: Int! # aggregate Order entities created
-  activeOrders: Int! # Order entities not yet fully filled/cancelled
+  activeOrders: Int! # count of currently-ACTIVE OrderEntry units (per on-chain orderId), NOT Order aggregates
   totalTrades: Int!
   totalFills: Int!
   totalVolume: BigInt!
@@ -50,7 +52,7 @@ type User @entity(immutable: false) {
 
   # Stats
   orderCount: Int! # aggregate Orders ever created
-  activeOrderCount: Int! # Orders currently ACTIVE/PARTIAL
+  activeOrderCount: Int! # count of currently-ACTIVE OrderEntry units (per on-chain orderId), NOT Order aggregates
   tradeCount: Int!
   fillCount: Int!
   realizedPnl: BigInt!
@@ -113,7 +115,12 @@ type OrderEntry @entity(immutable: false) {
   destURL: String!
   status: OrderEntryStatus!
   closedAt: BigInt
-  closedBy: Bytes
+  "EOA that sent the tx where this entry closed (tx.from). NOT necessarily the participant — for liquidations it's the keeper, for expiry it's whoever placed the next order. Use `liquidator` / Lot.closedBy for semantic close attribution."
+  closedByTx: Bytes
+  "Keeper that triggered the close, populated only when status = LIQUIDATED (from the paired OrderLiquidated event)."
+  liquidator: Bytes
+  "Fee paid by the order's participant to `liquidator`; populated only when status = LIQUIDATED."
+  liquidationFee: BigInt
 }
 
 enum OrderEntryStatus {
@@ -175,7 +182,6 @@ type Lot @entity(immutable: false) {
   destURL: String!
   sellPricePerDay: BigInt!
   buyPricePerDay: BigInt!
-  pricePerDay: BigInt!
   deliveryAt: BigInt!
   makerOrderId: Bytes!
   takerOrderId: Bytes!

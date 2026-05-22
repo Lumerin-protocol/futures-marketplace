@@ -1,11 +1,5 @@
 import { log } from "@graphprotocol/graph-ts";
-import {
-  Initialized,
-  MakerFeeUpdated,
-  TakerFeeUpdated,
-  Upgraded,
-  ValidatorURLUpdated,
-} from "../../generated/Futures/Futures";
+import { ConfigUpdated, Initialized, Upgraded } from "../../generated/Futures/Futures";
 import { getOrCreateFutures, loadFuturesFromContract } from "../internal/store";
 import { stringifyParameters } from "../internal/utils";
 
@@ -28,26 +22,25 @@ export function handleUpgraded(event: Upgraded): void {
   futures.save();
 }
 
-export function handleMakerFeeUpdated(event: MakerFeeUpdated): void {
-  log.debug("maker fee updated event ", [stringifyParameters(event)]);
+/// Single-event refresh path for the entire owner-settable config surface. Replaces
+/// the per-field `MakerFeeUpdated`/`TakerFeeUpdated`/`ValidatorURLUpdated`/`LiquidationFeeUpdated`
+/// handlers. The contract emits this event on every setter (and once from `initialize`),
+/// so we can always overwrite local state with the snapshot.
+export function handleConfigUpdated(event: ConfigUpdated): void {
+  log.debug("config updated event ", [stringifyParameters(event)]);
   const futures = getOrCreateFutures();
-  futures.makerFee = event.params.makerFee;
-  futures.lastUpdatedAt = event.block.timestamp;
-  futures.save();
-}
-
-export function handleTakerFeeUpdated(event: TakerFeeUpdated): void {
-  log.debug("taker fee updated event ", [stringifyParameters(event)]);
-  const futures = getOrCreateFutures();
-  futures.takerFee = event.params.takerFee;
-  futures.lastUpdatedAt = event.block.timestamp;
-  futures.save();
-}
-
-export function handleValidatorURLUpdated(event: ValidatorURLUpdated): void {
-  log.debug("validator url updated event ", [stringifyParameters(event)]);
-  const futures = getOrCreateFutures();
-  futures.validatorURL = event.params.validatorURL;
+  const cfg = event.params.config;
+  futures.makerFee = cfg.makerFee;
+  futures.takerFee = cfg.takerFee;
+  futures.liquidationFee = cfg.liquidationFee;
+  futures.breachPenaltyRatePerDay = cfg.breachPenaltyRatePerDay;
+  futures.minimumPriceIncrement = cfg.minimumPriceIncrement;
+  futures.liquidationMarginPercent = cfg.liquidationMarginPercent;
+  futures.futureDeliveryDatesCount = cfg.futureDeliveryDatesCount;
+  futures.validatorAddress = cfg.validatorAddress;
+  futures.hashrateOracleAddress = cfg.hashrateOracle;
+  futures.marginEngineAddress = cfg.marginEngine;
+  futures.validatorURL = cfg.validatorURL;
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
 }

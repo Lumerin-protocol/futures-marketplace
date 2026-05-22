@@ -82,9 +82,18 @@ export function priceLevelKey(deliveryAt: BigInt, price: BigInt, isBid: boolean)
   return deliveryAt.toString() + "-" + price.toString() + "-" + (isBid ? "bid" : "ask");
 }
 
-/// (user, deliveryAt) pointer id: 20-byte address ++ 4-byte i32 deliveryAt.
+/// 32-byte big-endian hex padding for a non-negative BigInt. Mirrors the
+/// `bigIntToFixed32` helper in `src/ids.ts` so test ID-construction stays in sync.
+function bigIntHex32(value: BigInt): string {
+  return padLeft(value.toHexString().slice(2), 64, "0");
+}
+
+/// (user, deliveryAt) pointer id: 20-byte address ++ 32-byte deliveryAt.
 export function pointerKey(user: Address, deliveryAt: BigInt): string {
-  return changetype<Bytes>(user).concatI32(deliveryAt.toI32()).toHexString();
+  const bytes = changetype<Bytes>(user).concat(
+    Bytes.fromHexString("0x" + bigIntHex32(deliveryAt)) as Bytes,
+  );
+  return bytes.toHexString();
 }
 
 /// Mark every contract getter consumed by `loadFuturesFromContract` as
@@ -101,6 +110,8 @@ export function mockFuturesContractCallsAsReverted(): void {
     ["minimumPriceIncrement", "minimumPriceIncrement():(uint256)"],
     ["makerFee", "makerFee():(uint256)"],
     ["takerFee", "takerFee():(uint256)"],
+    ["liquidationFee", "liquidationFee():(uint256)"],
+    ["marginEngine", "marginEngine():(address)"],
     ["liquidationMarginPercent", "liquidationMarginPercent():(uint8)"],
     ["speedHps", "speedHps():(uint256)"],
     ["deliveryDurationDays", "deliveryDurationDays():(uint8)"],
@@ -123,12 +134,14 @@ export function setupFutures(deliveryDurationDays: i32 = 30): void {
   f.contractAddress = changetype<Bytes>(contractAddress());
   f.collateralToken = Bytes.empty();
   f.hashrateOracleAddress = Bytes.empty();
+  f.marginEngineAddress = Bytes.empty();
   f.validatorAddress = Bytes.empty();
   f.validatorURL = "";
   f.startBlock = BigInt.zero();
   f.minimumPriceIncrement = BigInt.zero();
   f.makerFee = BigInt.zero();
   f.takerFee = BigInt.zero();
+  f.liquidationFee = BigInt.zero();
   f.liquidationMarginPercent = 0;
   f.speedHps = BigInt.zero();
   f.deliveryDurationDays = deliveryDurationDays;
@@ -165,6 +178,8 @@ export function nudgeTx(event: ethereum.Event, seed: i32): void {
   event.logIndex = BigInt.fromI32(seed);
 }
 
+const ID_SEP: Bytes = Bytes.fromHexString("0xff") as Bytes;
+
 /// Like `fillAggKeyDefaultTx` but with a custom tx hash (set via `nudgeTx`).
 /// `sessionId` matches the deterministic PositionSession id (see `positionSessionId`).
 export function fillAggKey(
@@ -174,8 +189,11 @@ export function fillAggKey(
   sessionId: string,
 ): string {
   return txHashBytes
+    .concat(ID_SEP)
     .concat(changetype<Bytes>(user))
+    .concat(ID_SEP)
     .concat(changetype<Bytes>(counterparty))
+    .concat(ID_SEP)
     .concat(Bytes.fromUTF8(sessionId))
     .toHexString();
 }
@@ -192,7 +210,7 @@ export function eventIdHex(logIndex: i32 = 1): string {
   return MOCK_TX_HASH.concatI32(logIndex).toHexString();
 }
 
-/// Order aggregate id: tx hash ++ user ++ price (32B) ++ deliveryAt (4B i32) ++ side (4B i32).
+/// Order aggregate id: tx hash ++ user ++ price (32B) ++ deliveryAt (32B) ++ side (1B).
 /// Mirrors `src/ids.ts#orderAggregateId` so tests can predict it.
 export function orderAggKeyDefaultTx(
   user: Address,
@@ -200,30 +218,36 @@ export function orderAggKeyDefaultTx(
   deliveryAt: BigInt,
   isBuy: boolean,
 ): string {
-  const priceHex = padLeft(price.toHexString().slice(2), 64, "0");
-  const priceBytes = Bytes.fromHexString("0x" + priceHex) as Bytes;
+  const priceBytes = Bytes.fromHexString("0x" + bigIntHex32(price)) as Bytes;
+  const deliveryBytes = Bytes.fromHexString("0x" + bigIntHex32(deliveryAt)) as Bytes;
+  const sideBytes = Bytes.fromHexString(isBuy ? "0x01" : "0x00") as Bytes;
   return MOCK_TX_HASH.concat(changetype<Bytes>(user))
     .concat(priceBytes)
-    .concatI32(deliveryAt.toI32())
-    .concatI32(isBuy ? 1 : 0)
+    .concat(deliveryBytes)
+    .concat(sideBytes)
     .toHexString();
 }
 
-/// Trade aggregate id: tx hash ++ user ++ sessionId.
+/// Trade aggregate id: tx hash ++ sep ++ user ++ sep ++ sessionId.
 export function tradeAggKeyDefaultTx(user: Address, sessionId: string): string {
-  return MOCK_TX_HASH.concat(changetype<Bytes>(user))
+  return MOCK_TX_HASH.concat(ID_SEP)
+    .concat(changetype<Bytes>(user))
+    .concat(ID_SEP)
     .concat(Bytes.fromUTF8(sessionId))
     .toHexString();
 }
 
-/// Fill aggregate id: tx hash ++ user ++ counterparty ++ sessionId.
+/// Fill aggregate id: tx hash ++ sep ++ user ++ sep ++ counterparty ++ sep ++ sessionId.
 export function fillAggKeyDefaultTx(
   user: Address,
   counterparty: Address,
   sessionId: string,
 ): string {
-  return MOCK_TX_HASH.concat(changetype<Bytes>(user))
+  return MOCK_TX_HASH.concat(ID_SEP)
+    .concat(changetype<Bytes>(user))
+    .concat(ID_SEP)
     .concat(changetype<Bytes>(counterparty))
+    .concat(ID_SEP)
     .concat(Bytes.fromUTF8(sessionId))
     .toHexString();
 }

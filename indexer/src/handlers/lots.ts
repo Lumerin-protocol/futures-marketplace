@@ -9,7 +9,7 @@ import {
 } from "../../generated/Futures/Futures";
 import { Lot, OrderEntry, User } from "../../generated/schema";
 import { LotCloseReason, LotStatus } from "../enums";
-import { applyExitFill, applyOpenFill } from "../internal/match";
+import { applyExitFill, applyOpenFill, flushFuturesCounters } from "../internal/match";
 import { getOrCreateFutures, getOrCreateUser } from "../internal/store";
 import { stringifyParameters } from "../internal/utils";
 
@@ -25,7 +25,6 @@ export function handleLotCreated(event: LotCreated): void {
   lot.destURL = resolveLotDestURL(event.params.makerOrderId, event.params.takerOrderId);
   lot.sellPricePerDay = event.params.pricePerDay;
   lot.buyPricePerDay = event.params.pricePerDay;
-  lot.pricePerDay = event.params.pricePerDay;
   lot.deliveryAt = event.params.deliveryAt;
   lot.makerOrderId = event.params.makerOrderId;
   lot.takerOrderId = event.params.takerOrderId;
@@ -68,6 +67,7 @@ export function handleLotCreated(event: LotCreated): void {
   );
 
   const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
   const volume = event.params.pricePerDay.times(BigInt.fromI32(futures.deliveryDurationDays));
   futures.totalVolume = futures.totalVolume.plus(volume);
   futures.lastUpdatedAt = event.block.timestamp;
@@ -109,9 +109,8 @@ export function handleLotTransferred(event: LotTransferred): void {
   newLot.seller = newSeller;
   newLot.buyer = newBuyer;
   newLot.destURL = resolveLotDestURL(event.params.makerOrderId, event.params.takerOrderId);
-  newLot.sellPricePerDay = event.params.newPricePerDay;
-  newLot.buyPricePerDay = event.params.newPricePerDay;
-  newLot.pricePerDay = event.params.newPricePerDay;
+  newLot.sellPricePerDay = event.params.newSellPricePerDay;
+  newLot.buyPricePerDay = event.params.newBuyPricePerDay;
   newLot.deliveryAt = oldLot.deliveryAt;
   newLot.makerOrderId = event.params.makerOrderId;
   newLot.takerOrderId = event.params.takerOrderId;
@@ -135,12 +134,17 @@ export function handleLotTransferred(event: LotTransferred): void {
   const counterpartyId = exitingAsBuyer ? oldLot.seller : oldLot.buyer;
   const exitingSignedQty = exitingAsBuyer ? -1 : 1;
   const entrantSignedQty = -exitingSignedQty;
+  // The new match price corresponds to whichever side just changed hands —
+  // the other side's price is the remaining counterparty's carried-over entry.
+  const matchPrice = exitingAsSeller
+    ? event.params.newSellPricePerDay
+    : event.params.newBuyPricePerDay;
 
   applyExitFill(
     exitingUser,
     counterpartyId,
     exitingSignedQty,
-    event.params.newPricePerDay,
+    matchPrice,
     event.params.exitPnl,
     oldLot.deliveryAt,
     event.transaction.hash,
@@ -153,7 +157,7 @@ export function handleLotTransferred(event: LotTransferred): void {
     entrantUser,
     counterpartyId,
     entrantSignedQty,
-    event.params.newPricePerDay,
+    matchPrice,
     oldLot.deliveryAt,
     event.transaction.hash,
     event.block.number,
@@ -163,7 +167,8 @@ export function handleLotTransferred(event: LotTransferred): void {
   );
 
   const futures = getOrCreateFutures();
-  const volume = event.params.newPricePerDay.times(BigInt.fromI32(futures.deliveryDurationDays));
+  flushFuturesCounters(futures);
+  const volume = matchPrice.times(BigInt.fromI32(futures.deliveryDurationDays));
   futures.totalVolume = futures.totalVolume.plus(volume);
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
@@ -178,9 +183,18 @@ export function handleLotClosed(event: LotClosed): void {
     return;
   }
 
+  const closeReason = mapLotCloseReason(event.params.reason);
+  if (closeReason.length == 0) {
+    log.error("LotClosed: unknown reason {} for lotId {} (tx {})", [
+      BigInt.fromI32(event.params.reason).toString(),
+      event.params.lotId.toHexString(),
+      event.transaction.hash.toHexString(),
+    ]);
+    return;
+  }
   lot.status = LotStatus.CLOSED;
   lot.isClosed = true;
-  lot.closeReason = mapLotCloseReason(event.params.reason);
+  lot.closeReason = closeReason;
   lot.sellerPnl = event.params.sellerPnl;
   lot.buyerPnl = event.params.buyerPnl;
   lot.closedBy = event.params.closedBy;
@@ -196,7 +210,7 @@ export function handleLotClosed(event: LotClosed): void {
     seller,
     buyer.id,
     1,
-    lot.pricePerDay,
+    lot.sellPricePerDay,
     event.params.sellerPnl,
     lot.deliveryAt,
     event.transaction.hash,
@@ -209,7 +223,7 @@ export function handleLotClosed(event: LotClosed): void {
     buyer,
     seller.id,
     -1,
-    lot.pricePerDay,
+    lot.buyPricePerDay,
     event.params.buyerPnl,
     lot.deliveryAt,
     event.transaction.hash,
@@ -220,6 +234,7 @@ export function handleLotClosed(event: LotClosed): void {
   );
 
   const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
 }
@@ -266,13 +281,15 @@ export function handleLotLiquidated(event: LotLiquidated): void {
   lot.save();
 }
 
+/// Empty string sentinel = unknown reason. Caller logs + skips so a future
+/// on-chain enum extension fails loudly instead of being silently mislabelled.
 function mapLotCloseReason(reason: i32): string {
   if (reason == 0) return LotCloseReason.MUTUAL_EXIT;
   if (reason == 1) return LotCloseReason.LIQUIDATION;
   if (reason == 2) return LotCloseReason.BREACH;
   if (reason == 3) return LotCloseReason.SETTLED;
   if (reason == 4) return LotCloseReason.RESET;
-  return LotCloseReason.RESET;
+  return "";
 }
 
 function resolveLotDestURL(makerOrderId: Bytes, takerOrderId: Bytes): string {

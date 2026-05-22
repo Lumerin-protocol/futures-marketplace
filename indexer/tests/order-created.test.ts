@@ -103,11 +103,12 @@ describe("handleOrderCreated", () => {
 
     assert.fieldEquals("PriceLevel", priceLevelKey(DELIVERY, PRICE, true), "totalQuantity", "3");
 
-    // totalOrders / activeOrders count *aggregates*, not units, so still 1.
+    // totalOrders / orderCount count *aggregates*; activeOrders / activeOrderCount count
+    // individual ACTIVE OrderEntry units (per on-chain orderId) — so 3 entries = 3 active.
     assert.fieldEquals("Futures", "0", "totalOrders", "1");
-    assert.fieldEquals("Futures", "0", "activeOrders", "1");
+    assert.fieldEquals("Futures", "0", "activeOrders", "3");
     assert.fieldEquals("User", user.toHexString(), "orderCount", "1");
-    assert.fieldEquals("User", user.toHexString(), "activeOrderCount", "1");
+    assert.fieldEquals("User", user.toHexString(), "activeOrderCount", "3");
   });
 
   test("different (price, side, deliveryAt) tuples create separate Order aggregates", () => {

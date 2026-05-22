@@ -99,7 +99,7 @@ describe("Futures - permissionless liquidation entry points", function () {
       );
     });
 
-    it("emits LiquidationFeeUpdated and persists the new value", async function () {
+    it("emits ConfigUpdated with the new liquidation fee and persists the value", async function () {
       const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
       const { futures } = contracts;
       const { owner, pc } = accounts;
@@ -111,9 +111,9 @@ describe("Futures - permissionless liquidation entry points", function () {
       const [event] = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "LiquidationFeeUpdated",
+        eventName: "ConfigUpdated",
       });
-      assert.equal(event.args.newLiquidationFee, liqFee);
+      assert.equal(event.args.config.liquidationFee, liqFee);
 
       assert.equal(await futures.read.liquidationFee(), liqFee);
     });

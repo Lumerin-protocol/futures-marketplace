@@ -1,5 +1,6 @@
 /**
- * Integration test: MakerFeeUpdated and TakerFeeUpdated flows.
+ * Integration test: ConfigUpdated flow (replaces per-field MakerFeeUpdated /
+ * TakerFeeUpdated events).
  *
  * Deploy futures → bind Matchstick to the proxy → anchor → call
  * `setMakerFee(...)` / `setTakerFee(...)` → `index(read("Futures", "0"))` → assert.
@@ -12,7 +13,7 @@ import { deployFuturesFixture } from "../../contracts/tests/fixtures.ts";
 
 const conn = await network.getOrCreate();
 
-describe("Futures MakerFeeUpdated / TakerFeeUpdated Integration", () => {
+describe("Futures ConfigUpdated Integration", () => {
   after(() => conn.matchstick.reset());
 
   it("indexes makerFee and takerFee updates", async () => {

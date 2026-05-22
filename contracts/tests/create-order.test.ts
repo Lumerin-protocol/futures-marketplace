@@ -371,7 +371,6 @@ describe("Order Creation", () => {
     });
 
     assert.equal(orderClosedEvent.args.orderId, buyOrderId);
-    assert.equal(getAddress(orderClosedEvent.args.participant), getAddress(seller.account.address));
 
     const newOrderCreatedEvents = parseEventLogs({
       logs: sellOrderReceipt.logs,
@@ -429,9 +428,6 @@ describe("Order Creation", () => {
     const closedOrderIds = orderClosedEvents.map((event) => event.args.orderId);
     for (const closedOrderId of closedOrderIds) {
       assert.ok(sellOrderIds.includes(closedOrderId));
-      const ev = orderClosedEvents.find((e) => e.args.orderId === closedOrderId);
-      assert.ok(ev);
-      assert.equal(getAddress(ev.args.participant), getAddress(seller.account.address));
     }
 
     const newOrderCreatedEvents = parseEventLogs({
@@ -526,10 +522,6 @@ describe("Order Creation", () => {
 
     assert.equal(orderClosedEvents.length, 1);
     assert.equal(orderClosedEvents[0].args.orderId, oldOrderId);
-    assert.equal(
-      getAddress(orderClosedEvents[0].args.participant),
-      getAddress(seller.account.address),
-    );
 
     oldOrder = await futures.read.getOrderById([oldOrderId]);
     assert.equal(oldOrder.participant, zeroAddress);

@@ -83,7 +83,7 @@ describe("qty=3 single sell order: Order aggregate and OrderEntry promotion", ()
     assert.ok(level1, "PriceLevel must exist");
     assert.equal(String(level1.totalQuantity), "3");
 
-    assert.equal(String(snap1.entity("Futures", "0")?.activeOrders), "1");
+    assert.equal(String(snap1.entity("Futures", "0")?.activeOrders), "3");
     assert.equal(String(snap1.entity("Futures", "0")?.totalOrders), "1");
 
     // --- Buyer matches all 3 in one call ---
@@ -299,8 +299,8 @@ describe("partial fill: Order PARTIAL, unfilled entries stay ACTIVE", () => {
     );
     assert.equal(
       String(snap.entity("Futures", "0")?.activeOrders),
-      "1",
-      "1 active order (partial)",
+      "2",
+      "2 active OrderEntry units (partial: 1 matched, 2 still resting)",
     );
   });
 });

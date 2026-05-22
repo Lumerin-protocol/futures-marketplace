@@ -149,7 +149,10 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
       getAddress(lotTransferredEvent.args.newParticipant),
       getAddress(account3.account.address),
     );
-    assert.equal(lotTransferredEvent.args.newPricePerDay, exitPrice);
+    // Exiting party was the buyer, so the remaining seller's price is carried over
+    // and only the buyer leg gets the new match price.
+    assert.equal(lotTransferredEvent.args.newSellPricePerDay, price);
+    assert.equal(lotTransferredEvent.args.newBuyPricePerDay, exitPrice);
 
     const deliveryDurationDays = await futures.read.deliveryDurationDays();
     const expectedProfit = (exitPrice - price) * BigInt(deliveryDurationDays);
@@ -229,7 +232,8 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
       getAddress(lotTransferredEvent.args.newParticipant),
       getAddress(account3.account.address),
     );
-    assert.equal(lotTransferredEvent.args.newPricePerDay, exitPrice);
+    assert.equal(lotTransferredEvent.args.newSellPricePerDay, price);
+    assert.equal(lotTransferredEvent.args.newBuyPricePerDay, exitPrice);
 
     const deliveryDurationDays = await futures.read.deliveryDurationDays();
     const expectedLoss = (price - exitPrice) * BigInt(deliveryDurationDays);
@@ -300,7 +304,8 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
       getAddress(lotTransferredEvent.args.newParticipant),
       getAddress(buyer2.account.address),
     );
-    assert.equal(lotTransferredEvent.args.newPricePerDay, newPrice);
+    assert.equal(lotTransferredEvent.args.newSellPricePerDay, price);
+    assert.equal(lotTransferredEvent.args.newBuyPricePerDay, newPrice);
     assert.equal(lotTransferredEvent.args.makerOrderId, order2CreatedEvent.args.orderId);
 
     const pnl = (newPrice - price) * BigInt(config.deliveryDurationDays);

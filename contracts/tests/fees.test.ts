@@ -118,7 +118,7 @@ describe("Fees (maker/taker)", () => {
     assert.equal(feesAfter, feesBefore);
   });
 
-  it("should emit MakerFeeUpdated and TakerFeeUpdated events when fees are set", async () => {
+  it("emits ConfigUpdated carrying maker/taker fees when fees are set", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { owner, pc } = accounts;
@@ -131,18 +131,20 @@ describe("Fees (maker/taker)", () => {
     const [makerEvent] = parseEventLogs({
       logs: makerReceipt.logs,
       abi: futures.abi,
-      eventName: "MakerFeeUpdated",
+      eventName: "ConfigUpdated",
     });
-    assert.equal(makerEvent.args.makerFee, newMakerFee);
+    assert.equal(makerEvent.args.config.makerFee, newMakerFee);
 
     const takerTx = await futures.write.setTakerFee([newTakerFee], { account: owner.account });
     const takerReceipt = await pc.waitForTransactionReceipt({ hash: takerTx });
     const [takerEvent] = parseEventLogs({
       logs: takerReceipt.logs,
       abi: futures.abi,
-      eventName: "TakerFeeUpdated",
+      eventName: "ConfigUpdated",
     });
-    assert.equal(takerEvent.args.takerFee, newTakerFee);
+    assert.equal(takerEvent.args.config.takerFee, newTakerFee);
+    // The snapshot is always whole-config, so the previously-set maker fee is still present.
+    assert.equal(takerEvent.args.config.makerFee, newMakerFee);
 
     assert.equal(await futures.read.makerFee(), newMakerFee);
     assert.equal(await futures.read.takerFee(), newTakerFee);

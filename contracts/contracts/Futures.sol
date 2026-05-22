@@ -98,7 +98,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private immutable _decimals; // decimals of the wrapped token
 
     // constants
-    string public constant VERSION = "2.9.0";
+    string public constant VERSION = "2.10.0";
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     /// @notice Maximum absolute quantity accepted in a single `createOrder` call.
     /// @dev Bounded by the int8 parameter type. Exposed as a constant so off-chain
@@ -166,12 +166,37 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     );
 
     /// @notice Fired when an order is closed for any reason.
+    /// @dev Participant is intentionally omitted — it is always recoverable from the matching
+    ///      `OrderCreated`/`orders[orderId].participant` mapping, and OrderCreated is permanently
+    ///      observable by any indexer subscribed to this event stream.
+    ///      When `reason == LIQUIDATED` a paired `OrderLiquidated` carries the liquidator /
+    ///      fee context; merging those fields here would tax every cancel/match/expire.
     /// @param reason  MATCHED — part of a fill; CANCELLED — user cancel; EXPIRED — past deliveryAt;
     ///                LIQUIDATED — margin-call; RESET — admin reset.
-    event OrderClosed(bytes32 indexed orderId, address indexed participant, OrderCloseReason reason);
+    event OrderClosed(bytes32 indexed orderId, OrderCloseReason reason);
 
-    event MakerFeeUpdated(uint256 makerFee);
-    event TakerFeeUpdated(uint256 takerFee);
+    /// @notice Snapshot of every owner-settable configuration field. Emitted by `ConfigUpdated`
+    ///         whenever any setter mutates state, and once at the end of `initialize`. Off-chain
+    ///         consumers can refresh their entire view in O(1) instead of subscribing to each
+    ///         individual `set*` event.
+    struct Config {
+        uint256 makerFee;
+        uint256 takerFee;
+        uint256 liquidationFee;
+        uint256 breachPenaltyRatePerDay;
+        uint256 minimumPriceIncrement;
+        uint8 liquidationMarginPercent;
+        uint8 futureDeliveryDatesCount;
+        address validatorAddress;
+        address hashrateOracle;
+        address marginEngine;
+        string validatorURL;
+    }
+
+    /// @notice Whole-config snapshot. Replaces the per-field
+    ///         `MakerFeeUpdated`/`TakerFeeUpdated`/`LiquidationFeeUpdated`/`ValidatorURLUpdated`
+    ///         events so the off-chain indexer only needs one handler to refresh state.
+    event ConfigUpdated(Config config);
 
     /// @notice Fired when a new matched unit (qty=1) is created.
     /// @param lotId         The on-chain position ID of this matched unit.
@@ -189,19 +214,26 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     /// @notice Atomic counterparty transfer: one party exits an existing lot and a new
     ///         participant takes their slot. The remaining party's session is NEVER touched.
+    /// @dev `newSellPricePerDay` / `newBuyPricePerDay` may differ when the remaining
+    ///      counterparty carries their original entry price forward (see
+    ///      `_maybeExitExistingPosition`). Off-chain consumers MUST use both fields rather
+    ///      than collapsing to a single price.
     event LotTransferred(
         bytes32 indexed oldLotId,
         bytes32 indexed newLotId,
         address exitingParticipant,
         address newParticipant,
         int256 exitPnl,
-        uint256 newPricePerDay,
+        uint256 newSellPricePerDay,
+        uint256 newBuyPricePerDay,
         bytes32 makerOrderId,
         bytes32 takerOrderId
     );
 
     /// @notice Fired when a lot is closed for any reason. sellerPnl/buyerPnl are signed
     ///         (positive = profit). For BREACH, closedBy is the address that called closeDelivery.
+    /// @dev When `reason == LIQUIDATION` a paired `LotLiquidated` carries the liquidator / fee
+    ///      context; merging those fields here would tax every settle/breach/mutual-exit.
     event LotClosed(
         bytes32 indexed lotId,
         address indexed seller,
@@ -218,8 +250,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @notice Seller withdrew escrowed payment after delivery window (replaces PositionPaymentReceived).
     event LotPaymentWithdrawn(bytes32 indexed lotId);
 
-    event ValidatorURLUpdated(string validatorURL);
-
     /// @notice Emitted at the end of `marginCall` when at least one order or position was force-closed.
     event Liquidation(
         address indexed participant, address indexed liquidator, int256 reclaimedMargin, int256 realizedPnl
@@ -229,18 +259,18 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     event BadDebt(address indexed account, uint256 amount);
 
     /// @notice Emitted when a resting order is force-cancelled by a permissionless liquidator.
-    ///         `OrderClosed(LIQUIDATED)` is also emitted from the same path.
+    ///         Paired with `OrderClosed(LIQUIDATED)` in the same tx; subscribed-to only by
+    ///         keepers / indexers that need per-liquidation attribution.
     event OrderLiquidated(
         bytes32 indexed orderId, address indexed participant, address indexed liquidator, uint256 fee
     );
 
-    /// @notice Emitted when a lot is force-closed by a permissionless liquidator.
-    ///         `LotClosed(LIQUIDATION)` is also emitted from the same path.
+    /// @notice Emitted when a lot is force-closed by a permissionless liquidator (or by the
+    ///         legacy validator-driven `marginCall`). Paired with `LotClosed(LIQUIDATION)` in
+    ///         the same tx.
     event LotLiquidated(
         bytes32 indexed lotId, address indexed participant, address indexed liquidator, uint256 fee
     );
-
-    event LiquidationFeeUpdated(uint256 newLiquidationFee);
 
     // errors
     error InvalidPrice();
@@ -305,8 +335,12 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         speedHps = _speedHps;
         deliveryDurationDays = _deliveryDurationDays;
         deliveryIntervalDays = _deliveryIntervalDays;
-        setFutureDeliveryDatesCount(_futureDeliveryDatesCount);
+        if (_futureDeliveryDatesCount < 1) {
+            revert ValueOutOfRange(1, int256(uint256(type(uint8).max)));
+        }
+        futureDeliveryDatesCount = _futureDeliveryDatesCount;
         firstFutureDeliveryDate = _firstFutureDeliveryDate;
+        _emitConfigUpdated();
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
@@ -445,7 +479,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     ) private returns (bytes32 takerOrderId) {
         takerOrderId = bytes32(++nonce);
         emit OrderCreated(takerOrderId, _participant, _destURL, _pricePerDay, _deliveryAt, _isBuy);
-        emit OrderClosed(takerOrderId, _participant, OrderCloseReason.MATCHED);
+        emit OrderClosed(takerOrderId, OrderCloseReason.MATCHED);
     }
 
     function _createOrder(
@@ -532,7 +566,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             address newParticipant = (ex.exitingParticipant == ex.oldBuyer) ? _temp.buyer : _temp.seller;
             _emitLotTransferred(
                 ex.lotId, positionId, ex.exitingParticipant, newParticipant,
-                ex.exitPnl, order.pricePerDay, orderId, takerOrderId
+                ex.exitPnl, _temp.sellPricePerDay, _temp.buyPricePerDay, orderId, takerOrderId
             );
         } else {
             _emitLotCreated(positionId, _temp, order.deliveryAt, orderId, takerOrderId);
@@ -557,12 +591,21 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         address exitingParticipant,
         address newParticipant,
         int256 exitPnl,
-        uint256 newPricePerDay,
+        uint256 newSellPricePerDay,
+        uint256 newBuyPricePerDay,
         bytes32 makerOrderId,
         bytes32 takerOrderId
     ) private {
         emit LotTransferred(
-            oldLotId, newLotId, exitingParticipant, newParticipant, exitPnl, newPricePerDay, makerOrderId, takerOrderId
+            oldLotId,
+            newLotId,
+            exitingParticipant,
+            newParticipant,
+            exitPnl,
+            newSellPricePerDay,
+            newBuyPricePerDay,
+            makerOrderId,
+            takerOrderId
         );
     }
 
@@ -659,7 +702,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             orderId
         );
         delete orders[orderId];
-        emit OrderClosed(orderId, order.participant, reason);
+        emit OrderClosed(orderId, reason);
     }
 
     /// @dev Pushes `_orderId` onto the per-(deliveryDate, price) FIFO queue and, if the queue
@@ -708,10 +751,12 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             revert ValueOutOfRange(0, int256(MAX_BREACH_PENALTY_RATE_PER_DAY));
         }
         breachPenaltyRatePerDay = _breachPenaltyRatePerDay;
+        _emitConfigUpdated();
     }
 
     function setLiquidationMarginPercent(uint8 _liquidationMarginPercent) external onlyOwner {
         liquidationMarginPercent = _liquidationMarginPercent;
+        _emitConfigUpdated();
     }
 
     function setFutureDeliveryDatesCount(uint8 _futureDeliveryDatesCount) public onlyOwner {
@@ -719,29 +764,31 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             revert ValueOutOfRange(1, int256(uint256(type(uint8).max)));
         }
         futureDeliveryDatesCount = _futureDeliveryDatesCount;
+        _emitConfigUpdated();
     }
 
     /// @notice Set the flat maker fee charged to the resting order's owner on every matched unit.
     function setMakerFee(uint256 _makerFee) external onlyOwner {
         makerFee = _makerFee;
-        emit MakerFeeUpdated(_makerFee);
+        _emitConfigUpdated();
     }
 
     /// @notice Set the flat taker fee charged to the incoming order's owner on every matched unit.
     function setTakerFee(uint256 _takerFee) external onlyOwner {
         takerFee = _takerFee;
-        emit TakerFeeUpdated(_takerFee);
+        _emitConfigUpdated();
     }
 
     /// @notice Set the flat liquidation fee paid by `liquidateOrder` / `liquidateOrders`
     ///         (per cancelled order) and `liquidatePosition` (per closed position).
     function setLiquidationFee(uint256 _liquidationFee) external onlyOwner {
         liquidationFee = _liquidationFee;
-        emit LiquidationFeeUpdated(_liquidationFee);
+        _emitConfigUpdated();
     }
 
     function setOracle(address addr) external onlyOwner {
         _setHashrateOracle(AggregatorV3Interface(addr));
+        _emitConfigUpdated();
     }
 
     /// @dev Caches the oracle reference together with a precomputed scaling divisor based on its `decimals()`
@@ -763,17 +810,40 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @param _validatorURL the validator endpoint, you can omit protocol prefix and use host.com:port
     function setValidatorURL(string memory _validatorURL) external onlyOwner {
         validatorURL = _validatorURL;
-        emit ValidatorURLUpdated(_validatorURL);
+        _emitConfigUpdated();
     }
 
     /// @notice Sets the validator address
     /// @dev Limits access to the functions with onlyValidator modifier
     function setValidatorAddress(address _validatorAddress) external onlyOwner {
         validatorAddress = _validatorAddress;
+        _emitConfigUpdated();
     }
 
     function setMarginEngine(address _marginEngine) external onlyOwner {
         marginEngine = IPortfolioMarginEngine(_marginEngine);
+        _emitConfigUpdated();
+    }
+
+    /// @dev Builds a `Config` snapshot from current storage and emits `ConfigUpdated`. Called
+    ///      by every setter (and `initialize`) so the indexer sees the entire mutable surface
+    ///      via a single event handler.
+    function _emitConfigUpdated() private {
+        emit ConfigUpdated(
+            Config({
+                makerFee: makerFee,
+                takerFee: takerFee,
+                liquidationFee: liquidationFee,
+                breachPenaltyRatePerDay: breachPenaltyRatePerDay,
+                minimumPriceIncrement: minimumPriceIncrement,
+                liquidationMarginPercent: liquidationMarginPercent,
+                futureDeliveryDatesCount: futureDeliveryDatesCount,
+                validatorAddress: validatorAddress,
+                hashrateOracle: address(hashrateOracle),
+                marginEngine: address(marginEngine),
+                validatorURL: validatorURL
+            })
+        );
     }
 
     /// @notice Admin escape hatch that clears every order and position belonging to the

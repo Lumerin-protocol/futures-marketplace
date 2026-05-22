@@ -48,7 +48,9 @@ describe("handleLiquidation", () => {
     assert.fieldEquals("Liquidation", id, "reclaimedMargin", reclaim.toString());
     assert.fieldEquals("Liquidation", id, "realizedPnl", pnl.toString());
 
-    assert.fieldEquals("User", user.toHexString(), "realizedPnl", pnl.toString());
+    // User.realizedPnl is driven by per-lot LotClosed/LotTransferred handlers
+    // (via applyExitFill), not the aggregate Liquidation event, to avoid
+    // double-counting. The Liquidation entity itself records the aggregate.
     assert.fieldEquals("Futures", "0", "totalLiquidations", "1");
   });
 });
