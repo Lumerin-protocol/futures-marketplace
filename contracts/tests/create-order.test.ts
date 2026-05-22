@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { getAddress, parseEventLogs, parseUnits, zeroAddress } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
-import { refreshHashprice } from "./utils.ts";
+import { warpPastDeliveryWithFreshOracle } from "./utils.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -477,7 +477,7 @@ describe("Order Creation", () => {
     await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
   });
 
-  it("should automatically remove outdated orders when creating a new order", async () => {
+  it("does not auto-sweep expired orders when creating a new order", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, pc, tc } = accounts;
@@ -485,7 +485,6 @@ describe("Order Creation", () => {
     const price = parseUnits("100", 6);
     const margin = parseUnits("10000", 6);
     const oldDeliveryDate = config.deliveryDates[0];
-    const newDeliveryDate = config.deliveryDates[1];
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
@@ -505,8 +504,14 @@ describe("Order Creation", () => {
     assert.equal(getAddress(oldOrder.participant), getAddress(seller.account.address));
     assert.equal(oldOrder.deliveryAt, oldDeliveryDate);
 
-    await tc.setNextBlockTimestamp({ timestamp: oldDeliveryDate + 1n });
-    await refreshHashprice(contracts.hashrateOracle);
+    await warpPastDeliveryWithFreshOracle(
+      tc,
+      contracts.hashrateOracle,
+      oldDeliveryDate,
+      BigInt(config.deliveryDurationSeconds),
+    );
+    const futureDates = await futures.read.getDeliveryDates();
+    const newDeliveryDate = futureDates[futureDates.length - 1];
 
     const newOrderTxHash = await futures.write.createOrder([price, newDeliveryDate, "", 1], {
       account: seller.account,
@@ -519,12 +524,10 @@ describe("Order Creation", () => {
       abi: futures.abi,
       eventName: "OrderClosed",
     });
-
-    assert.equal(orderClosedEvents.length, 1);
-    assert.equal(orderClosedEvents[0].args.orderId, oldOrderId);
+    assert.equal(orderClosedEvents.length, 0, "createOrder must not implicitly close expired orders");
 
     oldOrder = await futures.read.getOrderById([oldOrderId]);
-    assert.equal(oldOrder.participant, zeroAddress);
+    assert.equal(getAddress(oldOrder.participant), getAddress(seller.account.address));
 
     const newOrderEvents = parseEventLogs({
       logs: newOrderReceipt.logs,
@@ -533,6 +536,9 @@ describe("Order Creation", () => {
     });
     assert.equal(newOrderEvents.length, 1);
     assert.equal(newOrderEvents[0].args.deliveryAt, newDeliveryDate);
+
+    const sellerOrders = await futures.read.getOrderIds([seller.account.address]);
+    assert.equal(sellerOrders.length, 2, "stale order is still resting next to the new one");
   });
 
   it("should enforce maximum orders per participant", async () => {

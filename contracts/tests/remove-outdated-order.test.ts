@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { encodeFunctionData, parseEventLogs, parseUnits, zeroHash } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
+import { warpPastDeliveryWithFreshOracle } from "./utils.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -147,11 +148,12 @@ describe("Futures.removeOutdatedOrder", () => {
       restingIds.push(ev.args.orderId);
     }
 
-    // Fast-forward past expiringDd's window. Pick a placement date that is
-    // still valid afterwards.
-    await tc.setNextBlockTimestamp({
-      timestamp: expiringDd + BigInt(config.deliveryDurationSeconds) + 1n,
-    });
+    await warpPastDeliveryWithFreshOracle(
+      tc,
+      contracts.hashrateOracle,
+      expiringDd,
+      BigInt(config.deliveryDurationSeconds),
+    );
     const futureDates = await futures.read.getDeliveryDates();
     const freshDd = futureDates[futureDates.length - 1];
 

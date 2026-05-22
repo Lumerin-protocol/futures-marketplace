@@ -1,3 +1,6 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import hre from "hardhat";
 import { type Address, type PublicClient, getAddress, parseAbiItem } from "viem";
 import { encodeFunctionData } from "viem/utils";
@@ -22,6 +25,19 @@ const POSITION_CREATED_EVENT = parseAbiItem(
 const DEFAULT_BLOCK_CHUNK = 10_000n;
 const DEFAULT_RESET_BATCH = 50;
 const MIN_CHUNK_BLOCKS = 1n;
+const CACHE_VERSION = 1;
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const DEFAULT_CACHE_DIR = join(SCRIPT_DIR, "..", ".cache", "futures-reset-participants");
+
+type SerializedRange = { from: string; to: string };
+
+type ParticipantScanCache = {
+  version: number;
+  chainId: number;
+  contract: Address;
+  participants: Address[];
+  scannedRanges: SerializedRange[];
+};
 
 async function main() {
   logTitle("Futures Reset State");
@@ -49,6 +65,10 @@ async function main() {
     BlockChunk: blockChunk.toString(),
     ResetBatch: resetBatch,
     DryRun: dryRun,
+    Cache:
+      process.env.NO_CACHE === "true"
+        ? "disabled (NO_CACHE)"
+        : participantCachePath(pc, futuresAddress),
     Caller: SAFE_OWNER_ADDRESS ?? deployer.account.address,
   });
 
@@ -119,7 +139,7 @@ async function main() {
     const receipt = await pc.waitForTransactionReceipt({ hash: tx });
     logStep(
       `batch ${i + 1}/${batches.length} (${batch.length})`,
-      `${txUrl(pc, receipt.transactionHash)}  gas=${receipt.gasUsed}`,
+      `${txUrl(pc, receipt.transactionHash)}  gas=${receipt.gasUsed} block ${receipt.blockNumber}`,
     );
   }
   logSuccess(
@@ -131,27 +151,100 @@ async function main() {
  * Walk `OrderCreated` and `PositionCreated` logs and return the union of
  * `participant` / `seller` / `buyer` addresses, deduped and checksummed.
  *
+ * Results are cached on disk (per chain + contract). Reruns only `eth_getLogs`
+ * for block ranges not yet covered by the cache. Set `NO_CACHE=true` to force a
+ * full rescan; `PARTICIPANT_CACHE_DIR` overrides the default cache directory.
+ *
  * Both events are queried in one `eth_getLogs` round-trip per window. Windows
  * start at `blockChunk` and adaptively halve down to a single block when the
- * RPC rejects the range (e.g. Alchemy's free-tier "block range too wide" or
- * "log response too large" errors), then gently grow back after a success.
- * This way the script self-tunes to whatever the node accepts.
+ * RPC rejects the range, then gently grow back after a success.
  */
 async function collectParticipants(
   pc: PublicClient,
   contract: Address,
   opts: { startBlock: bigint; endBlock: bigint; blockChunk: bigint },
 ): Promise<Address[]> {
-  const seen = new Set<Address>();
-  const { startBlock, endBlock, blockChunk } = opts;
-  const totalRange = endBlock >= startBlock ? endBlock - startBlock + 1n : 0n;
-  let scanned = 0n;
-  let currentChunk = blockChunk;
-  let from = startBlock;
+  const chainId = pc.chain?.id;
+  if (chainId === undefined) {
+    throw new Error("Public client has no chain id; cannot use participant scan cache");
+  }
 
-  while (from <= endBlock) {
+  const { startBlock, endBlock, blockChunk } = opts;
+  const seen = new Set<Address>();
+  let scannedRanges: Array<{ from: bigint; to: bigint }> = [];
+  const useCache = process.env.NO_CACHE !== "true";
+
+  if (useCache) {
+    const cached = await loadParticipantCache(chainId, contract);
+    if (cached) {
+      for (const addr of cached.participants) seen.add(getAddress(addr));
+      scannedRanges = cached.scannedRanges.map((r) => ({
+        from: BigInt(r.from),
+        to: BigInt(r.to),
+      }));
+      logInfo("participant cache", {
+        File: participantCachePath(pc, contract),
+        Participants: cached.participants.length,
+        ScannedRanges: cached.scannedRanges.length,
+      });
+    }
+  }
+
+  const gaps = findMissingRanges(startBlock, endBlock, scannedRanges);
+  const totalRange = endBlock >= startBlock ? endBlock - startBlock + 1n : 0n;
+  const gapBlocks = gaps.reduce((sum, g) => sum + (g.to - g.from + 1n), 0n);
+
+  if (gaps.length === 0) {
+    console.log("  cache covers requested block range — skipping eth_getLogs");
+    return Array.from(seen);
+  }
+
+  logInfo("participant scan", {
+    MissingRanges: gaps.length,
+    BlocksToFetch: gapBlocks.toString(),
+    BlocksTotal: totalRange.toString(),
+  });
+
+  for (let i = 0; i < gaps.length; i++) {
+    const gap = gaps[i];
+    await scanParticipantLogs(pc, contract, gap.from, gap.to, blockChunk, seen, {
+      gapIndex: i + 1,
+      gapCount: gaps.length,
+      gapBlocks,
+    });
+    scannedRanges = mergeRanges([...scannedRanges, gap]);
+    // Persist after each gap so a failed run can resume without re-fetching.
+    if (useCache) {
+      await writeParticipantCache(chainId, contract, seen, scannedRanges);
+    }
+  }
+
+  if (useCache && gaps.length > 0) {
+    logInfo("participant cache", { Saved: participantCachePath(pc, contract) });
+  }
+
+  return Array.from(seen);
+}
+
+/**
+ * Scan a contiguous block range and add discovered addresses to `seen`.
+ */
+async function scanParticipantLogs(
+  pc: PublicClient,
+  contract: Address,
+  rangeStart: bigint,
+  rangeEnd: bigint,
+  blockChunk: bigint,
+  seen: Set<Address>,
+  progress: { gapIndex: number; gapCount: number; gapBlocks: bigint },
+): Promise<void> {
+  let scannedInGap = 0n;
+  let currentChunk = blockChunk;
+  let from = rangeStart;
+
+  while (from <= rangeEnd) {
     const desiredTo = from + currentChunk - 1n;
-    const to = desiredTo > endBlock ? endBlock : desiredTo;
+    const to = desiredTo > rangeEnd ? rangeEnd : desiredTo;
 
     try {
       const logs = await pc.getLogs({
@@ -170,10 +263,11 @@ async function collectParticipants(
         }
       }
 
-      scanned += to - from + 1n;
-      const pct = totalRange === 0n ? 100 : Number((scanned * 100n) / totalRange);
+      scannedInGap += to - from + 1n;
+      const pct =
+        progress.gapBlocks === 0n ? 100 : Number((scannedInGap * 100n) / progress.gapBlocks);
       process.stdout.write(
-        `\r  scanning blocks ${from}–${to}  chunk=${currentChunk}  ${pct}%  found=${seen.size}    `,
+        `\r  gap ${progress.gapIndex}/${progress.gapCount}  blocks ${from}–${to}  chunk=${currentChunk}  ${pct}%  found=${seen.size}    `,
       );
 
       from = to + 1n;
@@ -195,8 +289,99 @@ async function collectParticipants(
     }
   }
   process.stdout.write("\n");
+}
 
-  return Array.from(seen);
+function cacheFilePath(chainId: number, contract: Address): string {
+  const dir = process.env.PARTICIPANT_CACHE_DIR ?? DEFAULT_CACHE_DIR;
+  return join(dir, `${chainId}-${getAddress(contract).toLowerCase()}.json`);
+}
+
+function participantCachePath(pc: PublicClient, contract: Address): string {
+  return cacheFilePath(pc.chain?.id ?? 0, contract);
+}
+
+async function loadParticipantCache(
+  chainId: number,
+  contract: Address,
+): Promise<ParticipantScanCache | null> {
+  const path = cacheFilePath(chainId, contract);
+  try {
+    const raw = await readFile(path, "utf-8");
+    const parsed = JSON.parse(raw) as ParticipantScanCache;
+    if (parsed.version !== CACHE_VERSION) return null;
+    if (parsed.chainId !== chainId) return null;
+    if (getAddress(parsed.contract) !== getAddress(contract)) return null;
+    return parsed;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
+  }
+}
+
+async function writeParticipantCache(
+  chainId: number,
+  contract: Address,
+  seen: Set<Address>,
+  scannedRanges: Array<{ from: bigint; to: bigint }>,
+): Promise<void> {
+  const mergedRanges = mergeRanges(scannedRanges);
+  const path = cacheFilePath(chainId, contract);
+  await mkdir(dirname(path), { recursive: true });
+  const data: ParticipantScanCache = {
+    version: CACHE_VERSION,
+    chainId,
+    contract: getAddress(contract),
+    participants: Array.from(seen).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+    scannedRanges: mergedRanges.map((r) => ({
+      from: r.from.toString(),
+      to: r.to.toString(),
+    })),
+  };
+  await writeFile(path, `${JSON.stringify(data, null, 2)}\n`, "utf-8");
+}
+
+function mergeRanges(
+  ranges: Array<{ from: bigint; to: bigint }>,
+): Array<{ from: bigint; to: bigint }> {
+  if (ranges.length === 0) return [];
+  const sorted = [...ranges].sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0));
+  const out: Array<{ from: bigint; to: bigint }> = [{ from: sorted[0].from, to: sorted[0].to }];
+  for (let i = 1; i < sorted.length; i++) {
+    const cur = sorted[i];
+    const last = out[out.length - 1];
+    if (cur.from <= last.to + 1n) {
+      if (cur.to > last.to) last.to = cur.to;
+    } else {
+      out.push({ from: cur.from, to: cur.to });
+    }
+  }
+  return out;
+}
+
+/** Block ranges in `[start, end]` not already covered by `scanned`. */
+function findMissingRanges(
+  start: bigint,
+  end: bigint,
+  scanned: Array<{ from: bigint; to: bigint }>,
+): Array<{ from: bigint; to: bigint }> {
+  if (start > end) return [];
+  const clipped = scanned
+    .map((r) => ({
+      from: r.from < start ? start : r.from,
+      to: r.to > end ? end : r.to,
+    }))
+    .filter((r) => r.from <= r.to);
+  const merged = mergeRanges(clipped);
+  if (merged.length === 0) return [{ from: start, to: end }];
+
+  const gaps: Array<{ from: bigint; to: bigint }> = [];
+  let cursor = start;
+  for (const r of merged) {
+    if (cursor < r.from) gaps.push({ from: cursor, to: r.from - 1n });
+    cursor = r.to + 1n;
+  }
+  if (cursor <= end) gaps.push({ from: cursor, to: end });
+  return gaps;
 }
 
 /**

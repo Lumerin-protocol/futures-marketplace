@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { encodeFunctionData, getAddress, parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
+import { warpPastDeliveryWithFreshOracle } from "./utils.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -202,10 +203,12 @@ describe("Futures.createOrders (batch placement)", () => {
     // Seller rests one order.
     await futures.write.createOrder([mp, dd, "", -1], { account: seller.account });
 
-    // Fast-forward past delivery so the existing order is now "expired".
-    await tc.setNextBlockTimestamp({
-      timestamp: dd + BigInt(config.deliveryDurationSeconds) + 1n,
-    });
+    await warpPastDeliveryWithFreshOracle(
+      tc,
+      contracts.hashrateOracle,
+      dd,
+      BigInt(config.deliveryDurationSeconds),
+    );
 
     // The stale order is now past `deliveryAt`, but a fresh `createOrders`
     // call must NOT close it (the prologue sweep is gone). The only effect on
@@ -213,8 +216,7 @@ describe("Futures.createOrders (batch placement)", () => {
     const ordersBefore = await futures.read.getOrderIds([seller.account.address]);
     assert.equal(ordersBefore.length, 1, "stale order should still be present pre-placement");
 
-    // Choose a fresh, still-valid delivery date for the new placement.
-    const freshDeliveryDate = config.deliveryDates[config.deliveryDates.length - 1];
+    const freshDeliveryDate = (await futures.read.getDeliveryDates()).at(-1)!;
     const tx = await futures.write.createOrders(
       [
         [
