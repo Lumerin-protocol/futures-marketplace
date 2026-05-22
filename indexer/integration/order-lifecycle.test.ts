@@ -12,7 +12,7 @@ import { parseEventLogs, parseUnits } from "viem";
 import { read } from "matchstick-ts";
 import { deployFuturesFixture } from "../../contracts/tests/fixtures.ts";
 import { quantizePrice } from "../../contracts/tests/utils.ts";
-import { priceLevelId } from "./helpers.ts";
+import { assertHexHash, priceLevelId } from "./helpers.ts";
 
 const conn = await network.getOrCreate();
 
@@ -64,6 +64,8 @@ describe("qty=3 single sell order: Order aggregate and OrderEntry promotion", ()
       read("Futures", "0"),
     ]);
 
+    const sellerAddr = seller.account.address.toLowerCase() as `0x${string}`;
+
     const [order1] = snap1.saved("Order");
     assert.ok(order1, "Order aggregate must exist");
     assert.equal(String(order1.originalQuantity), "3");
@@ -73,10 +75,39 @@ describe("qty=3 single sell order: Order aggregate and OrderEntry promotion", ()
     assert.equal(order1.status, "ACTIVE");
     assert.equal(order1.isBuy, false);
 
+    // Field-coverage: lock in the rest of the Order aggregate.
+    assert.equal(String(order1.user).toLowerCase(), sellerAddr, "Order.user mirrors maker EOA");
+    assert.equal(String(order1.price), price.toString(), "Order.price = createOrder price");
+    assert.equal(
+      String(order1.deliveryAt),
+      deliveryDate.toString(),
+      "Order.deliveryAt = createOrder delivery date",
+    );
+    assert.ok(BigInt(String(order1.createdAt)) > 0n, "Order.createdAt set from event.block.timestamp");
+    assert.ok(BigInt(String(order1.updatedAt)) > 0n, "Order.updatedAt set on every save");
+    // matchstick-ts returns `undefined` for null nullable fields — accept either.
+    assert.ok(order1.closedAt == null, "Order.closedAt stays unset while ACTIVE");
+    assert.ok(BigInt(String(order1.blockNumber)) > 0n, "Order.blockNumber set from event.block.number");
+    assert.equal(
+      String(order1.transactionHash).toLowerCase(),
+      sellerTx.toLowerCase(),
+      "Order.transactionHash mirrors the createOrder tx hash",
+    );
+
     for (const id of makerOrderIds) {
       const entry = snap1.entity("OrderEntry", id);
       assert.ok(entry, `OrderEntry ${id} must exist`);
       assert.equal(entry.status, "ACTIVE");
+      // Field-coverage: id (= on-chain orderId), order relation, destURL.
+      assert.equal(String(entry.id).toLowerCase(), id, "OrderEntry.id = on-chain orderId");
+      assert.equal(
+        String(entry.order).toLowerCase(),
+        String(order1.id).toLowerCase(),
+        "OrderEntry.order points back at the Order aggregate",
+      );
+      assert.equal(entry.destURL, "", "seller passed empty destURL");
+      assert.ok(entry.closedAt == null, "OrderEntry.closedAt stays unset while ACTIVE");
+      assert.ok(entry.closedByTx == null, "OrderEntry.closedByTx stays unset while ACTIVE");
     }
 
     const level1 = snap1.entity("PriceLevel", levelId);
@@ -111,10 +142,29 @@ describe("qty=3 single sell order: Order aggregate and OrderEntry promotion", ()
     assert.equal(String(order2.quantity), "0", "remaining quantity must be 0 after full fill");
     assert.equal(order2.status, "FILLED");
 
+    // Field-coverage: terminal-transition metadata.
+    assert.ok(
+      order2.closedAt != null && BigInt(String(order2.closedAt)) > 0n,
+      "Order.closedAt is set on the terminal FILLED transition (recomputeOrderStatus)",
+    );
+    assert.ok(
+      BigInt(String(order2.updatedAt)) >= BigInt(String(order1.updatedAt)),
+      "Order.updatedAt is monotonically non-decreasing",
+    );
+
     for (const id of makerOrderIds) {
       const entry = snap2.entity("OrderEntry", id);
       assert.ok(entry);
       assert.equal(entry.status, "MATCHED", `OrderEntry ${id} must be MATCHED after fill`);
+      // Field-coverage: OrderEntry close metadata after MATCHED.
+      assert.ok(
+        entry.closedAt != null && BigInt(String(entry.closedAt)) > 0n,
+        "OrderEntry.closedAt is set on the OrderClosed event",
+      );
+      // OrderEntry.closedByTx = `event.transaction.from`. In matchstick-ts that
+      // gets stamped with a default mock 20-byte value (not the real EOA), so
+      // we only verify the field is populated as a hex address.
+      assertHexHash(entry.closedByTx, "OrderEntry.closedByTx after MATCHED");
     }
 
     const level2 = snap2.entity("PriceLevel", levelId);

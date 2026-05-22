@@ -126,6 +126,11 @@ describe("liquidatePosition: Lot closed with LIQUIDATION, seller netQty=0", () =
     // Dedup sentinel created exactly once per tx
     const liquidationTxs = snap.saved("LiquidationTx");
     assert.equal(liquidationTxs.length, 1, "exactly 1 LiquidationTx sentinel per liquidation tx");
+    assert.equal(
+      String(liquidationTxs[0].id).toLowerCase(),
+      liqTx.toLowerCase(),
+      "LiquidationTx.id mirrors the liquidatePosition tx hash",
+    );
 
     const sellerUser = snap.entity("User", sellerAddr);
     assert.ok(sellerUser);
@@ -198,6 +203,25 @@ describe("BadDebt: BadDebtEvent when losses exceed participant balance + insuran
       badDebt.amount,
       onChainAmount.toString(),
       "BadDebtEvent.amount must match on-chain event",
+    );
+
+    // Field-coverage: BadDebtEvent metadata.
+    assert.ok(
+      typeof badDebt.id === "string" && (badDebt.id as string).startsWith("0x"),
+      "BadDebtEvent.id is `tx hash ++ logIndex` (hex Bytes), set by createEventId",
+    );
+    assert.equal(
+      String(badDebt.transactionHash).toLowerCase(),
+      liqTx.toLowerCase(),
+      "BadDebtEvent.transactionHash mirrors the liquidatePosition tx hash",
+    );
+    assert.ok(
+      BigInt(String(badDebt.timestamp)) > 0n,
+      "BadDebtEvent.timestamp is set from event.block.timestamp",
+    );
+    assert.ok(
+      BigInt(String(badDebt.blockNumber)) > 0n,
+      "BadDebtEvent.blockNumber is set from event.block.number",
     );
 
     const futuresEntity = snap.entity("Futures", "0");

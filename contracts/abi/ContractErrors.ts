@@ -26,6 +26,11 @@ export const contractErrors = [
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "OrderNotExists",
+    "type": "error"
+  },
+  {
     "inputs": [
       {
         "internalType": "address",
@@ -144,6 +149,11 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "OnlyValidatorOrPositionParticipant",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OrderNotExpired",
     "type": "error"
   },
   {

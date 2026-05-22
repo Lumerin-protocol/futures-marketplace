@@ -98,7 +98,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private immutable _decimals; // decimals of the wrapped token
 
     // constants
-    string public constant VERSION = "2.10.0";
+    string public constant VERSION = "2.11.0";
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     /// @notice Maximum absolute quantity accepted in a single `createOrder` call.
     /// @dev Bounded by the int8 parameter type. Exposed as a constant so off-chain
@@ -122,6 +122,21 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         uint256 pricePerDay; // price of the hashrate in tokens for one day
         uint256 deliveryAt; // date of delivery, when contract delivery is started
         uint256 createdAt; // timestamp of the creation of the order
+    }
+
+    /// @notice One placement in a `createOrders` batch. Mirrors the per-leg arguments of
+    ///         `createOrder` so the batch entrypoint can amortize the IM check and
+    ///         outdated-orders pruning across many placements.
+    /// @param pricePerDay   Order price per delivery-day (token decimals).
+    /// @param deliveryDate  Delivery start timestamp; must be one of `getDeliveryDates()`.
+    /// @param destURL       Optional stratum URL set on the resulting position (buyer side).
+    /// @param qty           Signed quantity: `> 0` for buy / long, `< 0` for sell / short.
+    ///                      Bounded by `int8` so callers can clamp to `MAX_ORDER_QTY`.
+    struct OrderIntent {
+        uint256 pricePerDay;
+        uint256 deliveryDate;
+        string destURL;
+        int8 qty;
     }
 
     /// @notice Represents a couple of matched counterparty orders with bindings, active futures contract between seller and buyer
@@ -297,6 +312,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     error OrdersStillOpen(); // liquidatePosition called while participant has resting orders
     error OrderNotBelongToParticipant(); // liquidateOrder/liquidateOrders received an id not owned by `participant`
     error PositionNotBelongToParticipant(); // liquidatePosition received a positionId where participant is neither buyer nor seller
+    error OrderNotExists(); // removeOutdatedOrder received an unknown / already-closed orderId
+    error OrderNotExpired(); // removeOutdatedOrder called on an order whose deliveryAt is still in the future
 
     /// @param _collateralVault Must use the same underlying ERC20 as `token` passed to `initialize`.
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -341,9 +358,46 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     function createOrder(uint256 _price, uint256 _deliveryDate, string memory _destURL, int8 _qty) external {
-        // Remove outdated orders to keep state clean and ensure accurate limit checks
-        removeOutdatedOrdersForParticipant(_msgSender());
+        address sender = _msgSender();
+        _createOrderInternal(sender, _price, _deliveryDate, _destURL, _qty);
+        ensureNoCollateralDeficit(sender);
+    }
 
+    /// @notice Batched placement. Runs the IM check (`ensureNoCollateralDeficit`) exactly
+    ///         once at the end of the batch, instead of once per placement.
+    /// @dev    Semantically equivalent to calling `createOrder` once per intent but materially
+    ///         cheaper: `marginEngine.computePortfolioIM` (and the hashprice-oracle read it
+    ///         performs via `getFuturesOrderMargin`) runs once at the end rather than after
+    ///         every placement. Reverts atomically if any intent fails validation or if the
+    ///         final batch state is collateral-deficit, leaving the book unchanged.
+    ///
+    ///         Expired-order cleanup is intentionally NOT performed here — that is the job
+    ///         of the permissionless `removeOutdatedOrdersForParticipant(address)`, which any
+    ///         caller can invoke independently (typically composed with this entrypoint via
+    ///         the inherited Multicall when the participant wants to free up order-count slots
+    ///         in the same tx).
+    /// @param _intents Per-leg placement arguments. Empty array is a no-op apart from the
+    ///                 single IM check.
+    function createOrders(OrderIntent[] calldata _intents) external {
+        address sender = _msgSender();
+        uint256 len = _intents.length;
+        for (uint256 i = 0; i < len; i++) {
+            OrderIntent calldata intent = _intents[i];
+            _createOrderInternal(sender, intent.pricePerDay, intent.deliveryDate, intent.destURL, intent.qty);
+        }
+        ensureNoCollateralDeficit(sender);
+    }
+
+    /// @dev Per-leg body of `createOrder`, without the IM-check epilogue
+    ///      (`ensureNoCollateralDeficit`). Both `createOrder` and `createOrders` wrap this so
+    ///      the batch entrypoint amortizes the expensive epilogue across N placements.
+    function _createOrderInternal(
+        address _participant,
+        uint256 _price,
+        uint256 _deliveryDate,
+        string memory _destURL,
+        int8 _qty
+    ) private {
         validatePrice(_price);
         validateDeliveryDate(_deliveryDate);
         validateQty(_qty);
@@ -355,14 +409,15 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         StructuredLinkedList.List storage oppositeOrderIndex =
             _deliveryDatePriceOrderIds(_deliveryDate, _price, !_isBuy);
         EnumerableSet.Bytes32Set storage participantPriceOrderIds =
-            participantDeliveryDatePriceOrderIdsIndex[_msgSender()][_deliveryDate][_price];
+            participantDeliveryDatePriceOrderIdsIndex[_participant][_deliveryDate][_price];
 
-        for (uint8 i = 0; i < abs8(_qty); i++) {
+        uint8 absQty = abs8(_qty);
+        for (uint8 i = 0; i < absQty; i++) {
             _createOrMatchSingleOrder(
                 orderIndex,
                 oppositeOrderIndex,
                 participantPriceOrderIds,
-                _msgSender(),
+                _participant,
                 _price,
                 _deliveryDate,
                 _destURL,
@@ -370,8 +425,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
                 true
             );
         }
-
-        ensureNoCollateralDeficit(_msgSender());
     }
 
     /// @dev Charges flat maker and taker fees, transferring them from the participants' vault balances
@@ -664,25 +717,49 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         result.exitPnl = -pnl; // positive pnl arg = paid out, so participant received -pnl
     }
 
-    /// @notice Removes all outdated orders for a specific participant
-    /// @dev An order is considered outdated if its deliveryAt timestamp is in the past
-    /// @param _participant The address of the participant whose outdated orders should be removed
-    /// @return count The number of outdated orders removed
-    function removeOutdatedOrdersForParticipant(address _participant) public returns (uint256 count) {
-        EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[_participant];
-        uint256 ordersLength = _orders.length();
-
-        // Iterate backwards to safely remove items while iterating
-        for (uint256 i = ordersLength; i > 0; i--) {
-            bytes32 orderId = _orders.at(i - 1);
-            Order memory order = orders[orderId];
-
-            // Check if order is outdated (delivery date has passed)
-            if (order.deliveryAt < block.timestamp) {
-                _closeOrder(orderId, order, OrderCloseReason.EXPIRED);
-                count++;
-            }
-        }
+    /// @notice Closes a single resting order whose `deliveryAt` is already in the past.
+    ///         Permissionless — any address may call it for any orderId, since closing
+    ///         an expired order is unambiguously correct (it frees up a slot under
+    ///         `MAX_ORDERS_PER_PARTICIPANT` for the owner and removes a dead level from
+    ///         the book).
+    /// @dev    No longer invoked from `createOrder` / `createOrders` — those entrypoints
+    ///         skip this cleanup on the hot path to keep gas predictable. Callers that
+    ///         want bulk cleanup compose multiple calls via the inherited `multicall(bytes[])`
+    ///         (typically `[removeOutdatedOrder(id1), …, removeOutdatedOrder(idN),
+    ///         createOrders(intents)]`), or run it independently as a keeper job.
+    ///         Reverts `OrderNotExists` for an unknown / already-closed id, and
+    ///         `OrderNotExpired` for an order whose `deliveryAt` is still in the future,
+    ///         so silent no-ops can't hide caller bugs.
+    ///
+    /// @dev    TODO(keeper-incentive): right now closing an expired order pays the caller
+    ///         nothing — the keeper bears gas with no on-chain reward. Worth exploring a
+    ///         maker-side escrow that doubles as a cleanup bounty:
+    ///
+    ///           1. Charge `makerFee` from the participant on `createOrder` /
+    ///              `createOrders`, holding it inside the contract (akin to how
+    ///              `depositDeliveryPaymentV2` escrows delivery payment).
+    ///           2. On `closeOrder` (user cancel) — refund the maker fee in full,
+    ///              so cooperative MMs that cancel before expiration pay nothing.
+    ///           3. On `removeOutdatedOrder` (keeper sweep) — forward the escrowed
+    ///              maker fee to `_msgSender()` as a bounty, making expired-order
+    ///              cleanup profitable for whoever calls it first.
+    ///           4. On match (`MATCHED`) — keep the existing maker-fee accounting
+    ///              into `collectedFeesBalance`; no change needed there.
+    ///           5. On `liquidateOrder` / `RESET` — credit the escrow back to the
+    ///              order owner (cleanup happens at the keeper's existing
+    ///              `liquidationFee` price, no extra bounty).
+    ///
+    ///         Open design questions: (a) bounty sized to gas cost on the target
+    ///         chain — flat `makerFee` may need a per-order floor / cap; (b) interaction
+    ///         with `getFuturesOrderMargin` and IM accounting (escrow is collateral
+    ///         that's already locked but currently uncounted toward maintenance margin);
+    ///         (c) whether `RESET` should bounty the admin call too, or strictly refund.
+    /// @param  _orderId The id of the order to close.
+    function removeOutdatedOrder(bytes32 _orderId) external {
+        Order memory order = orders[_orderId];
+        if (order.participant == address(0)) revert OrderNotExists();
+        if (order.deliveryAt >= block.timestamp) revert OrderNotExpired();
+        _closeOrder(_orderId, order, OrderCloseReason.EXPIRED);
     }
 
     function _closeOrder(bytes32 orderId, Order memory order, OrderCloseReason reason) private {

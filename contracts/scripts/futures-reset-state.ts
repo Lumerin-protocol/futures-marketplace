@@ -19,7 +19,7 @@ const POSITION_CREATED_EVENT = parseAbiItem(
   "event PositionCreated(bytes32 indexed positionId, address indexed seller, address indexed buyer, uint256 sellPricePerDay, uint256 buyPricePerDay, uint256 deliveryAt, string destURL, bytes32 orderId, bytes32 takerOrderId)",
 );
 
-const DEFAULT_BLOCK_CHUNK = 2_000n;
+const DEFAULT_BLOCK_CHUNK = 10_000n;
 const DEFAULT_RESET_BATCH = 50;
 const MIN_CHUNK_BLOCKS = 1n;
 
@@ -107,7 +107,9 @@ async function main() {
         safe.getSafeUITxUrl(safeTxHash),
       );
     }
-    logSuccess(`Proposed ${batches.length} resetState transaction(s) to Safe ${SAFE_OWNER_ADDRESS}`);
+    logSuccess(
+      `Proposed ${batches.length} resetState transaction(s) to Safe ${SAFE_OWNER_ADDRESS}`,
+    );
     return;
   }
 

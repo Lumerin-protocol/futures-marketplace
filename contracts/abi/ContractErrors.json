@@ -26,6 +26,11 @@
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "OrderNotExists",
+    "type": "error"
+  },
+  {
     "inputs": [
       {
         "internalType": "address",
@@ -144,6 +149,11 @@
   {
     "inputs": [],
     "name": "OnlyValidatorOrPositionParticipant",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OrderNotExpired",
     "type": "error"
   },
   {
