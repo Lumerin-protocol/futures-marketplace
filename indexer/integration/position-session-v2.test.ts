@@ -216,3 +216,129 @@ describe("same tx qty=3 aggregation", () => {
     assert.equal(String(futuresEntity.totalTrades), "2");
   });
 });
+
+// ---------------------------------------------------------------------------
+// scaling into a position at two different prices: qty-weighted entry price
+// ---------------------------------------------------------------------------
+describe("scaling into a position at two different prices: qty-weighted entry price", () => {
+  after(() => conn.matchstick.reset());
+
+  it("aggregatedEntryPrice + PositionSession.entryPrice = (p1+p2)/2 after two same-side fills", async () => {
+    const { contracts, accounts, config } = await conn.networkHelpers.loadFixture(
+      deployFuturesFixture,
+    );
+    const { futures, collateralVault } = contracts;
+    const { seller, buyer, pc } = accounts;
+
+    const p1 = quantizePrice(await futures.read.getMarketPrice(), config.priceLadderStep);
+    const p2 = p1 + config.priceLadderStep;
+    const expectedAvg = (p1 + p2) / 2n;
+    const deliveryDate = config.deliveryDates[0];
+    const margin = parseUnits("10000", 6);
+
+    await collateralVault.write.deposit([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: buyer.account });
+
+    conn.matchstick.bind("Futures", futures.address, futures.abi);
+    await conn.matchstick.captureViewMocks();
+    await conn.matchstick.anchor();
+
+    // tx1: A sells 1 at p1, B buys 1 at p1.
+    await futures.write.createOrder([p1, deliveryDate, "", -1], { account: seller.account });
+    const buy1 = await futures.write.createOrder([p1, deliveryDate, "dst", 1], {
+      account: buyer.account,
+    });
+    await pc.waitForTransactionReceipt({ hash: buy1 });
+
+    // tx2: A sells another 1 at p2, B buys another 1 at p2.
+    await futures.write.createOrder([p2, deliveryDate, "", -1], { account: seller.account });
+    const buy2 = await futures.write.createOrder([p2, deliveryDate, "dst", 1], {
+      account: buyer.account,
+    });
+    await pc.waitForTransactionReceipt({ hash: buy2 });
+
+    const sellerAddr = seller.account.address.toLowerCase() as `0x${string}`;
+    const buyerAddr = buyer.account.address.toLowerCase() as `0x${string}`;
+    const sellerPtrId = pointerId(seller.account.address, deliveryDate);
+    const buyerPtrId = pointerId(buyer.account.address, deliveryDate);
+
+    const snap = await conn.matchstick.indexSnapshot([
+      read("UserDeliverySessionPointer", sellerPtrId),
+      read("UserDeliverySessionPointer", buyerPtrId),
+    ]);
+
+    // --- UserDeliverySessionPointer.aggregatedEntryPrice (qty-weighted) ---
+    const sellerPtr = snap.entity("UserDeliverySessionPointer", sellerPtrId);
+    const buyerPtr = snap.entity("UserDeliverySessionPointer", buyerPtrId);
+    assert.ok(sellerPtr);
+    assert.ok(buyerPtr);
+    assert.equal(String(sellerPtr.netQuantity), "-2");
+    assert.equal(String(buyerPtr.netQuantity), "2");
+    assert.equal(
+      String(sellerPtr.aggregatedEntryPrice),
+      expectedAvg.toString(),
+      "seller pointer.aggregatedEntryPrice = (p1+p2)/2 (qty-weighted)",
+    );
+    assert.equal(
+      String(buyerPtr.aggregatedEntryPrice),
+      expectedAvg.toString(),
+      "buyer pointer.aggregatedEntryPrice = (p1+p2)/2 (qty-weighted)",
+    );
+
+    // --- PositionSession.entryPrice: same qty-weighted aggregation ---
+    const sessions = snap.saved("PositionSession");
+    const sellerSession = sessions.find(
+      (s) => String(s.user).toLowerCase() === sellerAddr,
+    );
+    const buyerSession = sessions.find(
+      (s) => String(s.user).toLowerCase() === buyerAddr,
+    );
+    assert.ok(sellerSession, "seller has exactly one open session spanning both lots");
+    assert.ok(buyerSession, "buyer has exactly one open session spanning both lots");
+
+    assert.equal(sellerSession.status, "OPEN");
+    assert.equal(buyerSession.status, "OPEN");
+    assert.equal(
+      String(sellerSession.entryPrice),
+      expectedAvg.toString(),
+      "seller PositionSession.entryPrice = qty-weighted of two open legs",
+    );
+    assert.equal(
+      String(buyerSession.entryPrice),
+      expectedAvg.toString(),
+      "buyer PositionSession.entryPrice = qty-weighted of two open legs",
+    );
+    assert.equal(
+      String(sellerSession.netQuantity),
+      "-2",
+      "session.netQuantity reflects the scaled-in net qty",
+    );
+    assert.equal(String(buyerSession.netQuantity), "2");
+    assert.equal(
+      String(sellerSession.maxQuantity),
+      "2",
+      "session.maxQuantity climbs to 2 after the second leg",
+    );
+    assert.equal(String(buyerSession.maxQuantity), "2");
+    assert.equal(
+      String(sellerSession.closedQuantity),
+      "0",
+      "no exits → closedQuantity stays at 0",
+    );
+    assert.equal(String(buyerSession.closedQuantity), "0");
+    assert.equal(String(sellerSession.closePrice), "0", "no exits → closePrice stays at 0");
+    assert.equal(String(buyerSession.closePrice), "0");
+    assert.equal(String(sellerSession.realizedPnl), "0");
+    assert.equal(String(buyerSession.realizedPnl), "0");
+
+    // Exactly one session per user, even though two lots opened across two txs.
+    const sellerSessions = sessions.filter(
+      (s) => String(s.user).toLowerCase() === sellerAddr,
+    );
+    const buyerSessions = sessions.filter(
+      (s) => String(s.user).toLowerCase() === buyerAddr,
+    );
+    assert.equal(sellerSessions.length, 1, "scaling in keeps the same OPEN session");
+    assert.equal(buyerSessions.length, 1);
+  });
+});

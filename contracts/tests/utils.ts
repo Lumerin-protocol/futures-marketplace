@@ -41,3 +41,26 @@ export async function refreshHashprice(feed: ScalablePriceFeed, freshAt?: bigint
     await feed.write.setRound([roundId, answer, startedAt, freshAt, answeredInRound]);
   }
 }
+
+/** Hardhat test helper: `tc` from `await hre.network.getOrCreate()` → `accounts.tc`. */
+type TestClock = {
+  setNextBlockTimestamp: (args: { timestamp: bigint }) => Promise<void>;
+  mine: (args: { blocks: number }) => Promise<void>;
+};
+
+/// Advance chain time to `timestamp`, mine one block, and stamp the hashprice
+/// oracle at that timestamp so the next tx (e.g. `createOrder` /
+/// `createOrders`) does not trip `OracleStale` or use a stale fixture
+/// `deliveryDates[n]` that is now in the past.
+export async function warpPastDeliveryWithFreshOracle(
+  tc: TestClock,
+  feed: ScalablePriceFeed,
+  deliveryAt: bigint,
+  deliveryDurationSeconds: bigint,
+): Promise<bigint> {
+  const jumpedTo = deliveryAt + deliveryDurationSeconds + 1n;
+  await tc.setNextBlockTimestamp({ timestamp: jumpedTo });
+  await tc.mine({ blocks: 1 });
+  await refreshHashprice(feed, jumpedTo);
+  return jumpedTo;
+}

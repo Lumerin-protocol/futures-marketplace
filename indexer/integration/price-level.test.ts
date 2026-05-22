@@ -70,6 +70,30 @@ describe("PriceLevel: bid and ask at the same price are distinct entities", () =
     assert.equal(ask.isBid, false);
     assert.equal(bid.isBid, true);
 
+    // Field-coverage: `deliveryAt` and `price` are encoded in the composite id
+    // but also persisted as scalar fields by `getOrCreatePriceLevel`; lock
+    // both in directly so consumers can query without parsing the id.
+    assert.equal(
+      String(ask.deliveryAt),
+      deliveryDate.toString(),
+      "PriceLevel.deliveryAt mirrors the ask order's deliveryAt",
+    );
+    assert.equal(
+      String(ask.price),
+      askPrice.toString(),
+      "PriceLevel.price mirrors the ask order's price",
+    );
+    assert.equal(
+      String(bid.deliveryAt),
+      deliveryDate.toString(),
+      "PriceLevel.deliveryAt mirrors the bid order's deliveryAt",
+    );
+    assert.equal(
+      String(bid.price),
+      bidPrice.toString(),
+      "PriceLevel.price mirrors the bid order's price",
+    );
+
     // Exactly two PriceLevel rows so far — the test asserts no accidental
     // 3rd row exists (e.g. duplicate id between sides).
     const allLevels = snap.saved("PriceLevel");

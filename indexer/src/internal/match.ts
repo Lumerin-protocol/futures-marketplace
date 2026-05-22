@@ -58,11 +58,15 @@ export function flushFuturesCounters(futures: Futures): void {
 // ============================================================================
 
 /// LotCreated leg: user is opening or scaling into a lot at `tradePrice`.
+/// `tradingFee` is the flat per-unit fee this user pays on this leg (maker or
+/// taker depending on which side of the match they sat on); callers compute it
+/// from `Futures.makerFee` / `Futures.takerFee`.
 export function applyOpenFill(
   user: User,
   counterpartyId: Bytes,
   signedQty: i32,
   tradePrice: BigInt,
+  tradingFee: BigInt,
   deliveryAt: BigInt,
   txHash: Bytes,
   blockNumber: BigInt,
@@ -76,6 +80,7 @@ export function applyOpenFill(
     signedQty,
     tradePrice,
     BigInt.zero(),
+    tradingFee,
     deliveryAt,
     txHash,
     blockNumber,
@@ -86,12 +91,16 @@ export function applyOpenFill(
 }
 
 /// LotClosed/LotTransferred leg: user is closing one unit of an existing lot.
+/// `tradingFee` is the flat per-unit fee this user pays on this leg (see
+/// `applyOpenFill`); pass `BigInt.zero()` on fee-exempt legs (e.g. liquidation
+/// or settlement paths the contract does not charge).
 export function applyExitFill(
   user: User,
   counterpartyId: Bytes,
   signedQty: i32,
   exitPrice: BigInt,
   exitPnl: BigInt,
+  tradingFee: BigInt,
   deliveryAt: BigInt,
   txHash: Bytes,
   blockNumber: BigInt,
@@ -105,6 +114,7 @@ export function applyExitFill(
     signedQty,
     exitPrice,
     exitPnl,
+    tradingFee,
     deliveryAt,
     txHash,
     blockNumber,
@@ -138,6 +148,7 @@ function processUserMatch(
   tradeQty: i32,
   tradePrice: BigInt,
   preComputedPnl: BigInt,
+  tradingFee: BigInt,
   deliveryAt: BigInt,
   txHash: Bytes,
   blockNumber: BigInt,
@@ -166,6 +177,7 @@ function processUserMatch(
     tradeQty,
     tradePrice,
     realizedPnl,
+    tradingFee,
     newNet,
     newEntry,
     oldNet,
@@ -225,6 +237,7 @@ function handleFill(
   tradeQty: i32,
   tradePrice: BigInt,
   realizedPnl: BigInt,
+  tradingFee: BigInt,
   newNet: i32,
   newEntry: BigInt,
   oldNet: i32,
@@ -284,6 +297,16 @@ function handleFill(
     }
   }
 
+  // tradingFees accumulates the flat per-unit maker/taker fee on every leg of
+  // the session (open + scale-in + close). The PositionSession singleton is
+  // the canonical place to read total fees paid by a participant on a delivery
+  // date — Trade.tradingFee is the per-tx slice (qty × per-leg fee).
+  if (!tradingFee.equals(BigInt.zero())) {
+    session.tradingFees = session.tradingFees.plus(
+      tradingFee.times(BigInt.fromI32(absI32(tradeQty))),
+    );
+  }
+
   session.save();
 
   return upsertFill(
@@ -295,6 +318,7 @@ function handleFill(
     tradeQty,
     newNet,
     realizedPnl,
+    tradingFee,
     txHash,
     blockNumber,
     timestamp,
@@ -338,6 +362,7 @@ function upsertFill(
   fillQty: i32,
   netQuantityAfter: i32,
   realizedPnlDelta: BigInt,
+  tradingFee: BigInt,
   txHash: Bytes,
   blockNumber: BigInt,
   timestamp: BigInt,
@@ -411,6 +436,13 @@ function upsertFill(
   trade.realizedPnl = trade.realizedPnl.plus(realizedPnlDelta);
   trade.netQuantityAfter = netQuantityAfter;
   if (isNewFill) trade.fillCount++;
+  // tradingFee aggregates the flat per-unit fee × |fillQty| across every leg
+  // that lands on this Trade aggregate (one Trade per (tx, user, session)).
+  if (!tradingFee.equals(BigInt.zero())) {
+    trade.tradingFee = trade.tradingFee.plus(
+      tradingFee.times(BigInt.fromI32(absI32(fillQty))),
+    );
+  }
   trade.save();
 
   // Deferred Futures-singleton write: caller calls `flushFuturesCounters` once

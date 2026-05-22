@@ -160,6 +160,16 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "OrderNotExists",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OrderNotExpired",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "OrdersStillOpen",
     "type": "error"
   },
@@ -882,6 +892,41 @@ export const FuturesAbi = [
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "pricePerDay",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "deliveryDate",
+            "type": "uint256"
+          },
+          {
+            "internalType": "string",
+            "name": "destURL",
+            "type": "string"
+          },
+          {
+            "internalType": "int8",
+            "name": "qty",
+            "type": "int8"
+          }
+        ],
+        "internalType": "struct Futures.OrderIntent[]",
+        "name": "_intents",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "createOrders",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "decimals",
     "outputs": [
@@ -1566,19 +1611,13 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "_participant",
-        "type": "address"
+        "internalType": "bytes32",
+        "name": "_orderId",
+        "type": "bytes32"
       }
     ],
-    "name": "removeOutdatedOrdersForParticipant",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "count",
-        "type": "uint256"
-      }
-    ],
+    "name": "removeOutdatedOrder",
+    "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
   },

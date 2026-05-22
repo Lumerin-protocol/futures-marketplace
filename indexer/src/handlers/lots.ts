@@ -7,9 +7,14 @@ import {
   LotPaymentWithdrawn,
   LotTransferred,
 } from "../../generated/Futures/Futures";
-import { Lot, OrderEntry, User } from "../../generated/schema";
+import { Lot, Order, OrderEntry, User } from "../../generated/schema";
 import { LotCloseReason, LotStatus } from "../enums";
-import { applyExitFill, applyOpenFill, flushFuturesCounters } from "../internal/match";
+import {
+  applyExitFill,
+  applyOpenFill,
+  derivePriceFromExit,
+  flushFuturesCounters,
+} from "../internal/match";
 import { getOrCreateFutures, getOrCreateUser, markLiquidationTx } from "../internal/store";
 import { stringifyParameters } from "../internal/utils";
 
@@ -41,11 +46,24 @@ export function handleLotCreated(event: LotCreated): void {
   appendLot(seller, lot);
   appendLot(buyer, lot);
 
+  // Load Futures once so we can read the current maker/taker fee BEFORE
+  // routing per-leg fees through `applyOpenFill`. The counter flush at the
+  // bottom of this handler picks up the pendingNewFills/Trades produced by
+  // both legs below.
+  const futures = getOrCreateFutures();
+  const fees = resolveMatchFees(
+    event.params.makerOrderId,
+    seller.id,
+    futures.makerFee,
+    futures.takerFee,
+  );
+
   applyOpenFill(
     seller,
     buyer.id,
     -1,
     event.params.pricePerDay,
+    fees.partyAFee,
     event.params.deliveryAt,
     event.transaction.hash,
     event.block.number,
@@ -58,6 +76,7 @@ export function handleLotCreated(event: LotCreated): void {
     seller.id,
     1,
     event.params.pricePerDay,
+    fees.partyBFee,
     event.params.deliveryAt,
     event.transaction.hash,
     event.block.number,
@@ -66,7 +85,6 @@ export function handleLotCreated(event: LotCreated): void {
     1,
   );
 
-  const futures = getOrCreateFutures();
   flushFuturesCounters(futures);
   const volume = event.params.pricePerDay.times(BigInt.fromI32(futures.deliveryDurationDays));
   futures.totalVolume = futures.totalVolume.plus(volume);
@@ -140,12 +158,26 @@ export function handleLotTransferred(event: LotTransferred): void {
     ? event.params.newSellPricePerDay
     : event.params.newBuyPricePerDay;
 
+  // Identify maker/taker for fee routing. The contract charges
+  // makerFee+takerFee on every rewire match exactly like LotCreated; on this
+  // event the exiting side leaves and the new side joins, so one of
+  // {exitingUser, entrantUser} was the maker (resting order) and the other
+  // was the taker (incoming order).
+  const futures = getOrCreateFutures();
+  const fees = resolveMatchFees(
+    event.params.makerOrderId,
+    exitingUser.id,
+    futures.makerFee,
+    futures.takerFee,
+  );
+
   applyExitFill(
     exitingUser,
     counterpartyId,
     exitingSignedQty,
     matchPrice,
     event.params.exitPnl,
+    fees.partyAFee,
     oldLot.deliveryAt,
     event.transaction.hash,
     event.block.number,
@@ -158,6 +190,7 @@ export function handleLotTransferred(event: LotTransferred): void {
     counterpartyId,
     entrantSignedQty,
     matchPrice,
+    fees.partyBFee,
     oldLot.deliveryAt,
     event.transaction.hash,
     event.block.number,
@@ -166,7 +199,6 @@ export function handleLotTransferred(event: LotTransferred): void {
     1,
   );
 
-  const futures = getOrCreateFutures();
   flushFuturesCounters(futures);
   const volume = matchPrice.times(BigInt.fromI32(futures.deliveryDurationDays));
   futures.totalVolume = futures.totalVolume.plus(volume);
@@ -206,12 +238,43 @@ export function handleLotClosed(event: LotClosed): void {
   const seller = getOrCreateUser(event.params.seller, event.block.timestamp);
   const buyer = getOrCreateUser(event.params.buyer, event.block.timestamp);
 
+  // `LotClosed` doesn't emit the exit match price, so back-derive it from
+  // realized PnL and the carried-over entry price. Without this, the close-leg
+  // Fill.fillPrice / Trade.tradePrice would mirror entry while realizedPnl
+  // reflects the exit — internally inconsistent.
+  const sellerExitPrice = derivePriceFromExit(
+    false,
+    event.params.sellerPnl,
+    lot.sellPricePerDay,
+  );
+  const buyerExitPrice = derivePriceFromExit(true, event.params.buyerPnl, lot.buyPricePerDay);
+
+  // Fee attribution on LotClosed:
+  //   - MUTUAL_EXIT (reason=0): the contract charges makerFee+takerFee on the
+  //     match the same way it does for LotCreated, but `LotClosed` does NOT
+  //     emit `makerOrderId` / `takerOrderId`, so we cannot identify which side
+  //     is the maker vs taker from this event alone. Split the total evenly so
+  //     PositionSession.tradingFees and Trade.tradingFee still account for the
+  //     full fee envelope; per-side attribution is approximate. Follow-up
+  //     would extend the contract event or pair OrderClosed(MATCHED) sentinels.
+  //   - LIQUIDATION / BREACH / SETTLED / RESET: the contract skips
+  //     `_chargeMatchFees` on these paths → no fee accounting needed.
+  const futures = getOrCreateFutures();
+  let sellerFee = BigInt.zero();
+  let buyerFee = BigInt.zero();
+  if (event.params.reason == 0) {
+    const totalFee = futures.makerFee.plus(futures.takerFee);
+    sellerFee = totalFee.div(BigInt.fromI32(2));
+    buyerFee = totalFee.minus(sellerFee);
+  }
+
   applyExitFill(
     seller,
     buyer.id,
     1,
-    lot.sellPricePerDay,
+    sellerExitPrice,
     event.params.sellerPnl,
+    sellerFee,
     lot.deliveryAt,
     event.transaction.hash,
     event.block.number,
@@ -223,8 +286,9 @@ export function handleLotClosed(event: LotClosed): void {
     buyer,
     seller.id,
     -1,
-    lot.buyPricePerDay,
+    buyerExitPrice,
     event.params.buyerPnl,
+    buyerFee,
     lot.deliveryAt,
     event.transaction.hash,
     event.block.number,
@@ -233,7 +297,6 @@ export function handleLotClosed(event: LotClosed): void {
     1,
   );
 
-  const futures = getOrCreateFutures();
   flushFuturesCounters(futures);
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
@@ -323,4 +386,48 @@ function appendLot(user: User, lot: Lot): void {
   lotIds.push(lot.id);
   user.lots = lotIds;
   user.save();
+}
+
+class MatchFeeSplit {
+  partyAFee: BigInt;
+  partyBFee: BigInt;
+  constructor(a: BigInt, b: BigInt) {
+    this.partyAFee = a;
+    this.partyBFee = b;
+  }
+}
+
+/// Splits maker/taker fees between two participants in a match. `makerOrderId`
+/// is the resting order id from the LotCreated/LotTransferred event; whichever
+/// party owns that order pays `makerFee` and the other pays `takerFee`. If the
+/// OrderEntry can't be resolved (defensive — shouldn't happen in practice),
+/// returns zero fees and logs a warning so the bookkeeping degrades gracefully
+/// instead of silently mis-attributing.
+function resolveMatchFees(
+  makerOrderId: Bytes,
+  partyAId: Bytes,
+  makerFee: BigInt,
+  takerFee: BigInt,
+): MatchFeeSplit {
+  if (makerFee.equals(BigInt.zero()) && takerFee.equals(BigInt.zero())) {
+    return new MatchFeeSplit(BigInt.zero(), BigInt.zero());
+  }
+  const makerEntry = OrderEntry.load(makerOrderId);
+  if (!makerEntry) {
+    log.warning("resolveMatchFees: maker OrderEntry {} not found; skipping fee attribution", [
+      makerOrderId.toHexString(),
+    ]);
+    return new MatchFeeSplit(BigInt.zero(), BigInt.zero());
+  }
+  const makerOrder = Order.load(makerEntry.order);
+  if (!makerOrder) {
+    log.warning("resolveMatchFees: Order {} for maker entry {} not found", [
+      makerEntry.order.toHexString(),
+      makerOrderId.toHexString(),
+    ]);
+    return new MatchFeeSplit(BigInt.zero(), BigInt.zero());
+  }
+  const partyAIsMaker = makerOrder.user.equals(partyAId);
+  if (partyAIsMaker) return new MatchFeeSplit(makerFee, takerFee);
+  return new MatchFeeSplit(takerFee, makerFee);
 }
