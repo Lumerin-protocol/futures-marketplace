@@ -480,9 +480,11 @@ const Header = styled("div")`
 `;
 
 const TableContainer = styled("div")`
+  position: relative;
   overflow-y: auto;
   width: 100%;
   max-height: 510px; /* ~20 rows * 26px per row */
+  background-color: ${tokens.surface.panel};
 
   &::-webkit-scrollbar {
     width: 4px;
@@ -516,9 +518,9 @@ const Table = styled("table")`
     color: ${tokens.text.secondary};
     border-bottom: 1px solid ${tokens.overlay.white10};
     position: sticky;
-    top: 0;
+    top: -1px;
     background-color: ${tokens.surface.panel};
-    z-index: 1;
+    z-index: 2;
     letter-spacing: 0.03em;
     text-transform: uppercase;
     width: 33.33%;
