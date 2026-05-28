@@ -403,7 +403,7 @@ export const OrderBookTable = ({
 
               return (
                 <TableRow
-                  key={index}
+                  key={row.price}
                   $bidFillPercent={bidFillPercent}
                   $askFillPercent={askFillPercent}
                   onClick={() => {

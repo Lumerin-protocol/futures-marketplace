@@ -45,7 +45,7 @@ export const createFinalOrderBookData = (
 
   // Calculate static order book data based on hashrate
   let calculatedOrderBookData: { price: number; bidUnits: number | null; askUnits: number | null }[] = [];
-  const offsetAroundBasePrice = 15;
+  const offsetAroundBasePrice = 12;
 
   if (basePrice !== null && minimumPriceIncrement !== null) {
     const staticOrderBookRows = [];
@@ -108,42 +108,73 @@ export const createFinalOrderBookData = (
     }
   }
 
-  // Start merged map with calculated data (so calculated-only prices are kept)
-  // Normalize calculated prices to ensure consistency
-  const mergedMap = new Map<number, { bidUnits: number | null; askUnits: number | null }>();
-  if (calculatedOrderBookData && calculatedOrderBookData.length > 0) {
-    for (const row of calculatedOrderBookData) {
-      const normalizedPrice = normalizePrice(row.price);
-      mergedMap.set(normalizedPrice, { bidUnits: row.bidUnits, askUnits: row.askUnits });
-    }
+  // No ladder when market price or tick size is unavailable — show live book only
+  if (calculatedOrderBookData.length === 0) {
+    return Array.from(liveGroupedMap.entries())
+      .sort((a, b) => b[0] - a[0])
+      .map(([price, live]) => ({
+        price,
+        bidUnits: live.bidUnits,
+        askUnits: live.askUnits,
+        isLastHashprice: false,
+      }));
   }
 
-  // Overlay live data ensuring all live prices are present and preferred
-  // Live prices are already normalized, so they should match calculated prices
+  const normalizedBasePrice = normalizePrice(basePrice!);
+  const ladderPriceSet = new Set<number>();
+  let ladderMin = Infinity;
+  let ladderMax = -Infinity;
+
+  for (const row of calculatedOrderBookData) {
+    const price = normalizePrice(row.price);
+    ladderPriceSet.add(price);
+    ladderMin = Math.min(ladderMin, price);
+    ladderMax = Math.max(ladderMax, price);
+  }
+
+  const ladderRows: OrderBookData[] = calculatedOrderBookData.map((row) => {
+    const price = normalizePrice(row.price);
+    const live = liveGroupedMap.get(price);
+    return {
+      price,
+      bidUnits: live?.bidUnits ?? null,
+      askUnits: live?.askUnits ?? null,
+      isLastHashprice: price === normalizedBasePrice,
+    };
+  });
+
+  const aboveExtras: OrderBookData[] = [];
+  const belowExtras: OrderBookData[] = [];
+
   for (const [price, live] of liveGroupedMap.entries()) {
-    const existing = mergedMap.get(price);
-    if (!existing) {
-      mergedMap.set(price, { bidUnits: live.bidUnits, askUnits: live.askUnits });
+    if (ladderPriceSet.has(price)) {
+      continue;
+    }
+
+    const extraRow: OrderBookData = {
+      price,
+      bidUnits: live.bidUnits,
+      askUnits: live.askUnits,
+      isLastHashprice: false,
+    };
+
+    if (price > ladderMax) {
+      aboveExtras.push(extraRow);
+    } else if (price < ladderMin) {
+      belowExtras.push(extraRow);
     } else {
-      // Merge: prefer live data if available, otherwise keep existing
-      mergedMap.set(price, {
-        bidUnits: live.bidUnits !== null ? live.bidUnits : existing.bidUnits,
-        askUnits: live.askUnits !== null ? live.askUnits : existing.askUnits,
-      });
+      // Price within numeric ladder range but not on a ladder slot (shouldn't happen with consistent tick size)
+      if (price > normalizedBasePrice) {
+        aboveExtras.push(extraRow);
+      } else {
+        belowExtras.push(extraRow);
+      }
     }
   }
 
-  // Build final array sorted by price desc (higher prices on top)
-  // Normalize prices in final output to ensure consistency
-  return Array.from(mergedMap.entries())
-    .sort((a, b) => b[0] - a[0])
-    .map(([price, v]) => {
-      const normalizedPrice = normalizePrice(price);
-      return {
-        price: normalizedPrice,
-        bidUnits: v.bidUnits,
-        askUnits: v.askUnits,
-        isLastHashprice: normalizedPrice === (basePrice !== null ? normalizePrice(basePrice) : null),
-      };
-    });
+  aboveExtras.sort((a, b) => b.price - a.price);
+  belowExtras.sort((a, b) => b.price - a.price);
+  ladderRows.sort((a, b) => b.price - a.price);
+
+  return [...aboveExtras, ...ladderRows, ...belowExtras];
 };
