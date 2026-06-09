@@ -16,7 +16,7 @@ async function main() {
   const SAFE_OWNER_ADDRESS = readOptionalAddress("SAFE_OWNER_ADDRESS");
   const vaultAddress = requireAddress("VAULT_ADDRESS");
   const marginEngineAddress = readOptionalAddress("MARGIN_ENGINE_ADDRESS");
-  const pointsHookAddress = readOptionalAddress("POINTS_HOOK_ADDRESS");
+  const pointsHookAddress = readOptionalAddress("HOOK_ADDRESS");
 
   const [deployer, proposer] = await viem.getWalletClients();
   const pc = await viem.getPublicClient();
