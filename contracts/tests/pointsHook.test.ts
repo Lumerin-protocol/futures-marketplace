@@ -123,6 +123,42 @@ describe("Futures - points hook wiring", function () {
     });
   });
 
+  describe("maker price-improvement multiplier", function () {
+    it("boosts maker points when the resting quote sits at the oracle price", async function () {
+      const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures, collateralVault } = contracts;
+      const { owner, seller, buyer } = accounts;
+
+      const { points, hook } = await deployPointsStack(futures.address, owner);
+      await futures.write.setHook([hook.address], { account: owner.account });
+
+      // Maker must pay a positive fee to earn; enable a 3x bonus tapering over a 1% spread.
+      await futures.write.setMakerFee([1n], { account: owner.account });
+      await hook.write.setPriceImprovement([3n * WAD, WAD / 100n], { account: owner.account });
+
+      const price = await futures.read.getMarketPrice();
+      const margin = price * 10n;
+      const deliveryDate = config.deliveryDates[0];
+      await collateralVault.write.deposit([margin], { account: seller.account });
+      await collateralVault.write.deposit([margin], { account: buyer.account });
+
+      // Seller rests at the oracle price (spread 0 → full 3x), buyer takes.
+      await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
+      await futures.write.createOrder([price, deliveryDate, "", 1], { account: buyer.account });
+
+      const notional = price * BigInt(config.deliveryDurationDays);
+
+      // wMaker == 1 WAD and the maker quoted at the reference price → 3x notional.
+      assert.equal(
+        await points.read.balanceOf([seller.account.address]),
+        notional * 3n,
+        "maker earns 3x at zero spread",
+      );
+      // The taker is unaffected by the maker multiplier.
+      assert.equal(await points.read.balanceOf([buyer.account.address]), notional, "taker earns notional");
+    });
+  });
+
   describe("onLiquidation", function () {
     async function underwaterPosition(grantCaller = true) {
       const data = await networkHelpers.loadFixture(deployFuturesFixture);

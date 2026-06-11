@@ -514,7 +514,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         // charge maker/taker fees on the fill (skipped for liquidation-driven matches).
         if (_chargeFees) {
             _chargeMatchFees(oppositeOrder.participant, _participant);
-            _notifyFill(oppositeOrder.participant, _participant, _price);
+            _notifyFill(oppositeOrder.participant, _participant, _price, oppositeOrder.pricePerDay);
         }
 
         // create new position
@@ -920,11 +920,22 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @dev Notify the points hook of a matched fill. Skipped when no hook is configured. Not
     ///      isolated: a reverting hook reverts the fill (unplug via setHook). `notional` follows
     ///      the indexer convention `pricePerDay * deliveryDurationDays`; each match is one unit.
-    function _notifyFill(address _maker, address _taker, uint256 _pricePerDay) private {
+    function _notifyFill(address _maker, address _taker, uint256 _pricePerDay, uint256 _makerPrice) private {
         IPointsHook _hook = hook;
         if (address(_hook) == address(0)) return;
         uint256 notional = _pricePerDay * deliveryDurationDays;
-        _hook.onFill(_maker, _taker, notional, int256(makerFee), takerFee);
+        _hook.onFill(_maker, _taker, notional, int256(makerFee), takerFee, _makerPrice, _refPriceForPoints());
+    }
+
+    /// @dev Oracle reference price for the points price-improvement multiplier, in the same
+    ///      per-day units as an order's price. Unlike `getMarketPrice()` (which routes through
+    ///      `_getHashpriceUsd` and reverts on a stale/invalid oracle), this returns 0 so a
+    ///      points-side read can never block a fill — the hook applies no bonus (1x) when 0.
+    function _refPriceForPoints() private view returns (uint256) {
+        (, int256 answer,, uint256 updatedAt,) = hashrateOracle.latestRoundData();
+        if (answer <= 0) return 0;
+        if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) return 0;
+        return _getMarketPrice(uint256(answer));
     }
 
     /// @dev Notify the points hook of a liquidation. Skipped when no hook is configured. Not
