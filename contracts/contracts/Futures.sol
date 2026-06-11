@@ -14,6 +14,7 @@ import { StructuredLinkedList } from "solidity-linked-list/contracts/StructuredL
 import { Versionable } from "./interfaces/Versionable.sol";
 import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
 import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/interfaces/IPortfolioMarginEngine.sol";
+import { IPointsHook } from "collateral-margin/contracts/contracts/interfaces/IPointsHook.sol";
 
 // TODO:
 // 6. Do we need to batch same price and delivery date orders/positions so it is a single entry?
@@ -92,13 +93,21 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @dev Appended at the end of storage during the maker/taker fee upgrade.
     uint256 public makerFee;
 
+    /// @notice Optional points/rewards hook notified on fills and liquidations.
+    /// @dev Appended at the end of storage to preserve the upgradeable layout. When unset
+    ///      (`address(0)`) the venue mints no points and skips the call entirely. When set,
+    ///      hook calls are NOT wrapped in try/catch: a reverting hook will revert the fill or
+    ///      liquidation. The hook is a simple, owner-controlled contract and can be unplugged
+    ///      instantly via `setHook(address(0))`; unplug it before finalizing the POINTS token.
+    IPointsHook public hook;
+
     // immutable
     /// @dev Unified collateral vault (Titan `CollateralVault` or compatible). Baked into the implementation via constructor.
     ICollateralVault public immutable collateralVault;
     uint8 private immutable _decimals; // decimals of the wrapped token
 
     // constants
-    string public constant VERSION = "2.11.0";
+    string public constant VERSION = "2.13.0";
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     /// @notice Maximum absolute quantity accepted in a single `createOrder` call.
     /// @dev Bounded by the int8 parameter type. Exposed as a constant so off-chain
@@ -505,6 +514,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         // charge maker/taker fees on the fill (skipped for liquidation-driven matches).
         if (_chargeFees) {
             _chargeMatchFees(oppositeOrder.participant, _participant);
+            _notifyFill(oppositeOrder.participant, _participant, _price, oppositeOrder.pricePerDay);
         }
 
         // create new position
@@ -894,6 +904,48 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         _emitConfigUpdated();
     }
 
+    /// @notice Emitted whenever the points hook address changes.
+    event HookUpdated(address indexed hook);
+
+    /// @notice Set (or clear) the points/rewards hook. Pass `address(0)` to disable points.
+    /// @dev The venue must hold `HOOK_CALLER_ROLE` on the hook BEFORE it is plugged in: hook
+    ///      calls are not try/catch-isolated, so a hook that reverts (e.g. missing role, or
+    ///      after the POINTS token is finalized) would block fills and liquidations. Clear the
+    ///      hook with `address(0)` to disable points instantly.
+    function setHook(address _hook) external onlyOwner {
+        hook = IPointsHook(_hook);
+        emit HookUpdated(_hook);
+    }
+
+    /// @dev Notify the points hook of a matched fill. Skipped when no hook is configured. Not
+    ///      isolated: a reverting hook reverts the fill (unplug via setHook). `notional` follows
+    ///      the indexer convention `pricePerDay * deliveryDurationDays`; each match is one unit.
+    function _notifyFill(address _maker, address _taker, uint256 _pricePerDay, uint256 _makerPrice) private {
+        IPointsHook _hook = hook;
+        if (address(_hook) == address(0)) return;
+        uint256 notional = _pricePerDay * deliveryDurationDays;
+        _hook.onFill(_maker, _taker, notional, int256(makerFee), takerFee, _makerPrice, _refPriceForPoints());
+    }
+
+    /// @dev Oracle reference price for the points price-improvement multiplier, in the same
+    ///      per-day units as an order's price. Unlike `getMarketPrice()` (which routes through
+    ///      `_getHashpriceUsd` and reverts on a stale/invalid oracle), this returns 0 so a
+    ///      points-side read can never block a fill — the hook applies no bonus (1x) when 0.
+    function _refPriceForPoints() private view returns (uint256) {
+        (, int256 answer,, uint256 updatedAt,) = hashrateOracle.latestRoundData();
+        if (answer <= 0) return 0;
+        if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) return 0;
+        return _getMarketPrice(uint256(answer));
+    }
+
+    /// @dev Notify the points hook of a liquidation. Skipped when no hook is configured. Not
+    ///      isolated: a reverting hook reverts the liquidation (unplug via setHook).
+    function _notifyLiquidation(address _liquidator, uint256 _fee) private {
+        IPointsHook _hook = hook;
+        if (address(_hook) == address(0)) return;
+        _hook.onLiquidation(_liquidator, _fee);
+    }
+
     /// @dev Builds a `Config` snapshot from current storage and emits `ConfigUpdated`. Called
     ///      by every setter (and `initialize`) so the indexer sees the entire mutable surface
     ///      via a single event handler.
@@ -1050,6 +1102,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         }
 
         emit LotLiquidated(_positionId, _participant, _msgSender(), paid);
+
+        _notifyLiquidation(_msgSender(), paid);
     }
 
     /// @dev Cancels a single order on behalf of a (verified-underwater) participant and pays
@@ -1069,6 +1123,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         }
 
         emit OrderLiquidated(_orderId, _participant, _msgSender(), paid);
+
+        _notifyLiquidation(_msgSender(), paid);
     }
 
     /**

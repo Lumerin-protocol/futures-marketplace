@@ -16,6 +16,7 @@ async function main() {
   const SAFE_OWNER_ADDRESS = readOptionalAddress("SAFE_OWNER_ADDRESS");
   const vaultAddress = requireAddress("VAULT_ADDRESS");
   const marginEngineAddress = readOptionalAddress("MARGIN_ENGINE_ADDRESS");
+  const pointsHookAddress = readOptionalAddress("HOOK_ADDRESS");
 
   const [deployer, proposer] = await viem.getWalletClients();
   const pc = await viem.getPublicClient();
@@ -95,6 +96,24 @@ async function main() {
       logStep("Safe TX hash", setMarginEngineTxHash);
       logStep("Safe UI URL", safe.getSafeUITxUrl(setMarginEngineTxHash));
     }
+
+    if (pointsHookAddress) {
+      logInfo("Propose setHook via Safe", { hook: pointsHookAddress });
+      await logPrompt("Proceed?");
+      const setHookData = encodeFunctionData({
+        abi: futuresProxy.abi,
+        functionName: "setHook",
+        args: [pointsHookAddress],
+      });
+      const setHookTxHash = await safe.proposeTransaction({
+        data: setHookData,
+        to: futuresAddress,
+        value: "0",
+        operation: OperationType.Call,
+      });
+      logStep("Safe TX hash", setHookTxHash);
+      logStep("Safe UI URL", safe.getSafeUITxUrl(setHookTxHash));
+    }
   } else {
     logInfo("Upgrade Futures proxy", { newImpl: futuresImpl.address });
     await logPrompt("Proceed?");
@@ -108,6 +127,7 @@ async function main() {
       MarginEngine: await upgraded.read.marginEngine(),
       HashrateOracle: await upgraded.read.hashrateOracle(),
       Validator: await upgraded.read.validatorAddress(),
+      Hook: await upgraded.read.hook(),
       Owner: await upgraded.read.owner(),
       Version: await upgraded.read.VERSION(),
     });
@@ -124,6 +144,20 @@ async function main() {
         const setReceipt = await pc.waitForTransactionReceipt({ hash: setTx });
         logStep("setMarginEngine", txUrl(pc, setReceipt.transactionHash));
         logStep("MarginEngine", await upgraded.read.marginEngine());
+      }
+    }
+
+    if (pointsHookAddress) {
+      const currentHook = await upgraded.read.hook();
+      if (currentHook.toLowerCase() === pointsHookAddress.toLowerCase()) {
+        logStep("setHook", `skipped (already set to ${pointsHookAddress})`);
+      } else {
+        logInfo("setHook", { current: currentHook, new: pointsHookAddress });
+        await logPrompt("Proceed?");
+        const setTx = await upgraded.write.setHook([pointsHookAddress]);
+        const setReceipt = await pc.waitForTransactionReceipt({ hash: setTx });
+        logStep("setHook", txUrl(pc, setReceipt.transactionHash));
+        logStep("Hook", await upgraded.read.hook());
       }
     }
   }

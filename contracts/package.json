@@ -45,7 +45,7 @@
     "@safe-global/api-kit": "^3.0.1",
     "@safe-global/protocol-kit": "^6.0.3",
     "@safe-global/types-kit": "^2.0.1",
-    "collateral-margin": "github:Lumerin-protocol/collateral-margin.git#dev",
+    "collateral-margin": "github:Lumerin-protocol/collateral-margin#feat/points",
     "hashprice-oracle": "github:Lumerin-protocol/hashprice-oracle.git#dev",
     "multicall3": "github:mds1/multicall3",
     "solidity-linked-list": "6.5.0",
