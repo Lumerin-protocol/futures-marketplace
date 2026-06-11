@@ -107,7 +107,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private immutable _decimals; // decimals of the wrapped token
 
     // constants
-    string public constant VERSION = "2.12.0";
+    string public constant VERSION = "2.13.0";
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     /// @notice Maximum absolute quantity accepted in a single `createOrder` call.
     /// @dev Bounded by the int8 parameter type. Exposed as a constant so off-chain
