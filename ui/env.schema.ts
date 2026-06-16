@@ -31,6 +31,7 @@ export const EnvSchema = Type.Object({
   REACT_APP_SUBGRAPH_FUTURES_URL: Type.String({ format: "uri" }),
   REACT_APP_SUBGRAPH_ORACLES_URL: Type.String({ format: "uri" }),
   REACT_APP_SUBGRAPH_PERPS_URL: Type.Optional(Type.String({ format: "uri" })),
+  REACT_APP_SUBGRAPH_POINTS_URL: Type.Optional(Type.String({ format: "uri" })),
   REACT_APP_TITAN_LIGHTNING_POOL: Type.String({ default: "pplp.titan.io:4141" }),
   REACT_APP_URL: Type.String({ format: "uri" }),
   REACT_APP_VALIDATOR_REGISTRY_ADDRESS: TypeEthAddress(),

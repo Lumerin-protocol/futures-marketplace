@@ -24,7 +24,10 @@ import { getMinMarginForPositionManual } from "../../hooks/data/getMinMarginForP
 import { predefinedPools } from "./BuyerForms/predefinedPools";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
+import Tooltip from "@mui/material/Tooltip";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import { useMakerTakerFees } from "../../hooks/data/useMakerTakerFees";
+import { usePointsHookWeights } from "../../hooks/data/usePointsHookWeights";
 import type { PerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
 import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE, QUANTITY_SCALE_NUM } from "../../lib/units";
 
@@ -73,10 +76,20 @@ export const PlaceOrderForm: FC<Props> = ({
   const publicClient = usePublicClient();
   const contractSpecsQuery = useFuturesContractSpecs();
   const { makerFeeUSDC, takerFeeUSDC, isLoading: isFeesLoading } = useMakerTakerFees();
+  const { wMaker, wTaker, weightScale, isLoading: isWeightsLoading } = usePointsHookWeights();
 
   // Determine order type from quantity sign
   const isBuy = quantity > 0;
   const absoluteQuantity = Math.abs(quantity);
+
+  // Notional size (USDC) of this order — matches the "Size" row below.
+  const sizeUSDC = (Number(price) / PAYMENT_TOKEN_SCALE_NUM) * absoluteQuantity;
+
+  // Estimated points rewards: points = weight * size / WEIGHT_SCALE.
+  const makerReward =
+    wMaker !== undefined && weightScale ? (Number(wMaker) * sizeUSDC) / Number(weightScale) : null;
+  const takerReward =
+    wTaker !== undefined && weightScale ? (Number(wTaker) * sizeUSDC) / Number(weightScale) : null;
   const deliveryDurationDays = contractSpecsQuery.data?.data?.deliveryDurationDays ?? 7;
   const marginPersent = contractSpecsQuery.data?.data?.liquidationMarginPercent ?? 20;
 
@@ -212,9 +225,7 @@ export const PlaceOrderForm: FC<Props> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-300">Size:</span>
-                <span className="text-white">
-                  {((Number(price) / PAYMENT_TOKEN_SCALE_NUM) * absoluteQuantity).toFixed(2)} USDC
-                </span>
+                <span className="text-white">{sizeUSDC.toFixed(2)} USDC</span>
               </div>
               {contractMode === "futures" && (
                 <div className="flex justify-between">
@@ -241,18 +252,10 @@ export const PlaceOrderForm: FC<Props> = ({
               {contractMode === "perpetual" ? (
                 <>
                   <div className="flex justify-between">
-                    <span className="text-gray-300">Maker Fee:</span>
+                    <span className="text-gray-300">Maker / Taker Fee:</span>
                     <span className="text-white">
-                      {perpsCollection?.makerFeeBps !== undefined 
-                        ? `${(perpsCollection.makerFeeBps / 100).toFixed(2)}%` 
-                        : "N/A"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-300">Taker Fee:</span>
-                    <span className="text-white">
-                      {perpsCollection?.takerFeeBps !== undefined 
-                        ? `${(perpsCollection.takerFeeBps / 100).toFixed(2)}%` 
+                      {perpsCollection?.makerFeeBps !== undefined && perpsCollection?.takerFeeBps !== undefined
+                        ? `${(perpsCollection.makerFeeBps / 100).toFixed(2)}% / ${(perpsCollection.takerFeeBps / 100).toFixed(2)}%`
                         : "N/A"}
                     </span>
                   </div>
@@ -264,29 +267,32 @@ export const PlaceOrderForm: FC<Props> = ({
                   )}
                 </>
               ) : (
-                <>
-                  <div className="flex justify-between">
-                    <span className="text-gray-300">Maker Fee:</span>
-                    <span className="text-white">
-                      {makerFeeUSDC !== null
-                        ? `${makerFeeUSDC.toFixed(2)} USDC`
-                        : isFeesLoading
-                          ? "Loading..."
-                          : "N/A"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-300">Taker Fee:</span>
-                    <span className="text-white">
-                      {takerFeeUSDC !== null
-                        ? `${takerFeeUSDC.toFixed(2)} USDC`
-                        : isFeesLoading
-                          ? "Loading..."
-                          : "N/A"}
-                    </span>
-                  </div>
-                </>
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Maker / Taker Fee:</span>
+                  <span className="text-white">
+                    {makerFeeUSDC !== null && takerFeeUSDC !== null
+                      ? `${makerFeeUSDC.toFixed(2)} / ${takerFeeUSDC.toFixed(2)} USDC`
+                      : isFeesLoading
+                        ? "Loading..."
+                        : "N/A"}
+                  </span>
+                </div>
               )}
+              <div className="flex justify-between">
+                <span className="text-gray-300 flex items-center gap-1">
+                  Maker / Taker Points:
+                  <Tooltip title="Points are only rewarded if your order is matched and becomes a position.">
+                    <HelpOutlineIcon sx={{ fontSize: 14, cursor: "help", color: "inherit" }} />
+                  </Tooltip>
+                </span>
+                <span className="text-white">
+                  {makerReward !== null && takerReward !== null
+                    ? `${makerReward.toFixed(2)} / ${takerReward.toFixed(2)} pts`
+                    : isWeightsLoading
+                      ? "Loading..."
+                      : "N/A"}
+                </span>
+              </div>
             </div>
           </div>
           {isBuy && contractMode === "futures" && (

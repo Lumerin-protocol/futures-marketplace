@@ -10,6 +10,9 @@ const SuspenseLayoutLazy = safeLazy(() =>
 
 const Futures = safeLazy(() => import("./pages/futures/Futures").then((module) => ({ default: module.Futures })));
 const Perpetual = safeLazy(() => import("./pages/perpetual/Perpetual").then((module) => ({ default: module.Perpetual })));
+const Leaderboard = safeLazy(() =>
+  import("./pages/leaderboard/Leaderboard").then((module) => ({ default: module.Leaderboard })),
+);
 
 export const Router: FC = () => {
   return (
@@ -55,6 +58,15 @@ export const Router: FC = () => {
           element={
             <SuspenseLayoutLazy pageTitle="Lumerin Futures Marketplace">
               <Futures />
+            </SuspenseLayoutLazy>
+          }
+        />
+        {/* Points leaderboard */}
+        <Route
+          path={"/leaderboard"}
+          element={
+            <SuspenseLayoutLazy pageTitle="Leaderboard">
+              <Leaderboard />
             </SuspenseLayoutLazy>
           }
         />
