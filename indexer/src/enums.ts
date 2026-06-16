@@ -36,4 +36,5 @@ export namespace LotCloseReason {
   export const BREACH: string = "BREACH";
   export const SETTLED: string = "SETTLED";
   export const RESET: string = "RESET";
+  export const EXPIRED: string = "EXPIRED";
 }

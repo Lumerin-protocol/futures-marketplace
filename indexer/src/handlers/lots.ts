@@ -257,7 +257,7 @@ export function handleLotClosed(event: LotClosed): void {
   //     PositionSession.tradingFees and Trade.tradingFee still account for the
   //     full fee envelope; per-side attribution is approximate. Follow-up
   //     would extend the contract event or pair OrderClosed(MATCHED) sentinels.
-  //   - LIQUIDATION / BREACH / SETTLED / RESET: the contract skips
+  //   - LIQUIDATION / BREACH / SETTLED / RESET / EXPIRED: the contract skips
   //     `_chargeMatchFees` on these paths → no fee accounting needed.
   const futures = getOrCreateFutures();
   let sellerFee = BigInt.zero();
@@ -360,6 +360,7 @@ function mapLotCloseReason(reason: i32): string {
   if (reason == 2) return LotCloseReason.BREACH;
   if (reason == 3) return LotCloseReason.SETTLED;
   if (reason == 4) return LotCloseReason.RESET;
+  if (reason == 5) return LotCloseReason.EXPIRED;
   return "";
 }
 

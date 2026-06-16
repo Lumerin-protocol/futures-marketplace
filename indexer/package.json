@@ -43,8 +43,8 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "matchstick-ts",
-      "hardhat-matchstick-ts"
+      "matchstick-ts@https://codeload.github.com/lsheva/matchstick-ts/tar.gz/b62ffee63eb770a039e88ca2a759dcfcd2fb8302#path:packages/matchstick-ts",
+      "hardhat-matchstick-ts@https://codeload.github.com/lsheva/matchstick-ts/tar.gz/b62ffee63eb770a039e88ca2a759dcfcd2fb8302#path:packages/hardhat-matchstick-ts"
     ]
   }
 }

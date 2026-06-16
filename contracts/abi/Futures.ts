@@ -207,6 +207,11 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "PositionDeliveryNotExpired",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "PositionDeliveryNotStartedYet",
     "type": "error"
   },
@@ -817,6 +822,19 @@ export const FuturesAbi = [
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "_positionId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "cancelExpiredPosition",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
