@@ -227,6 +227,7 @@ enum LotCloseReason {
   BREACH
   SETTLED
   RESET
+  EXPIRED
 }
 
 # Open→close cycle for a (user, deliveryAt) pair.

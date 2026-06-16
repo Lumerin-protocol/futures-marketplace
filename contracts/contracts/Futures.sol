@@ -107,7 +107,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private immutable _decimals; // decimals of the wrapped token
 
     // constants
-    string public constant VERSION = "2.13.0";
+    string public constant VERSION = "2.14.0";
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     /// @notice Maximum absolute quantity accepted in a single `createOrder` call.
     /// @dev Bounded by the int8 parameter type. Exposed as a constant so off-chain
@@ -176,7 +176,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         LIQUIDATION, // forced cash-settle at market price
         BREACH, // closeDelivery called during delivery window
         SETTLED, // withdrawDeliveryPayment after window expires
-        RESET // admin resetState
+        RESET, // admin resetState
+        EXPIRED // cancelExpiredPosition: delivery window closed with no settlement (voided)
     }
 
     // events
@@ -286,9 +287,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     /// @notice Emitted when a lot is force-closed by a permissionless liquidator. Paired with
     ///         `LotClosed(LIQUIDATION)` in the same tx.
-    event LotLiquidated(
-        bytes32 indexed lotId, address indexed participant, address indexed liquidator, uint256 fee
-    );
+    event LotLiquidated(bytes32 indexed lotId, address indexed participant, address indexed liquidator, uint256 fee);
 
     // errors
     error InvalidPrice();
@@ -301,6 +300,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     error PositionNotExists();
     error PositionDeliveryNotStartedYet();
     error PositionDeliveryExpired();
+    error PositionDeliveryNotExpired(); // cancelExpiredPosition called before the settlement window closed
     error DeliveryDateExpired();
     error MaxOrdersPerParticipantReached();
     error ValueOutOfRange(int256 min, int256 max);
@@ -592,7 +592,9 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             // Both parties exited the old lot — no new lot to create.
             int256 sellerPnl = (ex.exitingParticipant == ex.oldSeller) ? ex.exitPnl : -ex.exitPnl;
             int256 buyerPnl = (ex.exitingParticipant == ex.oldBuyer) ? ex.exitPnl : -ex.exitPnl;
-            emit LotClosed(ex.lotId, ex.oldSeller, ex.oldBuyer, sellerPnl, buyerPnl, address(0), LotCloseReason.MUTUAL_EXIT);
+            emit LotClosed(
+                ex.lotId, ex.oldSeller, ex.oldBuyer, sellerPnl, buyerPnl, address(0), LotCloseReason.MUTUAL_EXIT
+            );
             return;
         }
 
@@ -621,8 +623,15 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             // Counterparty transfer: one party exited the old lot, a new participant takes their slot.
             address newParticipant = (ex.exitingParticipant == ex.oldBuyer) ? _temp.buyer : _temp.seller;
             _emitLotTransferred(
-                ex.lotId, positionId, ex.exitingParticipant, newParticipant,
-                ex.exitPnl, _temp.sellPricePerDay, _temp.buyPricePerDay, orderId, takerOrderId
+                ex.lotId,
+                positionId,
+                ex.exitingParticipant,
+                newParticipant,
+                ex.exitPnl,
+                _temp.sellPricePerDay,
+                _temp.buyPricePerDay,
+                orderId,
+                takerOrderId
             );
         } else {
             _emitLotCreated(positionId, _temp, order.deliveryAt, orderId, takerOrderId);
@@ -1503,28 +1512,80 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             bytes32 positionId = _positions.at(i - 1);
             Position storage position = positions[positionId];
             if (position.seller == _msgSender() && position.paid) {
-                // The buyer escrowed `buyPricePerDay * days` into `address(this)` at deposit time,
-                // but the seller is owed `sellPricePerDay * days`. When `_maybeExitExistingPosition`
-                // rewired this position the price differential (sellPx - buyPx) was already settled
-                // against the insurance fund via `_transferPnl`. Route the buyer's escrow through
-                // the fund so the seller can be paid in full while the fund's balance net-nets to
-                // zero across the position's lifecycle.
-                uint256 buyerDeposit = position.buyPricePerDay * deliveryDurationDays;
-                uint256 sellerOwed = position.sellPricePerDay * deliveryDurationDays;
-                address fund = _insuranceFundAccount();
-                address seller = position.seller;
-                address buyer = position.buyer;
-                _internalTransfer(address(this), fund, buyerDeposit);
-                _internalTransfer(fund, position.seller, sellerOwed);
-                position.paid = false;
+                _settleDeliveredPosition(positionId, position);
                 withdrew = true;
-                emit LotPaymentWithdrawn(positionId);
-                emit LotClosed(positionId, seller, buyer, 0, 0, address(0), LotCloseReason.SETTLED);
-                _removePosition(positionId, position);
             }
         }
         if (!withdrew) {
             revert NothingToWithdraw();
+        }
+    }
+
+    /// @dev Settles a funded (`paid == true`) position in the seller's favour and removes it.
+    ///      Used both by `withdrawDeliveryPayment` (seller pull) and `cancelExpiredPosition`
+    ///      (post-window cleanup): once the window has elapsed with no breach raised, delivery
+    ///      is assumed successful, so the seller is paid `sellPricePerDay * deliveryDurationDays`.
+    ///      The buyer escrowed `buyPricePerDay * days` into `address(this)` at deposit time, while
+    ///      the seller is owed `sellPricePerDay * days`. When `_maybeExitExistingPosition` rewired
+    ///      this position the price differential (sellPx - buyPx) was already settled against the
+    ///      insurance fund via `_transferPnl`. Route the buyer's escrow through the fund so the
+    ///      seller can be paid in full while the fund's balance net-nets to zero across the
+    ///      position's lifecycle.
+    function _settleDeliveredPosition(bytes32 _positionId, Position storage position) private {
+        uint256 buyerDeposit = position.buyPricePerDay * deliveryDurationDays;
+        uint256 sellerOwed = position.sellPricePerDay * deliveryDurationDays;
+        address fund = _insuranceFundAccount();
+        address seller = position.seller;
+        address buyer = position.buyer;
+        _internalTransfer(address(this), fund, buyerDeposit);
+        _internalTransfer(fund, seller, sellerOwed);
+        position.paid = false;
+        emit LotPaymentWithdrawn(_positionId);
+        emit LotClosed(_positionId, seller, buyer, 0, 0, address(0), LotCloseReason.SETTLED);
+        _removePosition(_positionId, position);
+    }
+
+    /// @notice Settles a single position whose delivery window has fully closed but which was never
+    ///         settled in-window. Clears positions stranded by a missed settlement and removes them
+    ///         from storage (and therefore from the indexed UI).
+    /// @dev By the time the window has closed the position has already rolled out of the portfolio-
+    ///      margin horizon (`getNetPositionDelta` / `getFuturesUnrealizedPnl` only sum current-and-
+    ///      future delivery dates), so no collateral backs a mark-to-market settlement; cash-settling
+    ///      at this point would just mint `BadDebt`. Resolution depends on whether delivery was funded:
+    ///        - `paid == true`  → delivery was funded and no breach was raised during the window, so
+    ///          delivery is assumed successful: the seller is paid `sellPricePerDay * deliveryDurationDays`
+    ///          (identical to `withdrawDeliveryPayment`), closed as `SETTLED`.
+    ///        - `paid == false` → the buyer never funded and no settlement ran: the trade never
+    ///          executed, so the position is voided with no transfers, closed as `EXPIRED`.
+    ///      No PnL or breach penalty is realized. Callable by either position participant, the
+    ///      validator, or the owner. Compose via the inherited `multicall(bytes[])` for bulk cleanup.
+    /// @param _positionId The position to settle/void.
+    function cancelExpiredPosition(bytes32 _positionId) public {
+        Position storage position = positions[_positionId];
+        if (position.seller == address(0)) {
+            revert PositionNotExists();
+        }
+        if (
+            _msgSender() != position.seller && _msgSender() != position.buyer && _msgSender() != validatorAddress
+                && _msgSender() != owner()
+        ) {
+            revert OnlyValidatorOrPositionParticipant();
+        }
+        // Before the window closes, `depositDeliveryPaymentV2` (pre-delivery) and `closeDelivery`
+        // (in-window) are the correct paths; this entry point is strictly for stranded positions.
+        if (block.timestamp <= position.deliveryAt + deliveryDurationSeconds()) {
+            revert PositionDeliveryNotExpired();
+        }
+
+        if (position.paid) {
+            // Funded delivery, window elapsed, no breach → assume success and pay the seller.
+            _settleDeliveredPosition(_positionId, position);
+        } else {
+            // Never funded and never settled → the trade never executed: void with no transfers.
+            address seller = position.seller;
+            address buyer = position.buyer;
+            _removePosition(_positionId, position);
+            emit LotClosed(_positionId, seller, buyer, 0, 0, _msgSender(), LotCloseReason.EXPIRED);
         }
     }
 
@@ -1679,5 +1740,4 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     // Modifiers
-
 }

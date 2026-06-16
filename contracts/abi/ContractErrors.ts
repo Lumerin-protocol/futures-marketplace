@@ -313,6 +313,11 @@ export const contractErrors = [
   },
   {
     "inputs": [],
+    "name": "PositionDeliveryNotExpired",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "UUPSUnauthorizedCallContext",
     "type": "error"
   },
