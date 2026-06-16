@@ -201,16 +201,19 @@ jobs:
               FUTURES_SUBGRAPH_URL="${{ vars.DEV_GS_FUTURES }}"
               ORACLES_SUBGRAPH_URL="${{ vars.DEV_GS_ORACLES }}"
               PERPS_SUBGRAPH_URL="${{ vars.DEV_GS_DERIVATIVES }}"
+              POINTS_SUBGRAPH_URL="${{ vars.DEV_GS_POINTS }}"
               ;;
             stg)
               FUTURES_SUBGRAPH_URL="${{ vars.STG_GS_FUTURES }}"
               ORACLES_SUBGRAPH_URL="${{ vars.STG_GS_ORACLES }}"
               PERPS_SUBGRAPH_URL="${{ vars.STG_GS_DERIVATIVES }}"
+              POINTS_SUBGRAPH_URL="${{ vars.STG_GS_POINTS }}"
               ;;
             main)
               FUTURES_SUBGRAPH_URL="${{ vars.LMN_GS_FUTURES }}"
               ORACLES_SUBGRAPH_URL="${{ vars.LMN_GS_ORACLES }}"
               PERPS_SUBGRAPH_URL="${{ vars.LMN_GS_DERIVATIVES }}"
+              POINTS_SUBGRAPH_URL="${{ vars.LMN_GS_POINTS }}"
               ;;
           esac
           # Create .env file with environment-scoped variables
@@ -234,6 +237,7 @@ jobs:
           REACT_APP_SUBGRAPH_FUTURES_URL=${FUTURES_SUBGRAPH_URL}
           REACT_APP_SUBGRAPH_ORACLES_URL=${ORACLES_SUBGRAPH_URL}
           REACT_APP_SUBGRAPH_PERPS_URL=${PERPS_SUBGRAPH_URL}
+          REACT_APP_SUBGRAPH_POINTS_URL=${POINTS_SUBGRAPH_URL}
           REACT_APP_PERPS_TOKEN_ADDRESS=${{ vars.REACT_APP_PERPS_TOKEN_ADDRESS }}
           EOF
           
@@ -319,6 +323,7 @@ jobs:
           REACT_APP_SUBGRAPH_FUTURES_URL=https://example.com
           REACT_APP_SUBGRAPH_ORACLES_URL=https://example.com
           REACT_APP_SUBGRAPH_PERPS_URL=https://example.com
+          REACT_APP_SUBGRAPH_POINTS_URL=https://example.com
           REACT_APP_PERPS_TOKEN_ADDRESS=0x0000000000000000000000000000000000000000
           EOF
           echo "✅ Placeholder .env file created"

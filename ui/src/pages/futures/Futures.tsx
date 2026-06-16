@@ -25,6 +25,7 @@ import { usePerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
 import { useUserPositionSessions } from "../../hooks/data/perps/useUserPositionSessions";
 import { useUserPerpsOrders } from "../../hooks/data/perps/useUserPerpsOrders";
 import { useMaintenanceMarginPercent } from "../../hooks/data/perps/useMaintenanceMarginPercent";
+import { usePointsHookWeights } from "../../hooks/data/usePointsHookWeights";
 import { computeLiquidationState } from "../../hooks/data/perps/positionHelper";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
 import type { PositionBookPosition } from "../../hooks/data/getUserFuturesPositions";
@@ -153,6 +154,11 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
   // Active delivery date selected in the order book (used for futures entry price line)
   const [selectedDeliveryDate, setSelectedDeliveryDate] = useState<number | undefined>();
+
+  // Resolve the points hook address and its weighting params (WEIGHT_SCALE,
+  // wTaker, wMaker) on initial load so they're warm in cache for the place-order
+  // modal's reward estimate.
+  usePointsHookWeights();
 
   // Read maintenanceMarginPercent from contract once (cached indefinitely)
   const { data: maintenanceMarginPercentRaw } = useMaintenanceMarginPercent();

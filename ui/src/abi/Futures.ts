@@ -160,6 +160,16 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "OrderNotExists",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OrderNotExpired",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "OrdersStillOpen",
     "type": "error"
   },
@@ -193,6 +203,11 @@ export const FuturesAbi = [
   {
     "inputs": [],
     "name": "PositionDeliveryExpired",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PositionDeliveryNotExpired",
     "type": "error"
   },
   {
@@ -349,6 +364,19 @@ export const FuturesAbi = [
       }
     ],
     "name": "ConfigUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "hook",
+        "type": "address"
+      }
+    ],
+    "name": "HookUpdated",
     "type": "event"
   },
   {
@@ -802,6 +830,19 @@ export const FuturesAbi = [
         "internalType": "bytes32",
         "name": "_positionId",
         "type": "bytes32"
+      }
+    ],
+    "name": "cancelExpiredPosition",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "_positionId",
+        "type": "bytes32"
       },
       {
         "internalType": "bool",
@@ -877,6 +918,41 @@ export const FuturesAbi = [
       }
     ],
     "name": "createOrder",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "pricePerDay",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "deliveryDate",
+            "type": "uint256"
+          },
+          {
+            "internalType": "string",
+            "name": "destURL",
+            "type": "string"
+          },
+          {
+            "internalType": "int8",
+            "name": "qty",
+            "type": "int8"
+          }
+        ],
+        "internalType": "struct Futures.OrderIntent[]",
+        "name": "_intents",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "createOrders",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1333,6 +1409,19 @@ export const FuturesAbi = [
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "hook",
+    "outputs": [
+      {
+        "internalType": "contract IPointsHook",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "contract AggregatorV3Interface",
@@ -1566,19 +1655,13 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "_participant",
-        "type": "address"
+        "internalType": "bytes32",
+        "name": "_orderId",
+        "type": "bytes32"
       }
     ],
-    "name": "removeOutdatedOrdersForParticipant",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "count",
-        "type": "uint256"
-      }
-    ],
+    "name": "removeOutdatedOrder",
+    "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
   },
@@ -1624,6 +1707,19 @@ export const FuturesAbi = [
       }
     ],
     "name": "setFutureDeliveryDatesCount",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_hook",
+        "type": "address"
+      }
+    ],
+    "name": "setHook",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
