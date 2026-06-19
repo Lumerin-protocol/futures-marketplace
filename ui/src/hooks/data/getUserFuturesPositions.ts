@@ -66,6 +66,12 @@ const sessionToPosition = (
 
   const isActive = session.status === "OPEN";
 
+  const settlementPrice =
+    session.expiration && session.expiration.settlementPrice != null
+      ? BigInt(session.expiration.settlementPrice)
+      : null;
+  const settledAt = session.expiration?.settledAt ?? null;
+
   return {
     id: session.id,
     timestamp: session.openedAt,
@@ -74,10 +80,10 @@ const sessionToPosition = (
     buyPricePerDay: isLong ? entryPrice : 0n,
     netQuantity: session.netQuantity,
     isActive,
+    settlementPrice,
+    settledAt,
     closedAt: isActive ? null : session.lastTradeAt,
     closedBy: null,
-    destURL: "",
-    isPaid: false,
     transactionHash: (latestTrade?.transactionHash as `0x${string}`) ?? ZERO_HASH,
     buyer: {
       address: isLong ? (session.user.id as `0x${string}`) : ZERO_ADDRESS,
@@ -157,11 +163,14 @@ export type PositionBookPosition = {
   /// while the session is OPEN; 0 once the session is CLOSE.
   netQuantity: number;
   isActive: boolean;
+  /// Pinned cash-settlement price for this position's expiration (token decimals),
+  /// or null until `SettlementPriceRecorded` has fired for the deliveryAt.
+  settlementPrice: bigint | null;
+  /// Block timestamp at which the settlement price was pinned, or null.
+  settledAt: string | null;
   id: string;
   closedBy: string | null;
-  destURL: string;
   closedAt: string | null;
-  isPaid: boolean;
   buyer: {
     address: `0x${string}`;
   };
@@ -193,6 +202,10 @@ type PositionsBookResponse = {
     lastTradeAt: string;
     realizedPnl: string;
     tradingFees: string;
+    expiration: {
+      settlementPrice: string | null;
+      settledAt: string | null;
+    } | null;
     user: {
       id: string;
     };

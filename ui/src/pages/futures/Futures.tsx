@@ -344,6 +344,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
           currentPrice={currentPriceFormatted}
           fundingRate={fundingRateQuery.data?.formattedRate ?? "0%"}
           totalVolume={perpsCollectionQuery.data?.data?.totalVolume}
+          selectedDeliveryDate={selectedDeliveryDate}
         />
       </TradingHeaderArea>
 

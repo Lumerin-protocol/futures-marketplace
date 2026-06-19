@@ -60,6 +60,7 @@ export const HistoricalPositionsListWidget = ({
               <th>Side</th>
               <th>Price (USDC)</th>
               <th>Max Quantity</th>
+              <th>Settlement Price (USDC)</th>
               <th>Realized PnL (USDC)</th>
               <th>Created</th>
               <th>Closed</th>
@@ -78,6 +79,13 @@ export const HistoricalPositionsListWidget = ({
                   </td>
                   <td>{formatPrice(position.pricePerDay)}</td>
                   <td>{maxQuantity}</td>
+                  <td>
+                    {position.settlementPrice !== null ? (
+                      formatPrice(position.settlementPrice)
+                    ) : (
+                      <span style={{ color: tokens.text.muted }}>—</span>
+                    )}
+                  </td>
                   <td>
                     <PnLCell $isPositive={position.pnl >= 0} $isZero={position.pnl === 0}>
                       {formatPnl(position.pnl)}

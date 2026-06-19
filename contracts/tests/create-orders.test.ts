@@ -300,8 +300,11 @@ describe("Futures.createOrders (batch placement)", () => {
     );
     const savings = baselineGas - batchGas;
     // Floor: each of the (N-1) skipped end-of-call IM checks must be worth at
-    // least ~25k gas (cross-contract call + cold engine reads). 75k for N=4.
-    const minSavings = BigInt(N - 1) * 25_000n;
+    // least ~8k gas (cross-contract call + engine reads). The futures margin
+    // views now iterate only the participant's touched expiration dates (one
+    // here) instead of a fixed future-date window, so each IM check is cheaper
+    // than before and the per-skip floor is lower. 24k for N=4.
+    const minSavings = BigInt(N - 1) * 8_000n;
     assert.ok(
       savings >= minSavings,
       `expected ≥${minSavings} gas saved over ${N} placements; got ${savings} (${baselineGas} → ${batchGas})`,

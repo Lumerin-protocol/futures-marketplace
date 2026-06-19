@@ -31,7 +31,7 @@ export async function scaleHashprice(
 ///
 /// When `freshAt` is supplied, the helper instead writes that timestamp directly via
 /// `setRound` without consuming the next block's timestamp slot. Use this overload when
-/// the next tx (e.g. `closeDelivery`) must mine at a specific `deliveryDate` and the
+/// the next tx (e.g. `settlePosition`) must mine at a specific `deliveryDate` and the
 /// refresh shouldn't shift it.
 export async function refreshHashprice(feed: ScalablePriceFeed, freshAt?: bigint): Promise<void> {
   const [roundId, answer, startedAt, , answeredInRound] = await feed.read.latestRoundData();

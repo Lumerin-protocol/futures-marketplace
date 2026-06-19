@@ -64,6 +64,10 @@ export const PositionsBookQuery = gql`
       realizedPnl
       status
       tradingFees
+      expiration {
+        settlementPrice
+        settledAt
+      }
       user {
         id
       }
@@ -143,7 +147,6 @@ export const ContractSpecsQuery = gql`
       minimumPriceIncrement
       speedHps
       contractAddress
-      validatorAddress
     }
     _meta {
       block {
@@ -181,23 +184,6 @@ export const AggregatedHashrateIndexQuery = gql`
   }
 }`;
 
-export const PaidSellerPositionsQuery = gql`
-  query PaidSellerPositionsQuery($address: ID!) {
-    positions(
-      where: { isPaid: true, seller_: { address: $address }}
-    ) {
-      deliveryAt
-      sellPricePerDay
-    }
-    _meta {
-      block {
-        number
-        timestamp
-      }
-    }
-  }
-`;
-
 // Historical (closed) PositionSessions for the last 30 days, paged with first/skip.
 // Mirrors the active `PositionsBookQuery` shape — the only difference is the
 // `status: CLOSE` filter and the `lastTradeAt_gte` cutoff.
@@ -221,6 +207,10 @@ export const HistoricalPositionsQuery = gql`
       realizedPnl
       status
       tradingFees
+      expiration {
+        settlementPrice
+        settledAt
+      }
       user {
         id
       }

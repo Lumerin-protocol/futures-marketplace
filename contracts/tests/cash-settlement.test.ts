@@ -88,7 +88,8 @@ describe("Futures - Offset & Cash Settlement", () => {
     await refreshHashprice(contracts.hashrateOracle, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
 
-    await futures.write.closeDelivery([newPositionId, false], { account: validator.account });
+    // Cash settlement at maturity is permissionless; any address may trigger it.
+    await futures.write.settlePosition([newPositionId], { account: validator.account });
 
     const contractBalanceAfterSettlement = await totalContractBalance(contracts);
     assert.equal(contractBalanceBefore + totalFees, contractBalanceAfterSettlement);
@@ -167,7 +168,7 @@ describe("Futures - Offset & Cash Settlement", () => {
       buyer2.account.address,
     ]);
 
-    await futures.write.closeDelivery([newPositionId, false], { account: validator.account });
+    await futures.write.settlePosition([newPositionId], { account: validator.account });
 
     const contractBalanceAfterSettlement = await totalContractBalance(contracts);
     assert.equal(contractBalanceBefore + totalFees, contractBalanceAfterSettlement);

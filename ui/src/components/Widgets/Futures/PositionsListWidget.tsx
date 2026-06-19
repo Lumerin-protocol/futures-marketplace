@@ -6,10 +6,7 @@ import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPos
 import { useCreateOrder } from "../../../hooks/data/useCreateOrder";
 import { useCreatePerpsOrder } from "../../../hooks/data/perps/useCreatePerpsOrder";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
-import { ServerStackIcon, CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
-import { useModal } from "../../../hooks/useModal";
-import { ModalItem } from "../../Modal";
-import { DepositDeliveryPaymentForm } from "../../Forms/DepositDeliveryPaymentForm";
+import { useSettlePositions } from "../../../hooks/data/useSettlePositions";
 import { useState } from "react";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
 import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
@@ -40,7 +37,6 @@ export const PositionsListWidget = ({
   participantAddress,
   onClosePosition,
   contractMode = "futures",
-  balanceQuery,
 }: PositionsListWidgetProps) => {
   // Conditionally use futures or perps create order hook
   const futuresCreateOrder = useCreateOrder();
@@ -48,35 +44,44 @@ export const PositionsListWidget = ({
   const { createOrderAsync, isPending } = contractMode === "perpetual" ? perpsCreateOrder : futuresCreateOrder;
   const { data: marketPrice } = useGetMarketPrice();
   const contractSpecsQuery = useFuturesContractSpecs();
-  const depositModal = useModal();
-  const [selectedDeliveryDate, setSelectedDeliveryDate] = useState<bigint | null>(null);
-  const [selectedPricePerDay, setSelectedPricePerDay] = useState<bigint | null>(null);
-  const [selectedTotalContracts, setSelectedTotalContracts] = useState<number | null>(null);
-  const [selectedPositions, setSelectedPositions] = useState<PositionBookPosition[]>([]);
   const [tradesSelection, setTradesSelection] = useState<FuturesTradesModalSelection | null>(null);
+  const { settlePositionsAsync, isPending: isSettling } = useSettlePositions();
+  // deliveryAt currently being claimed, plus any per-expiration claim error message.
+  const [claimingDeliveryAt, setClaimingDeliveryAt] = useState<string | null>(null);
+  const [claimError, setClaimError] = useState<{ deliveryAt: string; message: string } | null>(null);
 
-  const getStatusColor = (isActive: boolean, closedAt: string | null) => {
-    if (closedAt) {
-      return tokens.text.muted; // Closed
-    }
-    return isActive ? tokens.trading.long : tokens.trading.short; // Active or Cancelled
-  };
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const isMatured = (deliveryAt: string) =>
+    contractMode === "futures" && Number(deliveryAt) > 0 && Number(deliveryAt) < nowSeconds;
 
-  const getStatusText = (isActive: boolean, closedAt: string | null) => {
-    if (closedAt) {
-      return "Closed";
+  const handleClaim = async (deliveryAt: string) => {
+    setClaimError(null);
+    setClaimingDeliveryAt(deliveryAt);
+    try {
+      await settlePositionsAsync({
+        deliveryAt: BigInt(deliveryAt),
+        participant: participantAddress,
+      });
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err);
+      // Surface the common, recoverable cases in plain language.
+      let message = "Failed to settle. Please try again.";
+      if (/OracleStale/i.test(raw)) {
+        message = "Price feed is stale — settlement will be possible once the oracle refreshes.";
+      } else if (/No open positions/i.test(raw)) {
+        message = "Already settled.";
+      } else if (/User rejected|denied/i.test(raw)) {
+        message = "Transaction rejected.";
+      }
+      setClaimError({ deliveryAt, message });
+    } finally {
+      setClaimingDeliveryAt(null);
     }
-    return isActive ? "Open" : "Cancelled";
   };
 
   const getPositionType = (position: PositionBookPosition) => {
     if (!participantAddress) return "Unknown";
     return position.buyer.address.toLowerCase() === participantAddress.toLowerCase() ? "Long" : "Short";
-  };
-
-  const getTypeColor = (position: PositionBookPosition) => {
-    const type = getPositionType(position);
-    return type === "Long" ? tokens.trading.long : tokens.trading.short;
   };
 
   const getPriceForPosition = (position: PositionBookPosition) => {
@@ -118,15 +123,19 @@ export const PositionsListWidget = ({
   const calculatePnL = (
     entryPrice: bigint,
     netQuantity: number,
+    // When the expiration's settlement price is pinned, PnL is frozen at that price
+    // instead of drifting with the live mark.
+    markOverride?: bigint | null,
   ): { pnl: number | null; percentage: number | null } => {
-    if (!latestPriceBigInt) return { pnl: null, percentage: null };
+    const mark = markOverride ?? latestPriceBigInt;
+    if (!mark) return { pnl: null, percentage: null };
     if (netQuantity === 0) return { pnl: 0, percentage: 0 };
 
     const signedQty = BigInt(netQuantity);
     const absQty = signedQty < 0n ? -signedQty : signedQty;
     const days = BigInt(deliveryDurationDays);
 
-    const pnlScaled = (latestPriceBigInt - entryPrice) * signedQty * days;
+    const pnlScaled = (mark - entryPrice) * signedQty * days;
     const entryNotionalScaled = entryPrice * absQty * days;
 
     const pnl = Number(pnlScaled) / PAYMENT_TOKEN_SCALE_NUM;
@@ -220,9 +229,7 @@ export const PositionsListWidget = ({
           pricePerDay: pricePerDay,
           deliveryAt: position.deliveryAt,
           positionType: positionType,
-          destURL: position.destURL,
           amount: 0,
-          paidCount: 0,
           // Sessions are per (user, deliveryAt), so every position rolling up
           // into this group shares the same session-level net qty. Take it
           // from the first one we see; subsequent ones would just duplicate it.
@@ -230,14 +237,13 @@ export const PositionsListWidget = ({
           isActive: position.isActive,
           closedAt: position.closedAt,
           timestamp: position.timestamp,
+          settlementPrice: position.settlementPrice,
+          settledAt: position.settledAt,
           positions: [] as PositionBookPosition[],
         };
       }
 
       acc[key].amount += 1;
-      if (position.isPaid) {
-        acc[key].paidCount += 1;
-      }
       acc[key].positions.push(position);
 
       return acc;
@@ -248,13 +254,13 @@ export const PositionsListWidget = ({
         pricePerDay: bigint;
         deliveryAt: string;
         positionType: string;
-        destURL: string;
         amount: number;
-        paidCount: number;
         netQuantity: number;
         isActive: boolean;
         closedAt: string | null;
         timestamp: string;
+        settlementPrice: bigint | null;
+        settledAt: string | null;
         positions: PositionBookPosition[];
       }
     >,
@@ -283,12 +289,12 @@ export const PositionsListWidget = ({
             <tr>
               <th>Contract Expiration</th>
               <th>Side</th>
+              <th>Status</th>
               <th>Price (USDC)</th>
               <th>Quantity</th>
               <th>Margin</th>
+              <th>Settlement Price (USDC)</th>
               <th>Unrealized PnL (USDC)</th>
-              <th>Destination</th>
-              <th>Payment</th>
               <th>Time</th>
               <th>Action</th>
             </tr>
@@ -298,114 +304,99 @@ export const PositionsListWidget = ({
               <TableRow
                 key={`${groupedPosition.pricePerDay}-${groupedPosition.deliveryAt}-${groupedPosition.positionType}-${index}`}
               >
-                <td><DateTimeCell timestamp={groupedPosition.deliveryAt} /></td>
-                <td>
-                  <TypeBadge $type={groupedPosition.positionType}>{groupedPosition.positionType}</TypeBadge>
-                </td>
-                <td>{formatPrice(groupedPosition.pricePerDay)}</td>
-                <td>{Math.abs(groupedPosition.netQuantity)}</td>
-                <td>
-                  {formatMargin(
-                    calculateMargin(groupedPosition.pricePerDay, groupedPosition.amount, groupedPosition.positionType),
-                  )}
-                </td>
-                <td>
-                  {(() => {
-                    const { pnl, percentage } = calculatePnL(
-                      groupedPosition.pricePerDay,
-                      groupedPosition.netQuantity,
-                    );
-                    return <PnLCell $isPositive={pnl !== null && pnl >= 0}>{formatPnL(pnl, percentage)}</PnLCell>;
-                  })()}
-                </td>
-                <td>
-                  {groupedPosition.destURL ? (
-                    <Tooltip title={groupedPosition.destURL}>
-                      <DestURLCell>
-                        <ServerStackIcon width={20} height={20} />
-                      </DestURLCell>
-                    </Tooltip>
-                  ) : (
-                    <span>---</span>
-                  )}
-                </td>
-                <td>
-                  {groupedPosition.destURL ? (
-                    <PaymentStatusCell>
-                      {groupedPosition.paidCount === groupedPosition.amount ? (
-                        <CheckCircleIcon width={20} height={20} color={tokens.trading.long} />
-                      ) : (
-                        <XCircleIcon width={20} height={20} color={tokens.trading.short} />
-                      )}
-                      <PaymentText>
-                        {groupedPosition.paidCount}/{groupedPosition.amount}
-                      </PaymentText>
-                    </PaymentStatusCell>
-                  ) : (
-                    <span>---</span>
-                  )}
-                </td>
-                <td><DateTimeCell timestamp={groupedPosition.timestamp} /></td>
-                <td>
-                  <ActionButtons>
-                    {groupedPosition.destURL &&
-                      groupedPosition.positionType !== "Short" &&
-                      groupedPosition.paidCount < groupedPosition.amount && (
-                        <DepositButton
-                          onClick={() => {
-                            setSelectedDeliveryDate(BigInt(groupedPosition.deliveryAt));
-                            setSelectedPricePerDay(groupedPosition.pricePerDay);
-                            setSelectedTotalContracts(groupedPosition.amount);
-                            setSelectedPositions(groupedPosition.positions);
-                            depositModal.open();
-                          }}
-                          title="Deposit delivery payment"
-                        >
-                          Deposit
-                        </DepositButton>
-                      )}
-                    <TradesButton
-                      onClick={() =>
-                        setTradesSelection({
-                          pricePerDay: groupedPosition.pricePerDay,
-                          deliveryAt: groupedPosition.deliveryAt,
-                          positionType: groupedPosition.positionType as "Long" | "Short",
-                        })
-                      }
-                      title="View matching trades from the last 30 days"
-                    >
-                      Trades
-                    </TradesButton>
-                    {groupedPosition.isActive && !groupedPosition.closedAt && (() => {
-                      // Futures positions whose delivery has already passed cannot be
-                      // closed by creating an opposing order — they are awaiting
-                      // settlement/resolution. Disable Close and surface support copy.
-                      const isExpired =
-                        contractMode === "futures" &&
-                        Number(groupedPosition.deliveryAt) > 0 &&
-                        Number(groupedPosition.deliveryAt) < Math.floor(Date.now() / 1000);
-
-                      const closeButton = (
-                        <CloseButton
-                          onClick={() => handleClosePosition(groupedPosition)}
-                          disabled={isPending || isExpired}
-                          title={isExpired ? undefined : "By creating opposite order"}
-                        >
-                          Close
-                        </CloseButton>
-                      );
-
-                      if (!isExpired) return closeButton;
-
-                      return (
-                        <Tooltip title="Status is unresolved, please contact support" arrow>
-                          {/* span wrapper is required so the tooltip still triggers on a disabled button */}
-                          <span style={{ display: "inline-flex" }}>{closeButton}</span>
-                        </Tooltip>
-                      );
-                    })()}
-                  </ActionButtons>
-                </td>
+                {(() => {
+                  const matured = isMatured(groupedPosition.deliveryAt);
+                  const settlementPrice = groupedPosition.settlementPrice;
+                  const pricePinned = settlementPrice !== null;
+                  // Status: Open while live; once matured it awaits cash settlement
+                  // (optionally with the price already pinned).
+                  const status = !matured ? "Open" : "Awaiting settlement";
+                  // PnL freezes at the pinned settlement price the moment it's recorded.
+                  const { pnl, percentage } = calculatePnL(
+                    groupedPosition.pricePerDay,
+                    groupedPosition.netQuantity,
+                    pricePinned ? settlementPrice : null,
+                  );
+                  const rowClaimError =
+                    claimError?.deliveryAt === groupedPosition.deliveryAt ? claimError.message : null;
+                  const isRowClaiming = claimingDeliveryAt === groupedPosition.deliveryAt;
+                  return (
+                    <>
+                      <td><DateTimeCell timestamp={groupedPosition.deliveryAt} /></td>
+                      <td>
+                        <TypeBadge $type={groupedPosition.positionType}>{groupedPosition.positionType}</TypeBadge>
+                      </td>
+                      <td>
+                        <StatusBadge $status={status}>{status}</StatusBadge>
+                      </td>
+                      <td>{formatPrice(groupedPosition.pricePerDay)}</td>
+                      <td>{Math.abs(groupedPosition.netQuantity)}</td>
+                      <td>
+                        {formatMargin(
+                          calculateMargin(
+                            groupedPosition.pricePerDay,
+                            groupedPosition.amount,
+                            groupedPosition.positionType,
+                          ),
+                        )}
+                      </td>
+                      <td>
+                        {pricePinned ? (
+                          formatPrice(settlementPrice)
+                        ) : matured ? (
+                          <span style={{ color: tokens.text.muted }}>Pending</span>
+                        ) : (
+                          <span style={{ color: tokens.text.muted }}>—</span>
+                        )}
+                      </td>
+                      <td>
+                        <PnLCell $isPositive={pnl !== null && pnl >= 0}>{formatPnL(pnl, percentage)}</PnLCell>
+                      </td>
+                      <td><DateTimeCell timestamp={groupedPosition.timestamp} /></td>
+                      <td>
+                        <ActionButtons>
+                          <TradesButton
+                            onClick={() =>
+                              setTradesSelection({
+                                pricePerDay: groupedPosition.pricePerDay,
+                                deliveryAt: groupedPosition.deliveryAt,
+                                positionType: groupedPosition.positionType as "Long" | "Short",
+                              })
+                            }
+                            title="View matching trades from the last 30 days"
+                          >
+                            Trades
+                          </TradesButton>
+                          {groupedPosition.isActive && !groupedPosition.closedAt && !matured && (
+                            <CloseButton
+                              onClick={() => handleClosePosition(groupedPosition)}
+                              disabled={isPending}
+                              title="By creating opposite order"
+                            >
+                              Close
+                            </CloseButton>
+                          )}
+                          {groupedPosition.isActive && !groupedPosition.closedAt && matured && (
+                            <Tooltip
+                              title="Cash-settle this matured position now (normally the keeper does this automatically)"
+                              arrow
+                            >
+                              <span style={{ display: "inline-flex" }}>
+                                <ClaimButton
+                                  onClick={() => handleClaim(groupedPosition.deliveryAt)}
+                                  disabled={isSettling && isRowClaiming}
+                                >
+                                  {isRowClaiming ? "Claiming…" : "Claim"}
+                                </ClaimButton>
+                              </span>
+                            </Tooltip>
+                          )}
+                          {rowClaimError && <ClaimErrorText>{rowClaimError}</ClaimErrorText>}
+                        </ActionButtons>
+                      </td>
+                    </>
+                  );
+                })()}
               </TableRow>
             ))}
           </tbody>
@@ -417,28 +408,6 @@ export const PositionsListWidget = ({
           <p>No positions found</p>
         </EmptyState>
       )}
-
-      <ModalItem open={depositModal.isOpen} setOpen={depositModal.setOpen}>
-        {selectedDeliveryDate !== null &&
-          selectedPricePerDay !== null &&
-          selectedTotalContracts !== null &&
-          selectedPositions.length > 0 && (
-            <DepositDeliveryPaymentForm
-              closeForm={() => {
-                depositModal.close();
-                setSelectedDeliveryDate(null);
-                setSelectedPricePerDay(null);
-                setSelectedTotalContracts(null);
-                setSelectedPositions([]);
-              }}
-              deliveryDate={selectedDeliveryDate}
-              pricePerDay={selectedPricePerDay}
-              totalContracts={selectedTotalContracts}
-              positions={selectedPositions}
-              balanceQuery={balanceQuery}
-            />
-          )}
-      </ModalItem>
 
       <FuturesTradesModal
         open={tradesSelection !== null}
@@ -544,28 +513,6 @@ const PnLCell = styled("span")<{ $isPositive: boolean }>`
   font-weight: 600;
 `;
 
-const DestURLCell = styled("span")`
-  display: inline-block;
-  max-width: 200px;
-  overflow: hidden;
-  cursor: pointer;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: ${tokens.text.secondary};
-  font-size: 0.875rem;
-`;
-
-const PaymentStatusCell = styled("span")`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-`;
-
-const PaymentText = styled("span")`
-  font-size: 0.875rem;
-  color: ${tokens.text.onDark};
-`;
-
 const StatusBadge = styled("span")<{ $status: string }>`
   display: inline-block;
   padding: 0.25rem 0.5rem;
@@ -576,6 +523,8 @@ const StatusBadge = styled("span")<{ $status: string }>`
     switch (props.$status) {
       case "Open":
         return tokens.trading.longRowBg;
+      case "Awaiting settlement":
+        return tokens.trading.shortRowBg;
       case "Closed":
         return tokens.trading.neutralRowBg;
       default:
@@ -589,27 +538,6 @@ const ActionButtons = styled("div")`
   display: flex;
   gap: 0.5rem;
   align-items: center;
-`;
-
-const DepositButton = styled("button")`
-  padding: 0.5rem 0.875rem;
-  background: ${tokens.neutralButton.bg};
-  color: ${tokens.text.onDark};
-  border: none;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.1s ease;
-  
-  &:hover {
-    background: ${tokens.neutralButton.hover};
-    transform: translateY(-1px);
-  }
-  
-  &:active {
-    transform: translateY(0);
-  }
 `;
 
 const CloseButton = styled("button")`
@@ -637,6 +565,39 @@ const CloseButton = styled("button")`
     cursor: not-allowed;
     opacity: 0.6;
   }
+`;
+
+const ClaimButton = styled("button")`
+  padding: 0.5rem 0.875rem;
+  background: ${tokens.trading.long};
+  color: ${tokens.text.onDark};
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.05);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    background: ${tokens.text.muted};
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+`;
+
+const ClaimErrorText = styled("span")`
+  color: ${tokens.trading.short};
+  font-size: 0.75rem;
+  max-width: 180px;
 `;
 
 const TradesButton = styled("button")`
@@ -682,6 +643,8 @@ const getStatusColor = (status: string) => {
   switch (status) {
     case "Open":
       return tokens.trading.long;
+    case "Awaiting settlement":
+      return tokens.trading.short;
     case "Closed":
       return tokens.text.muted;
     default:

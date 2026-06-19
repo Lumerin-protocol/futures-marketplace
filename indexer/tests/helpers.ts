@@ -105,8 +105,6 @@ export function mockFuturesContractCallsAsReverted(): void {
   const getters: string[][] = [
     ["collateralVault", "collateralVault():(address)"],
     ["hashrateOracle", "hashrateOracle():(address)"],
-    ["validatorAddress", "validatorAddress():(address)"],
-    ["validatorURL", "validatorURL():(string)"],
     ["minimumPriceIncrement", "minimumPriceIncrement():(uint256)"],
     ["makerFee", "makerFee():(uint256)"],
     ["takerFee", "takerFee():(uint256)"],
@@ -118,7 +116,6 @@ export function mockFuturesContractCallsAsReverted(): void {
     ["deliveryIntervalDays", "deliveryIntervalDays():(uint8)"],
     ["futureDeliveryDatesCount", "futureDeliveryDatesCount():(uint8)"],
     ["firstFutureDeliveryDate", "firstFutureDeliveryDate():(uint256)"],
-    ["breachPenaltyRatePerDay", "breachPenaltyRatePerDay():(uint256)"],
     ["collectedFeesBalance", "collectedFeesBalance():(uint256)"],
   ];
   for (let i = 0; i < getters.length; i++) {
@@ -135,8 +132,6 @@ export function setupFutures(deliveryDurationDays: i32 = 30): void {
   f.collateralToken = Bytes.empty();
   f.hashrateOracleAddress = Bytes.empty();
   f.marginEngineAddress = Bytes.empty();
-  f.validatorAddress = Bytes.empty();
-  f.validatorURL = "";
   f.startBlock = BigInt.zero();
   f.minimumPriceIncrement = BigInt.zero();
   f.makerFee = BigInt.zero();
@@ -148,7 +143,6 @@ export function setupFutures(deliveryDurationDays: i32 = 30): void {
   f.deliveryIntervalDays = 0;
   f.futureDeliveryDatesCount = 0;
   f.firstFutureDeliveryDate = BigInt.zero();
-  f.breachPenaltyRatePerDay = BigInt.zero();
   f.collectedFeesBalance = BigInt.zero();
   f.totalUsers = 0;
   f.totalOrders = 0;

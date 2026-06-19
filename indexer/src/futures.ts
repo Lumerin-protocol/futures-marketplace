@@ -18,9 +18,9 @@ export {
   handleLotClosed,
   handleLotCreated,
   handleLotLiquidated,
-  handleLotPaid,
-  handleLotPaymentWithdrawn,
   handleLotTransferred,
 } from "./handlers/lots";
 
 export { handleBadDebt } from "./handlers/liquidation";
+
+export { handleSettlementPriceRecorded } from "./handlers/expirations";

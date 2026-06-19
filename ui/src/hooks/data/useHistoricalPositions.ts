@@ -33,6 +33,10 @@ export type HistoricalPosition = {
   maxQuantity: number;
   isActive: boolean;
   closedAt: string | null;
+  /// Pinned cash-settlement price for this expiration (token decimals), or null.
+  settlementPrice: bigint | null;
+  /// Block timestamp at which the settlement price was pinned, or null.
+  settledAt: string | null;
   transactionHash: `0x${string}`;
   // Underlying on-chain Trade rows from the source PositionSession.
   trades: FuturesSessionTrade[];
@@ -57,6 +61,10 @@ type HistoricalPositionsResponse = {
     lastTradeAt: string;
     realizedPnl: string;
     tradingFees: string;
+    expiration: {
+      settlementPrice: string | null;
+      settledAt: string | null;
+    } | null;
     user: {
       id: string;
     };
@@ -123,6 +131,11 @@ const sessionToHistoricalPosition = (
     maxQuantity: session.maxQuantity,
     isActive: false,
     closedAt: session.lastTradeAt,
+    settlementPrice:
+      session.expiration && session.expiration.settlementPrice != null
+        ? BigInt(session.expiration.settlementPrice)
+        : null,
+    settledAt: session.expiration?.settledAt ?? null,
     transactionHash: (latestTrade?.transactionHash as `0x${string}`) ?? ZERO_HASH,
     trades: session.trades.map(toFuturesSessionTrade),
   };

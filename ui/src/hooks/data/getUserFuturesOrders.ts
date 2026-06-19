@@ -64,9 +64,8 @@ const fetchParticipantAsync = async (
     originalQuantity: order.originalQuantity,
     filledQuantity: order.filledQuantity,
     cancelledQuantity: order.cancelledQuantity,
-    // The new schema doesn't expose destURL or closedBy on Order — both live
-    // on OrderEntry. Consumers that need them must query entries separately.
-    destURL: "",
+    // Physical delivery is retired (futures are cash-settled); only closedBy
+    // remains relevant and the new schema exposes it on OrderEntry, not Order.
     closedBy: null,
     participant: {
       address: (order.user.id as `0x${string}`) ?? participantAddress,
@@ -122,7 +121,6 @@ export type ParticipantOrder = {
   id: string;
   isActive: boolean;
   isBuy: boolean;
-  destURL: string;
   participant: {
     address: `0x${string}`;
   };

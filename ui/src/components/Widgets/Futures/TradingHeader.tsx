@@ -4,6 +4,7 @@ import EastIcon from "@mui/icons-material/East";
 import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
 import { DetailedSpecsModal } from "./DetailedSpecsModal";
+import { useSettlementPrice } from "../../../hooks/data/useSettlementPrice";
 import { formatHashrateTHPS, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
@@ -17,6 +18,9 @@ interface TradingHeaderProps {
   currentPrice?: string | null;
   fundingRate?: string;
   totalVolume?: string;
+  /// Currently-selected expiration (unix seconds). Used to surface the pinned
+  /// cash-settlement price once that expiration has matured and been settled.
+  selectedDeliveryDate?: number;
 }
 
 const formatVolume = (raw: string): string => {
@@ -33,9 +37,19 @@ export const TradingHeader = ({
   currentPrice,
   fundingRate = "0%",
   totalVolume,
+  selectedDeliveryDate,
 }: TradingHeaderProps) => {
   const detailedSpecsModal = useModal();
   const { data: contractSpecs } = contractSpecsQuery;
+
+  const { data: settlementPriceRaw } = useSettlementPrice(
+    contractMode === "futures" && selectedDeliveryDate ? BigInt(selectedDeliveryDate) : undefined,
+  );
+  // Only show a settlement price once it's been pinned on-chain (non-zero).
+  const settlementPrice =
+    settlementPriceRaw && settlementPriceRaw > 0n
+      ? (Number(settlementPriceRaw) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)
+      : null;
 
   const formatSpeed = (speedHps: bigint) => formatHashrateTHPS(speedHps).full;
 
@@ -109,6 +123,15 @@ export const TradingHeader = ({
                   <StatItem>
                     <StatValue>{formatDuration(contractSpecs.data.deliveryDurationSeconds)}</StatValue>
                     <StatLabel>Delivery Duration</StatLabel>
+                  </StatItem>
+                </>
+              )}
+              {settlementPrice && (
+                <>
+                  <Divider />
+                  <StatItem>
+                    <StatValue>{settlementPrice}</StatValue>
+                    <StatLabel>Settlement Price (USDC)</StatLabel>
                   </StatItem>
                 </>
               )}

@@ -263,6 +263,11 @@ export const contractErrors = [
   },
   {
     "inputs": [],
+    "name": "SettlementDateNotReached",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "FunctionDisabled",
     "type": "error"
   },

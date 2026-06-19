@@ -2,12 +2,13 @@ import { Address, BigInt, Bytes, dataSource } from "@graphprotocol/graph-ts";
 import { Futures as FuturesContract } from "../../generated/Futures/Futures";
 import {
   Futures,
+  FuturesExpiration,
   LiquidationTx,
   PriceLevel,
   User,
   UserDeliverySessionPointer,
 } from "../../generated/schema";
-import { priceLevelId, userDeliveryPointerId } from "../ids";
+import { futuresExpirationId, priceLevelId, userDeliveryPointerId } from "../ids";
 import { recordNewUser } from "./match";
 
 /// Singleton row keyed by `id = 0`. All contract-wide config + counters live here.
@@ -19,8 +20,6 @@ export function getOrCreateFutures(): Futures {
     futures.collateralToken = Bytes.empty();
     futures.hashrateOracleAddress = Bytes.empty();
     futures.marginEngineAddress = Bytes.empty();
-    futures.validatorAddress = Bytes.empty();
-    futures.validatorURL = "";
     futures.startBlock = readStartBlockFromContext();
     futures.minimumPriceIncrement = BigInt.zero();
     futures.makerFee = BigInt.zero();
@@ -32,7 +31,6 @@ export function getOrCreateFutures(): Futures {
     futures.deliveryIntervalDays = 0;
     futures.futureDeliveryDatesCount = 0;
     futures.firstFutureDeliveryDate = BigInt.zero();
-    futures.breachPenaltyRatePerDay = BigInt.zero();
     futures.collectedFeesBalance = BigInt.zero();
     futures.totalUsers = 0;
     futures.totalOrders = 0;
@@ -70,12 +68,6 @@ export function loadFuturesFromContract(futures: Futures): void {
   const hashrate = contract.try_hashrateOracle();
   if (!hashrate.reverted) futures.hashrateOracleAddress = hashrate.value;
 
-  const validator = contract.try_validatorAddress();
-  if (!validator.reverted) futures.validatorAddress = validator.value;
-
-  const validatorURL = contract.try_validatorURL();
-  if (!validatorURL.reverted) futures.validatorURL = validatorURL.value;
-
   const minPx = contract.try_minimumPriceIncrement();
   if (!minPx.reverted) futures.minimumPriceIncrement = minPx.value;
 
@@ -109,9 +101,6 @@ export function loadFuturesFromContract(futures: Futures): void {
   const firstDelivery = contract.try_firstFutureDeliveryDate();
   if (!firstDelivery.reverted) futures.firstFutureDeliveryDate = firstDelivery.value;
 
-  const breach = contract.try_breachPenaltyRatePerDay();
-  if (!breach.reverted) futures.breachPenaltyRatePerDay = breach.value;
-
   const fees = contract.try_collectedFeesBalance();
   if (!fees.reverted) futures.collectedFeesBalance = fees.value;
 }
@@ -139,6 +128,20 @@ export function getOrCreateUser(address: Address, timestamp: BigInt): User {
   return user;
 }
 
+/// One row per expiration timestamp, created lazily the first time any entity at that
+/// `deliveryAt` is indexed. Settlement fields stay null until `SettlementPriceRecorded`
+/// pins the price. Returns the (saved) entity so callers can wire the `expiration` relation.
+export function getOrCreateFuturesExpiration(deliveryAt: BigInt): FuturesExpiration {
+  const id = futuresExpirationId(deliveryAt);
+  let expiration = FuturesExpiration.load(id);
+  if (!expiration) {
+    expiration = new FuturesExpiration(id);
+    expiration.deliveryAt = deliveryAt;
+    expiration.save();
+  }
+  return expiration;
+}
+
 export function getOrCreatePriceLevel(
   deliveryAt: BigInt,
   price: BigInt,
@@ -149,6 +152,7 @@ export function getOrCreatePriceLevel(
   if (!level) {
     level = new PriceLevel(id);
     level.deliveryAt = deliveryAt;
+    level.expiration = getOrCreateFuturesExpiration(deliveryAt).id;
     level.price = price;
     level.isBid = isBid;
     level.totalQuantity = 0;

@@ -271,7 +271,8 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
                 oldQuantity: oldSignedQuantity,
                 newPrice: newPriceBigInt,
                 newQuantity: newSignedQuantity,
-                destUrl: order.destURL,
+                // Physical delivery is retired; createOrder still takes a destURL arg.
+                destUrl: "",
                 deliveryDate: order.deliveryAt,
               });
 
