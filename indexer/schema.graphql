@@ -8,8 +8,6 @@ type Futures @entity(immutable: false) {
   collateralToken: Bytes!
   hashrateOracleAddress: Bytes!
   marginEngineAddress: Bytes!
-  validatorAddress: Bytes!
-  validatorURL: String!
 
   "Block number the indexer was configured to start from (sourced from the data source context, set via START_BLOCK_FUTURES)."
   startBlock: BigInt!
@@ -25,7 +23,6 @@ type Futures @entity(immutable: false) {
   deliveryIntervalDays: Int!
   futureDeliveryDatesCount: Int!
   firstFutureDeliveryDate: BigInt!
-  breachPenaltyRatePerDay: BigInt!
 
   # Pool balances
   collectedFeesBalance: BigInt!
@@ -43,6 +40,32 @@ type Futures @entity(immutable: false) {
   # Timestamps
   initializedAt: BigInt!
   lastUpdatedAt: BigInt!
+}
+
+# First-class expiration entity holding cash-settlement metadata for one delivery date.
+# Created lazily the first time any entity at that `deliveryAt` is indexed; the settlement
+# fields stay null until a `SettlementPriceRecorded` event pins the price.
+type FuturesExpiration @entity(immutable: false) {
+  "32-byte big-endian encoding of the expiration timestamp (deliveryAt)."
+  id: Bytes!
+  "The expiration timestamp this entity represents."
+  deliveryAt: BigInt!
+
+  "Pinned cash-settlement price (token decimals). Null until SettlementPriceRecorded fires; its presence is the 'settled' signal (no separate boolean)."
+  settlementPrice: BigInt
+  "Block timestamp at which the settlement price was pinned."
+  settledAt: BigInt
+  "Address that pinned the price (an explicit recordSettlementPrice caller or the first settlePosition for this expiry)."
+  recordedBy: Bytes
+  recordTransactionHash: Bytes
+  recordBlockNumber: BigInt
+
+  # Back-links (backward-compatible: existing entities keep their `deliveryAt` scalar)
+  lots: [Lot!]! @derivedFrom(field: "expiration")
+  orders: [Order!]! @derivedFrom(field: "expiration")
+  positionSessions: [PositionSession!]! @derivedFrom(field: "expiration")
+  trades: [Trade!]! @derivedFrom(field: "expiration")
+  priceLevels: [PriceLevel!]! @derivedFrom(field: "expiration")
 }
 
 # User entity (replaces former Participant)
@@ -81,6 +104,8 @@ type Order @entity(immutable: false) {
   user: User!
   price: BigInt! # pricePerDay
   deliveryAt: BigInt!
+  "Expiration metadata for `deliveryAt` (settlement price, etc.). Nullable, backward-compatible add-on."
+  expiration: FuturesExpiration
   isBuy: Boolean!
 
   # Counts (each unit = one on-chain orderId)
@@ -143,6 +168,8 @@ type Trade @entity(immutable: false) {
   user: User!
   positionSession: PositionSession!
   deliveryAt: BigInt!
+  "Expiration metadata for `deliveryAt` (settlement price, etc.). Nullable, backward-compatible add-on."
+  expiration: FuturesExpiration
 
   tradePrice: BigInt! # qty-weighted average fill price
   tradeQuantity: Int! # signed sum of fill quantities
@@ -187,6 +214,8 @@ type Lot @entity(immutable: false) {
   sellPricePerDay: BigInt!
   buyPricePerDay: BigInt!
   deliveryAt: BigInt!
+  "Expiration metadata for `deliveryAt` (settlement price, etc.). Nullable, backward-compatible add-on."
+  expiration: FuturesExpiration
   makerOrderId: Bytes!
   takerOrderId: Bytes!
 
@@ -194,8 +223,6 @@ type Lot @entity(immutable: false) {
   isClosed: Boolean!
   closeReason: LotCloseReason
 
-  isPaid: Boolean!
-  isWithdrawn: Boolean!
   sellerPnl: BigInt
   buyerPnl: BigInt
   closedBy: Bytes
@@ -205,14 +232,10 @@ type Lot @entity(immutable: false) {
 
   createdAt: BigInt!
   updatedAt: BigInt!
-  paidAt: BigInt
-  withdrawnAt: BigInt
   closedAt: BigInt
   blockNumber: BigInt!
   transactionHash: Bytes!
   closeTransactionHash: Bytes
-  paymentTransactionHash: Bytes
-  withdrawalTransactionHash: Bytes
 }
 
 enum LotStatus {
@@ -237,6 +260,8 @@ type PositionSession @entity(immutable: false) {
   status: PositionSessionStatus!
   user: User!
   deliveryAt: BigInt!
+  "Expiration metadata for `deliveryAt` (settlement price, etc.). Nullable, backward-compatible add-on."
+  expiration: FuturesExpiration
 
   entryPrice: BigInt! # qty-weighted average entry price
   closePrice: BigInt! # qty-weighted average exit price
@@ -282,6 +307,8 @@ type PriceLevel @entity(immutable: false) {
   "ID format: {deliveryAt}-{price}-{bid|ask}"
   id: String!
   deliveryAt: BigInt!
+  "Expiration metadata for `deliveryAt` (settlement price, etc.). Nullable, backward-compatible add-on."
+  expiration: FuturesExpiration
   price: BigInt!
   isBid: Boolean!
   totalQuantity: Int! # sum of ACTIVE OrderEntry units at this level

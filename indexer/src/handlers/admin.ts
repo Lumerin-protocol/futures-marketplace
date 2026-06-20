@@ -37,14 +37,11 @@ export function handleConfigUpdated(event: ConfigUpdated): void {
   futures.makerFee = cfg.makerFee;
   futures.takerFee = cfg.takerFee;
   futures.liquidationFee = cfg.liquidationFee;
-  futures.breachPenaltyRatePerDay = cfg.breachPenaltyRatePerDay;
   futures.minimumPriceIncrement = cfg.minimumPriceIncrement;
   futures.liquidationMarginPercent = cfg.liquidationMarginPercent;
   futures.futureDeliveryDatesCount = cfg.futureDeliveryDatesCount;
-  futures.validatorAddress = cfg.validatorAddress;
   futures.hashrateOracleAddress = cfg.hashrateOracle;
   futures.marginEngineAddress = cfg.marginEngine;
-  futures.validatorURL = cfg.validatorURL;
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
 }

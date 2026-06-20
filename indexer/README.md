@@ -2,6 +2,9 @@
 
 This subgraph indexes the Futures contract and HashrateOracle contract to track positions, orders, and hashrate data.
 
+> **Cash settlement (contract `2.15.0`).** Futures are cash-settled at maturity. Settlement
+> surfaces as `LotClosed` with `reason = SETTLED`, emitted by the permissionless `settlePosition`.
+
 ## Entities
 
 ### Futures Contract Entities

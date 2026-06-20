@@ -50,7 +50,7 @@ describe("Futures: full config + address surface populated by loadFuturesFromCon
       deployFuturesFixture,
     );
     const { futures, collateralVault, hashrateOracle, portfolioMarginEngine } = contracts;
-    const { owner, validator } = accounts;
+    const { owner } = accounts;
 
     conn.matchstick.bind("Futures", futures.address, futures.abi);
     await conn.matchstick.captureViewMocks();
@@ -87,14 +87,6 @@ describe("Futures: full config + address surface populated by loadFuturesFromCon
       String(entity.marginEngineAddress).toLowerCase(),
       portfolioMarginEngine.address.toLowerCase(),
     );
-    assert.equal(
-      String(entity.validatorAddress).toLowerCase(),
-      validator.account.address.toLowerCase(),
-    );
-    assert.equal(
-      String(entity.validatorURL),
-      "//shev8.validator:anything@stratum.braiins.com:3333",
-    );
 
     // === scalar config ===
     assert.equal(String(entity.minimumPriceIncrement), config.priceLadderStep.toString());
@@ -115,11 +107,6 @@ describe("Futures: full config + address surface populated by loadFuturesFromCon
     assert.equal(
       String(entity.firstFutureDeliveryDate),
       config.firstFutureDeliveryDate.toString(),
-    );
-    assert.equal(
-      String(entity.breachPenaltyRatePerDay),
-      "0",
-      "breachPenaltyRatePerDay defaults to 0 in fixture",
     );
     assert.equal(
       String(entity.collectedFeesBalance),

@@ -18,11 +18,11 @@ const { networkHelpers } = await network.getOrCreate();
 // `computePortfolioIM`, etc.) read stale values.
 //
 // These tests pin the invariant for the two close paths that flow through
-// `_closeAndCashSettleDelivery`:
-//   1. `closeDelivery` → `_closeAndCashSettleDeliveryAndPenalize`
+// `_settleAtMark`:
+//   1. `settlePosition` (cash settlement at maturity)
 //   2. `liquidatePosition` → `_forceLiquidatePosition`
 describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
-  it("trackers stay consistent across closeDelivery → reopen at a new date", async () => {
+  it("trackers stay consistent across settlePosition → reopen at a new date", async () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts, config } = data;
     const { futures, collateralVault, hashrateOracle } = contracts;
@@ -63,16 +63,16 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
       "seller and buyer deltas mirror each other",
     );
 
-    // Advance into delivery and close: this is the closeDelivery path that flows
-    // through _closeAndCashSettleDeliveryAndPenalize → _closeAndCashSettleDelivery.
+    // Advance to maturity and cash-settle: this is the permissionless settlePosition
+    // path that flows through _settleAtMark → _removePosition.
     await tc.setNextBlockTimestamp({
       timestamp: deliveryDate + BigInt(config.deliveryDurationSeconds) / 2n,
     });
     await refreshHashprice(hashrateOracle);
-    await futures.write.closeDelivery([positionId, true], { account: validator.account });
+    await futures.write.settlePosition([positionId], { account: validator.account });
 
     // Re-open one position at a *different* delivery date. If
-    // _closeAndCashSettleDelivery had failed to decrement the original tracker
+    // _settleAtMark had failed to decrement the original tracker
     // for `deliveryDate`, that mapping would still hold ±deliveryDurationDays.
     // Reopening at `laterDeliveryDate` adds another ±deliveryDurationDays. The
     // observable post-state is the *sum* of both — so a leak shows up as a

@@ -126,8 +126,6 @@ describe("rewiring exit: B exits, seller A rewired to C", () => {
     assert.ok(newLot);
     assert.equal(newLot.status, "OPEN");
     assert.equal(newLot.isClosed, false);
-    assert.equal(newLot.isPaid, false);
-    assert.equal(newLot.isWithdrawn, false);
     // Asymmetric prices: A is rewired through the new lot at their ORIGINAL
     // entry price (`price`) so their cost basis carries forward — the rewire
     // realizes PnL on B, not A. C enters fresh at the new match price (`price2`).

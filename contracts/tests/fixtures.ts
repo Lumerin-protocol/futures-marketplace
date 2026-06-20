@@ -1,13 +1,6 @@
 import type { NetworkConnection } from "hardhat/types/network";
 import type { ArtifactMap } from "hardhat/types/artifacts";
-import {
-  parseUnits,
-  maxUint256,
-  encodeFunctionData,
-  formatUnits,
-  parseEventLogs,
-  getContract,
-} from "viem";
+import { parseUnits, maxUint256, encodeFunctionData, getContract } from "viem";
 import type { Abi, Address, PublicClient, WalletClient, GetContractReturnType } from "viem";
 
 // Contract ABIs mapping from Hardhat's artifact map
@@ -172,7 +165,6 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
   const futureDeliveryDatesCount = 10;
   const firstFutureDeliveryDate = now + BigInt(deliveryDurationSeconds);
   const collateralAmount = parseUnits("10000", USDC_DECIMALS);
-  const validatorURL = "//shev8.validator:anything@stratum.braiins.com:3333";
 
   // Get wallet client for deployments
   const [walletClient] = await viem.getWalletClients();
@@ -223,7 +215,6 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
         functionName: "initialize",
         args: [
           hashrateOracle.address,
-          validator.account.address,
           liquidationMarginPercent,
           speedHps,
           priceLadderStep,
@@ -316,7 +307,6 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
 
   await futures.write.setMakerFee([makerFee], { account: owner.account });
   await futures.write.setTakerFee([takerFee], { account: owner.account });
-  await futures.write.setValidatorURL([validatorURL], { account: owner.account });
   const deliveryDates = await futures.read.getDeliveryDates();
 
   // `depositFor` pulls USDC via the vault — approve the vault, not Futures.
@@ -386,7 +376,7 @@ export async function deployOnlyFuturesWithDummyData(
   const ctx = await deployOnlyFuturesFixture(conn, data);
   const { contracts, accounts, config } = ctx;
   const { futures, collateralVault } = contracts;
-  const { seller, buyer, buyer2, pc } = accounts;
+  const { seller, buyer, buyer2 } = accounts;
 
   const mp = await futures.read.getMarketPrice();
   const inc = config.priceLadderStep;
@@ -408,23 +398,9 @@ export async function deployOnlyFuturesWithDummyData(
   await futures.write.createOrder([mp - 3n * inc, d, dst, 1], { account: buyer.account });
 
   await futures.write.createOrder([mp, d, dst, -1], { account: seller.account });
-  const txhash = await futures.write.createOrder([mp, d, dst, 1], { account: buyer.account });
+  await futures.write.createOrder([mp, d, dst, 1], { account: buyer.account });
 
-  const receipt = await pc.waitForTransactionReceipt({ hash: txhash });
-  const [event] = parseEventLogs({
-    logs: receipt.logs,
-    abi: futures.abi,
-    eventName: "LotCreated",
-  });
-  const { lotId: positionId } = event.args;
-
-  const totalPayment = mp * BigInt(config.deliveryDurationDays);
-  const buyerBalance = await contracts.usdcMock.read.balanceOf([buyer.account.address]);
-  console.log("buyer balance:", formatUnits(buyerBalance, USDC_DECIMALS));
-  console.log("total payment", formatUnits(totalPayment, USDC_DECIMALS));
-
-  await collateralVault.write.deposit([totalPayment], { account: buyer.account });
-
-  await futures.write.depositDeliveryPaymentV2([positionId], { account: buyer.account });
+  // Physical-delivery escrow is disabled; futures cash-settle at maturity via
+  // `settlePosition`, so no delivery payment is deposited for the seeded position.
   return ctx;
 }

@@ -10,7 +10,7 @@ import {
 import { PositionSessionStatus } from "../enums";
 import { absI32, isSameSignI32, minI32 } from "../lib";
 import { fillAggregateId, positionSessionId, tradeAggregateId } from "../ids";
-import { getOrCreateFutures, getOrCreatePointer } from "./store";
+import { getOrCreateFutures, getOrCreateFuturesExpiration, getOrCreatePointer } from "./store";
 
 // ============================================================================
 // Pending Futures-singleton counter deltas
@@ -337,6 +337,7 @@ function openSession(
   s.status = PositionSessionStatus.OPEN;
   s.user = userId;
   s.deliveryAt = deliveryAt;
+  s.expiration = getOrCreateFuturesExpiration(deliveryAt).id;
   s.entryPrice = entryPrice;
   s.closePrice = BigInt.zero();
   s.netQuantity = initialNetQty;
@@ -382,6 +383,7 @@ function upsertFill(
     trade.user = user.id;
     trade.positionSession = sessionId;
     trade.deliveryAt = deliveryAt;
+    trade.expiration = getOrCreateFuturesExpiration(deliveryAt).id;
     trade.tradePrice = BigInt.zero();
     trade.tradeQuantity = 0;
     trade.tradingFee = BigInt.zero();

@@ -3,8 +3,6 @@ import {
   LotClosed,
   LotCreated,
   LotLiquidated,
-  LotPaid,
-  LotPaymentWithdrawn,
   LotTransferred,
 } from "../../generated/Futures/Futures";
 import { Lot, Order, OrderEntry, User } from "../../generated/schema";
@@ -15,7 +13,12 @@ import {
   derivePriceFromExit,
   flushFuturesCounters,
 } from "../internal/match";
-import { getOrCreateFutures, getOrCreateUser, markLiquidationTx } from "../internal/store";
+import {
+  getOrCreateFutures,
+  getOrCreateFuturesExpiration,
+  getOrCreateUser,
+  markLiquidationTx,
+} from "../internal/store";
 import { stringifyParameters } from "../internal/utils";
 
 export function handleLotCreated(event: LotCreated): void {
@@ -31,12 +34,11 @@ export function handleLotCreated(event: LotCreated): void {
   lot.sellPricePerDay = event.params.pricePerDay;
   lot.buyPricePerDay = event.params.pricePerDay;
   lot.deliveryAt = event.params.deliveryAt;
+  lot.expiration = getOrCreateFuturesExpiration(event.params.deliveryAt).id;
   lot.makerOrderId = event.params.makerOrderId;
   lot.takerOrderId = event.params.takerOrderId;
   lot.status = LotStatus.OPEN;
   lot.isClosed = false;
-  lot.isPaid = false;
-  lot.isWithdrawn = false;
   lot.createdAt = event.block.timestamp;
   lot.updatedAt = event.block.timestamp;
   lot.blockNumber = event.block.number;
@@ -130,12 +132,11 @@ export function handleLotTransferred(event: LotTransferred): void {
   newLot.sellPricePerDay = event.params.newSellPricePerDay;
   newLot.buyPricePerDay = event.params.newBuyPricePerDay;
   newLot.deliveryAt = oldLot.deliveryAt;
+  newLot.expiration = getOrCreateFuturesExpiration(oldLot.deliveryAt).id;
   newLot.makerOrderId = event.params.makerOrderId;
   newLot.takerOrderId = event.params.takerOrderId;
   newLot.status = LotStatus.OPEN;
   newLot.isClosed = false;
-  newLot.isPaid = false;
-  newLot.isWithdrawn = false;
   newLot.createdAt = event.block.timestamp;
   newLot.updatedAt = event.block.timestamp;
   newLot.blockNumber = event.block.number;
@@ -300,34 +301,6 @@ export function handleLotClosed(event: LotClosed): void {
   flushFuturesCounters(futures);
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
-}
-
-export function handleLotPaid(event: LotPaid): void {
-  log.debug("lot paid event {}", [stringifyParameters(event)]);
-  const lot = Lot.load(event.params.lotId);
-  if (!lot) {
-    log.warning("LotPaid for unknown lotId {}", [event.params.lotId.toHexString()]);
-    return;
-  }
-  lot.isPaid = true;
-  lot.paidAt = event.block.timestamp;
-  lot.updatedAt = event.block.timestamp;
-  lot.paymentTransactionHash = event.transaction.hash;
-  lot.save();
-}
-
-export function handleLotPaymentWithdrawn(event: LotPaymentWithdrawn): void {
-  log.debug("lot payment withdrawn event {}", [stringifyParameters(event)]);
-  const lot = Lot.load(event.params.lotId);
-  if (!lot) {
-    log.warning("LotPaymentWithdrawn for unknown lotId {}", [event.params.lotId.toHexString()]);
-    return;
-  }
-  lot.isWithdrawn = true;
-  lot.withdrawnAt = event.block.timestamp;
-  lot.updatedAt = event.block.timestamp;
-  lot.withdrawalTransactionHash = event.transaction.hash;
-  lot.save();
 }
 
 export function handleLotLiquidated(event: LotLiquidated): void {

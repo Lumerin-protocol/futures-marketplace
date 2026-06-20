@@ -14,6 +14,14 @@ export function pointerId(user: Hex, deliveryAt: bigint): Hex {
 }
 
 /**
+ * Mirrors `futuresExpirationId` in `src/ids.ts`:
+ *   32-byte big-endian encoding of the expiration timestamp (deliveryAt).
+ */
+export function futuresExpirationId(deliveryAt: bigint): Hex {
+  return `0x${deliveryAt.toString(16).padStart(64, "0")}`.toLowerCase() as Hex;
+}
+
+/**
  * Mirrors `priceLevelId` in `src/ids.ts`:
  *   "{deliveryAt}-{price}-bid" | "{deliveryAt}-{price}-ask"
  */

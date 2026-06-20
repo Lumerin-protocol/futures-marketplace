@@ -16,7 +16,6 @@ async function main() {
   // collateral vault, so `USDC_TOKEN_ADDRESS` is no longer a deploy-time input.
   const collateralVaultAddress = requireAddress("VAULT_ADDRESS");
   const hashrateOracleAddress = requireAddress("HASHRATE_ORACLE_ADDRESS");
-  const validatorAddress = requireAddress("VALIDATOR_ADDRESS");
   const SAFE_OWNER_ADDRESS = readOptionalAddress("SAFE_OWNER_ADDRESS");
   // Optional: when set, wire the Futures contract into the cross-product
   // PortfolioMarginEngine end-to-end (Futures.setMarginEngine + PME.setFutures
@@ -32,7 +31,6 @@ async function main() {
     "DELIVERY_DURATION_DAYS",
     "DELIVERY_INTERVAL_DAYS",
     "FUTURE_DELIVERY_DATES_COUNT",
-    "VALIDATOR_URL",
   );
 
   const [deployer] = await viem.getWalletClients();
@@ -96,7 +94,6 @@ async function main() {
     functionName: "initialize",
     args: [
       hashrateOracleAddress,
-      validatorAddress,
       Number(env.LIQUIDATION_MARGIN_PERCENT),
       BigInt(env.SPEED_HPS),
       BigInt(env.MINIMUM_PRICE_INCREMENT),
@@ -121,16 +118,7 @@ async function main() {
 
   const futures = await viem.getContractAt("Futures", futuresProxy.address);
 
-  // ── 3. Set validator URL ────────────────────────────────────────────────
-  logInfo("Futures.setValidatorURL", { url: env.VALIDATOR_URL });
-  await logPrompt("Proceed?");
-  {
-    const sim = await futures.simulate.setValidatorURL([env.VALIDATOR_URL]);
-    const receipt = await writeAndWait(deployer, sim);
-    logStep("Done", txUrl(pc, receipt.transactionHash));
-  }
-
-  // ── 4. Wire the PortfolioMarginEngine (optional) ────────────────────────
+  // ── 3. Wire the PortfolioMarginEngine (optional) ────────────────────────
   if (MARGIN_ENGINE_ADDRESS) {
     const pme = await viem.getContractAt("PortfolioMarginEngine", MARGIN_ENGINE_ADDRESS);
     const pmeOwner = await pme.read.owner();

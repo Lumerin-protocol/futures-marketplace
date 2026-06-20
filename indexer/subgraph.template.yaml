@@ -52,18 +52,16 @@ dataSources:
           handler: handleLotTransferred
         - event: LotClosed(indexed bytes32,indexed address,indexed address,int256,int256,address,uint8)
           handler: handleLotClosed
-        - event: LotPaid(indexed bytes32)
-          handler: handleLotPaid
-        - event: LotPaymentWithdrawn(indexed bytes32)
-          handler: handleLotPaymentWithdrawn
         - event: LotLiquidated(indexed bytes32,indexed address,indexed address,uint256)
           handler: handleLotLiquidated
         - event: OrderLiquidated(indexed bytes32,indexed address,indexed address,uint256)
           handler: handleOrderLiquidated
-        - event: ConfigUpdated((uint256,uint256,uint256,uint256,uint256,uint8,uint8,address,address,address,string))
+        - event: ConfigUpdated((uint256,uint256,uint256,uint256,uint8,uint8,address,address))
           handler: handleConfigUpdated
         - event: BadDebt(indexed address,uint256)
           handler: handleBadDebt
+        - event: SettlementPriceRecorded(indexed uint256,uint256,address)
+          handler: handleSettlementPriceRecorded
       file: ./src/futures.ts
 # Required when deploying with `goldsky subgraph deploy ... --graft-from <name>/<version>`
 features:

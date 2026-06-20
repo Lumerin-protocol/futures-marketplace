@@ -8,7 +8,7 @@ const { networkHelpers, viem } = await network.getOrCreate();
 
 describe("Futures - Initialization", () => {
   it("should initialize with correct parameters", async () => {
-    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { contracts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
 
     // Check hashrate oracle address (now serves the hashprice in USD; getter name kept for back-compat)
@@ -16,19 +16,12 @@ describe("Futures - Initialization", () => {
       getAddress(await futures.read.hashrateOracle()),
       getAddress(contracts.hashrateOracle.address),
     );
-    // Check validator address
-    assert.equal(
-      getAddress(await futures.read.validatorAddress()),
-      getAddress(accounts.validator.account.address),
-    );
     // Check margin percentages
     assert.equal(await futures.read.liquidationMarginPercent(), config.liquidationMarginPercent);
     // Check speed
     assert.equal(await futures.read.speedHps(), config.speedHps);
     // Check delivery duration
     assert.equal(await futures.read.deliveryDurationDays(), config.deliveryDurationDays);
-    // Check breach penalty rate
-    assert.equal(await futures.read.breachPenaltyRatePerDay(), 0n);
   });
 
   it("should expose the configured oracle staleness window", async function () {

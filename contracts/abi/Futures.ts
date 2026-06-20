@@ -232,6 +232,11 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "SettlementDateNotReached",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "TransferDisabled",
     "type": "error"
   },
@@ -318,11 +323,6 @@ export const FuturesAbi = [
           },
           {
             "internalType": "uint256",
-            "name": "breachPenaltyRatePerDay",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
             "name": "minimumPriceIncrement",
             "type": "uint256"
           },
@@ -338,11 +338,6 @@ export const FuturesAbi = [
           },
           {
             "internalType": "address",
-            "name": "validatorAddress",
-            "type": "address"
-          },
-          {
-            "internalType": "address",
             "name": "hashrateOracle",
             "type": "address"
           },
@@ -350,11 +345,6 @@ export const FuturesAbi = [
             "internalType": "address",
             "name": "marginEngine",
             "type": "address"
-          },
-          {
-            "internalType": "string",
-            "name": "validatorURL",
-            "type": "string"
           }
         ],
         "indexed": false,
@@ -519,32 +509,6 @@ export const FuturesAbi = [
       }
     ],
     "name": "LotLiquidated",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "lotId",
-        "type": "bytes32"
-      }
-    ],
-    "name": "LotPaid",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "lotId",
-        "type": "bytes32"
-      }
-    ],
-    "name": "LotPaymentWithdrawn",
     "type": "event"
   },
   {
@@ -725,6 +689,31 @@ export const FuturesAbi = [
     "inputs": [
       {
         "indexed": true,
+        "internalType": "uint256",
+        "name": "deliveryAt",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "price",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "recordedBy",
+        "type": "address"
+      }
+    ],
+    "name": "SettlementPriceRecorded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
         "internalType": "address",
         "name": "implementation",
         "type": "address"
@@ -812,50 +801,6 @@ export const FuturesAbi = [
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "breachPenaltyRatePerDay",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "_positionId",
-        "type": "bytes32"
-      }
-    ],
-    "name": "cancelExpiredPosition",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "_positionId",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bool",
-        "name": "_blameSeller",
-        "type": "bool"
-      }
-    ],
-    "name": "closeDelivery",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
         "internalType": "bytes32",
@@ -903,7 +848,7 @@ export const FuturesAbi = [
       },
       {
         "internalType": "uint256",
-        "name": "_deliveryDate",
+        "name": "_expirationAt",
         "type": "uint256"
       },
       {
@@ -997,32 +942,6 @@ export const FuturesAbi = [
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "bytes32[]",
-        "name": "_positionIds",
-        "type": "bytes32[]"
-      }
-    ],
-    "name": "depositDeliveryPayment",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "positionId",
-        "type": "bytes32"
-      }
-    ],
-    "name": "depositDeliveryPaymentV2",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
     "inputs": [],
     "name": "firstFutureDeliveryDate",
     "outputs": [
@@ -1052,7 +971,7 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "_deliveryDate",
+        "name": "_expirationAt",
         "type": "uint256"
       },
       {
@@ -1076,7 +995,7 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "_deliveryDate",
+        "name": "_expirationAt",
         "type": "uint256"
       },
       {
@@ -1338,7 +1257,7 @@ export const FuturesAbi = [
       },
       {
         "internalType": "uint256",
-        "name": "_deliveryDate",
+        "name": "_expirationAt",
         "type": "uint256"
       }
     ],
@@ -1357,7 +1276,7 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "_deliveryDate",
+        "name": "_expirationAt",
         "type": "uint256"
       },
       {
@@ -1426,11 +1345,6 @@ export const FuturesAbi = [
       {
         "internalType": "contract AggregatorV3Interface",
         "name": "_hashrateOracle",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "_validatorAddress",
         "type": "address"
       },
       {
@@ -1655,6 +1569,25 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "deliveryAt",
+        "type": "uint256"
+      }
+    ],
+    "name": "recordSettlementPrice",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "price",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "bytes32",
         "name": "_orderId",
         "type": "bytes32"
@@ -1681,19 +1614,6 @@ export const FuturesAbi = [
       }
     ],
     "name": "resetState",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_breachPenaltyRatePerDay",
-        "type": "uint256"
-      }
-    ],
-    "name": "setBreachPenaltyRatePerDay",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1805,12 +1725,12 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "_validatorAddress",
-        "type": "address"
+        "internalType": "bytes32",
+        "name": "_positionId",
+        "type": "bytes32"
       }
     ],
-    "name": "setValidatorAddress",
+    "name": "settlePosition",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1818,14 +1738,33 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
-        "internalType": "string",
-        "name": "_validatorURL",
-        "type": "string"
+        "internalType": "bytes32[]",
+        "name": "_positionIds",
+        "type": "bytes32[]"
       }
     ],
-    "name": "setValidatorURL",
+    "name": "settlePositions",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "settlementPrice",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -1887,46 +1826,7 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "validatorAddress",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "validatorURL",
-    "outputs": [
-      {
-        "internalType": "string",
-        "name": "",
-        "type": "string"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
     "name": "withdrawCollectedFees",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_deliveryDate",
-        "type": "uint256"
-      }
-    ],
-    "name": "withdrawDeliveryPayment",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

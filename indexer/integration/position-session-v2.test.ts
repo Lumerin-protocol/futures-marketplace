@@ -77,8 +77,6 @@ describe("single match session state", () => {
     assert.equal(lot.isClosed, false);
     assert.equal(lot.sellPricePerDay, price.toString());
     assert.equal(lot.buyPricePerDay, price.toString());
-    assert.equal(lot.isPaid, false);
-    assert.equal(lot.isWithdrawn, false);
     assert.equal(lot.destURL, "dst", "Lot.destURL must prefer the taker's OrderEntry.destURL");
     assert.equal(lot.makerOrderId, makerOrderId, "Lot.makerOrderId must mirror the event");
     assert.equal(lot.takerOrderId, takerOrderId, "Lot.takerOrderId must mirror the event");

@@ -48,6 +48,13 @@ function bigIntToFixed32(value: BigInt): Bytes {
   return Bytes.fromHexString(padLeft(value.toHexString().slice(2), 64, "0")) as Bytes;
 }
 
+/// FuturesExpiration id: 32-byte big-endian encoding of the expiration timestamp
+/// (`deliveryAt`). One entity per expiration, keyed solely by the timestamp so that
+/// any entity carrying a `deliveryAt` can resolve its expiration via the same key.
+export function futuresExpirationId(deliveryAt: BigInt): Bytes {
+  return bigIntToFixed32(deliveryAt);
+}
+
 /// (user, deliveryAt) pointer key: 20-byte address ++ 32-byte deliveryAt (full BigInt range).
 export function userDeliveryPointerId(
   user: Address,

@@ -7,6 +7,7 @@ import { recomputeOrderStatus } from "../internal/orders";
 import { flushFuturesCounters } from "../internal/match";
 import {
   getOrCreateFutures,
+  getOrCreateFuturesExpiration,
   getOrCreatePriceLevel,
   getOrCreateUser,
   markLiquidationTx,
@@ -37,6 +38,7 @@ export function handleOrderCreated(event: OrderCreated): void {
     order.user = user.id;
     order.price = event.params.pricePerDay;
     order.deliveryAt = event.params.deliveryAt;
+    order.expiration = getOrCreateFuturesExpiration(event.params.deliveryAt).id;
     order.isBuy = event.params.isBuy;
     order.quantity = 0;
     order.originalQuantity = 0;

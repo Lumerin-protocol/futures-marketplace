@@ -32,7 +32,6 @@ async function main() {
     Owner: await futuresProxy.read.owner(),
     Version: currentVersion,
     HashrateOracle: await futuresProxy.read.hashrateOracle(),
-    Validator: await futuresProxy.read.validatorAddress(),
   });
 
   await logPrompt("Review the configuration above. Proceed with upgrade?");
@@ -126,7 +125,6 @@ async function main() {
       Vault: await upgraded.read.collateralVault(),
       MarginEngine: await upgraded.read.marginEngine(),
       HashrateOracle: await upgraded.read.hashrateOracle(),
-      Validator: await upgraded.read.validatorAddress(),
       Hook: await upgraded.read.hook(),
       Owner: await upgraded.read.owner(),
       Version: await upgraded.read.VERSION(),

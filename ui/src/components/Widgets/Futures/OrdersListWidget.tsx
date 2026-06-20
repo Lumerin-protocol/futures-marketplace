@@ -7,8 +7,6 @@ import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
 import { ModifyOrderForm } from "../../Forms/ModifyOrderForm";
 import { CloseOrderForm } from "../../Forms/CloseOrderForm";
-import { ServerStackIcon } from "@heroicons/react/24/outline";
-import Tooltip from "@mui/material/Tooltip";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
@@ -126,7 +124,6 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
           isBuy: order.isBuy,
           pricePerDay: order.pricePerDay,
           deliveryAt: order.deliveryAt,
-          destURL: order.destURL,
           amount: 0,
           originalQuantity: 0,
           filledQuantity: 0,
@@ -154,7 +151,6 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
         isBuy: boolean;
         pricePerDay: bigint;
         deliveryAt: bigint;
-        destURL: string;
         amount: number;
         originalQuantity: number;
         filledQuantity: number;
@@ -193,7 +189,6 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
               <th>Price (USDC)</th>
               <th>Filled / Quantity</th>
               <th>Margin</th>
-              <th>Destination</th>
               <th>Time</th>
               <th>Actions</th>
             </tr>
@@ -211,17 +206,6 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
                 <td>{groupedOrder.filledQuantity} / {groupedOrder.originalQuantity}</td>
                 <td>
                   {formatMargin(calculateMargin(groupedOrder.pricePerDay, groupedOrder.amount, groupedOrder.isBuy))}
-                </td>
-                <td>
-                  {groupedOrder.destURL ? (
-                    <Tooltip title={groupedOrder.destURL}>
-                      <DestURLCell>
-                        <ServerStackIcon width={20} height={20} />
-                      </DestURLCell>
-                    </Tooltip>
-                  ) : (
-                    <span>---</span>
-                  )}
                 </td>
                 <td><DateTimeCell timestamp={groupedOrder.timestamp} /></td>
                 <td>
@@ -377,17 +361,6 @@ const TypeBadge = styled("span")<{ $type: string }>`
   font-weight: 600;
   background-color: ${(props) => (props.$type === "Long" ? tokens.trading.longRowBg : tokens.trading.shortRowBg)};
   color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
-`;
-
-const DestURLCell = styled("span")`
-  display: inline-block;
-  max-width: 200px;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: ${tokens.text.secondary};
-  font-size: 0.875rem;
 `;
 
 const StatusBadge = styled("span")<{ $status: string }>`

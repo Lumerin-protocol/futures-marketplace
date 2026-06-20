@@ -27,7 +27,6 @@ const fetchContractSpecsAsync = async (): Promise<GetResponse<FuturesContractSpe
     liquidationMarginPercent: response.futures.liquidationMarginPercent,
     speedHps: BigInt(+response.futures.speedHps),
     tokenAddress: response.futures.contractAddress,
-    validatorAddress: response.futures.validatorAddress,
   };
   return {
     data,
@@ -43,7 +42,6 @@ export type FuturesContractSpecs = {
   liquidationMarginPercent: number;
   speedHps: bigint;
   tokenAddress: `0x${string}`;
-  validatorAddress: `0x${string}`;
 };
 
 type ContractSpecsResponse = {
@@ -60,6 +58,5 @@ type ContractSpecsResponse = {
     minimumPriceIncrement: string;
     speedHps: string;
     contractAddress: `0x${string}`;
-    validatorAddress: `0x${string}`;
   };
 };
