@@ -801,53 +801,6 @@ export const FuturesAbi = [
     "type": "function"
   },
   {
-<<<<<<< Updated upstream
-    "inputs": [],
-    "name": "breachPenaltyRatePerDay",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "_positionId",
-        "type": "bytes32"
-      }
-    ],
-    "name": "cancelExpiredPosition",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "_positionId",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bool",
-        "name": "_blameSeller",
-        "type": "bool"
-      }
-    ],
-    "name": "closeDelivery",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-=======
->>>>>>> Stashed changes
     "inputs": [
       {
         "internalType": "bytes32",
@@ -895,7 +848,7 @@ export const FuturesAbi = [
       },
       {
         "internalType": "uint256",
-        "name": "_deliveryDate",
+        "name": "_expirationAt",
         "type": "uint256"
       },
       {
@@ -1018,7 +971,7 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "_deliveryDate",
+        "name": "_expirationAt",
         "type": "uint256"
       },
       {
@@ -1042,7 +995,7 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "_deliveryDate",
+        "name": "_expirationAt",
         "type": "uint256"
       },
       {
@@ -1304,7 +1257,7 @@ export const FuturesAbi = [
       },
       {
         "internalType": "uint256",
-        "name": "_deliveryDate",
+        "name": "_expirationAt",
         "type": "uint256"
       }
     ],
@@ -1323,7 +1276,7 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "_deliveryDate",
+        "name": "_expirationAt",
         "type": "uint256"
       },
       {
@@ -1616,13 +1569,6 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
-<<<<<<< Updated upstream
-        "internalType": "bytes32",
-        "name": "_orderId",
-        "type": "bytes32"
-      }
-    ],
-=======
         "internalType": "uint256",
         "name": "deliveryAt",
         "type": "uint256"
@@ -1647,7 +1593,6 @@ export const FuturesAbi = [
         "type": "bytes32"
       }
     ],
->>>>>>> Stashed changes
     "name": "removeOutdatedOrder",
     "outputs": [],
     "stateMutability": "nonpayable",
@@ -1682,19 +1627,6 @@ export const FuturesAbi = [
       }
     ],
     "name": "setFutureDeliveryDatesCount",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_hook",
-        "type": "address"
-      }
-    ],
-    "name": "setHook",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
