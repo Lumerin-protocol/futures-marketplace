@@ -293,7 +293,6 @@ export const PositionsListWidget = ({
               <th>Price (USDC)</th>
               <th>Quantity</th>
               <th>Margin</th>
-              <th>Settlement Price (USDC)</th>
               <th>Unrealized PnL (USDC)</th>
               <th>Time</th>
               <th>Action</th>
@@ -338,15 +337,6 @@ export const PositionsListWidget = ({
                             groupedPosition.amount,
                             groupedPosition.positionType,
                           ),
-                        )}
-                      </td>
-                      <td>
-                        {pricePinned ? (
-                          formatPrice(settlementPrice)
-                        ) : matured ? (
-                          <span style={{ color: tokens.text.muted }}>Pending</span>
-                        ) : (
-                          <span style={{ color: tokens.text.muted }}>—</span>
                         )}
                       </td>
                       <td>
