@@ -24,6 +24,7 @@ export const EnvSchema = Type.Object({
     maximum: 100,
     default: 80,
   }),
+  REACT_APP_MARKET_MAKER_ADDRESS: Type.Optional(TypeEthAddress()),
   REACT_APP_MULTICALL_ADDRESS: Type.Optional(TypeEthAddress()),
   REACT_APP_PAYMENT_SLIPPAGE_PERCENT: Type.Integer({ minimum: 0, maximum: 100, default: 1 }),
   REACT_APP_PERPS_TOKEN_ADDRESS: TypeEthAddress(),
