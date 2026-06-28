@@ -1,5 +1,5 @@
 import { graphqlRequest } from "./graphql";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { backgroundRefetchOpts } from "./config";
 import { BtcPriceIndexQuery, AggregatedBtcPriceIndexQuery } from "./graphql-queries";
 import type { TimePeriod } from "./useHashRateIndexData";
@@ -56,6 +56,9 @@ export const useBtcPriceIndexData = (props?: { refetch?: boolean; timePeriod?: T
   const query = useQuery({
     queryKey: [BTC_PRICE_INDEX_QK, timePeriod],
     queryFn: () => fetchBtcPriceIndexData(timePeriod),
+    // Keep showing the previous period's data while the new period loads
+    // to avoid a brief empty/"no data" flash when switching time periods.
+    placeholderData: keepPreviousData,
     ...(props?.refetch ? backgroundRefetchOpts : {}),
   });
 

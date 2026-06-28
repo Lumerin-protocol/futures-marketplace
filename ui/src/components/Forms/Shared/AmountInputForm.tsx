@@ -52,6 +52,23 @@ export const handleNumericDecimalInput = (e: React.FormEvent<HTMLInputElement | 
 };
 
 /**
+ * Validates whole-number input: digits only, no decimal point or sign.
+ * Used for futures quantity inputs which must be positive integers.
+ * @param e - The beforeinput event
+ */
+export const handleNumericIntegerInput = (e: React.FormEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const inputChar = e.data;
+
+  // Allow deletion or navigation
+  if (!inputChar) return;
+
+  // Reject anything that isn't a single digit (no ".", no "-")
+  if (!/^[0-9]$/.test(inputChar)) {
+    e.preventDefault();
+  }
+};
+
+/**
  * Validates numeric input for decimal numbers with up to 6 decimal places.
  * Used for perpetuals quantity input which supports higher precision.
  * @param e - The beforeinput event

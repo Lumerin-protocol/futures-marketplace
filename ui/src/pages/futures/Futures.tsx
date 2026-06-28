@@ -373,6 +373,8 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
             btcPriceData={btcPriceQuery.data || []}
             isLoading={hashrateQuery.isLoading}
             isBtcPriceLoading={btcPriceQuery.isLoading}
+            isFetching={hashrateQuery.isFetching}
+            isBtcPriceFetching={btcPriceQuery.isFetching}
             marketPrice={marketPrice}
             marketPriceFetchedAt={marketPriceFetchedAt}
             entryPrice={openPositionEntryPrice}
