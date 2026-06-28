@@ -60,7 +60,7 @@ export const HistoricalPositionsListWidget = ({
               <th>Side</th>
               <th>Price (USDC)</th>
               <th>Max Quantity</th>
-              <th>Settlement Price (USDC)</th>
+              <th>Exit Price (USDC)</th>
               <th>Realized PnL (USDC)</th>
               <th>Created</th>
               <th>Closed</th>

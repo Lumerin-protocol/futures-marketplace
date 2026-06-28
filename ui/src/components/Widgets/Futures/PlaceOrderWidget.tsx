@@ -34,7 +34,11 @@ import type { ContractMode, AccountBalance } from "../../../types/types";
 import type { PerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
 import { useAccount } from "wagmi";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
-import { handleNumericDecimalInput, handleNumericDecimalInput6Decimals } from "../../Forms/Shared/AmountInputForm";
+import {
+  handleNumericDecimalInput,
+  handleNumericDecimalInput6Decimals,
+  handleNumericIntegerInput,
+} from "../../Forms/Shared/AmountInputForm";
 import { useMakerTakerFees } from "../../../hooks/data/useMakerTakerFees";
 import { ModeToggle, ModeButton, type AmountMode } from "./PerpsOrderFormFields";
 import { useSimulatePerpsOrder } from "../../../hooks/data/perps/useSimulatePerpsOrder";
@@ -925,7 +929,7 @@ export const PlaceOrderWidget = ({
 
             {orderType === "limit" && (
               <InputGroup $isHighlighted={highlightedButton !== null}>
-                <label>{contractMode === "futures" ? "Price per day (USDC)" : "Price (USDC)"}</label>
+                <label>Price (USDC)</label>
                 <PriceInputContainer $isHighlighted={highlightedButton !== null}>
                   <PriceButton
                     onClick={decrementPrice}
@@ -985,11 +989,15 @@ export const PlaceOrderWidget = ({
                 </AmountInputWrapper>
               ) : (
                 <input
-                  type="number"
+                  type="text"
                   value={amount}
-                  onChange={(e) => handleAmountChange(Number(e.target.value.replace("-", "")))}
-                  min="1"
-                  max="50"
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/[^0-9]/g, "");
+                    handleAmountChange(digits === "" ? "" : Number(digits));
+                  }}
+                  onBeforeInput={handleNumericIntegerInput}
+                  inputMode="numeric"
+                  placeholder="1"
                 />
               )}
               {/* {contractMode === "perpetual" && getNumericAmount() > 0 && (
