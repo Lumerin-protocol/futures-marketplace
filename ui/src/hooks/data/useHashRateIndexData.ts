@@ -109,11 +109,14 @@ async function fetchDayHashrateIndex() {
     }
   }
 
-  const seed = (await loadHashpriceUsdsSeed()) as HashrateIndexItem[];
-  const seedForRange = seed.filter((item) => BigInt(item.timestamp) >= startMicros);
-  allIndexes = mergeById(allIndexes, seedForRange).filter(
-    (item) => BigInt(item.timestamp) >= startMicros,
-  );
+  if (process.env.REACT_APP_USE_SEED_DATA === "true") {
+    const seed = (await loadHashpriceUsdsSeed()) as HashrateIndexItem[];
+    const seedForRange = seed.filter((item) => BigInt(item.timestamp) >= startMicros);
+    allIndexes = mergeById(allIndexes, seedForRange).filter(
+      (item) => BigInt(item.timestamp) >= startMicros,
+    );
+  }
+  allIndexes = allIndexes.filter((item) => BigInt(item.timestamp) >= startMicros);
   allIndexes.sort((a, b) => Number(BigInt(b.timestamp) - BigInt(a.timestamp)));
 
   const data = allIndexes.map((item) => {
@@ -172,12 +175,14 @@ async function fetchAggregatedHashrateIndex(timePeriod: "week" | "month") {
     }
   }
 
-  const seed = (await (interval === "hour"
-    ? loadHashpriceUsdCandlesHourSeed()
-    : loadHashpriceUsdCandlesDaySeed())) as AggregatedHashrateIndexItem[];
   const startMicros = BigInt(startTimestamp);
-  const seedForRange = seed.filter((item) => BigInt(item.timestamp) >= startMicros);
-  allCandles = mergeById(allCandles, seedForRange);
+  if (process.env.REACT_APP_USE_SEED_DATA === "true") {
+    const seed = (await (interval === "hour"
+      ? loadHashpriceUsdCandlesHourSeed()
+      : loadHashpriceUsdCandlesDaySeed())) as AggregatedHashrateIndexItem[];
+    const seedForRange = seed.filter((item) => BigInt(item.timestamp) >= startMicros);
+    allCandles = mergeById(allCandles, seedForRange);
+  }
   allCandles.sort((a, b) => Number(BigInt(b.timestamp) - BigInt(a.timestamp)));
 
   const data = allCandles.map((item) => {
