@@ -240,6 +240,7 @@ jobs:
           REACT_APP_SUBGRAPH_PERPS_URL=${PERPS_SUBGRAPH_URL}
           REACT_APP_SUBGRAPH_POINTS_URL=${POINTS_SUBGRAPH_URL}
           REACT_APP_PERPS_TOKEN_ADDRESS=${{ vars.REACT_APP_PERPS_TOKEN_ADDRESS }}
+          REACT_APP_USE_SEED_DATA=${{ vars.REACT_APP_USE_SEED_DATA }}
           EOF
           
           echo "✅ .env file created"
@@ -327,6 +328,7 @@ jobs:
           REACT_APP_SUBGRAPH_PERPS_URL=https://example.com
           REACT_APP_SUBGRAPH_POINTS_URL=https://example.com
           REACT_APP_PERPS_TOKEN_ADDRESS=0x0000000000000000000000000000000000000000
+          REACT_APP_USE_SEED_DATA=false
           EOF
           echo "✅ Placeholder .env file created"
 
