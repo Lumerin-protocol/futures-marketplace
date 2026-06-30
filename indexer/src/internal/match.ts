@@ -141,7 +141,7 @@ export function derivePriceFromExit(wasBuyer: boolean, pnl: BigInt, entryPrice: 
 /// Applies one signed-unit fill against the user's `(user, deliveryAt)` session
 /// pointer, opening / scaling / closing the session as needed and upserting the
 /// per-(tx, user, counterparty, session) Fill and per-(tx, user, session) Trade
-/// aggregates. Returns the Fill id.
+/// aggregates. Returns the Trade id so liquidation callers can flag it.
 function processUserMatch(
   user: User,
   counterpartyId: Bytes,
@@ -170,7 +170,7 @@ function processUserMatch(
   const realizedPnl = preComputedPnl;
   const newEntry = computeNewEntryPrice(oldEntry, tradePrice, oldNet, tradeQty, newNet);
 
-  const fillId = handleFill(
+  const tradeId = handleFill(
     user,
     pointer,
     counterpartyId,
@@ -202,7 +202,7 @@ function processUserMatch(
   }
   user.save();
 
-  return fillId;
+  return tradeId;
 }
 
 function computeNewEntryPrice(
@@ -342,6 +342,7 @@ function openSession(
   s.closePrice = BigInt.zero();
   s.netQuantity = initialNetQty;
   s.closedQuantity = 0;
+  s.liquidatedQuantity = 0;
   s.realizedPnl = BigInt.zero();
   s.maxQuantity = absI32(initialNetQty);
   s.tradingFees = BigInt.zero();
@@ -390,6 +391,7 @@ function upsertFill(
     trade.realizedPnl = BigInt.zero();
     trade.netQuantityAfter = 0;
     trade.fillCount = 0;
+    trade.isLiquidation = false;
     trade.timestamp = timestamp;
     trade.blockNumber = blockNumber;
     trade.transactionHash = txHash;
@@ -455,5 +457,5 @@ function upsertFill(
   if (isNewFill) user.fillCount++;
   if (isNewTrade) user.tradeCount++;
 
-  return fillId;
+  return trade.id;
 }

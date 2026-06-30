@@ -9,6 +9,8 @@ import { HashrateChart } from "../../components/Charts/HashrateChart";
 import { PlaceOrderWidget } from "../../components/Widgets/Futures/PlaceOrderWidget";
 import { OrdersPositionsTabWidget } from "../../components/Widgets/Futures/OrdersPositionsTabWidget";
 import { PerpsOrdersPositionsTabWidget } from "../../components/Widgets/Futures/PerpsOrdersPositionsTabWidget";
+import { LiquidationToast } from "../../components/Widgets/Futures/LiquidationToast";
+import { useLiquidationNotifications } from "../../hooks/data/useLiquidationNotifications";
 import { ClosePositionModal, useClosePositionModal } from "../../components/Widgets/Futures/ClosePositionModal";
 import { useHashrateIndexData, type TimePeriod } from "../../hooks/data/useHashRateIndexData";
 import { useBtcPriceIndexData } from "../../hooks/data/useBtcPriceIndexData";
@@ -151,6 +153,10 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
   // Fetch user position sessions for perpetual contracts
   const positionSessionsQuery = useUserPositionSessions(address, { refetch: hasOpenPerpsOrders });
+
+  // Poll both products' trade feeds for new liquidations and surface a toast.
+  const { notifications: liquidationNotifications, dismiss: dismissLiquidation } =
+    useLiquidationNotifications(address);
 
   // Active delivery date selected in the order book (used for futures entry price line)
   const [selectedDeliveryDate, setSelectedDeliveryDate] = useState<number | undefined>();
@@ -335,6 +341,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
   return (
     <FuturesContainer>
+      <LiquidationToast notifications={liquidationNotifications} onDismiss={dismissLiquidation} />
       {/* Row 1: Compact Trading Header — full width */}
       <TradingHeaderArea>
         <TradingHeader

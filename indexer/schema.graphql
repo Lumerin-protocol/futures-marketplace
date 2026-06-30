@@ -178,6 +178,13 @@ type Trade @entity(immutable: false) {
   netQuantityAfter: Int!
   fillCount: Int!
 
+  "True when this Trade was a forced liquidation against the market."
+  isLiquidation: Boolean! # default false
+  "Keeper that triggered the liquidation; set only when isLiquidation."
+  liquidator: Bytes # nullable
+  "Fee paid to the liquidator; set only when isLiquidation."
+  liquidationFee: BigInt # nullable
+
   fills: [Fill!]! @derivedFrom(field: "trade")
 
   # Metadata
@@ -269,6 +276,8 @@ type PositionSession @entity(immutable: false) {
   netQuantity: Int!
   maxQuantity: Int! # max absolute qty reached during the session
   closedQuantity: Int! # cumulative qty closed
+  "Cumulative absolute quantity closed via liquidation in this session (default 0). 'Was liquidated' = liquidatedQuantity > 0."
+  liquidatedQuantity: Int! # default 0
   realizedPnl: BigInt!
   tradingFees: BigInt!
 
@@ -290,6 +299,17 @@ enum PositionSessionStatus {
 # existence is the dedup signal.
 type LiquidationTx @entity(immutable: true) {
   id: Bytes! # transaction hash
+}
+
+# Transient internal lookup. `LotClosed` (reason=LIQUIDATION) fires BEFORE the
+# same-tx `LotLiquidated`, and only `LotLiquidated` knows which side is the
+# liquidated participant. So `handleLotClosed` records each closed leg's Trade
+# here keyed by `txHash ++ user`, and the later `handleLotLiquidated` looks up
+# the participant's entry to flag that single Trade. Existence is incidental —
+# the entity just carries the Trade pointer across the two same-tx handlers.
+type PendingLiquidationTrade @entity(immutable: false) {
+  id: Bytes! # txHash ++ user address
+  trade: Trade!
 }
 
 # Bad debt event when a participant or the insurance fund cannot cover a loss.

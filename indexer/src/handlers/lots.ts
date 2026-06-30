@@ -5,8 +5,9 @@ import {
   LotLiquidated,
   LotTransferred,
 } from "../../generated/Futures/Futures";
-import { Lot, Order, OrderEntry, User } from "../../generated/schema";
+import { Lot, Order, OrderEntry, PositionSession, Trade, User } from "../../generated/schema";
 import { LotCloseReason, LotStatus } from "../enums";
+import { absI32 } from "../lib";
 import {
   applyExitFill,
   applyOpenFill,
@@ -17,7 +18,9 @@ import {
   getOrCreateFutures,
   getOrCreateFuturesExpiration,
   getOrCreateUser,
+  loadPendingLiquidationTrade,
   markLiquidationTx,
+  recordPendingLiquidationTrade,
 } from "../internal/store";
 import { stringifyParameters } from "../internal/utils";
 
@@ -269,7 +272,7 @@ export function handleLotClosed(event: LotClosed): void {
     buyerFee = totalFee.minus(sellerFee);
   }
 
-  applyExitFill(
+  const sellerTradeId = applyExitFill(
     seller,
     buyer.id,
     1,
@@ -283,7 +286,7 @@ export function handleLotClosed(event: LotClosed): void {
     event.logIndex,
     0,
   );
-  applyExitFill(
+  const buyerTradeId = applyExitFill(
     buyer,
     seller.id,
     -1,
@@ -297,6 +300,16 @@ export function handleLotClosed(event: LotClosed): void {
     event.logIndex,
     1,
   );
+
+  // LIQUIDATION closes fire BEFORE the same-tx `LotLiquidated`, which alone
+  // carries the liquidated participant + liquidator + fee. Stash both legs'
+  // closing Trades keyed by `txHash ++ user` so `handleLotLiquidated` can flag
+  // only the participant's Trade (the counterparty is merely cash-settled, not
+  // liquidated, so it must NOT be flagged).
+  if (closeReason == LotCloseReason.LIQUIDATION) {
+    recordPendingLiquidationTrade(event.transaction.hash, seller.id, sellerTradeId);
+    recordPendingLiquidationTrade(event.transaction.hash, buyer.id, buyerTradeId);
+  }
 
   flushFuturesCounters(futures);
   futures.lastUpdatedAt = event.block.timestamp;
@@ -315,6 +328,34 @@ export function handleLotLiquidated(event: LotLiquidated): void {
   lot.liquidationFee = event.params.fee;
   lot.updatedAt = event.block.timestamp;
   lot.save();
+
+  // Flag the liquidated participant's closing Trade (modeled as a forced trade
+  // against the market). The Trade + PositionSession were already created by
+  // the same-tx `LotClosed` legs (which ran first); we look up the participant's
+  // closing Trade via the transient ref keyed by `txHash ++ participant`.
+  const pendingTrade = loadPendingLiquidationTrade(
+    event.transaction.hash,
+    event.params.participant,
+  );
+  if (pendingTrade != null) {
+    const trade = Trade.load(pendingTrade.trade);
+    if (trade != null) {
+      trade.isLiquidation = true;
+      trade.liquidator = event.params.liquidator;
+      trade.liquidationFee = event.params.fee;
+      trade.save();
+
+      // Denormalize the liquidated qty onto the closing session so the
+      // position-centric views don't need to fetch trades. The participant's
+      // Trade in this tx is the liquidation close, so |tradeQuantity| is the
+      // qty closed via liquidation.
+      const session = PositionSession.load(trade.positionSession);
+      if (session != null) {
+        session.liquidatedQuantity = session.liquidatedQuantity + absI32(trade.tradeQuantity);
+        session.save();
+      }
+    }
+  }
 
   if (markLiquidationTx(event.transaction.hash)) {
     const futures = getOrCreateFutures();

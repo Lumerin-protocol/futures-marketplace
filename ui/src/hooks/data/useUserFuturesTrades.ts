@@ -47,6 +47,10 @@ const fetchUserFuturesTradesAsync = async (address: `0x${string}`) => {
       tradePrice: BigInt(trade.tradePrice),
       tradeQuantity: trade.tradeQuantity,
       tradingFee: BigInt(trade.tradingFee),
+      isLiquidation: trade.isLiquidation,
+      liquidator: trade.liquidator,
+      liquidationFee:
+        trade.liquidationFee != null ? BigInt(trade.liquidationFee) : null,
     })),
   };
 
@@ -76,6 +80,9 @@ export type UserFuturesTrade = {
   tradePrice: bigint;
   tradeQuantity: number;
   tradingFee: bigint;
+  isLiquidation: boolean;
+  liquidator: string | null;
+  liquidationFee: bigint | null;
 };
 
 type UserFuturesTradesResponse = {
@@ -94,5 +101,8 @@ type UserFuturesTradesResponse = {
     tradePrice: string;
     tradeQuantity: number;
     tradingFee: string;
+    isLiquidation: boolean;
+    liquidator: string | null;
+    liquidationFee: string | null;
   }[];
 };

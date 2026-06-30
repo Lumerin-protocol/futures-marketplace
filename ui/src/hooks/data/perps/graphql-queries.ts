@@ -161,6 +161,7 @@ export const UserPositionSessionsQuery = gql`
       closePrice
       entryPrice
       closedQuantity
+      liquidatedQuantity
       fundingFees
       id
       lastTradeAt
@@ -205,6 +206,9 @@ export const UserTradesQuery = gql`
       tradePrice
       tradeQuantity
       tradingFee
+      isLiquidation
+      liquidator
+      liquidationFee
     }
   }
 `

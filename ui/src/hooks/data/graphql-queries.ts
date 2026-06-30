@@ -54,6 +54,7 @@ export const PositionsBookQuery = gql`
     positionSessions(where: { user: $address, netQuantity_not: 0 }) {
       closePrice
       closedQuantity
+      liquidatedQuantity
       deliveryAt
       entryPrice
       id
@@ -198,6 +199,7 @@ export const HistoricalPositionsQuery = gql`
     ) {
       closePrice
       closedQuantity
+      liquidatedQuantity
       deliveryAt
       entryPrice
       id
@@ -270,6 +272,14 @@ export const HistoricalOrdersQuery = gql`
       status
       transactionHash
       updatedAt
+      # Liquidated units of this aggregate order. The aggregate Order.status has
+      # no LIQUIDATED state (it lands in CANCELLED/PARTIALLY_FILLED); liquidation
+      # lives on the per-unit OrderEntry, so detect it via these entries.
+      liquidatedEntries: entries(where: { status: LIQUIDATED }) {
+        id
+        liquidator
+        liquidationFee
+      }
     }
     _meta {
       block {
@@ -329,6 +339,9 @@ export const UserFuturesTradesQuery = gql`
       tradePrice
       tradeQuantity
       tradingFee
+      isLiquidation
+      liquidator
+      liquidationFee
     }
   }
 `;

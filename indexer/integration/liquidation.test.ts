@@ -138,6 +138,52 @@ describe("liquidatePosition: Lot closed with LIQUIDATION, seller netQty=0", () =
       BigInt(String(sellerUser.realizedPnl)) < 0n,
       `seller User.realizedPnl must be negative after liquidation: got ${sellerUser.realizedPnl}`,
     );
+
+    // The forced close is modeled as a flagged Trade (single source of truth):
+    // the closing Trade for the liquidated seller in the liquidation tx must
+    // carry isLiquidation + liquidator + liquidationFee, mirroring the on-chain
+    // LotLiquidated event.
+    let sellerTrade: EntityFields | undefined;
+    for (const t of snap.saved("Trade")) {
+      if (
+        t.user === sellerAddr &&
+        String(t.transactionHash).toLowerCase() === liqTx.toLowerCase()
+      ) {
+        sellerTrade = t;
+      }
+    }
+    assert.ok(
+      sellerTrade,
+      "a closing Trade must exist for the liquidated seller in the liquidation tx",
+    );
+    assert.equal(
+      sellerTrade.isLiquidation,
+      true,
+      "closing Trade.isLiquidation must be true on a LIQUIDATION close",
+    );
+    assert.equal(
+      String(sellerTrade.liquidator).toLowerCase(),
+      validatorAddr,
+      "Trade.liquidator must be the keeper/validator from LotLiquidated",
+    );
+    assert.equal(
+      String(sellerTrade.liquidationFee),
+      String(lotLiquidated.args.fee),
+      "Trade.liquidationFee must mirror the on-chain LotLiquidated.fee",
+    );
+
+    // Denormalized liquidation qty on the closing PositionSession (what the
+    // Positions / Position History views read; no nested trade fetch needed).
+    const sellerSession = snap.entity(
+      "PositionSession",
+      String(sellerTrade.positionSession),
+    );
+    assert.ok(sellerSession, "the closing PositionSession must exist");
+    assert.equal(
+      String(sellerSession.liquidatedQuantity),
+      "1",
+      "PositionSession.liquidatedQuantity must equal abs(closed qty) = 1",
+    );
   });
 });
 

@@ -37,6 +37,7 @@ const fetchUserPositionSessionsAsync = async (
       closePrice: session.closePrice ? BigInt(session.closePrice) : null,
       entryPrice: BigInt(session.entryPrice),
       closedQuantity: BigInt(session.closedQuantity),
+      liquidatedQuantity: BigInt(session.liquidatedQuantity),
       fundingFees: BigInt(session.fundingFees),
       id: session.id,
       lastTradeAt: session.lastTradeAt,
@@ -75,6 +76,7 @@ export type PositionSession = {
   closePrice: bigint | null;
   entryPrice: bigint;
   closedQuantity: bigint;
+  liquidatedQuantity: bigint;
   fundingFees: bigint;
   id: string;
   lastTradeAt: string;
@@ -108,6 +110,7 @@ type UserPositionSessionsResponse = {
     closePrice: string | null;
     entryPrice: string;
     closedQuantity: string;
+    liquidatedQuantity: string;
     fundingFees: string;
     id: string;
     lastTradeAt: string;
