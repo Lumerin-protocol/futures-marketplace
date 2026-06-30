@@ -959,7 +959,7 @@ export const PlaceOrderWidget = ({
                   </PriceButton>
                 </PriceInputContainer>
                 <PriceHint>
-                  <span>ⓘ</span> Your order must match an existing opposite order at the exact same price.
+                  <span>ⓘ</span> Orders are matched only at the exact same price. Unmatched orders remain open in the order book.
                 </PriceHint>
               </InputGroup>
             )}
