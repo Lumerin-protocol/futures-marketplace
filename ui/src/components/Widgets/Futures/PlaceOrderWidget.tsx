@@ -958,9 +958,11 @@ export const PlaceOrderWidget = ({
                     +
                   </PriceButton>
                 </PriceInputContainer>
-                <PriceHint>
-                  <span>ⓘ</span> Orders are matched only at the exact same price. Unmatched orders remain open in the order book.
-                </PriceHint>
+                {contractMode !== "perpetual" && (
+                  <PriceHint>
+                    <span>ⓘ</span> Orders are matched only at the exact same price. Unmatched orders remain open in the order book.
+                  </PriceHint>
+                )}
               </InputGroup>
             )}
 
