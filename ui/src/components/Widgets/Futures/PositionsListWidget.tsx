@@ -292,11 +292,9 @@ export const PositionsListWidget = ({
             <tr>
               <th>Contract Expiration</th>
               <th>Side</th>
-              <th>Status</th>
               <th>Price (USDC)</th>
               <th>Quantity</th>
               <th>Margin</th>
-              <th>Settlement Price (USDC)</th>
               <th>Unrealized PnL (USDC)</th>
               <th>Time</th>
               <th>Action</th>
@@ -311,9 +309,6 @@ export const PositionsListWidget = ({
                   const matured = isMatured(groupedPosition.deliveryAt);
                   const settlementPrice = groupedPosition.settlementPrice;
                   const pricePinned = settlementPrice !== null;
-                  // Status: Open while live; once matured it awaits cash settlement
-                  // (optionally with the price already pinned).
-                  const status = !matured ? "Open" : "Awaiting settlement";
                   // PnL freezes at the pinned settlement price the moment it's recorded.
                   const { pnl, percentage } = calculatePnL(
                     groupedPosition.pricePerDay,
@@ -325,7 +320,7 @@ export const PositionsListWidget = ({
                   const isRowClaiming = claimingDeliveryAt === groupedPosition.deliveryAt;
                   return (
                     <>
-                      <td><DateTimeCell timestamp={groupedPosition.deliveryAt} /></td>
+                      <td style={matured ? { color: "#EF4444" } : undefined}><DateTimeCell timestamp={groupedPosition.deliveryAt} /></td>
                       <td>
                         <SideCell>
                           <TypeBadge $type={groupedPosition.positionType}>{groupedPosition.positionType}</TypeBadge>
@@ -344,9 +339,6 @@ export const PositionsListWidget = ({
                           )}
                         </SideCell>
                       </td>
-                      <td>
-                        <StatusBadge $status={status}>{status}</StatusBadge>
-                      </td>
                       <td>{formatPrice(groupedPosition.pricePerDay)}</td>
                       <td>{Math.abs(groupedPosition.netQuantity)}</td>
                       <td>
@@ -356,15 +348,6 @@ export const PositionsListWidget = ({
                             groupedPosition.amount,
                             groupedPosition.positionType,
                           ),
-                        )}
-                      </td>
-                      <td>
-                        {pricePinned ? (
-                          formatPrice(settlementPrice)
-                        ) : matured ? (
-                          <span style={{ color: tokens.text.muted }}>Pending</span>
-                        ) : (
-                          <span style={{ color: tokens.text.muted }}>—</span>
                         )}
                       </td>
                       <td>
@@ -404,7 +387,7 @@ export const PositionsListWidget = ({
                                   onClick={() => handleClaim(groupedPosition.deliveryAt)}
                                   disabled={isSettling && isRowClaiming}
                                 >
-                                  {isRowClaiming ? "Claiming…" : "Claim"}
+                                  {isRowClaiming ? "Claiming…" : <><span>Claim</span><ClaimHintIcon>?</ClaimHintIcon></>}
                                 </ClaimButton>
                               </span>
                             </Tooltip>
@@ -538,26 +521,6 @@ const PnLCell = styled("span")<{ $isPositive: boolean }>`
   font-weight: 600;
 `;
 
-const StatusBadge = styled("span")<{ $status: string }>`
-  display: inline-block;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  background-color: ${(props) => {
-    switch (props.$status) {
-      case "Open":
-        return tokens.trading.longRowBg;
-      case "Awaiting settlement":
-        return tokens.trading.shortRowBg;
-      case "Closed":
-        return tokens.trading.neutralRowBg;
-      default:
-        return tokens.trading.neutralRowBg;
-    }
-  }};
-  color: ${(props) => getStatusColor(props.$status)};
-`;
 
 const ActionButtons = styled("div")`
   display: flex;
@@ -593,8 +556,10 @@ const CloseButton = styled("button")`
 `;
 
 const ClaimButton = styled("button")`
+  display: inline-flex;
+  align-items: center;
   padding: 0.5rem 0.875rem;
-  background: ${tokens.trading.long};
+  background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};
   border: none;
   border-radius: 6px;
@@ -604,8 +569,8 @@ const ClaimButton = styled("button")`
   transition: background-color 0.2s ease, transform 0.1s ease;
 
   &:hover:not(:disabled) {
+    background: ${tokens.neutralButton.hover};
     transform: translateY(-1px);
-    filter: brightness(1.05);
   }
 
   &:active:not(:disabled) {
@@ -617,6 +582,22 @@ const ClaimButton = styled("button")`
     cursor: not-allowed;
     opacity: 0.6;
   }
+`;
+
+const ClaimHintIcon = styled("span")`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 5px;
+  vertical-align: middle;
+  opacity: 0.75;
 `;
 
 const ClaimErrorText = styled("span")`
@@ -663,16 +644,3 @@ const EmptyState = styled("div")`
   }
 `;
 
-// Helper function for status color
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case "Open":
-      return tokens.trading.long;
-    case "Awaiting settlement":
-      return tokens.trading.short;
-    case "Closed":
-      return tokens.text.muted;
-    default:
-      return tokens.text.muted;
-  }
-};

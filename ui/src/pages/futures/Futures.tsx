@@ -62,13 +62,19 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     navigate(newPath, { replace: true });
   }, [navigate]);
 
-  // Track account changes and reload page when account switches
+  // Reload the page only when the user genuinely switches to a different wallet
+  // account. `address` from useAccount() flickers undefined <-> 0x... while
+  // WalletConnect is connecting/reconnecting, so we ignore falsy values and
+  // only react to a transition between two distinct defined addresses.
   useEffect(() => {
+    if (!address) return;
+    const normalized = address.toLowerCase();
     if (previousAddressRef.current === undefined) {
-      previousAddressRef.current = address;
+      previousAddressRef.current = normalized;
       return;
     }
-    if (previousAddressRef.current !== address) {
+    if (previousAddressRef.current !== normalized) {
+      previousAddressRef.current = normalized;
       window.location.reload();
     }
   }, [address]);
@@ -374,6 +380,8 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
             btcPriceData={btcPriceQuery.data || []}
             isLoading={hashrateQuery.isLoading}
             isBtcPriceLoading={btcPriceQuery.isLoading}
+            isFetching={hashrateQuery.isFetching}
+            isBtcPriceFetching={btcPriceQuery.isFetching}
             marketPrice={marketPrice}
             marketPriceFetchedAt={marketPriceFetchedAt}
             entryPrice={openPositionEntryPrice}

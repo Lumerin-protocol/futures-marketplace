@@ -1,5 +1,5 @@
 import { graphqlRequest } from "./graphql";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { backgroundRefetchOpts } from "./config";
 import { BtcPriceIndexQuery, AggregatedBtcPriceIndexQuery } from "./graphql-queries";
 import type { TimePeriod } from "./useHashRateIndexData";
@@ -56,6 +56,9 @@ export const useBtcPriceIndexData = (props?: { refetch?: boolean; timePeriod?: T
   const query = useQuery({
     queryKey: [BTC_PRICE_INDEX_QK, timePeriod],
     queryFn: () => fetchBtcPriceIndexData(timePeriod),
+    // Keep showing the previous period's data while the new period loads
+    // to avoid a brief empty/"no data" flash when switching time periods.
+    placeholderData: keepPreviousData,
     ...(props?.refetch ? backgroundRefetchOpts : {}),
   });
 
@@ -100,11 +103,14 @@ async function fetchDayBtcPriceIndex() {
     }
   }
 
-  const seed = (await loadBtcUsdsSeed()) as BtcPriceIndexItem[];
-  const seedForRange = seed.filter((item) => BigInt(item.timestamp) >= startMicros);
-  allIndexes = mergeById(allIndexes, seedForRange).filter(
-    (item) => BigInt(item.timestamp) >= startMicros,
-  );
+  if (process.env.REACT_APP_USE_SEED_DATA === "true") {
+    const seed = (await loadBtcUsdsSeed()) as BtcPriceIndexItem[];
+    const seedForRange = seed.filter((item) => BigInt(item.timestamp) >= startMicros);
+    allIndexes = mergeById(allIndexes, seedForRange).filter(
+      (item) => BigInt(item.timestamp) >= startMicros,
+    );
+  }
+  allIndexes = allIndexes.filter((item) => BigInt(item.timestamp) >= startMicros);
   allIndexes.sort((a, b) => Number(BigInt(b.timestamp) - BigInt(a.timestamp)));
 
   const data = allIndexes.map((item) => {
@@ -164,12 +170,14 @@ async function fetchAggregatedBtcPriceIndex(timePeriod: "week" | "month") {
     }
   }
 
-  const seed = (await (interval === "hour"
-    ? loadBtcUsdCandlesHourSeed()
-    : loadBtcUsdCandlesDaySeed())) as AggregatedBtcPriceIndexItem[];
   const startMicros = BigInt(startTimestamp);
-  const seedForRange = seed.filter((item) => BigInt(item.timestamp) >= startMicros);
-  allCandles = mergeById(allCandles, seedForRange);
+  if (process.env.REACT_APP_USE_SEED_DATA === "true") {
+    const seed = (await (interval === "hour"
+      ? loadBtcUsdCandlesHourSeed()
+      : loadBtcUsdCandlesDaySeed())) as AggregatedBtcPriceIndexItem[];
+    const seedForRange = seed.filter((item) => BigInt(item.timestamp) >= startMicros);
+    allCandles = mergeById(allCandles, seedForRange);
+  }
   allCandles.sort((a, b) => Number(BigInt(b.timestamp) - BigInt(a.timestamp)));
 
   const data = allCandles.map((item) => {

@@ -11,7 +11,7 @@ import { useAccount } from "wagmi";
 import type { ParticipantOrder, Participant } from "../../hooks/data/getUserFuturesOrders";
 import styled from "@mui/material/styles/styled";
 import { tokens } from "../../styles/tokens";
-import { handleNumericDecimalInput } from "./Shared/AmountInputForm";
+import { handleNumericDecimalInput, handleNumericIntegerInput } from "./Shared/AmountInputForm";
 import { getMinMarginForPositionManual } from "../../hooks/data/getMinMarginForPositionManual";
 import { useMakerTakerFees } from "../../hooks/data/useMakerTakerFees";
 import type { AccountBalance, ContractMode } from "../../types/types";
@@ -410,23 +410,24 @@ const ModifyInputForm = memo<{
       <InputGroup>
         <label>Quantity</label>
         <input
-          type="number"
+          type="text"
           value={quantityController.field.value}
           onChange={(e) => {
-            const value = e.target.value;
-            if (value === "") {
-              quantityController.field.onChange(0);
+            const digits = e.target.value.replace(/[^0-9]/g, "");
+            if (digits === "") {
+              // Leave the field empty so the placeholder ("1") shows instead of "0".
+              quantityController.field.onChange("");
             } else {
-              const numValue = parseInt(value, 10);
+              const numValue = parseInt(digits, 10);
               if (!isNaN(numValue) && numValue >= 0 && numValue <= 127) {
                 quantityController.field.onChange(numValue);
               }
             }
           }}
+          onBeforeInput={handleNumericIntegerInput}
           onBlur={quantityController.field.onBlur}
           name={quantityController.field.name}
-          min="1"
-          max="127"
+          inputMode="numeric"
           placeholder="1"
         />
         {quantityController.fieldState.error && <ErrorText>{quantityController.fieldState.error.message}</ErrorText>}

@@ -229,8 +229,8 @@ const FuturesTradesTable = ({ trades, isLoading, visibleCount, onLoadMore }: Fut
         <thead>
           <tr>
             <th>Time</th>
-            <th>Side</th>
             <th>Contract Expiration</th>
+            <th>Side</th>
             <th>Price (USDC)</th>
             <th>Quantity</th>
             <th>Trading Fee</th>
@@ -263,6 +263,9 @@ const FuturesTradesTable = ({ trades, isLoading, visibleCount, onLoadMore }: Fut
                 </td>
                 <td>
                   <DateTimeCell timestamp={trade.deliveryAt} />
+                </td>
+                <td>
+                  <TypeBadge $type={isLong ? "Long" : "Short"}>{isLong ? "Long" : "Short"}</TypeBadge>
                 </td>
                 <td>{formatPrice(trade.tradePrice)}</td>
                 <td>{Math.abs(trade.tradeQuantity)}</td>

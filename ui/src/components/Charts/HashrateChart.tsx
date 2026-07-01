@@ -5,6 +5,7 @@ import styled from "@mui/material/styles/styled";
 import type { TimePeriod } from "../../hooks/data/useHashRateIndexData";
 import { tokens } from "../../styles/tokens";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
+import { Spinner } from "../Spinner.styled";
 
 const PeriodSwitch = styled("div")`
   display: flex;
@@ -69,6 +70,8 @@ interface HashrateChartProps {
   }>;
   isLoading?: boolean;
   isBtcPriceLoading?: boolean;
+  isFetching?: boolean;
+  isBtcPriceFetching?: boolean;
   marketPrice?: bigint | null;
   marketPriceFetchedAt?: Date;
   entryPrice?: number | null;
@@ -82,6 +85,8 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   btcPriceData,
   isLoading = false,
   isBtcPriceLoading = false,
+  isFetching = false,
+  isBtcPriceFetching = false,
   marketPrice,
   marketPriceFetchedAt,
   entryPrice,
@@ -402,11 +407,12 @@ export const HashrateChart: FC<HashrateChartProps> = ({
     },
   };
 
-  if (isLoading && isBtcPriceLoading) {
+  if ((isLoading || isBtcPriceLoading) && (!data || data.length === 0)) {
     return (
       <div
         style={{
           display: "flex",
+          flexDirection: "column",
           justifyContent: "center",
           alignItems: "center",
           height: "400px",
@@ -414,7 +420,8 @@ export const HashrateChart: FC<HashrateChartProps> = ({
           fontSize: "18px",
         }}
       >
-        Loading chart data...
+        <Spinner fontSize="0.35em" />
+        <div>Loading chart data...</div>
       </div>
     );
   }
@@ -452,8 +459,30 @@ export const HashrateChart: FC<HashrateChartProps> = ({
           </PeriodButton>
         </PeriodSwitch>
       </ChartControls>
-      <div style={{ width: "100%", height: "450px", paddingTop: "1rem" }}>
+      <div style={{ position: "relative", width: "100%", height: "450px", paddingTop: "1rem" }}>
         <HighchartsReact highcharts={Highcharts} options={options} containerProps={{ style: { height: "100%" } }} />
+        {(isFetching || isBtcPriceFetching) && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: "0.25rem",
+              background: "rgba(15, 17, 23, 0.55)",
+              backdropFilter: "blur(1px)",
+              color: tokens.text.primary,
+              fontSize: "14px",
+              pointerEvents: "none",
+              zIndex: 5,
+            }}
+          >
+            <Spinner fontSize="0.3em" />
+            <div>Updating chart…</div>
+          </div>
+        )}
       </div>
     </>
   );

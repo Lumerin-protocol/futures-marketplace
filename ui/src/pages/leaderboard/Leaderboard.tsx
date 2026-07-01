@@ -46,9 +46,16 @@ export const Leaderboard: FC = () => {
   const { address, isConnected } = useAccount();
   const { wMaker, wTaker, weightScale } = usePointsHookWeights();
 
-  const { data: leaderboard = [], isLoading: isLeaderboardLoading } = usePointsLeaderboard(20);
+  const { data: rawLeaderboard = [], isLoading: isLeaderboardLoading } = usePointsLeaderboard(20);
   const { data: userPoints, isLoading: isUserPointsLoading } = useUserPoints(address);
   const { data: pointsMints = [], isLoading: isMintsLoading } = useUserPointsMints(address);
+
+  // Exclude the market maker wallet from the leaderboard (case-insensitive).
+  const leaderboard = useMemo(() => {
+    const marketMaker = process.env.REACT_APP_MARKET_MAKER_ADDRESS?.toLowerCase();
+    if (!marketMaker) return rawLeaderboard;
+    return rawLeaderboard.filter((entry) => entry.address.toLowerCase() !== marketMaker);
+  }, [rawLeaderboard]);
 
   // Rank is derived client-side from the top-20 ordering (the schema has no
   // stored rank). Wallets outside the top 20 are shown as "Unranked".

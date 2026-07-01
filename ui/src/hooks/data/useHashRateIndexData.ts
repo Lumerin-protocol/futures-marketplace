@@ -1,5 +1,5 @@
 import { graphqlRequest } from "./graphql";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { backgroundRefetchOpts } from "./config";
 import { HashrateIndexQuery, AggregatedHashrateIndexQuery } from "./graphql-queries";
 
@@ -60,6 +60,9 @@ export const useHashrateIndexData = (props?: { refetch?: boolean; timePeriod?: T
   const query = useQuery({
     queryKey: [HASHRATE_INDEX_QK, timePeriod],
     queryFn: () => fetchHashrateIndexData(timePeriod),
+    // Keep showing the previous period's data while the new period loads
+    // to avoid a brief empty/"no data" flash when switching time periods.
+    placeholderData: keepPreviousData,
     ...(props?.refetch ? backgroundRefetchOpts : {}),
   });
 
@@ -106,11 +109,14 @@ async function fetchDayHashrateIndex() {
     }
   }
 
-  const seed = (await loadHashpriceUsdsSeed()) as HashrateIndexItem[];
-  const seedForRange = seed.filter((item) => BigInt(item.timestamp) >= startMicros);
-  allIndexes = mergeById(allIndexes, seedForRange).filter(
-    (item) => BigInt(item.timestamp) >= startMicros,
-  );
+  if (process.env.REACT_APP_USE_SEED_DATA === "true") {
+    const seed = (await loadHashpriceUsdsSeed()) as HashrateIndexItem[];
+    const seedForRange = seed.filter((item) => BigInt(item.timestamp) >= startMicros);
+    allIndexes = mergeById(allIndexes, seedForRange).filter(
+      (item) => BigInt(item.timestamp) >= startMicros,
+    );
+  }
+  allIndexes = allIndexes.filter((item) => BigInt(item.timestamp) >= startMicros);
   allIndexes.sort((a, b) => Number(BigInt(b.timestamp) - BigInt(a.timestamp)));
 
   const data = allIndexes.map((item) => {
@@ -169,12 +175,14 @@ async function fetchAggregatedHashrateIndex(timePeriod: "week" | "month") {
     }
   }
 
-  const seed = (await (interval === "hour"
-    ? loadHashpriceUsdCandlesHourSeed()
-    : loadHashpriceUsdCandlesDaySeed())) as AggregatedHashrateIndexItem[];
   const startMicros = BigInt(startTimestamp);
-  const seedForRange = seed.filter((item) => BigInt(item.timestamp) >= startMicros);
-  allCandles = mergeById(allCandles, seedForRange);
+  if (process.env.REACT_APP_USE_SEED_DATA === "true") {
+    const seed = (await (interval === "hour"
+      ? loadHashpriceUsdCandlesHourSeed()
+      : loadHashpriceUsdCandlesDaySeed())) as AggregatedHashrateIndexItem[];
+    const seedForRange = seed.filter((item) => BigInt(item.timestamp) >= startMicros);
+    allCandles = mergeById(allCandles, seedForRange);
+  }
   allCandles.sort((a, b) => Number(BigInt(b.timestamp) - BigInt(a.timestamp)));
 
   const data = allCandles.map((item) => {

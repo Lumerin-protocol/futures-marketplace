@@ -131,7 +131,7 @@ export const TradingHeader = ({
                   <Divider />
                   <StatItem>
                     <StatValue>{settlementPrice}</StatValue>
-                    <StatLabel>Settlement Price (USDC)</StatLabel>
+                    <StatLabel>Exit Price (USDC)</StatLabel>
                   </StatItem>
                 </>
               )}

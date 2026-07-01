@@ -1,6 +1,7 @@
 import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
-import { useMemo } from "react";
+import Tooltip from "@mui/material/Tooltip";
+import { useMemo, useState, type ReactNode } from "react";
 import { formatHashrateTHPS, HASHRATE_TH_SCALE_NUM, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { useGetDeliveryDates } from "../../../hooks/data/useGetDeliveryDates";
 import { useFuturesContractConstants } from "../../../hooks/data/useFuturesContractConstants";
@@ -57,10 +58,9 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
 
   if (!contractSpecs && contractMode === "futures") {
     return (
-      <ModalContainer>
-        <h2>Contract Specifications</h2>
+      <SpecsShell>
         <LoadingText>Loading contract specifications...</LoadingText>
-      </ModalContainer>
+      </SpecsShell>
     );
   }
   if (contractMode === "perpetual") {
@@ -70,10 +70,9 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
   // For futures mode, check if contractSpecs exist
   if (!contractSpecs) {
     return (
-      <ModalContainer>
-        <h2>Contract Specifications</h2>
+      <SpecsShell>
         <LoadingText>Loading contract specifications...</LoadingText>
-      </ModalContainer>
+      </SpecsShell>
     );
   }
 
@@ -93,9 +92,7 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
       : null;
 
   return (
-    <ModalContainer>
-      <h2>Contract Specifications</h2>
-
+    <SpecsShell>
       {/* CONTRACT SPECIFICATIONS */}
       <SpecSection>
         <SectionTitle>CONTRACT SPECIFICATIONS</SectionTitle>
@@ -119,7 +116,7 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
 
         <SpecItem>
           <SpecLabel>Contract Address</SpecLabel>
-          <SpecValueMono>{contractAddress}</SpecValueMono>
+          {contractAddress ? <AddressDisplay address={contractAddress} /> : <SpecValue>—</SpecValue>}
         </SpecItem>
       </SpecSection>
 
@@ -127,7 +124,7 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
       <SpecSection>
         <SectionTitle>CONTRACT FREQUENCY</SectionTitle>
         <SpecItem>
-          <SpecLabel>Available Expirations</SpecLabel>
+          <SpecLabel>Forward Expirations</SpecLabel>
           <SpecValue>
             {contractConstants.futureDeliveryDatesCount ?? "..."} contract
             {contractConstants.futureDeliveryDatesCount !== 1 ? "s" : ""}
@@ -168,7 +165,7 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
         </SpecItem>
 
         <SpecItem>
-          <SpecLabel>Delivery Duration</SpecLabel>
+          <SpecLabel>Contract Multiplier</SpecLabel>
           <SpecValue>
             {contractSpecs.deliveryDurationDays} day{contractSpecs.deliveryDurationDays !== 1 ? "s" : ""}
           </SpecValue>
@@ -206,7 +203,71 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
           </SpecLink>
         </SpecItem>
       </SpecSection>
-    </ModalContainer>
+    </SpecsShell>
+  );
+};
+
+// Trim an address to `0x12345....67890` form (7 leading chars, 5 trailing).
+const trimAddress = (address: string) =>
+  address.length > 12 ? `${address.slice(0, 7)}....${address.slice(-5)}` : address;
+
+const CopyIconSvg = () => (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </svg>
+);
+
+const CheckIconSvg = () => (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
+);
+
+const AddressDisplay = ({ address }: { address: string }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard write can fail (e.g. insecure context); silently ignore.
+    }
+  };
+
+  return (
+    <AddressWrapper>
+      <Tooltip title={address} arrow>
+        <AddressMono>{trimAddress(address)}</AddressMono>
+      </Tooltip>
+      <Tooltip title={copied ? "Copied!" : "Copy to clipboard"} arrow>
+        <CopyButton type="button" onClick={handleCopy} aria-label="Copy address to clipboard">
+          {copied ? <CheckIconSvg /> : <CopyIconSvg />}
+        </CopyButton>
+      </Tooltip>
+    </AddressWrapper>
   );
 };
 
@@ -247,17 +308,14 @@ const PerpetualStatistics = () => {
 
   if (!perpsCollection) {
     return (
-      <ModalContainer>
-        <h2>Contract Specifications</h2>
+      <SpecsShell>
         <LoadingText>Loading contract specifications...</LoadingText>
-      </ModalContainer>
+      </SpecsShell>
     );
   }
 
   return (
-    <ModalContainer>
-      <h2>Contract Specifications</h2>
-
+    <SpecsShell>
       {/* CONTRACT SPECIFICATIONS */}
       <SpecSection>
         <SectionTitle>CONTRACT SPECIFICATIONS</SectionTitle>
@@ -292,7 +350,7 @@ const PerpetualStatistics = () => {
         {contractAddress && (
           <SpecItem>
             <SpecLabel>Contract Address</SpecLabel>
-            <SpecValueMono>{contractAddress}</SpecValueMono>
+            <AddressDisplay address={contractAddress} />
           </SpecItem>
         )}
       </SpecSection>
@@ -401,13 +459,29 @@ const PerpetualStatistics = () => {
           </SpecItem>
         </SpecSection>
       )}
-    </ModalContainer>
+    </SpecsShell>
   );
 };
 
+// Pins the "Contract Specifications" heading while only the body scrolls.
+const SpecsShell = ({ children }: { children: ReactNode }) => (
+  <ModalContainer>
+    <ModalHeader>
+      <h2>Contract Specifications</h2>
+    </ModalHeader>
+    <ScrollBody>{children}</ScrollBody>
+  </ModalContainer>
+);
+
 const ModalContainer = styled("div")`
   max-height: 70vh;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+`;
+
+const ModalHeader = styled("div")`
+  flex-shrink: 0;
   padding: 0 1rem;
 
   h2 {
@@ -416,6 +490,13 @@ const ModalContainer = styled("div")`
     color: ${tokens.text.onDark};
     margin-bottom: 1.5rem;
   }
+`;
+
+const ScrollBody = styled("div")`
+  flex: 1;
+  overflow-y: auto;
+  /* Extra right padding so content doesn't sit under the scrollbar when it appears. */
+  padding: 0 1.75rem 0 1rem;
 `;
 
 const LoadingText = styled("div")`
@@ -466,11 +547,37 @@ const SpecValue = styled("span")`
   margin-left: 1rem;
 `;
 
-const SpecValueMono = styled(SpecValue)`
+const AddressWrapper = styled("div")`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: 1rem;
+`;
+
+const AddressMono = styled("span")`
   font-family: monospace;
   font-size: 0.75rem;
-  word-break: break-all;
-  max-width: 280px;
+  font-weight: 500;
+  color: ${tokens.text.onDark};
+  cursor: default;
+`;
+
+const CopyButton = styled("button")`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.15rem;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: ${tokens.text.secondary};
+  cursor: pointer;
+  transition: color 0.2s ease, background-color 0.2s ease;
+
+  &:hover {
+    color: ${tokens.text.onDark};
+    background-color: ${tokens.overlay.white10};
+  }
 `;
 
 const SpecLink = styled("a")`
