@@ -7,7 +7,6 @@ import {
 } from "../../generated/Futures/Futures";
 import { Lot, Order, OrderEntry, PositionSession, Trade, User } from "../../generated/schema";
 import { LotCloseReason, LotStatus } from "../enums";
-import { absI32 } from "../lib";
 import {
   applyExitFill,
   applyOpenFill,
@@ -17,11 +16,11 @@ import {
 import {
   getOrCreateFutures,
   getOrCreateFuturesExpiration,
+  getOrCreatePointer,
   getOrCreateUser,
-  loadPendingLiquidationTrade,
   markLiquidationTx,
-  recordPendingLiquidationTrade,
 } from "../internal/store";
+import { tradeAggregateId } from "../ids";
 import { stringifyParameters } from "../internal/utils";
 
 export function handleLotCreated(event: LotCreated): void {
@@ -272,7 +271,7 @@ export function handleLotClosed(event: LotClosed): void {
     buyerFee = totalFee.minus(sellerFee);
   }
 
-  const sellerTradeId = applyExitFill(
+  applyExitFill(
     seller,
     buyer.id,
     1,
@@ -286,7 +285,7 @@ export function handleLotClosed(event: LotClosed): void {
     event.logIndex,
     0,
   );
-  const buyerTradeId = applyExitFill(
+  applyExitFill(
     buyer,
     seller.id,
     -1,
@@ -300,16 +299,6 @@ export function handleLotClosed(event: LotClosed): void {
     event.logIndex,
     1,
   );
-
-  // LIQUIDATION closes fire BEFORE the same-tx `LotLiquidated`, which alone
-  // carries the liquidated participant + liquidator + fee. Stash both legs'
-  // closing Trades keyed by `txHash ++ user` so `handleLotLiquidated` can flag
-  // only the participant's Trade (the counterparty is merely cash-settled, not
-  // liquidated, so it must NOT be flagged).
-  if (closeReason == LotCloseReason.LIQUIDATION) {
-    recordPendingLiquidationTrade(event.transaction.hash, seller.id, sellerTradeId);
-    recordPendingLiquidationTrade(event.transaction.hash, buyer.id, buyerTradeId);
-  }
 
   flushFuturesCounters(futures);
   futures.lastUpdatedAt = event.block.timestamp;
@@ -331,14 +320,20 @@ export function handleLotLiquidated(event: LotLiquidated): void {
 
   // Flag the liquidated participant's closing Trade (modeled as a forced trade
   // against the market). The Trade + PositionSession were already created by
-  // the same-tx `LotClosed` legs (which ran first); we look up the participant's
-  // closing Trade via the transient ref keyed by `txHash ++ participant`.
-  const pendingTrade = loadPendingLiquidationTrade(
-    event.transaction.hash,
-    event.params.participant,
-  );
-  if (pendingTrade != null) {
-    const trade = Trade.load(pendingTrade.trade);
+  // the same-tx `LotClosed(LIQUIDATION)` leg (which ran first). Re-derive that
+  // Trade's (session-keyed) id from the participant's pointer: the session is
+  // still open (`currentSessionId`) on partial multi-leg closes, or was just
+  // closed (`lastClosedSessionId`) once the position went flat.
+  const pointer = getOrCreatePointer(event.params.participant, lot.deliveryAt);
+  let sessionId = pointer.currentSessionId;
+  if (sessionId.length == 0) sessionId = pointer.lastClosedSessionId;
+  if (sessionId.length > 0) {
+    const tradeId = tradeAggregateId(
+      event.transaction.hash,
+      event.params.participant,
+      sessionId,
+    );
+    const trade = Trade.load(tradeId);
     if (trade != null) {
       trade.isLiquidation = true;
       trade.liquidator = event.params.liquidator;
@@ -346,15 +341,28 @@ export function handleLotLiquidated(event: LotLiquidated): void {
       trade.save();
 
       // Denormalize the liquidated qty onto the closing session so the
-      // position-centric views don't need to fetch trades. The participant's
-      // Trade in this tx is the liquidation close, so |tradeQuantity| is the
-      // qty closed via liquidation.
+      // position-centric views don't need to fetch trades. Each `LotLiquidated`
+      // leg closes exactly one unit, so bump by 1 per event — NOT by the
+      // aggregate `trade.tradeQuantity`, which would over-count when several
+      // legs of the same session liquidate in one tx (a multicall batch).
       const session = PositionSession.load(trade.positionSession);
       if (session != null) {
-        session.liquidatedQuantity = session.liquidatedQuantity + absI32(trade.tradeQuantity);
+        session.liquidatedQuantity = session.liquidatedQuantity + 1;
         session.save();
       }
+    } else {
+      log.warning("LotLiquidated: closing Trade {} not found for participant {} (tx {})", [
+        tradeId.toHexString(),
+        event.params.participant.toHexString(),
+        event.transaction.hash.toHexString(),
+      ]);
     }
+  } else {
+    log.warning("LotLiquidated: no session pointer for participant {} deliveryAt {} (tx {})", [
+      event.params.participant.toHexString(),
+      lot.deliveryAt.toString(),
+      event.transaction.hash.toHexString(),
+    ]);
   }
 
   if (markLiquidationTx(event.transaction.hash)) {

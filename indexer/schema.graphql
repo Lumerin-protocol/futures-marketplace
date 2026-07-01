@@ -301,17 +301,6 @@ type LiquidationTx @entity(immutable: true) {
   id: Bytes! # transaction hash
 }
 
-# Transient internal lookup. `LotClosed` (reason=LIQUIDATION) fires BEFORE the
-# same-tx `LotLiquidated`, and only `LotLiquidated` knows which side is the
-# liquidated participant. So `handleLotClosed` records each closed leg's Trade
-# here keyed by `txHash ++ user`, and the later `handleLotLiquidated` looks up
-# the participant's entry to flag that single Trade. Existence is incidental —
-# the entity just carries the Trade pointer across the two same-tx handlers.
-type PendingLiquidationTrade @entity(immutable: false) {
-  id: Bytes! # txHash ++ user address
-  trade: Trade!
-}
-
 # Bad debt event when a participant or the insurance fund cannot cover a loss.
 type BadDebtEvent @entity(immutable: true) {
   id: Bytes! # tx hash + log index
@@ -344,4 +333,6 @@ type UserDeliverySessionPointer @entity(immutable: false) {
   aggregatedEntryPrice: BigInt!
   "ID of the currently-OPEN PositionSession for this (user, deliveryAt). Empty string when flat."
   currentSessionId: String!
+  "ID of the most recently CLOSED PositionSession for this (user, deliveryAt). Empty string until the first close. Lets the same-tx `LotLiquidated` handler re-derive the (session-keyed) closing Trade id after the pointer has gone flat, without a transient lookup entity."
+  lastClosedSessionId: String!
 }

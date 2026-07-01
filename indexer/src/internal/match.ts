@@ -282,6 +282,11 @@ function handleFill(
   if (isNowFlat) {
     session.status = PositionSessionStatus.CLOSE;
     pointer.currentSessionId = "";
+    // Breadcrumb for the same-tx `LotLiquidated` handler: once the position
+    // goes flat the pointer no longer references the just-closed session, so
+    // record its id here to let `handleLotLiquidated` re-derive the
+    // (session-keyed) closing Trade id without a transient lookup entity.
+    pointer.lastClosedSessionId = session.id;
   }
 
   if (reducingExisting) {

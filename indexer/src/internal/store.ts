@@ -4,7 +4,6 @@ import {
   Futures,
   FuturesExpiration,
   LiquidationTx,
-  PendingLiquidationTrade,
   PriceLevel,
   User,
   UserDeliverySessionPointer,
@@ -172,31 +171,6 @@ export function markLiquidationTx(txHash: Bytes): boolean {
   return true;
 }
 
-/// Records the closing Trade for one leg of a LIQUIDATION-reason `LotClosed`,
-/// keyed by `txHash ++ user`, so the later same-tx `LotLiquidated` handler can
-/// flag the liquidated participant's Trade (the participant is only known on
-/// `LotLiquidated`, which fires after `LotClosed`).
-export function recordPendingLiquidationTrade(
-  txHash: Bytes,
-  user: Bytes,
-  tradeId: Bytes,
-): void {
-  const ref = new PendingLiquidationTrade(txHash.concat(user));
-  ref.trade = tradeId;
-  ref.save();
-}
-
-/// Loads the transient ref pointing at `participant`'s closing Trade for this
-/// tx's `LotClosed` legs. Null when the close wasn't a liquidation. Returns the
-/// entity (not the Bytes id) so callers null-check an entity reference — AS
-/// 0.19.23 crashes resolving `!=` overloads on a nullable `Bytes`.
-export function loadPendingLiquidationTrade(
-  txHash: Bytes,
-  participant: Bytes,
-): PendingLiquidationTrade | null {
-  return PendingLiquidationTrade.load(txHash.concat(participant));
-}
-
 /// Per-(user, deliveryAt) bookkeeping pointer: the running net qty, weighted
 /// entry price, and id of the currently-OPEN PositionSession (if any).
 /// Required because GraphQL has no Map<deliveryAt, …> support, so we cannot
@@ -214,6 +188,7 @@ export function getOrCreatePointer(
     pointer.netQuantity = 0;
     pointer.aggregatedEntryPrice = BigInt.zero();
     pointer.currentSessionId = "";
+    pointer.lastClosedSessionId = "";
   }
   return pointer;
 }
