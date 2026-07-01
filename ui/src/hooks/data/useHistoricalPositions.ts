@@ -27,6 +27,9 @@ export type HistoricalPosition = {
   /// Cumulative qty closed during the session's lifetime (mirrors
   /// `PositionSession.closedQuantity` on the indexer).
   closedQuantity: number;
+  /// Cumulative qty force-closed via liquidation during the session's lifetime
+  /// (mirrors `PositionSession.liquidatedQuantity`). 0 if never liquidated.
+  liquidatedQuantity: number;
   /// Peak signed net quantity reached during the session's lifetime
   /// (mirrors `PositionSession.maxQuantity` on the indexer). Positive for
   /// long sessions, negative for short sessions. Use `Math.abs` for display.
@@ -56,6 +59,7 @@ type HistoricalPositionsResponse = {
     entryPrice: string;
     closePrice: string;
     closedQuantity: number;
+    liquidatedQuantity: number;
     maxQuantity: number;
     openedAt: string;
     lastTradeAt: string;
@@ -128,6 +132,7 @@ const sessionToHistoricalPosition = (
     pnl: Number(session.realizedPnl),
     isLong,
     closedQuantity: session.closedQuantity,
+    liquidatedQuantity: session.liquidatedQuantity,
     maxQuantity: session.maxQuantity,
     isActive: false,
     closedAt: session.lastTradeAt,

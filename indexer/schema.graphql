@@ -178,6 +178,13 @@ type Trade @entity(immutable: false) {
   netQuantityAfter: Int!
   fillCount: Int!
 
+  "True when this Trade was a forced liquidation against the market."
+  isLiquidation: Boolean! # default false
+  "Keeper that triggered the liquidation; set only when isLiquidation."
+  liquidator: Bytes # nullable
+  "Fee paid to the liquidator; set only when isLiquidation."
+  liquidationFee: BigInt # nullable
+
   fills: [Fill!]! @derivedFrom(field: "trade")
 
   # Metadata
@@ -269,6 +276,8 @@ type PositionSession @entity(immutable: false) {
   netQuantity: Int!
   maxQuantity: Int! # max absolute qty reached during the session
   closedQuantity: Int! # cumulative qty closed
+  "Cumulative absolute quantity closed via liquidation in this session (default 0). 'Was liquidated' = liquidatedQuantity > 0."
+  liquidatedQuantity: Int! # default 0
   realizedPnl: BigInt!
   tradingFees: BigInt!
 
@@ -324,4 +333,6 @@ type UserDeliverySessionPointer @entity(immutable: false) {
   aggregatedEntryPrice: BigInt!
   "ID of the currently-OPEN PositionSession for this (user, deliveryAt). Empty string when flat."
   currentSessionId: String!
+  "ID of the most recently CLOSED PositionSession for this (user, deliveryAt). Empty string until the first close. Lets the same-tx `LotLiquidated` handler re-derive the (session-keyed) closing Trade id after the pointer has gone flat, without a transient lookup entity."
+  lastClosedSessionId: String!
 }

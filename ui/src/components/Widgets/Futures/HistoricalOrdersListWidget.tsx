@@ -4,6 +4,7 @@ import { SmallWidget } from "../../Cards/Cards.styled";
 import type { HistoricalOrder } from "../../../hooks/data/useHistoricalOrders";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { LiquidationChip, formatLiquidatedQty, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
 
 interface HistoricalOrdersListWidgetProps {
   orders: HistoricalOrder[];
@@ -27,6 +28,8 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
         return "Partially Filled";
       case "CANCELLED":
         return "Cancelled";
+      case "LIQUIDATED":
+        return "Liquidated";
       default:
         return status;
     }
@@ -44,6 +47,8 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
         return tokens.text.muted;
       case "CANCELLED":
         return tokens.trading.short;
+      case "LIQUIDATED":
+        return tokens.status.error;
       default:
         return tokens.text.muted;
     }
@@ -79,7 +84,10 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
           </thead>
           <tbody>
             {orders.map((order) => (
-              <TableRow key={order.id}>
+              <TableRow
+                key={order.id}
+                style={order.wasLiquidated ? { backgroundColor: LIQUIDATION_ROW_BG } : undefined}
+              >
                 <td><DateTimeCell timestamp={order.deliveryAt} /></td>
                 <td>
                   <TypeBadge $type={order.isBuy ? "Long" : "Short"}>
@@ -89,9 +97,23 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
                 <td>{formatPrice(order.pricePerDay)}</td>
                 <td>{order.originalQuantity}</td>
                 <td>
-                  <StatusBadge $status={order.status} $color={getStatusColor(order.status)}>
-                    {formatStatus(order.status)}
-                  </StatusBadge>
+                  {order.wasLiquidated ? (
+                    <LiquidationChip
+                      title={formatLiquidatedQty(
+                        order.liquidatedQuantity,
+                        order.originalQuantity - order.liquidatedQuantity,
+                      )}
+                    >
+                      {formatLiquidatedQty(
+                        order.liquidatedQuantity,
+                        order.originalQuantity - order.liquidatedQuantity,
+                      )}
+                    </LiquidationChip>
+                  ) : (
+                    <StatusBadge $status={order.status} $color={getStatusColor(order.status)}>
+                      {formatStatus(order.status)}
+                    </StatusBadge>
+                  )}
                 </td>
                 <td><DateTimeCell timestamp={order.timestamp} /></td>
                 <td>{order.closedAt ? <DateTimeCell timestamp={order.closedAt} /> : "-"}</td>

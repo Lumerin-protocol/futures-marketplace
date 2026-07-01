@@ -80,7 +80,7 @@ jobs:
 
       - name: Run unit tests
         working-directory: ./indexer
-        run: pnpm test
+        run: pnpm test:unit
 
       - name: Run integration tests
         working-directory: ./indexer

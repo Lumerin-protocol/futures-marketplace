@@ -19,6 +19,12 @@ export type HistoricalOrder = {
   originalQuantity: number;
   filledQuantity: number;
   cancelledQuantity: number;
+  /// True if any unit (OrderEntry) of this aggregate order was force-cancelled
+  /// by liquidation. The aggregate `status` can't express this (no LIQUIDATED
+  /// state), so it's derived from the order's LIQUIDATED entries.
+  wasLiquidated: boolean;
+  /// Count of liquidated units within this aggregate order.
+  liquidatedQuantity: number;
   participant: {
     address: `0x${string}`;
   };
@@ -49,6 +55,11 @@ type HistoricalOrdersResponse = {
     status: string;
     transactionHash: `0x${string}`;
     updatedAt: string;
+    liquidatedEntries: {
+      id: string;
+      liquidator: string | null;
+      liquidationFee: string | null;
+    }[];
   }[];
 };
 
@@ -87,6 +98,8 @@ const fetchHistoricalOrders = async (
     originalQuantity: order.originalQuantity,
     filledQuantity: order.filledQuantity,
     cancelledQuantity: order.cancelledQuantity,
+    wasLiquidated: order.liquidatedEntries.length > 0,
+    liquidatedQuantity: order.liquidatedEntries.length,
     participant: {
       address: order.user.id as `0x${string}`,
     },

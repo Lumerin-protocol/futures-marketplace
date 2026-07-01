@@ -188,6 +188,7 @@ export function getOrCreatePointer(
     pointer.netQuantity = 0;
     pointer.aggregatedEntryPrice = BigInt.zero();
     pointer.currentSessionId = "";
+    pointer.lastClosedSessionId = "";
   }
   return pointer;
 }

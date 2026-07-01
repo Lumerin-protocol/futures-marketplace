@@ -38,7 +38,7 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Target environment (dev=DEV, stg=STG, main=LMN/PROD)'
+        description: "Target environment (dev=DEV, stg=STG, main=LMN/PROD)"
         required: true
         type: choice
         options:
@@ -55,8 +55,8 @@ defaults:
     shell: bash
 
 permissions:
-  id-token: write   # Required for OIDC
-  contents: write   # Required for creating releases and tags
+  id-token: write # Required for OIDC
+  contents: write # Required for creating releases and tags
 
 env:
   SERVICE_NAME: futures-marketplace
@@ -85,7 +85,7 @@ jobs:
         uses: ./.github/actions/gen-tag
         with:
           component: ui
-          major_version: '3'
+          major_version: "3"
           environment_override: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || '' }}
 
   setup:
@@ -101,7 +101,7 @@ jobs:
       cloudfront_distribution: ${{ steps.get_deployment_config.outputs.cloudfront_distribution_id }}
       aws_region: ${{ steps.get_deployment_config.outputs.aws_region }}
       marketplace_url: ${{ steps.get_deployment_config.outputs.marketplace_url }}
-    
+
     steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -114,7 +114,7 @@ jobs:
         id: get_deployment_config
         run: |
           ENV="${{ needs.generate-tag.outputs.environment }}"
-          
+
           # Map environment to AWS secret suffix
           case $ENV in
             dev)
@@ -127,27 +127,27 @@ jobs:
               SECRET_NAME="futures-marketplace-secrets-v3-lmn"
               ;;
           esac
-          
+
           echo "📦 Retrieving deployment config from AWS Secrets Manager: ${SECRET_NAME}"
-          
+
           # Retrieve the secret
           SECRET_JSON=$(aws secretsmanager get-secret-value \
             --secret-id ${SECRET_NAME} \
             --query SecretString \
             --output text)
-          
+
           # Parse deployment configuration
           S3_BUCKET=$(echo $SECRET_JSON | jq -r '.deployment.s3_bucket')
           CF_DISTRO=$(echo $SECRET_JSON | jq -r '.deployment.cloudfront_distribution_id')
           MARKETPLACE_URL=$(echo $SECRET_JSON | jq -r '.deployment.marketplace_url')
           AWS_REGION=$(echo $SECRET_JSON | jq -r '.deployment.aws_region')
-          
+
           # Output for use in subsequent jobs
           echo "s3_bucket=${S3_BUCKET}" >> $GITHUB_OUTPUT
           echo "cloudfront_distribution_id=${CF_DISTRO}" >> $GITHUB_OUTPUT
           echo "marketplace_url=${MARKETPLACE_URL}" >> $GITHUB_OUTPUT
           echo "aws_region=${AWS_REGION}" >> $GITHUB_OUTPUT
-          
+
           echo "✅ Deployment Configuration:"
           echo "   S3 Bucket: ${S3_BUCKET}"
           echo "   CloudFront: ${CF_DISTRO}"
@@ -172,7 +172,7 @@ jobs:
       cloudfront_distribution: ${{ needs.setup.outputs.cloudfront_distribution }}
       aws_region: ${{ needs.setup.outputs.aws_region }}
       marketplace_url: ${{ needs.setup.outputs.marketplace_url }}
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -193,13 +193,16 @@ jobs:
 
       - name: Create .env file
         id: create_env
+        env:
+          VARS_JSON: ${{ toJSON(vars) }}
+          SECRETS_JSON: ${{ toJSON(secrets) }}
         run: |
           ENV="${{ needs.generate-tag.outputs.environment }}"
           VERSION="${{ needs.generate-tag.outputs.vtag }}"
-          
+
           echo "🔧 Creating .env file for ${ENV} environment"
           echo "📌 Version tag: ${VERSION}"
-          
+
           # Goldsky public subgraph URLs (org-level vars, no API key needed)
           case $ENV in
             dev)
@@ -221,46 +224,71 @@ jobs:
               POINTS_SUBGRAPH_URL="${{ vars.LMN_GS_POINTS }}"
               ;;
           esac
-          # Create .env file with environment-scoped variables
-          # GitHub Environments automatically scope secrets/vars to the environment
-          cat > ui/.env << EOF
-          REACT_APP_CHAIN_ID=${{ vars.REACT_APP_CHAIN_ID }}
-          REACT_APP_CLONE_FACTORY=${{ vars.REACT_APP_CLONE_FACTORY }}
-          REACT_APP_ETHERSCAN_URL=${{ vars.REACT_APP_ETHERSCAN_URL }}
-          REACT_APP_GITBOOK_URL=${{ vars.REACT_APP_GITBOOK_URL }}
-          REACT_APP_INDEXER_URL=${{ vars.REACT_APP_INDEXER_URL }}
-          REACT_APP_MARKET_MAKER_ADDRESS=${{ vars.REACT_APP_MARKET_MAKER_ADDRESS }}
-          REACT_APP_MULTICALL_ADDRESS=${{ vars.REACT_APP_MULTICALL_ADDRESS }}
-          REACT_APP_PAYMENT_SLIPPAGE_PERCENT=${{ vars.REACT_APP_PAYMENT_SLIPPAGE_PERCENT }}
-          REACT_APP_READ_ONLY_ETH_NODE_URL=${{ secrets.REACT_APP_READ_ONLY_ETH_NODE_URL }}
-          REACT_APP_TITAN_LIGHTNING_POOL=${{ vars.REACT_APP_TITAN_LIGHTNING_POOL }}
-          REACT_APP_URL=${{ needs.setup.outputs.marketplace_url }}
-          REACT_APP_VALIDATOR_REGISTRY_ADDRESS=${{ vars.REACT_APP_VALIDATOR_REGISTRY_ADDRESS }}
-          REACT_APP_VERSION=${{ needs.generate-tag.outputs.vtag }}
-          REACT_APP_WALLET_CONNECT_ID=${{ secrets.REACT_APP_WALLET_CONNECT_ID }}
-          DEV_SERVER_HTTPS=false
-          REACT_APP_FUTURES_TOKEN_ADDRESS=${{ vars.REACT_APP_FUTURES_TOKEN_ADDRESS }}
-          REACT_APP_SUBGRAPH_FUTURES_URL=${FUTURES_SUBGRAPH_URL}
-          REACT_APP_SUBGRAPH_ORACLES_URL=${ORACLES_SUBGRAPH_URL}
-          REACT_APP_SUBGRAPH_PERPS_URL=${PERPS_SUBGRAPH_URL}
-          REACT_APP_SUBGRAPH_POINTS_URL=${POINTS_SUBGRAPH_URL}
-          REACT_APP_PERPS_TOKEN_ADDRESS=${{ vars.REACT_APP_PERPS_TOKEN_ADDRESS }}
-          REACT_APP_USE_SEED_DATA=${{ vars.REACT_APP_USE_SEED_DATA }}
-          EOF
-          
-          echo "✅ .env file created"
-          echo "📄 Version in .env: $(grep REACT_APP_VERSION ui/.env)"
+
+          # Create .env file with environment-scoped variables.
+          # GitHub Environments automatically scope secrets/vars to the environment.
+
+          # put <NAME> <vars|secrets|VALUE> [show|hide|mask]
+          #   vars|secrets -> look the value up in that context (JSON) by name
+          #   anything else -> use it directly as a computed/literal value
+          # The third arg controls how the line is echoed to the log (default: show):
+          #   show -> print key=value   hide -> don't echo   mask -> echo first 4 chars then ****
+          # The line is skipped entirely when the value is empty.
+          put() {
+            local name="$1" src="$2" mode="${3:-show}" value
+            case "$src" in
+              vars)    value=$(jq -r --arg k "$name" '.[$k] // empty' <<< "$VARS_JSON") ;;
+              secrets) value=$(jq -r --arg k "$name" '.[$k] // empty' <<< "$SECRETS_JSON") ;;
+              *)       value="$src" ;;
+            esac
+            [ -n "$value" ] || return 0
+            printf '%s=%s\n' "$name" "$value" >> ui/.env
+            case "$mode" in
+              hide) ;;
+              mask) echo "$name=$(printf '%s' "$value" | cut -c1-4)****" ;;
+              *)    echo "$name=$value" ;;
+            esac
+          }
+
+          # Names whose .env key matches the context key: looked up by name.
+          VARS=(
+            REACT_APP_CHAIN_ID
+            REACT_APP_CLONE_FACTORY
+            REACT_APP_ETHERSCAN_URL
+            REACT_APP_GITBOOK_URL
+            REACT_APP_INDEXER_URL
+            REACT_APP_MARKET_MAKER_ADDRESS
+            REACT_APP_MULTICALL_ADDRESS
+            REACT_APP_PAYMENT_SLIPPAGE_PERCENT
+            REACT_APP_TITAN_LIGHTNING_POOL
+            REACT_APP_VALIDATOR_REGISTRY_ADDRESS
+            REACT_APP_FUTURES_TOKEN_ADDRESS
+            REACT_APP_PERPS_TOKEN_ADDRESS
+            REACT_APP_USE_SEED_DATA
+          )
+          SECRETS=(
+            REACT_APP_READ_ONLY_ETH_NODE_URL
+            REACT_APP_WALLET_CONNECT_ID
+          )
+
+          : > ui/.env
           echo "📄 .env contents (sanitized):"
-          # Print .env contents, but mask secret values to protect sensitive data
           echo "------------------------------"
-          while IFS='=' read -r key value; do
-            if [[ "$key" =~ ^REACT_APP_READ_ONLY_ETH_NODE_URL$ || "$key" =~ ^REACT_APP_WALLET_CONNECT_ID$ ]]; then
-              echo "$key=$(printf '%s' "$value" | cut -c1-4)****"
-            else
-              echo "$key=$value"
-            fi
-          done < ui/.env
+
+          for name in "${VARS[@]}"; do put "$name" vars; done
+          for name in "${SECRETS[@]}"; do put "$name" secrets mask; done
+
+          # Manual: computed/literal values, or where the .env key != context key.
+          put REACT_APP_URL "${{ needs.setup.outputs.marketplace_url }}"
+          put REACT_APP_VERSION "${{ needs.generate-tag.outputs.vtag }}"
+          put DEV_SERVER_HTTPS "false"
+          put REACT_APP_SUBGRAPH_FUTURES_URL "${FUTURES_SUBGRAPH_URL}"
+          put REACT_APP_SUBGRAPH_ORACLES_URL "${ORACLES_SUBGRAPH_URL}"
+          put REACT_APP_SUBGRAPH_PERPS_URL "${PERPS_SUBGRAPH_URL}"
+          put REACT_APP_SUBGRAPH_POINTS_URL "${POINTS_SUBGRAPH_URL}"
           echo "------------------------------"
+
+          echo "✅ .env file created"
 
       - name: Install dependencies
         working-directory: ui
@@ -292,7 +320,7 @@ jobs:
     runs-on: ubuntu-latest
     # NO environment scope - PR builds run without GitHub Environment binding
     # to avoid environment protection rules blocking the build.
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -372,7 +400,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [generate-tag, setup, build]
     if: github.event_name != 'pull_request' && needs.generate-tag.outputs.is_cicd_branch != 'true'
-    
+
     steps:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -391,7 +419,7 @@ jobs:
         run: |
           echo "🚀 Deploying to S3 bucket: ${{ needs.setup.outputs.s3_bucket }}"
           aws s3 sync build/ s3://${{ needs.setup.outputs.s3_bucket }}/ --delete
-          
+
           echo "✅ Files uploaded to S3"
 
       - name: Invalidate CloudFront cache
@@ -400,7 +428,7 @@ jobs:
           aws cloudfront create-invalidation \
             --distribution-id ${{ needs.setup.outputs.cloudfront_distribution }} \
             --paths "/*"
-          
+
           echo "✅ CloudFront cache invalidated"
 
   verify:
@@ -408,7 +436,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [generate-tag, setup, build, deploy]
     if: github.event_name != 'pull_request' && needs.generate-tag.outputs.is_cicd_branch != 'true'
-    
+
     steps:
       - name: Wait for CloudFront propagation
         run: |
@@ -422,24 +450,24 @@ jobs:
         run: |
           URL="${{ needs.setup.outputs.marketplace_url }}"
           EXPECTED_VERSION="${{ needs.generate-tag.outputs.vtag }}"
-          
+
           echo "🧪 Verifying deployment at $URL"
           echo "📌 Expected version: $EXPECTED_VERSION"
-          
+
           # Fetch the page
           HTTP_CODE=$(curl -o /tmp/page.html -s -w "%{http_code}" "$URL")
-          
+
           if [ "$HTTP_CODE" -ne 200 ]; then
             echo "❌ Marketplace returned HTTP $HTTP_CODE"
             echo "::error::Marketplace not accessible (HTTP $HTTP_CODE)"
             exit 1
           fi
-          
+
           echo "✅ Marketplace is accessible (HTTP $HTTP_CODE)"
-          
+
           # Extract version from meta tag
           ACTUAL_VERSION=$(grep -oP '<meta name="application-version" content="\K[^"]+' /tmp/page.html || echo "")
-          
+
           if [ -z "$ACTUAL_VERSION" ]; then
             echo "⚠️ WARNING: Could not extract version from page"
             echo "::warning::Version meta tag not found on deployed page"
@@ -460,7 +488,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [generate-tag, setup, build, deploy, verify]
     if: always() && github.event_name != 'pull_request' && needs.generate-tag.outputs.is_cicd_branch != 'true'
-    
+
     steps:
       - name: Clone repository
         if: needs.verify.result == 'success'
@@ -481,7 +509,7 @@ jobs:
         run: |
           TAG_NAME=${{ needs.generate-tag.outputs.tag_name }}
           echo "🏷️ Creating tag after successful deployment: $TAG_NAME"
-          
+
           # Check if tag already exists
           if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
             echo "⚠️ Tag $TAG_NAME already exists, skipping tag creation"
@@ -501,12 +529,12 @@ jobs:
           release_name: Marketplace ${{ needs.generate-tag.outputs.tag_name }}
           body: |
             ## Marketplace Release ${{ needs.generate-tag.outputs.tag_name }}
-            
+
             **Environment:** Production
             **Branch:** ${{ github.ref_name }}
             **Commit:** ${{ github.sha }}
             **Deployed:** ${{ needs.setup.outputs.marketplace_url }}
-            
+
             ### Changes
             This production release includes the latest changes from the main branch.
           draft: false
@@ -546,13 +574,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: [generate-tag, setup, build, deploy, verify, summary]
     if: always() && github.event_name != 'pull_request'
-    
+
     steps:
       - name: Checkout (for composite action)
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
-      
+
       - name: Determine status
         id: status
         run: |
@@ -567,14 +595,14 @@ jobs:
           else
             echo "status=skipped" >> $GITHUB_OUTPUT
           fi
-      
+
       - name: Send Slack notification
         uses: ./.github/actions/slack-notify
         with:
           status: ${{ steps.status.outputs.status }}
           environment: ${{ needs.generate-tag.outputs.environment }}
-          service_name: 'Futures UI'
+          service_name: "Futures UI"
           version: ${{ needs.generate-tag.outputs.vtag }}
           slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          additional_info: '${{ needs.generate-tag.outputs.is_cicd_branch == ''true'' && ''*Mode:* CI/CD Test (no build/deploy)'' || format(''*URL:* {0}'', needs.setup.outputs.marketplace_url) }}'
+          additional_info: "${{ needs.generate-tag.outputs.is_cicd_branch == 'true' && '*Mode:* CI/CD Test (no build/deploy)' || format('*URL:* {0}', needs.setup.outputs.marketplace_url) }}"
