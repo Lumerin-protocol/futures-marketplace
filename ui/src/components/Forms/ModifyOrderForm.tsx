@@ -6,6 +6,9 @@ import type { TransactionReceipt } from "viem";
 import { useModifyOrder } from "../../hooks/data/useModifyOrder";
 import { PARTICIPANT_QK } from "../../hooks/data/getUserFuturesOrders";
 import { POSITION_BOOK_QK } from "../../hooks/data/getUserFuturesPositions";
+import { HISTORICAL_ORDERS_QK } from "../../hooks/data/useHistoricalOrders";
+import { FUTURES_POSITION_HISTORY_QK } from "../../hooks/data/useFuturesPositionHistory";
+import { USER_FUTURES_TRADES_QK } from "../../hooks/data/useUserFuturesTrades";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
 import type { ParticipantOrder, Participant } from "../../hooks/data/getUserFuturesOrders";
@@ -290,6 +293,10 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
                 qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
                 address && qc.invalidateQueries({ queryKey: [POSITION_BOOK_QK] }),
                 address && qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
+                // Reset futures history tables back to their newest page.
+                address && qc.resetQueries({ queryKey: [HISTORICAL_ORDERS_QK, address] }),
+                address && qc.resetQueries({ queryKey: [FUTURES_POSITION_HISTORY_QK, address] }),
+                address && qc.resetQueries({ queryKey: [USER_FUTURES_TRADES_QK, address] }),
               ]);
             },
           },

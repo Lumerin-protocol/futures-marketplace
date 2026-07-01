@@ -4,13 +4,23 @@ import { SmallWidget } from "../../Cards/Cards.styled";
 import type { HistoricalOrder } from "../../../hooks/data/useHistoricalOrders";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { LoadMoreButton } from "../../LoadMoreButton";
 
 interface HistoricalOrdersListWidgetProps {
   orders: HistoricalOrder[];
   isLoading?: boolean;
+  hasMore?: boolean;
+  isFetchingMore?: boolean;
+  onLoadMore?: () => void;
 }
 
-export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrdersListWidgetProps) => {
+export const HistoricalOrdersListWidget = ({
+  orders,
+  isLoading,
+  hasMore = false,
+  isFetchingMore,
+  onLoadMore,
+}: HistoricalOrdersListWidgetProps) => {
   const formatPrice = (price: bigint) => {
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
@@ -101,10 +111,16 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
         </Table>
       </TableContainer>
 
-      {orders.length === 0 && (
+      {orders.length === 0 ? (
         <EmptyState>
-          <p>No historical orders found in the last 30 days</p>
+          <p>No historical orders found</p>
         </EmptyState>
+      ) : (
+        <LoadMoreButton
+          hasMore={hasMore}
+          isLoading={isFetchingMore}
+          onClick={() => onLoadMore?.()}
+        />
       )}
     </OrdersContainer>
   );

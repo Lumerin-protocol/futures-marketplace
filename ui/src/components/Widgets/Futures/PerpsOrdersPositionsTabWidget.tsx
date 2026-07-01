@@ -9,20 +9,21 @@ import { ModalCard } from "../../Modal.styled";
 import { TabSwitch } from "../../TabSwitch";
 import type { ParticipantOrder } from "../../../hooks/data/getUserFuturesOrders";
 import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPositions";
-import { useHistoricalOrders } from "../../../hooks/data/useHistoricalOrders";
 import type { AccountBalance } from "../../../types/types";
-import { useUserPerpsOrders } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { useCancelPerpsOrder } from "../../../hooks/data/perps/useCancelPerpsOrder";
 import { useQueryClient } from "@tanstack/react-query";
 import { USER_PERPS_ORDERS_QK } from "../../../hooks/data/perps/useUserPerpsOrders";
 import type { PositionSession } from "../../../hooks/data/perps/useUserPositionSessions";
 import { useUserTrades } from "../../../hooks/data/perps/useUserTrades";
 import type { UserTrade } from "../../../hooks/data/perps/useUserTrades";
+import { usePerpsOrderHistory } from "../../../hooks/data/perps/usePerpsOrderHistory";
+import { usePerpsPositionHistory } from "../../../hooks/data/perps/usePerpsPositionHistory";
 import { computeLiquidationState } from "../../../hooks/data/perps/positionHelper";
 import { ClosePerpsPositionModal } from "./ClosePerpsPositionModal";
 import { ModifyPerpsOrderModal } from "./ModifyPerpsOrderModal";
 import type { PerpsOrder } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { DateTimeCell } from "../../DateTimeCell";
+import { LoadMoreButton } from "../../LoadMoreButton";
 import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_DECIMALS_BIGINT, QUANTITY_SCALE } from "../../../lib/units";
 import { getTxUrl } from "../../../lib/indexer";
 
@@ -71,26 +72,18 @@ export const PerpsOrdersPositionsTabWidget = ({
 }: PerpsOrdersPositionsTabWidgetProps) => {
   const [activeTab, setActiveTab] = useState<TabType>("OPEN_ORDERS");
   const [openOrdersVisibleCount, setOpenOrdersVisibleCount] = useState(10);
-  const [tradesVisibleCount, setTradesVisibleCount] = useState(10);
-  const [positionHistoryVisibleCount, setPositionHistoryVisibleCount] = useState(10);
-  const [orderHistoryVisibleCount, setOrderHistoryVisibleCount] = useState(10);
   const [closePositionSession, setClosePositionSession] = useState<PositionSession | null>(null);
   const [modifyOrder, setModifyOrder] = useState<PerpsOrder | null>(null);
   const queryClient = useQueryClient();
   const { cancelOrderAsync, isPending: isCancelling } = useCancelPerpsOrder();
 
-  // Fetch perps orders for Order History tab (all non-ACTIVE)
-  const orderHistoryQuery = useUserPerpsOrders(participantAddress, {
-    excludeStatuses: ["ACTIVE"],
-  });
+  // Paginated ("Load More") Order History — all non-ACTIVE perps orders.
+  const orderHistoryQuery = usePerpsOrderHistory(participantAddress);
 
-  // Fetch historical orders for Orders History tab
-  const historicalOrdersQuery = useHistoricalOrders(
-    participantAddress,
-    activeTab === "ORDER_HISTORY"
-  );
+  // Paginated ("Load More") Position History — closed perps position sessions.
+  const positionHistoryQuery = usePerpsPositionHistory(participantAddress);
 
-  // Fetch trades for Trades tab (new query with detailed trade info)
+  // Paginated ("Load More") Trades tab.
   const tradesQuery = useUserTrades(
     participantAddress,
     { refetch: activeTab === "TRADES" }
@@ -100,8 +93,11 @@ export const PerpsOrdersPositionsTabWidget = ({
   const handleCancelOrder = async (orderId: string) => {
     try {
       await cancelOrderAsync({ orderId: orderId as `0x${string}` });
-      // Invalidate both open orders and history queries
+      // Invalidate open orders and reset the history tables to the newest page.
       queryClient.invalidateQueries({ queryKey: [USER_PERPS_ORDERS_QK, participantAddress] });
+      orderHistoryQuery.refresh();
+      positionHistoryQuery.refresh();
+      tradesQuery.refresh();
     } catch (error) {
       console.error("Failed to cancel order:", error);
     }
@@ -131,22 +127,13 @@ export const PerpsOrdersPositionsTabWidget = ({
     }
   }, [perpsOpenOrdersLoading, positionSessionsLoading, ordersCount, positionsCount]);
 
-  // Count closed positions
-  const positionHistoryCount = useMemo(() => {
-    // Count closed positions (status === "CLOSED")
-    return positionSessions.filter((session) => session.status === "CLOSE").length;
-  }, [positionSessions]);
+  // Loaded-row counts for the tab badges (no totals are exposed by the
+  // subgraph, so these reflect how many rows are currently loaded).
+  const positionHistoryCount = positionHistoryQuery.data.length;
 
-  // Count trades
-  const tradesCount = useMemo(() => {
-    const trades = tradesQuery.data?.trades || [];
-    return trades.length;
-  }, [tradesQuery.data?.trades]);
+  const tradesCount = tradesQuery.data.length;
 
-  // Count historical orders (all non-ACTIVE orders)
-  const orderHistoryCount = useMemo(() => {
-    return orderHistoryQuery.data?.data?.orders.length ?? 0;
-  }, [orderHistoryQuery.data?.data?.orders]);
+  const orderHistoryCount = orderHistoryQuery.data.length;
 
   return (
     <TabContainer>
@@ -196,31 +183,34 @@ export const PerpsOrdersPositionsTabWidget = ({
         {activeTab === "TRADES" && (
           <TradesWrapper>
             <PerpsTradesTable
-              trades={tradesQuery.data?.trades || []}
-              isLoading={tradesQuery.isLoading}
+              trades={tradesQuery.data}
+              isLoading={tradesQuery.loading}
               userAddress={participantAddress}
-              visibleCount={tradesVisibleCount}
-              onLoadMore={() => setTradesVisibleCount(c => c + 10)}
+              hasMore={tradesQuery.hasMore}
+              isFetchingMore={tradesQuery.isFetchingMore}
+              onLoadMore={tradesQuery.loadMore}
             />
           </TradesWrapper>
         )}
         {activeTab === "POSITION_HISTORY" && (
           <PositionsWrapper>
             <PerpsPositionHistoryTable
-              positionSessions={positionSessions}
-              isLoading={positionSessionsLoading}
-              visibleCount={positionHistoryVisibleCount}
-              onLoadMore={() => setPositionHistoryVisibleCount(c => c + 10)}
+              positionSessions={positionHistoryQuery.data}
+              isLoading={positionHistoryQuery.loading}
+              hasMore={positionHistoryQuery.hasMore}
+              isFetchingMore={positionHistoryQuery.isFetchingMore}
+              onLoadMore={positionHistoryQuery.loadMore}
             />
           </PositionsWrapper>
         )}
         {activeTab === "ORDER_HISTORY" && (
           <OrdersWrapper>
             <PerpsOrderHistoryTable
-              orders={orderHistoryQuery.data?.data?.orders || []}
-              isLoading={orderHistoryQuery.isLoading}
-              visibleCount={orderHistoryVisibleCount}
-              onLoadMore={() => setOrderHistoryVisibleCount(c => c + 10)}
+              orders={orderHistoryQuery.data}
+              isLoading={orderHistoryQuery.loading}
+              hasMore={orderHistoryQuery.hasMore}
+              isFetchingMore={orderHistoryQuery.isFetchingMore}
+              onLoadMore={orderHistoryQuery.loadMore}
             />
           </OrdersWrapper>
         )}
@@ -232,7 +222,14 @@ export const PerpsOrdersPositionsTabWidget = ({
         session={closePositionSession}
         marketPrice={marketPrice}
         participantAddress={participantAddress}
-        onConfirmed={onPositionClosed}
+        onConfirmed={async () => {
+          // Closing a position adds history rows — reset every history table
+          // back to its newest page rather than merging in-place.
+          orderHistoryQuery.refresh();
+          positionHistoryQuery.refresh();
+          tradesQuery.refresh();
+          await onPositionClosed?.();
+        }}
       />
 
       <ModifyPerpsOrderModal
@@ -389,9 +386,9 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
         </tbody>
       </Table>
       {visibleCount < activeOrders.length && (
-        <LoadMoreButton onClick={onLoadMore}>
+        <InlineLoadMoreButton onClick={onLoadMore}>
           Load next 10 items
-        </LoadMoreButton>
+        </InlineLoadMoreButton>
       )}
 
       {pendingCancelOrder && (
@@ -485,11 +482,12 @@ interface PerpsOrderHistoryTableProps {
     closedAt: string | null;
   }>;
   isLoading?: boolean;
-  visibleCount: number;
+  hasMore?: boolean;
+  isFetchingMore?: boolean;
   onLoadMore: () => void;
 }
 
-const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }: PerpsOrderHistoryTableProps) => {
+const PerpsOrderHistoryTable = ({ orders, isLoading, hasMore = false, isFetchingMore, onLoadMore }: PerpsOrderHistoryTableProps) => {
   const formatPrice = (price: bigint) => {
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
@@ -539,7 +537,7 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }:
     Number(b.createdAt) - Number(a.createdAt)
   );
 
-  const displayedOrders = sortedOrders.slice(0, visibleCount);
+  const displayedOrders = sortedOrders;
 
   if (isLoading) {
     return (
@@ -595,11 +593,7 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }:
           ))}
         </tbody>
       </Table>
-      {visibleCount < sortedOrders.length && (
-        <LoadMoreButton onClick={onLoadMore}>
-          Load next 10 items
-        </LoadMoreButton>
-      )}
+      <LoadMoreButton hasMore={hasMore} isLoading={isFetchingMore} onClick={onLoadMore} />
     </TableContainer>
   );
 };
@@ -769,11 +763,12 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
 interface PerpsPositionHistoryTableProps {
   positionSessions: PositionSession[];
   isLoading?: boolean;
-  visibleCount: number;
+  hasMore?: boolean;
+  isFetchingMore?: boolean;
   onLoadMore: () => void;
 }
 
-const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, onLoadMore }: PerpsPositionHistoryTableProps) => {
+const PerpsPositionHistoryTable = ({ positionSessions, isLoading, hasMore = false, isFetchingMore, onLoadMore }: PerpsPositionHistoryTableProps) => {
   const [selectedSession, setSelectedSession] = useState<PositionSession | null>(null);
 
   const formatPrice = (price: bigint) => {
@@ -812,7 +807,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, 
   const closedPositions = [...positionSessions]
     .filter((session) => session.status === "CLOSE")
     .sort((a, b) => Number(b.openedAt) - Number(a.openedAt));
-  const displayedPositions = closedPositions.slice(0, visibleCount);
+  const displayedPositions = closedPositions;
 
   if (isLoading) {
     return (
@@ -886,11 +881,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, 
             })}
           </tbody>
         </Table>
-        {visibleCount < closedPositions.length && (
-          <LoadMoreButton onClick={onLoadMore}>
-          Load next 10 items
-        </LoadMoreButton>
-      )}
+        <LoadMoreButton hasMore={hasMore} isLoading={isFetchingMore} onClick={onLoadMore} />
       </TableContainer>
 
       {/* Details Modal */}
@@ -909,11 +900,12 @@ interface PerpsTradesTableProps {
   trades: UserTrade[];
   isLoading?: boolean;
   userAddress?: `0x${string}`;
-  visibleCount: number;
+  hasMore?: boolean;
+  isFetchingMore?: boolean;
   onLoadMore: () => void;
 }
 
-const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoadMore }: PerpsTradesTableProps) => {
+const PerpsTradesTable = ({ trades, isLoading, userAddress, hasMore = false, isFetchingMore, onLoadMore }: PerpsTradesTableProps) => {
   const formatPrice = (price: bigint) => {
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
@@ -935,7 +927,7 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoad
     Number(b.timestamp) - Number(a.timestamp)
   );
 
-  const displayedTrades = sortedTrades.slice(0, visibleCount);
+  const displayedTrades = sortedTrades;
 
   if (isLoading) {
     return (
@@ -1002,11 +994,7 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoad
           ))}
         </tbody>
       </Table>
-      {visibleCount < sortedTrades.length && (
-        <LoadMoreButton onClick={onLoadMore}>
-          Load next 10 items
-        </LoadMoreButton>
-      )}
+      <LoadMoreButton hasMore={hasMore} isLoading={isFetchingMore} onClick={onLoadMore} />
     </TableContainer>
   );
 };
@@ -1405,7 +1393,7 @@ const TradesTableContainer = styled("div")`
   }
 `;
 
-const LoadMoreButton = styled("button")`
+const InlineLoadMoreButton = styled("button")`
   display: block;
   width: 100%;
   padding: 0.75rem;

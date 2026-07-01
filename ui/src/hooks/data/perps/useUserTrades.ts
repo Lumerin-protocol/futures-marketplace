@@ -1,7 +1,9 @@
 import { backgroundRefetchOpts } from "../config";
-import { graphqlRequest } from "../graphql";
-import { useQuery } from "@tanstack/react-query";
 import { UserTradesQuery } from "./graphql-queries";
+import {
+  usePaginatedHistory,
+  type PaginatedHistoryResult,
+} from "../usePaginatedHistory";
 
 export const USER_TRADES_QK = "UserTrades";
 
@@ -10,32 +12,14 @@ export const useUserTrades = (
   props?: {
     refetch?: boolean;
   },
-) => {
-  const query = useQuery({
+): PaginatedHistoryResult<UserTrade> => {
+  return usePaginatedHistory<UserTradesResponse, UserTrade>({
     queryKey: [USER_TRADES_QK, address],
-    queryFn: () => fetchUserTradesAsync(address!),
-    enabled: !!address,
-    ...(props?.refetch ? backgroundRefetchOpts : {}),
-  });
-
-  return query;
-};
-
-const fetchUserTradesAsync = async (
-  address: `0x${string}`,
-) => {
-  const variables = {
-    address
-  };
-
-  const response = await graphqlRequest<UserTradesResponse>(
-    UserTradesQuery,
-    variables,
-    process.env.REACT_APP_SUBGRAPH_PERPS_URL
-  );
-
-  const data: UserTrades = {
-    trades: response.trades.map((trade) => ({
+    query: UserTradesQuery,
+    variables: { address },
+    subgraphUrl: process.env.REACT_APP_SUBGRAPH_PERPS_URL,
+    selectRows: (response) => response.trades,
+    mapRow: (trade) => ({
       user: {
         id: trade.user.id,
       },
@@ -49,14 +33,14 @@ const fetchUserTradesAsync = async (
       tradePrice: BigInt(trade.tradePrice),
       tradeQuantity: BigInt(trade.tradeQuantity),
       tradingFee: BigInt(trade.tradingFee),
-    })),
-  };
-
-  return data;
-};
-
-export type UserTrades = {
-  trades: UserTrade[];
+      isLiquidation: trade.isLiquidation,
+      liquidator: trade.liquidator,
+      liquidationFee: trade.liquidationFee != null ? BigInt(trade.liquidationFee) : null,
+    }),
+    getId: (trade) => trade.id,
+    enabled: !!address,
+    refetchInterval: props?.refetch ? backgroundRefetchOpts.refetchInterval : undefined,
+  });
 };
 
 export type UserTrade = {
@@ -73,6 +57,9 @@ export type UserTrade = {
   tradePrice: bigint;
   tradeQuantity: bigint;
   tradingFee: bigint;
+  isLiquidation: boolean;
+  liquidator: string | null;
+  liquidationFee: bigint | null;
 };
 
 type UserTradesResponse = {
@@ -90,5 +77,8 @@ type UserTradesResponse = {
     tradePrice: string;
     tradeQuantity: string;
     tradingFee: string;
+    isLiquidation: boolean;
+    liquidator: string | null;
+    liquidationFee: string | null;
   }[];
 };

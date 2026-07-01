@@ -80,11 +80,13 @@ query UserPerpsOrdersByStatus ($address: ID!, $statuses: [String!]!)  {
     `
 
 export const UserPerpsOrdersExcludeStatusQuery = gql`
-query UserPerpsOrdersExcludeStatus ($address: ID!, $statuses: [String!]!)  {
+query UserPerpsOrdersExcludeStatus ($address: ID!, $statuses: [String!]!, $first: Int, $skip: Int)  {
   orders(
     where: { user: $address, status_not_in: $statuses }
     orderBy: createdAt
     orderDirection: desc
+    first: $first
+    skip: $skip
   ) {
     blockNumber
     closedAt
@@ -161,6 +163,51 @@ export const UserPositionSessionsQuery = gql`
       closePrice
       entryPrice
       closedQuantity
+      liquidatedQuantity
+      fundingFees
+      id
+      lastTradeAt
+      maxQuantity
+      openedAt
+      realizedPnl
+      status
+      tradingFees
+      user {
+        id
+        netQuantity
+      }
+      trades {
+        aggregatedEntryPriceAfter
+        blockNumber
+        id
+        netQuantityAfter
+        realizedPnl
+        timestamp
+        tradePrice
+        tradeQuantity
+        tradingFee
+        transactionHash
+      }
+    }
+  }
+`
+
+// Closed PositionSessions for a user, paged with first/skip and ordered
+// newest-first. Powers the perps Position History "Load More" table — the open
+// Positions tab keeps using the unfiltered `UserPositionSessionsQuery`.
+export const UserClosedPositionSessionsQuery = gql`
+  query UserClosedPositionSessions($address: ID!, $first: Int!, $skip: Int!) {
+    positionSessions(
+      where: { user: $address, status: CLOSE }
+      orderBy: lastTradeAt
+      orderDirection: desc
+      first: $first
+      skip: $skip
+    ) {
+      closePrice
+      entryPrice
+      closedQuantity
+      liquidatedQuantity
       fundingFees
       id
       lastTradeAt
@@ -190,8 +237,14 @@ export const UserPositionSessionsQuery = gql`
 `
 
 export const UserTradesQuery = gql`
-  query UserTrades($address: ID!) {
-    trades(where: { user: $address }, orderBy: timestamp, orderDirection: desc) {
+  query UserTrades($address: ID!, $first: Int!, $skip: Int!) {
+    trades(
+      where: { user: $address }
+      orderBy: timestamp
+      orderDirection: desc
+      first: $first
+      skip: $skip
+    ) {
       user {
         id
       }
@@ -205,6 +258,9 @@ export const UserTradesQuery = gql`
       tradePrice
       tradeQuantity
       tradingFee
+      isLiquidation
+      liquidator
+      liquidationFee
     }
   }
 `

@@ -9,6 +9,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { USER_PERPS_ORDERS_QK } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { USER_POSITION_SESSIONS_QK } from "../../../hooks/data/perps/useUserPositionSessions";
 import { USER_PERPS_TRADES_QK } from "../../../hooks/data/perps/useUserPerpsTrades";
+import { PERPS_ORDER_HISTORY_QK } from "../../../hooks/data/perps/usePerpsOrderHistory";
+import { PERPS_POSITION_HISTORY_QK } from "../../../hooks/data/perps/usePerpsPositionHistory";
+import { USER_TRADES_QK } from "../../../hooks/data/perps/useUserTrades";
 import { getOrderBookQueryKey, waitForOrderBookBlockNumber } from "../../../hooks/data/orderBookHelpers";
 import { usePublicClient } from "wagmi";
 import {
@@ -158,6 +161,10 @@ export const ClosePerpsPositionModal = ({
         queryClient.invalidateQueries({ queryKey: [USER_PERPS_ORDERS_QK, participantAddress] }),
         queryClient.invalidateQueries({ queryKey: [USER_POSITION_SESSIONS_QK, participantAddress] }),
         queryClient.invalidateQueries({ queryKey: [USER_PERPS_TRADES_QK, participantAddress] }),
+        // Reset perps history tables back to their newest page.
+        queryClient.resetQueries({ queryKey: [PERPS_ORDER_HISTORY_QK, participantAddress] }),
+        queryClient.resetQueries({ queryKey: [PERPS_POSITION_HISTORY_QK, participantAddress] }),
+        queryClient.resetQueries({ queryKey: [USER_TRADES_QK, participantAddress] }),
       ]);
 
       if (onConfirmed) await onConfirmed();

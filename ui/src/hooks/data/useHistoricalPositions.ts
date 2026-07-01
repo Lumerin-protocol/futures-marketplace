@@ -6,7 +6,6 @@ import { toFuturesSessionTrade, type FuturesSessionTrade } from "./getUserFuture
 export const HISTORICAL_POSITIONS_QK = "HistoricalPositions";
 
 const PAGE_SIZE = 100;
-const THIRTY_DAYS_IN_SECONDS = 30 * 24 * 60 * 60;
 
 const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`;
 
@@ -27,6 +26,9 @@ export type HistoricalPosition = {
   /// Cumulative qty closed during the session's lifetime (mirrors
   /// `PositionSession.closedQuantity` on the indexer).
   closedQuantity: number;
+  /// Cumulative qty force-closed via liquidation during the session's lifetime
+  /// (mirrors `PositionSession.liquidatedQuantity`). 0 if never liquidated.
+  liquidatedQuantity: number;
   /// Peak signed net quantity reached during the session's lifetime
   /// (mirrors `PositionSession.maxQuantity` on the indexer). Positive for
   /// long sessions, negative for short sessions. Use `Math.abs` for display.
@@ -42,46 +44,49 @@ export type HistoricalPosition = {
   trades: FuturesSessionTrade[];
 };
 
-type HistoricalPositionsResponse = {
+export type RawHistoricalPositionSession = {
+  id: string;
+  status: string;
+  deliveryAt: string;
+  entryPrice: string;
+  closePrice: string;
+  closedQuantity: number;
+  liquidatedQuantity: number;
+  maxQuantity: number;
+  openedAt: string;
+  lastTradeAt: string;
+  realizedPnl: string;
+  tradingFees: string;
+  expiration: {
+    settlementPrice: string | null;
+    settledAt: string | null;
+  } | null;
+  user: {
+    id: string;
+  };
+  trades: {
+    id: string;
+    blockNumber: string;
+    deliveryAt: string;
+    fillCount: number;
+    netQuantityAfter: number;
+    realizedPnl: string;
+    timestamp: string;
+    tradePrice: string;
+    tradeQuantity: number;
+    tradingFee: string;
+    transactionHash: `0x${string}`;
+  }[];
+};
+
+export type HistoricalPositionsResponse = {
   _meta: {
     block: {
       number: number;
       timestamp: string;
     };
   };
-  positionSessions: {
-    id: string;
-    status: string;
-    deliveryAt: string;
-    entryPrice: string;
-    closePrice: string;
-    closedQuantity: number;
-    maxQuantity: number;
-    openedAt: string;
-    lastTradeAt: string;
-    realizedPnl: string;
-    tradingFees: string;
-    expiration: {
-      settlementPrice: string | null;
-      settledAt: string | null;
-    } | null;
-    user: {
-      id: string;
-    };
-    trades: {
-      id: string;
-      blockNumber: string;
-      deliveryAt: string;
-      fillCount: number;
-      netQuantityAfter: number;
-      realizedPnl: string;
-      timestamp: string;
-      tradePrice: string;
-      tradeQuantity: number;
-      tradingFee: string;
-      transactionHash: `0x${string}`;
-    }[];
-  }[];
+  positionSessions: RawHistoricalPositionSession[];
 };
 
 /// Collapse a closed PositionSession into the HistoricalPosition shape.
@@ -91,10 +96,10 @@ type HistoricalPositionsResponse = {
 /// user actually entered. Price comes from the session's `entryPrice` and
 /// PnL from `realizedPnl` — the row no longer encodes a buyer/seller split
 /// since a session belongs to a single user.
-const sessionToHistoricalPosition = (
-  session: HistoricalPositionsResponse["positionSessions"][number],
+export const sessionToHistoricalPosition = (
+  session: RawHistoricalPositionSession,
 ): HistoricalPosition => {
-  type SessionTrade = HistoricalPositionsResponse["positionSessions"][number]["trades"][number];
+  type SessionTrade = RawHistoricalPositionSession["trades"][number];
 
   // Earliest trade by (timestamp, blockNumber, fillCount). Subgraph ordering
   // for nested arrays isn't guaranteed, so sort defensively.
@@ -128,6 +133,7 @@ const sessionToHistoricalPosition = (
     pnl: Number(session.realizedPnl),
     isLong,
     closedQuantity: session.closedQuantity,
+    liquidatedQuantity: session.liquidatedQuantity,
     maxQuantity: session.maxQuantity,
     isActive: false,
     closedAt: session.lastTradeAt,
@@ -147,9 +153,6 @@ const fetchAllHistoricalPositions = async (
   data: HistoricalPosition[];
   blockNumber: number;
 }> => {
-  const now = Math.floor(Date.now() / 1000);
-  const thirtyDaysAgo = now - THIRTY_DAYS_IN_SECONDS;
-
   let allPositions: HistoricalPosition[] = [];
   let skip = 0;
   let hasMore = true;
@@ -158,7 +161,6 @@ const fetchAllHistoricalPositions = async (
   while (hasMore) {
     const variables = {
       address: address.toLowerCase(),
-      thirtyDaysAgo,
       first: PAGE_SIZE,
       skip,
     };

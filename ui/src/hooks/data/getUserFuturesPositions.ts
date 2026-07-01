@@ -79,6 +79,7 @@ const sessionToPosition = (
     sellPricePerDay: isLong ? 0n : entryPrice,
     buyPricePerDay: isLong ? entryPrice : 0n,
     netQuantity: session.netQuantity,
+    liquidatedQuantity: session.liquidatedQuantity,
     isActive,
     settlementPrice,
     settledAt,
@@ -162,6 +163,9 @@ export type PositionBookPosition = {
   /// PositionSession belongs to. Mirrors `UserDeliverySessionPointer.netQuantity`
   /// while the session is OPEN; 0 once the session is CLOSE.
   netQuantity: number;
+  /// Cumulative qty force-closed via liquidation on the source PositionSession
+  /// (mirrors `PositionSession.liquidatedQuantity`). 0 if never liquidated.
+  liquidatedQuantity: number;
   isActive: boolean;
   /// Pinned cash-settlement price for this position's expiration (token decimals),
   /// or null until `SettlementPriceRecorded` has fired for the deliveryAt.
@@ -196,6 +200,7 @@ type PositionsBookResponse = {
     entryPrice: string;
     closePrice: string;
     closedQuantity: number;
+    liquidatedQuantity: number;
     maxQuantity: number;
     netQuantity: number;
     openedAt: string;
