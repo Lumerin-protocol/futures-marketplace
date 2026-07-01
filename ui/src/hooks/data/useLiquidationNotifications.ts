@@ -44,7 +44,7 @@ export function useLiquidationNotifications(address?: `0x${string}`) {
   const initializedFor = useRef<string | null>(null);
 
   const liquidations = useMemo<LiquidationNotification[]>(() => {
-    const perpsLiq = (perps.data?.trades ?? [])
+    const perpsLiq = (perps.data ?? [])
       .filter((t) => t.isLiquidation)
       .map((t) => ({
         id: t.id,
@@ -52,7 +52,7 @@ export function useLiquidationNotifications(address?: `0x${string}`) {
         timestamp: t.timestamp,
         liquidator: t.liquidator,
       }));
-    const futuresLiq = (futures.data?.trades ?? [])
+    const futuresLiq = (futures.data ?? [])
       .filter((t) => t.isLiquidation)
       .map((t) => ({
         id: t.id,
@@ -61,7 +61,7 @@ export function useLiquidationNotifications(address?: `0x${string}`) {
         liquidator: t.liquidator,
       }));
     return [...perpsLiq, ...futuresLiq];
-  }, [perps.data?.trades, futures.data?.trades]);
+  }, [perps.data, futures.data]);
 
   useEffect(() => {
     if (!address) {
@@ -72,7 +72,7 @@ export function useLiquidationNotifications(address?: `0x${string}`) {
 
     // Wait for both feeds to settle their first fetch before priming the
     // watermark, otherwise a late-arriving backlog would all read as "new".
-    if (perps.isLoading || futures.isLoading) return;
+    if (perps.loading || futures.loading) return;
 
     const seen = readSeen(address);
 
@@ -93,7 +93,7 @@ export function useLiquidationNotifications(address?: `0x${string}`) {
     for (const liq of fresh) next.add(liq.id);
     writeSeen(address, next);
     setNotifications((prev) => [...fresh, ...prev]);
-  }, [address, liquidations, perps.isLoading, futures.isLoading]);
+  }, [address, liquidations, perps.loading, futures.loading]);
 
   const dismiss = (id: string) =>
     setNotifications((prev) => prev.filter((n) => n.id !== id));

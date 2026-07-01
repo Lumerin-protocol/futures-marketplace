@@ -185,13 +185,14 @@ export const AggregatedHashrateIndexQuery = gql`
   }
 }`;
 
-// Historical (closed) PositionSessions for the last 30 days, paged with first/skip.
-// Mirrors the active `PositionsBookQuery` shape — the only difference is the
-// `status: CLOSE` filter and the `lastTradeAt_gte` cutoff.
+// Historical (closed) PositionSessions, paged with first/skip and ordered
+// newest-first. Mirrors the active `PositionsBookQuery` shape — the only
+// difference is the `status: CLOSE` filter. Incremental "Load More" pagination
+// reaches arbitrarily far back, so there is no time-window cutoff.
 export const HistoricalPositionsQuery = gql`
-  query HistoricalPositionsQuery($address: ID!, $thirtyDaysAgo: BigInt!, $first: Int!, $skip: Int!) {
+  query HistoricalPositionsQuery($address: ID!, $first: Int!, $skip: Int!) {
     positionSessions(
-      where: { user: $address, status: CLOSE, lastTradeAt_gte: $thirtyDaysAgo }
+      where: { user: $address, status: CLOSE }
       first: $first
       skip: $skip
       orderBy: lastTradeAt
@@ -239,16 +240,16 @@ export const HistoricalPositionsQuery = gql`
   }
 `;
 
-// Historical (closed) Orders for the last 30 days, paged with first/skip.
-// Mirrors the active `UserFuturesOrdersByStatusQuery` shape — the only difference
-// is the status filter (terminal states) and the deliveryAt cutoff.
+// Historical (closed) Orders, paged with first/skip and ordered newest-first.
+// Mirrors the active `UserFuturesOrdersByStatusQuery` shape — the only
+// difference is the status filter (terminal states). Incremental "Load More"
+// pagination reaches arbitrarily far back, so there is no time-window cutoff.
 export const HistoricalOrdersQuery = gql`
-  query HistoricalOrdersQuery($address: ID!, $thirtyDaysAgo: BigInt!, $first: Int!, $skip: Int!) {
+  query HistoricalOrdersQuery($address: ID!, $first: Int!, $skip: Int!) {
     orders(
       where: {
         user: $address
         status_in: ["FILLED", "PARTIALLY_FILLED", "CANCELLED"]
-        deliveryAt_gte: $thirtyDaysAgo
       }
       first: $first
       skip: $skip
@@ -323,8 +324,14 @@ export const AggregatedBtcPriceIndexQuery = gql`
 // The futures Trade entity has no `aggregatedEntryPriceAfter` (perps-only)
 // but does carry `deliveryAt` and `fillCount` (futures-only).
 export const UserFuturesTradesQuery = gql`
-  query UserFuturesTrades($address: ID!) {
-    trades(where: { user: $address }, orderBy: timestamp, orderDirection: desc) {
+  query UserFuturesTrades($address: ID!, $first: Int!, $skip: Int!) {
+    trades(
+      where: { user: $address }
+      orderBy: timestamp
+      orderDirection: desc
+      first: $first
+      skip: $skip
+    ) {
       user {
         id
       }

@@ -6,18 +6,25 @@ import type { HistoricalPosition } from "../../../hooks/data/useHistoricalPositi
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { FuturesTradesModal, type FuturesTradesModalSelection } from "./FuturesTradesModal";
+import { LoadMoreButton } from "../../LoadMoreButton";
 import { LiquidationChip, formatLiquidatedQty, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
 
 interface HistoricalPositionsListWidgetProps {
   positions: HistoricalPosition[];
   isLoading?: boolean;
   participantAddress?: `0x${string}`;
+  hasMore?: boolean;
+  isFetchingMore?: boolean;
+  onLoadMore?: () => void;
 }
 
 export const HistoricalPositionsListWidget = ({
   positions,
   isLoading,
   participantAddress,
+  hasMore = false,
+  isFetchingMore,
+  onLoadMore,
 }: HistoricalPositionsListWidgetProps) => {
   const [tradesSelection, setTradesSelection] = useState<FuturesTradesModalSelection | null>(null);
 
@@ -139,10 +146,16 @@ export const HistoricalPositionsListWidget = ({
         </Table>
       </TableContainer>
 
-      {sortedPositions.length === 0 && (
+      {sortedPositions.length === 0 ? (
         <EmptyState>
-          <p>No historical positions found in the last 30 days</p>
+          <p>No historical positions found</p>
         </EmptyState>
+      ) : (
+        <LoadMoreButton
+          hasMore={hasMore}
+          isLoading={isFetchingMore}
+          onClick={() => onLoadMore?.()}
+        />
       )}
 
       <FuturesTradesModal
