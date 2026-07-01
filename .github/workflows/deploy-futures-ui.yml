@@ -6,18 +6,18 @@ on:
       - dev
       - stg
       - main
-      - "cicd/**"
+      - 'cicd/**'
 
-    paths:
-      - ".github/workflows/deploy-futures-ui.yml"
-      - "ui/src/**"
-      - "ui/public/**"
-      - "ui/package.json"
-      - "ui/yarn.lock"
-      - "ui/vite.config.ts"
-      - "ui/tsconfig.json"
-      - "ui/index.html"
-      - "ui/.cicd_trigger"
+    paths: 
+      - '.github/workflows/deploy-futures-ui.yml'
+      - 'ui/src/**'
+      - 'ui/public/**'
+      - 'ui/package.json'
+      - 'ui/pnpm-lock.yaml'
+      - 'ui/vite.config.ts'
+      - 'ui/tsconfig.json'
+      - 'ui/index.html'
+      - 'ui/.cicd_trigger'
 
   pull_request:
     branches:
@@ -25,15 +25,15 @@ on:
       - stg
       - main
     paths:
-      - ".github/workflows/deploy-futures-ui.yml"
-      - "ui/src/**"
-      - "ui/public/**"
-      - "ui/package.json"
-      - "ui/yarn.lock"
-      - "ui/vite.config.ts"
-      - "ui/tsconfig.json"
-      - "ui/index.html"
-      - "ui/.cicd_trigger"
+      - '.github/workflows/deploy-futures-ui.yml'
+      - 'ui/src/**'
+      - 'ui/public/**'
+      - 'ui/package.json'
+      - 'ui/pnpm-lock.yaml'
+      - 'ui/vite.config.ts'
+      - 'ui/tsconfig.json'
+      - 'ui/index.html'
+      - 'ui/.cicd_trigger'
 
   workflow_dispatch:
     inputs:
@@ -179,12 +179,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ui/package.json
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
-          cache: "yarn"
-          cache-dependency-path: ui/yarn.lock
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: ui/pnpm-lock.yaml
 
       - name: Create .env file
         id: create_env
@@ -289,14 +294,14 @@ jobs:
         working-directory: ui
         run: |
           echo "📦 Installing dependencies..."
-          yarn install --frozen-lockfile
+          pnpm install --frozen-lockfile
 
       - name: Build application
         working-directory: ui
         run: |
           echo "🏗️ Building application..."
-          yarn build
-
+          pnpm build
+          
           echo "✅ Build complete"
           ls -lh build/
 
@@ -322,12 +327,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ui/package.json
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
-          cache: "yarn"
-          cache-dependency-path: ui/yarn.lock
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: ui/pnpm-lock.yaml
 
       - name: Create placeholder .env file
         run: |
@@ -364,13 +374,13 @@ jobs:
         working-directory: ui
         run: |
           echo "📦 Installing dependencies..."
-          yarn install --frozen-lockfile
+          pnpm install --frozen-lockfile
 
       - name: Build application
         working-directory: ui
         run: |
           echo "🏗️ Building application..."
-          yarn build
+          pnpm build
 
           echo "✅ Build complete"
           ls -lh build/
