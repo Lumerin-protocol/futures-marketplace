@@ -721,14 +721,14 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
                       </TypeBadge>
                       {session.liquidatedQuantity > 0n && (
                         <LiquidationChip
-                          title={formatLiquidatedQty(session.liquidatedQuantity, displayQuantity, {
+                          title={formatLiquidatedQty(session.liquidatedQuantity, displayQuantity,                           {
                             scale: PAYMENT_TOKEN_SCALE_NUM,
-                            fractionDigits: 6,
+                            fractionDigits: 2,
                           })}
                         >
-                          {formatLiquidatedQty(session.liquidatedQuantity, displayQuantity, {
+                          {formatLiquidatedQty(session.liquidatedQuantity, displayQuantity,                           {
                             scale: PAYMENT_TOKEN_SCALE_NUM,
-                            fractionDigits: 6,
+                            fractionDigits: 2,
                           })}
                         </LiquidationChip>
                       )}
@@ -740,7 +740,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
                     {" / "}
                     {((Number(session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(session.maxQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}
                   </td>
-                  <td>{(Number(displayQuantity < 0n ? -displayQuantity : displayQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6)}</td>
+                  <td>{(Number(displayQuantity < 0n ? -displayQuantity : displayQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)}</td>
                   <td>{formatFees(session.fundingFees, session.tradingFees)}</td>
                   <td>
                     <PnLText $isPositive={unrealizedPnlValue >= 0}>
@@ -885,13 +885,13 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, 
                         title={formatLiquidatedQty(
                           session.liquidatedQuantity,
                           session.maxQuantity - session.liquidatedQuantity,
-                          { scale: PAYMENT_TOKEN_SCALE_NUM, fractionDigits: 6 },
+                          { scale: PAYMENT_TOKEN_SCALE_NUM, fractionDigits: 2 },
                         )}
                       >
                         {formatLiquidatedQty(
                           session.liquidatedQuantity,
                           session.maxQuantity - session.liquidatedQuantity,
-                          { scale: PAYMENT_TOKEN_SCALE_NUM, fractionDigits: 6 },
+                          { scale: PAYMENT_TOKEN_SCALE_NUM, fractionDigits: 2 },
                         )}
                       </LiquidationChip>
                     ) : (
