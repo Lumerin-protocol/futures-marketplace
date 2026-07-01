@@ -52,9 +52,12 @@ export function liquidatedPercent(
 }
 
 /**
- * Human label: `"Liquidated 3 / 8 (37.5%)"`, where `3` is the closed amount
- * (abs(tradeQuantity)) and `8` is the position size before the close
- * (closed + abs(netQuantityAfter)).
+ * Human label:
+ *  - partial: `"Liquidated 3 / 8 (37.5%)"`, where `3` is the closed amount
+ *    (abs(tradeQuantity)) and `8` is the position size before the close
+ *    (closed + abs(netQuantityAfter)).
+ *  - full: `"Liquidated (100%)"` — the `closed / total` pair is redundant when
+ *    nothing remains, so it's dropped.
  *
  * - `scale`: divisor applied to the raw quantities (e.g. `PAYMENT_TOKEN_SCALE_NUM`
  *   for perps' fixed-point quantities; `1` for futures' integer contract counts).
@@ -71,6 +74,8 @@ export function formatLiquidatedQty(
   const remaining = absToNumber(netQuantityAfter, scale);
   const total = closed + remaining;
   const pct = total > 0 ? (closed / total) * 100 : 0;
+  const pctStr = trimTrailingZeros(pct.toFixed(1));
+  if (remaining <= 0) return `Liquidated (${pctStr}%)`;
   const fmt = (n: number) => trimTrailingZeros(n.toFixed(fractionDigits));
-  return `Liquidated ${fmt(closed)} / ${fmt(total)} (${trimTrailingZeros(pct.toFixed(1))}%)`;
+  return `Liquidated ${fmt(closed)} / ${fmt(total)} (${pctStr}%)`;
 }

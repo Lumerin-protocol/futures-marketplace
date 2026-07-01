@@ -15,7 +15,7 @@ import { useUserFuturesTrades, type UserFuturesTrade } from "../../../hooks/data
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { getTxUrl } from "../../../lib/indexer";
-import { LiquidationChip, formatLiquidatedQty, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
+import { LiquidationChip, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
 
 import type { AccountBalance, ContractMode } from "../../../types/types";
 
@@ -250,22 +250,13 @@ const FuturesTradesTable = ({ trades, isLoading, visibleCount, onLoadMore }: Fut
                   <DateTimeCell timestamp={trade.timestamp} />
                 </td>
                 <td>
-                  <SideCell>
-                    <TypeBadge $type={isLong ? "Long" : "Short"}>{isLong ? "Long" : "Short"}</TypeBadge>
-                    {trade.isLiquidation && (
-                      <LiquidationChip
-                        title={formatLiquidatedQty(trade.tradeQuantity, trade.netQuantityAfter)}
-                      >
-                        {formatLiquidatedQty(trade.tradeQuantity, trade.netQuantityAfter)}
-                      </LiquidationChip>
-                    )}
-                  </SideCell>
-                </td>
-                <td>
                   <DateTimeCell timestamp={trade.deliveryAt} />
                 </td>
                 <td>
-                  <TypeBadge $type={isLong ? "Long" : "Short"}>{isLong ? "Long" : "Short"}</TypeBadge>
+                  <SideCell>
+                    <TypeBadge $type={isLong ? "Long" : "Short"}>{isLong ? "Long" : "Short"}</TypeBadge>
+                    {trade.isLiquidation && <LiquidationChip>Liquidated</LiquidationChip>}
+                  </SideCell>
                 </td>
                 <td>{formatPrice(trade.tradePrice)}</td>
                 <td>{Math.abs(trade.tradeQuantity)}</td>
