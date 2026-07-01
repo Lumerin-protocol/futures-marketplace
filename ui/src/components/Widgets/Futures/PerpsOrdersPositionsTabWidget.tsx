@@ -1020,19 +1020,7 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoad
                   <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
                     {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
                   </TypeBadge>
-                  {trade.isLiquidation && (
-                    <LiquidationChip
-                      title={formatLiquidatedQty(trade.tradeQuantity, trade.netQuantityAfter, {
-                        scale: PAYMENT_TOKEN_SCALE_NUM,
-                        fractionDigits: 6,
-                      })}
-                    >
-                      {formatLiquidatedQty(trade.tradeQuantity, trade.netQuantityAfter, {
-                        scale: PAYMENT_TOKEN_SCALE_NUM,
-                        fractionDigits: 6,
-                      })}
-                    </LiquidationChip>
-                  )}
+                  {trade.isLiquidation && <LiquidationChip>Liquidated</LiquidationChip>}
                 </SideCell>
               </td>
               <td>{formatPrice(trade.tradePrice)}</td>
