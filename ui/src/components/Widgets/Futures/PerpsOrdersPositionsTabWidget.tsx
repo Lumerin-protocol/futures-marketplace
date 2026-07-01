@@ -26,6 +26,7 @@ import { DateTimeCell } from "../../DateTimeCell";
 import { LoadMoreButton } from "../../LoadMoreButton";
 import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_DECIMALS_BIGINT, QUANTITY_SCALE } from "../../../lib/units";
 import { getTxUrl } from "../../../lib/indexer";
+import { LiquidationChip, formatLiquidatedQty, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
 
 type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "POSITION_HISTORY" | "ORDER_HISTORY";
 
@@ -509,6 +510,8 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, hasMore = false, isFetching
         return "Filled";
       case "CANCELLED":
         return "Cancelled";
+      case "LIQUIDATED":
+        return "Liquidated";
       default:
         return status;
     }
@@ -524,6 +527,8 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, hasMore = false, isFetching
         return tokens.text.muted;
       case "CANCELLED":
         return tokens.trading.short;
+      case "LIQUIDATED":
+        return tokens.status.error;
       default:
         return tokens.text.muted;
     }
@@ -704,9 +709,24 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
                 <TableRow key={session.id}>
                   <td><DateTimeCell timestamp={session.openedAt} /></td>
                   <td>
-                    <TypeBadge $type={isLong ? "Long" : "Short"}>
-                      {isLong ? "Long" : "Short"}
-                    </TypeBadge>
+                    <SideCell>
+                      <TypeBadge $type={isLong ? "Long" : "Short"}>
+                        {isLong ? "Long" : "Short"}
+                      </TypeBadge>
+                      {session.liquidatedQuantity > 0n && (
+                        <LiquidationChip
+                          title={formatLiquidatedQty(session.liquidatedQuantity, displayQuantity,                           {
+                            scale: PAYMENT_TOKEN_SCALE_NUM,
+                            fractionDigits: 2,
+                          })}
+                        >
+                          {formatLiquidatedQty(session.liquidatedQuantity, displayQuantity,                           {
+                            scale: PAYMENT_TOKEN_SCALE_NUM,
+                            fractionDigits: 2,
+                          })}
+                        </LiquidationChip>
+                      )}
+                    </SideCell>
                   </td>
                   <td>{formatPrice(session.entryPrice)}</td>
                   <td>
@@ -714,7 +734,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
                     {" / "}
                     {((Number(session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(session.maxQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}
                   </td>
-                  <td>{(Number(displayQuantity < 0n ? -displayQuantity : displayQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6)}</td>
+                  <td>{(Number(displayQuantity < 0n ? -displayQuantity : displayQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)}</td>
                   <td>{formatFees(session.fundingFees, session.tradingFees)}</td>
                   <td>
                     <PnLText $isPositive={unrealizedPnlValue >= 0}>
@@ -832,7 +852,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, hasMore = fals
           <thead>
             <tr>
               <th>Opened At</th>
-              {/* <th>Status</th> */}
+              <th>Status</th>
               <th>Side</th>
               <th>Entry Price (USDC)</th>
               <th>Close Price (USDC)</th>
@@ -846,15 +866,35 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, hasMore = fals
             {displayedPositions.map((session) => {
               const isLong = session.maxQuantity > 0n;
               const realizedPnlValue = Number(session.realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
+              const wasLiquidated = session.liquidatedQuantity > 0n;
 
               return (
-                <TableRow key={session.id}>
+                <TableRow
+                  key={session.id}
+                  style={wasLiquidated ? { backgroundColor: LIQUIDATION_ROW_BG } : undefined}
+                >
                   <td><DateTimeCell timestamp={session.openedAt} /></td>
-                  {/* <td>
-                    <StatusBadge $status={session.status} $color={getStatusColor(session.status)}>
-                      {formatStatus(session.status)}
-                    </StatusBadge>
-                  </td> */}
+                  <td>
+                    {wasLiquidated ? (
+                      <LiquidationChip
+                        title={formatLiquidatedQty(
+                          session.liquidatedQuantity,
+                          session.maxQuantity - session.liquidatedQuantity,
+                          { scale: PAYMENT_TOKEN_SCALE_NUM, fractionDigits: 2 },
+                        )}
+                      >
+                        {formatLiquidatedQty(
+                          session.liquidatedQuantity,
+                          session.maxQuantity - session.liquidatedQuantity,
+                          { scale: PAYMENT_TOKEN_SCALE_NUM, fractionDigits: 2 },
+                        )}
+                      </LiquidationChip>
+                    ) : (
+                      <StatusBadge $status={session.status} $color={getStatusColor(session.status)}>
+                        {formatStatus(session.status)}
+                      </StatusBadge>
+                    )}
+                  </td>
                   <td>
                     <TypeBadge $type={isLong ? "Long" : "Short"}>
                       {isLong ? "Long" : "Short"}
@@ -962,12 +1002,18 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, hasMore = false, isF
         </thead>
         <tbody>
           {displayedTrades.map((trade) => (
-            <TableRow key={trade.id}>
+            <TableRow
+              key={trade.id}
+              style={trade.isLiquidation ? { backgroundColor: LIQUIDATION_ROW_BG } : undefined}
+            >
               <td><DateTimeCell timestamp={trade.timestamp} /></td>
               <td>
-                <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
-                  {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
-                </TypeBadge>
+                <SideCell>
+                  <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
+                    {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
+                  </TypeBadge>
+                  {trade.isLiquidation && <LiquidationChip>Liquidated</LiquidationChip>}
+                </SideCell>
               </td>
               <td>{formatPrice(trade.tradePrice)}</td>
               <td>{((Number(trade.tradePrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(trade.tradeQuantity < 0n ? -trade.tradeQuantity : trade.tradeQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}</td>
@@ -1227,6 +1273,13 @@ const TypeBadge = styled("span")<{ $type: string }>`
   font-weight: 600;
   background-color: ${(props) => (props.$type === "Long" ? tokens.trading.longRowBg : tokens.trading.shortRowBg)};
   color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
+`;
+
+const SideCell = styled("div")`
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
 `;
 
 const StatusBadge = styled("span")<{ $status: string; $color: string }>`

@@ -7,6 +7,7 @@ import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { FuturesTradesModal, type FuturesTradesModalSelection } from "./FuturesTradesModal";
 import { LoadMoreButton } from "../../LoadMoreButton";
+import { LiquidationChip, formatLiquidatedQty, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
 
 interface HistoricalPositionsListWidgetProps {
   positions: HistoricalPosition[];
@@ -65,6 +66,7 @@ export const HistoricalPositionsListWidget = ({
             <tr>
               <th>Contract Expiration</th>
               <th>Side</th>
+              <th>Close Reason</th>
               <th>Price (USDC)</th>
               <th>Max Quantity</th>
               <th>Exit Price (USDC)</th>
@@ -78,11 +80,34 @@ export const HistoricalPositionsListWidget = ({
             {sortedPositions.map((position) => {
               const positionType: "Long" | "Short" = position.isLong ? "Long" : "Short";
               const maxQuantity = Math.abs(position.maxQuantity);
+              const wasLiquidated = position.liquidatedQuantity > 0;
               return (
-                <TableRow key={position.id}>
+                <TableRow
+                  key={position.id}
+                  style={wasLiquidated ? { backgroundColor: LIQUIDATION_ROW_BG } : undefined}
+                >
                   <td><DateTimeCell timestamp={position.deliveryAt} /></td>
                   <td>
                     <TypeBadge $type={positionType}>{positionType}</TypeBadge>
+                  </td>
+                  <td>
+                    {wasLiquidated ? (
+                      <LiquidationChip
+                        title={formatLiquidatedQty(
+                          position.liquidatedQuantity,
+                          maxQuantity - position.liquidatedQuantity,
+                        )}
+                      >
+                        {formatLiquidatedQty(
+                          position.liquidatedQuantity,
+                          maxQuantity - position.liquidatedQuantity,
+                        )}
+                      </LiquidationChip>
+                    ) : position.settlementPrice !== null ? (
+                      <span style={{ color: tokens.text.muted }}>Settled</span>
+                    ) : (
+                      <span style={{ color: tokens.text.muted }}>Closed</span>
+                    )}
                   </td>
                   <td>{formatPrice(position.pricePerDay)}</td>
                   <td>{maxQuantity}</td>

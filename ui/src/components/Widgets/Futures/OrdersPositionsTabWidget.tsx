@@ -16,6 +16,7 @@ import { DateTimeCell } from "../../DateTimeCell";
 import { LoadMoreButton } from "../../LoadMoreButton";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { getTxUrl } from "../../../lib/indexer";
+import { LiquidationChip, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
 
 import type { AccountBalance, ContractMode } from "../../../types/types";
 
@@ -248,7 +249,10 @@ const FuturesTradesTable = ({
           {displayedTrades.map((trade) => {
             const isLong = trade.tradeQuantity >= 0;
             return (
-              <TableRow key={trade.id}>
+              <TableRow
+                key={trade.id}
+                style={trade.isLiquidation ? { backgroundColor: LIQUIDATION_ROW_BG } : undefined}
+              >
                 <td>
                   <DateTimeCell timestamp={trade.timestamp} />
                 </td>
@@ -256,7 +260,10 @@ const FuturesTradesTable = ({
                   <DateTimeCell timestamp={trade.deliveryAt} />
                 </td>
                 <td>
-                  <TypeBadge $type={isLong ? "Long" : "Short"}>{isLong ? "Long" : "Short"}</TypeBadge>
+                  <SideCell>
+                    <TypeBadge $type={isLong ? "Long" : "Short"}>{isLong ? "Long" : "Short"}</TypeBadge>
+                    {trade.isLiquidation && <LiquidationChip>Liquidated</LiquidationChip>}
+                  </SideCell>
                 </td>
                 <td>{formatPrice(trade.tradePrice)}</td>
                 <td>{Math.abs(trade.tradeQuantity)}</td>
@@ -409,6 +416,13 @@ const TypeBadge = styled("span")<{ $type: string }>`
   font-weight: 600;
   background-color: ${(props) => (props.$type === "Long" ? tokens.trading.longRowBg : tokens.trading.shortRowBg)};
   color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
+`;
+
+const SideCell = styled("div")`
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
 `;
 
 const EmptyState = styled("div")`

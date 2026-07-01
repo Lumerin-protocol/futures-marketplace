@@ -14,6 +14,7 @@ import type { ContractMode } from "../../../types/types";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { FuturesTradesModal, type FuturesTradesModalSelection } from "./FuturesTradesModal";
+import { LiquidationChip, formatLiquidatedQty } from "../../../lib/liquidation";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -234,6 +235,7 @@ export const PositionsListWidget = ({
           // into this group shares the same session-level net qty. Take it
           // from the first one we see; subsequent ones would just duplicate it.
           netQuantity: position.netQuantity,
+          liquidatedQuantity: position.liquidatedQuantity,
           isActive: position.isActive,
           closedAt: position.closedAt,
           timestamp: position.timestamp,
@@ -256,6 +258,7 @@ export const PositionsListWidget = ({
         positionType: string;
         amount: number;
         netQuantity: number;
+        liquidatedQuantity: number;
         isActive: boolean;
         closedAt: string | null;
         timestamp: string;
@@ -319,7 +322,22 @@ export const PositionsListWidget = ({
                     <>
                       <td style={matured ? { color: "#EF4444" } : undefined}><DateTimeCell timestamp={groupedPosition.deliveryAt} /></td>
                       <td>
-                        <TypeBadge $type={groupedPosition.positionType}>{groupedPosition.positionType}</TypeBadge>
+                        <SideCell>
+                          <TypeBadge $type={groupedPosition.positionType}>{groupedPosition.positionType}</TypeBadge>
+                          {groupedPosition.liquidatedQuantity > 0 && (
+                            <LiquidationChip
+                              title={formatLiquidatedQty(
+                                groupedPosition.liquidatedQuantity,
+                                groupedPosition.netQuantity,
+                              )}
+                            >
+                              {formatLiquidatedQty(
+                                groupedPosition.liquidatedQuantity,
+                                groupedPosition.netQuantity,
+                              )}
+                            </LiquidationChip>
+                          )}
+                        </SideCell>
                       </td>
                       <td>{formatPrice(groupedPosition.pricePerDay)}</td>
                       <td>{Math.abs(groupedPosition.netQuantity)}</td>
@@ -489,6 +507,13 @@ const TypeBadge = styled("span")<{ $type: string }>`
   font-weight: 600;
   background-color: ${(props) => (props.$type === "Long" ? tokens.trading.longRowBg : tokens.trading.shortRowBg)};
   color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
+`;
+
+const SideCell = styled("div")`
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
 `;
 
 const PnLCell = styled("span")<{ $isPositive: boolean }>`
