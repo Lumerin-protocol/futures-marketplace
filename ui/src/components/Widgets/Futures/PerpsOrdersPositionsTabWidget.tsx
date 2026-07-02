@@ -386,11 +386,7 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
           ))}
         </tbody>
       </Table>
-      {visibleCount < activeOrders.length && (
-        <InlineLoadMoreButton onClick={onLoadMore}>
-          Load next 10 items
-        </InlineLoadMoreButton>
-      )}
+      <LoadMoreButton hasMore={visibleCount < activeOrders.length} onClick={onLoadMore} />
 
       {pendingCancelOrder && (
         <CancelOrderConfirmModal
@@ -685,6 +681,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
             <tr>
               <th>Opened At</th>
               <th>Side</th>
+              <th>Status</th>
               <th>Entry Price</th>
               <th>Size / Max Size</th>
               <th>Net Quantity</th>
@@ -709,24 +706,28 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
                 <TableRow key={session.id}>
                   <td><DateTimeCell timestamp={session.openedAt} /></td>
                   <td>
-                    <SideCell>
-                      <TypeBadge $type={isLong ? "Long" : "Short"}>
-                        {isLong ? "Long" : "Short"}
-                      </TypeBadge>
-                      {session.liquidatedQuantity > 0n && (
-                        <LiquidationChip
-                          title={formatLiquidatedQty(session.liquidatedQuantity, displayQuantity,                           {
-                            scale: PAYMENT_TOKEN_SCALE_NUM,
-                            fractionDigits: 2,
-                          })}
-                        >
-                          {formatLiquidatedQty(session.liquidatedQuantity, displayQuantity,                           {
-                            scale: PAYMENT_TOKEN_SCALE_NUM,
-                            fractionDigits: 2,
-                          })}
-                        </LiquidationChip>
-                      )}
-                    </SideCell>
+                    <TypeBadge $type={isLong ? "Long" : "Short"}>
+                      {isLong ? "Long" : "Short"}
+                    </TypeBadge>
+                  </td>
+                  <td>
+                    {session.liquidatedQuantity > 0n ? (
+                      <LiquidationChip
+                        title={formatLiquidatedQty(session.liquidatedQuantity, displayQuantity, {
+                          scale: PAYMENT_TOKEN_SCALE_NUM,
+                          fractionDigits: 2,
+                        })}
+                      >
+                        {formatLiquidatedQty(session.liquidatedQuantity, displayQuantity, {
+                          scale: PAYMENT_TOKEN_SCALE_NUM,
+                          fractionDigits: 2,
+                        })}
+                      </LiquidationChip>
+                    ) : (
+                      <StatusBadge $status="OPEN" $color={tokens.trading.long}>
+                        Open
+                      </StatusBadge>
+                    )}
                   </td>
                   <td>{formatPrice(session.entryPrice)}</td>
                   <td>
@@ -1075,7 +1076,7 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
   );
 
   // Client-side "Load More" paging (the session's trades are already in memory).
-  const PAGE_SIZE = 15;
+  const PAGE_SIZE = 10;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const displayedTrades = sortedTrades.slice(0, visibleCount);
 
@@ -1453,24 +1454,6 @@ const TradesTableContainer = styled("div")`
   &::-webkit-scrollbar-thumb {
     background: ${tokens.overlay.white30};
     border-radius: 4px;
-  }
-`;
-
-const InlineLoadMoreButton = styled("button")`
-  display: block;
-  width: 100%;
-  padding: 0.75rem;
-  margin-top: 0.5rem;
-  background: transparent;
-  color: ${tokens.text.secondary};
-  border: none;
-  font-size: 0.875rem;
-  cursor: pointer;
-  text-align: center;
-  transition: color 0.2s ease;
-
-  &:hover {
-    color: ${tokens.text.onDark};
   }
 `;
 

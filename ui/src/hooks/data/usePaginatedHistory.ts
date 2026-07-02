@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { graphqlRequest } from "./graphql";
 
-export const DEFAULT_HISTORY_PAGE_SIZE = 15;
+export const DEFAULT_HISTORY_PAGE_SIZE = 10;
 
 export interface PaginatedHistoryResult<TItem> {
   /// Flattened, de-duplicated rows across every loaded page.

@@ -210,7 +210,7 @@ export const FuturesTradesModal = ({
   };
 
   // Client-side "Load More" paging (the full set is already in memory).
-  const PAGE_SIZE = 15;
+  const PAGE_SIZE = 10;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   // Reset to the first page whenever the modal opens or the selection changes.
   useEffect(() => {
