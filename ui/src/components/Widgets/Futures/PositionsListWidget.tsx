@@ -292,6 +292,7 @@ export const PositionsListWidget = ({
             <tr>
               <th>Contract Expiration</th>
               <th>Side</th>
+              <th>Status</th>
               <th>Price (USDC)</th>
               <th>Quantity</th>
               <th>Margin</th>
@@ -322,22 +323,24 @@ export const PositionsListWidget = ({
                     <>
                       <td style={matured ? { color: "#EF4444" } : undefined}><DateTimeCell timestamp={groupedPosition.deliveryAt} /></td>
                       <td>
-                        <SideCell>
-                          <TypeBadge $type={groupedPosition.positionType}>{groupedPosition.positionType}</TypeBadge>
-                          {groupedPosition.liquidatedQuantity > 0 && (
-                            <LiquidationChip
-                              title={formatLiquidatedQty(
-                                groupedPosition.liquidatedQuantity,
-                                groupedPosition.netQuantity,
-                              )}
-                            >
-                              {formatLiquidatedQty(
-                                groupedPosition.liquidatedQuantity,
-                                groupedPosition.netQuantity,
-                              )}
-                            </LiquidationChip>
-                          )}
-                        </SideCell>
+                        <TypeBadge $type={groupedPosition.positionType}>{groupedPosition.positionType}</TypeBadge>
+                      </td>
+                      <td>
+                        {groupedPosition.liquidatedQuantity > 0 ? (
+                          <LiquidationChip
+                            title={formatLiquidatedQty(
+                              groupedPosition.liquidatedQuantity,
+                              groupedPosition.netQuantity,
+                            )}
+                          >
+                            {formatLiquidatedQty(
+                              groupedPosition.liquidatedQuantity,
+                              groupedPosition.netQuantity,
+                            )}
+                          </LiquidationChip>
+                        ) : (
+                          <StatusBadge $color={tokens.trading.long}>Open</StatusBadge>
+                        )}
                       </td>
                       <td>{formatPrice(groupedPosition.pricePerDay)}</td>
                       <td>{Math.abs(groupedPosition.netQuantity)}</td>
@@ -509,11 +512,14 @@ const TypeBadge = styled("span")<{ $type: string }>`
   color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
-const SideCell = styled("div")`
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  flex-wrap: wrap;
+const StatusBadge = styled("span")<{ $color: string }>`
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background-color: ${(props) => `${props.$color}33`};
+  color: ${(props) => props.$color};
 `;
 
 const PnLCell = styled("span")<{ $isPositive: boolean }>`
