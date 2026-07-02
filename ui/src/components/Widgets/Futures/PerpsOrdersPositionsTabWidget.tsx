@@ -1074,6 +1074,11 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
     Number(b.timestamp) - Number(a.timestamp)
   );
 
+  // Client-side "Load More" paging (the session's trades are already in memory).
+  const PAGE_SIZE = 15;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const displayedTrades = sortedTrades.slice(0, visibleCount);
+
   return (
     <Modal
       open={true}
@@ -1105,7 +1110,7 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
               </tr>
             </thead>
             <tbody>
-              {sortedTrades.map((trade) => (
+              {displayedTrades.map((trade) => (
                 <TableRow key={trade.id}>
                   <td><DateTimeCell timestamp={trade.timestamp} /></td>
                   <td>
@@ -1139,6 +1144,11 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
             </tbody>
           </TradesTable>
         </TradesTableContainer>
+
+        <LoadMoreButton
+          hasMore={visibleCount < sortedTrades.length}
+          onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+        />
       </TradesModalCard>
     </Modal>
   );
