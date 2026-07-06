@@ -174,6 +174,11 @@ export const FuturesAbi = [
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "OverLiquidation",
+    "type": "error"
+  },
+  {
     "inputs": [
       {
         "internalType": "address",
@@ -1452,6 +1457,24 @@ export const FuturesAbi = [
       }
     ],
     "name": "liquidatePosition",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32[]",
+        "name": "_positionIds",
+        "type": "bytes32[]"
+      }
+    ],
+    "name": "liquidatePositions",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

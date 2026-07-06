@@ -338,6 +338,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     error InvalidOracle(); // hashprice oracle returned a non-positive answer
     error NotLiquidatable(); // liquidate{Order,Orders,Position} called on a healthy participant
     error OrdersStillOpen(); // liquidatePosition called while participant has resting orders
+    error OverLiquidation(); // liquidatePositions closed too many lots — leftover balance above the IM buffer
     error OrderNotBelongToParticipant(); // liquidateOrder/liquidateOrders received an id not owned by `participant`
     error PositionNotBelongToParticipant(); // liquidatePosition received a positionId where participant is neither buyer nor seller
     error OrderNotExists(); // removeOutdatedOrder received an unknown / already-closed orderId
@@ -1089,19 +1090,69 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         if (participantOrderIdsIndex[_participant].length() != 0) revert OrdersStillOpen();
         if (!_underwater(_participant)) revert NotLiquidatable();
 
+        _liquidateOnePosition(_positionId, position, _participant);
+    }
+
+    /// @notice Force-close a keeper-supplied SET of positions belonging to an underwater
+    ///         participant in a single call — the batched "close down to the IM buffer" path
+    ///         that lets the keeper clear an account in one tx instead of one lot per tx.
+    /// @dev    Preconditions checked once at entry: no resting orders (`OrdersStillOpen`) and
+    ///         `_underwater` (`NotLiquidatable`). The loop does NOT recompute margin per lot —
+    ///         the keeper sizes the worst-first subset off-chain. Stale (already-closed) or
+    ///         foreign ids are skipped (not reverted) so a slightly outdated id list still makes
+    ///         progress; reverts `NotLiquidatable` if nothing closed. End-of-batch over-liquidation
+    ///         guard (a single margin read): if positions remain AND there is a real IM buffer
+    ///         (`im > mm`), the leftover balance must sit at/under IM else `OverLiquidation`.
+    ///         Degenerate `im <= mm` (no buffer): no upper bound. Fully-closed accounts skip the
+    ///         guard entirely (bad-debt / full-deleverage path).
+    /// @param  _participant  The underwater account whose lots are being closed.
+    /// @param  _positionIds  Keeper-chosen worst-first subset of the participant's lot ids.
+    function liquidatePositions(address _participant, bytes32[] calldata _positionIds) external {
+        if (participantOrderIdsIndex[_participant].length() != 0) revert OrdersStillOpen();
+        if (!_underwater(_participant)) revert NotLiquidatable();
+
+        uint256 closed = 0;
+        for (uint256 i = 0; i < _positionIds.length; i++) {
+            bytes32 positionId = _positionIds[i];
+            Position storage position = positions[positionId];
+            // Skip stale (already-closed) or foreign ids so an outdated keeper list still
+            // makes progress rather than reverting the whole batch.
+            if (position.seller == address(0)) continue;
+            if (position.seller != _participant && position.buyer != _participant) continue;
+            _liquidateOnePosition(positionId, position, _participant);
+            closed++;
+        }
+
+        if (closed == 0) revert NotLiquidatable();
+
+        // Over-liquidation guard (single margin read). Only meaningful when positions remain
+        // AND there is a real IM buffer above MM. Fully-closed accounts fall through (the
+        // keeper deliberately closed everything — bad-debt / full-deleverage path).
+        if (participantPositionIdsIndex[_participant].length() > 0) {
+            uint256 im = marginEngine.computePortfolioIM(_participant);
+            uint256 mm = marginEngine.computePortfolioMM(_participant);
+            if (im > mm && collateralVault.balanceOf(_participant) > im) revert OverLiquidation();
+        }
+    }
+
+    /// @dev Force-closes a single position on behalf of a (pre-verified underwater, orders-clear)
+    ///      participant and pays the flat liquidation fee. Shared by `liquidatePosition` (single)
+    ///      and `liquidatePositions` (batch). Behaviour is identical to the pre-batch inline body:
+    ///      cash-settle via `_forceLiquidatePosition`, pay `min(fee, balance)`, emit `LotLiquidated`,
+    ///      and notify the points hook. Callers MUST have already checked the orders-first /
+    ///      underwater / ownership invariants.
+    function _liquidateOnePosition(bytes32 _positionId, Position storage position, address _participant)
+        private
+    {
         // Cash-settle through `_forceLiquidatePosition`: it builds an offsetting taker
         // order from the counterparty side and routes PnL through the insurance fund.
         _forceLiquidatePosition(_positionId, position, _participant);
 
-        uint256 fee = liquidationFee;
-        uint256 paid;
-        if (fee > 0) {
-            uint256 balance = collateralVault.balanceOf(_participant);
-            paid = fee < balance ? fee : balance;
-            if (paid > 0) {
-                _internalTransfer(_participant, _msgSender(), paid);
-            }
-        }
+        // Keeper-incentive payout is DISABLED for now: the protocol runs the only
+        // liquidator, so no `liquidationFee` is transferred to `_msgSender()`. The
+        // `liquidationFee` state var, its setter, and the fee field on `LotLiquidated`
+        // are retained (emitting 0) for a future incentive iteration.
+        uint256 paid = 0;
 
         emit LotLiquidated(_positionId, _participant, _msgSender(), paid);
 
@@ -1114,15 +1165,10 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     function _doLiquidateOrder(address _participant, bytes32 _orderId, Order memory _order) private {
         _closeOrder(_orderId, _order, OrderCloseReason.LIQUIDATED);
 
-        uint256 fee = liquidationFee;
-        uint256 paid;
-        if (fee > 0) {
-            uint256 balance = collateralVault.balanceOf(_participant);
-            paid = fee < balance ? fee : balance;
-            if (paid > 0) {
-                _internalTransfer(_participant, _msgSender(), paid);
-            }
-        }
+        // Keeper-incentive payout is DISABLED for now (see `_liquidateOnePosition`):
+        // no `liquidationFee` is transferred; the state var / setter / event field are
+        // retained (emitting 0) for a future incentive iteration.
+        uint256 paid = 0;
 
         emit OrderLiquidated(_orderId, _participant, _msgSender(), paid);
 
@@ -1563,7 +1609,10 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             return;
         }
 
-        // Payer cannot cover full amount: transfer what's available and socialize the shortfall.
+        // Payer cannot cover full amount: transfer what's available and record the uncovered
+        // remainder as bad debt. The counterparty here is always the insurance fund, so the
+        // shortfall is absorbed by that protocol reserve (the fund receives less than it is owed,
+        // or pays a winner from its own balance) — it is never taken from other users' collateral.
         // Surfaces previously-implicit reverts as a `BadDebt` signal for off-chain observers.
         if (available > 0) {
             collateralVault.internalTransfer(payer, receiver, available);

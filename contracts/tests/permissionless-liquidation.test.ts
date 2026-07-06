@@ -75,10 +75,11 @@ async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
     positionId,
     async makeUnderwater() {
       // Drop hashprice aggressively so the buyer (long) breaks MM even after
-      // resting orders are force-cancelled by the keeper's first step. Picking
-      // 100/300 (~66% drop) keeps the test resilient to the size of the order
-      // MM contribution while still leaving the position itself underwater.
-      await scaleHashprice(contracts.hashrateOracle, 100n, 300n);
+      // resting orders are force-cancelled by the keeper's first step. The MM
+      // includes the position's mark-to-market loss (`futuresUnrealizedLoss`), so
+      // a deep drop leaves the position itself underwater once the order-margin
+      // contribution is gone — no reliance on any liquidation-fee balance drain.
+      await scaleHashprice(contracts.hashrateOracle, 100n, 600n);
     },
   };
 }
@@ -168,9 +169,9 @@ describe("Futures - permissionless liquidation entry points", function () {
       );
     });
 
-    it("cancels the order, pays liquidationFee, and emits events", async function () {
+    it("cancels the order without paying a fee (payout disabled), and emits events", async function () {
       const data = await networkHelpers.loadFixture(underwaterWithOrdersAndPositionFixture);
-      const { contracts, accounts, config } = data;
+      const { contracts, accounts } = data;
       const { futures, collateralVault } = contracts;
       const { buyer, buyer2, pc } = accounts;
 
@@ -191,8 +192,9 @@ describe("Futures - permissionless liquidation entry points", function () {
       const liqBalAfter = await collateralVault.read.balanceOf([buyer2.account.address]);
       const userBalAfter = await collateralVault.read.balanceOf([buyer.account.address]);
 
-      assert.equal(liqBalAfter - liqBalBefore, config.liquidationFee);
-      assert.equal(userBalBefore - userBalAfter, config.liquidationFee);
+      // Keeper-incentive payout is disabled: no transfer between participant and liquidator.
+      assert.equal(liqBalAfter - liqBalBefore, 0n);
+      assert.equal(userBalBefore - userBalAfter, 0n);
 
       const ordersAfter = await futures.read.getOrderIds([buyer.account.address]);
       assert.equal(ordersAfter.length, 1);
@@ -207,10 +209,10 @@ describe("Futures - permissionless liquidation entry points", function () {
       ) as any;
       assert.ok(orderClosed, "OrderClosed should be emitted for indexer compatibility");
       assert.ok(orderLiquidated);
-      assert.equal(orderLiquidated.args.fee, config.liquidationFee);
+      assert.equal(orderLiquidated.args.fee, 0n);
     });
 
-    it("caps fee at participant's vault balance", async function () {
+    it("does not transfer any fee even when liquidationFee is set high (payout disabled)", async function () {
       const data = await networkHelpers.loadFixture(underwaterWithOrdersAndPositionFixture);
       const { contracts, accounts } = data;
       const { futures, collateralVault } = contracts;
@@ -232,8 +234,8 @@ describe("Futures - permissionless liquidation entry points", function () {
       const userBalAfter = await collateralVault.read.balanceOf([buyer.account.address]);
       const liqBalAfter = await collateralVault.read.balanceOf([buyer2.account.address]);
 
-      assert.equal(userBalAfter, 0n);
-      assert.equal(liqBalAfter - liqBalBefore, userBalBefore);
+      assert.equal(userBalAfter, userBalBefore, "participant balance untouched");
+      assert.equal(liqBalAfter, liqBalBefore, "liquidator balance untouched");
     });
   });
 
@@ -252,9 +254,9 @@ describe("Futures - permissionless liquidation entry points", function () {
       );
     });
 
-    it("cancels all orders FIFO and pays per-order fee", async function () {
+    it("cancels all orders FIFO without paying a fee (payout disabled)", async function () {
       const data = await networkHelpers.loadFixture(underwaterWithOrdersAndPositionFixture);
-      const { contracts, accounts, config } = data;
+      const { contracts, accounts } = data;
       const { futures, collateralVault } = contracts;
       const { buyer, buyer2 } = accounts;
 
@@ -271,11 +273,8 @@ describe("Futures - permissionless liquidation entry points", function () {
       const ordersAfter = await futures.read.getOrderIds([buyer.account.address]);
 
       assert.equal(ordersAfter.length, 0);
-      // At most `len * fee`; possibly less if MM became healthy partway.
-      assert.ok(
-        liqBalAfter - liqBalBefore <= config.liquidationFee * BigInt(ordersBefore.length),
-      );
-      assert.ok(liqBalAfter - liqBalBefore >= config.liquidationFee);
+      // Keeper-incentive payout is disabled: sweeping every order earns nothing.
+      assert.equal(liqBalAfter - liqBalBefore, 0n);
     });
   });
 
