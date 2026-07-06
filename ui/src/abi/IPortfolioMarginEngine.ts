@@ -52,7 +52,33 @@ export const IPortfolioMarginEngineAbi = [
     },
     {
       "inputs": [],
+      "name": "imVolShock",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
       "name": "mmSpotShock",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "mmVolShock",
       "outputs": [
         {
           "internalType": "uint256",

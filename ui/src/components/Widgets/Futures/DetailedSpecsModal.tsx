@@ -10,8 +10,44 @@ import { usePerpsCollection } from "../../../hooks/data/perps/usePerpsCollection
 import { usePerpsContractConstants } from "../../../hooks/data/perps/usePerpsContractConstants";
 import { usePerpsTokenInfo } from "../../../hooks/data/perps/usePerpsTokenInfo";
 import { useFundingRate } from "../../../hooks/data/perps/useFundingRate";
+import { useMarginEngineShocks } from "../../../hooks/data/useMarginEngineShocks";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { ContractMode } from "../../../types/types";
+
+// Shock parameters are WAD-scaled (1e18) fractions. Spot shocks render as a
+// percentage (e.g. 0.1e18 -> "±10%"); vol shocks render as vol points using the
+// same magnitude (e.g. 0.1e18 -> "±10 vol pts").
+const formatSpotShock = (value: bigint | undefined) =>
+  value === undefined ? "..." : `±${(Number(value) / 1e18) * 100}%`;
+
+const formatVolShock = (value: bigint | undefined) =>
+  value === undefined ? "..." : `±${(Number(value) / 1e18) * 100} vol pts`;
+
+// Shared RISK PARAMETERS section rendered in both futures and perpetual views.
+const RiskParametersSection = () => {
+  const shocks = useMarginEngineShocks();
+  return (
+    <SpecSection>
+      <SectionTitle>RISK PARAMETERS</SectionTitle>
+      <SpecItem>
+        <SpecLabel>Initial Margin</SpecLabel>
+        <SpecValue>{formatSpotShock(shocks.imSpotShock)}</SpecValue>
+      </SpecItem>
+      <SpecItem>
+        <SpecLabel>Maintenance Margin</SpecLabel>
+        <SpecValue>{formatSpotShock(shocks.mmSpotShock)}</SpecValue>
+      </SpecItem>
+      <SpecItem>
+        <SpecLabel>Initial Margin (Vol)</SpecLabel>
+        <SpecValue>{formatVolShock(shocks.imVolShock)}</SpecValue>
+      </SpecItem>
+      <SpecItem>
+        <SpecLabel>Maintenance Margin (Vol)</SpecLabel>
+        <SpecValue>{formatVolShock(shocks.mmVolShock)}</SpecValue>
+      </SpecItem>
+    </SpecSection>
+  );
+};
 
 interface DetailedSpecsModalProps {
   closeForm: () => void;
@@ -95,16 +131,12 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
     <SpecsShell>
       {/* CONTRACT SPECIFICATIONS */}
       <SpecSection>
-        <SectionTitle>CONTRACT SPECIFICATIONS</SectionTitle>
+        <SectionTitle>CONTRACT DETAILS</SectionTitle>
         <SpecItem>
           <SpecLabel>Contract Unit</SpecLabel>
           <SpecValue>{formatSpeedTHs(contractSpecs.speedHps)} TH/s per day</SpecValue>
         </SpecItem>
 
-        <SpecItem>
-          <SpecLabel>Margin Requirement</SpecLabel>
-          <SpecValue>{contractSpecs.liquidationMarginPercent}%</SpecValue>
-        </SpecItem>
 
         <SpecItem>
           <SpecLabel>Expiration Time</SpecLabel>
@@ -193,6 +225,10 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
           <SpecValue>{contractConstants.maxOrdersPerParticipant ?? "..."}</SpecValue>
         </SpecItem>
       </SpecSection>
+
+      {/* RISK PARAMETERS */}
+      <RiskParametersSection />
+
       {/* MORE DETAILS */}
       <SpecSection>
         <SectionTitle>MORE DETAILS</SectionTitle>
@@ -318,34 +354,12 @@ const PerpetualStatistics = () => {
     <SpecsShell>
       {/* CONTRACT SPECIFICATIONS */}
       <SpecSection>
-        <SectionTitle>CONTRACT SPECIFICATIONS</SectionTitle>
+        <SectionTitle>CONTRACT DETAILS</SectionTitle>
         <SpecItem>
           <SpecLabel>Contract Type</SpecLabel>
           <SpecValue>Perpetual</SpecValue>
         </SpecItem>
 
-        {perpsCollection && (
-          <SpecItem>
-            <SpecLabel>Initial Margin</SpecLabel>
-            <SpecValue>{perpsCollection.marginPercent}%</SpecValue>
-          </SpecItem>
-        )}
-
-        {perpsCollection && (
-          <SpecItem>
-            <SpecLabel>Maintenance Margin</SpecLabel>
-            <SpecValue>{perpsCollection.maintenanceMarginPercent}%</SpecValue>
-          </SpecItem>
-        )}
-
-        {minMarginPerOrder !== null && (
-          <SpecItem>
-            <SpecLabel>Min Margin Per Order</SpecLabel>
-            <SpecValue>
-              {minMarginPerOrder.toFixed(2)} {tokenSymbol}
-            </SpecValue>
-          </SpecItem>
-        )}
 
         {contractAddress && (
           <SpecItem>
@@ -446,6 +460,9 @@ const PerpetualStatistics = () => {
           </SpecItem>
         )}
       </SpecSection>
+
+      {/* RISK PARAMETERS */}
+      <RiskParametersSection />
 
       {/* MORE DETAILS */}
       {docsUrl && (
