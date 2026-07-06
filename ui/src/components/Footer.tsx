@@ -20,7 +20,7 @@ const socials = [
 
 const resources = [
   { href: `${process.env.REACT_APP_GITBOOK_URL}`, icon: HelpIcon, label: "Help" },
-  { href: "https://github.com/Lumerin-protocol/proxy-router-ui/issues", icon: FlagCircleIcon, label: "Report issue" },
+  { href: "https://github.com/Lumerin-protocol/futures-marketplace/issues", icon: FlagCircleIcon, label: "Report issue" },
   { href: "https://lumerin.io/privacy-policy", icon: ShieldIcon, label: "Privacy Policy" },
 ];
 
