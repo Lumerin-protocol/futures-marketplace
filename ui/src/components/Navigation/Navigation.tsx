@@ -114,7 +114,7 @@ export const ResponsiveNavigation = (prop: {
             <HelpIcon style={{ fill: tokens.accent.main }} />
             <span className="item-name">Help</span>
           </a>
-          <a href="https://github.com/Lumerin-protocol/proxy-router-ui/issues" target="_blank" rel="noreferrer">
+          <a href="https://github.com/Lumerin-protocol/futures-marketplace/issues" target="_blank" rel="noreferrer">
             <FlagCircleIcon style={{ fill: tokens.accent.main }} />
             <span className="item-name">Report issue</span>
           </a>

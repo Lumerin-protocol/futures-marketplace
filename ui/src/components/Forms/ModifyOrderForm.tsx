@@ -6,6 +6,9 @@ import type { TransactionReceipt } from "viem";
 import { useModifyOrder } from "../../hooks/data/useModifyOrder";
 import { PARTICIPANT_QK } from "../../hooks/data/getUserFuturesOrders";
 import { POSITION_BOOK_QK } from "../../hooks/data/getUserFuturesPositions";
+import { HISTORICAL_ORDERS_QK } from "../../hooks/data/useHistoricalOrders";
+import { FUTURES_POSITION_HISTORY_QK } from "../../hooks/data/useFuturesPositionHistory";
+import { USER_FUTURES_TRADES_QK } from "../../hooks/data/useUserFuturesTrades";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
 import type { ParticipantOrder, Participant } from "../../hooks/data/getUserFuturesOrders";
@@ -196,6 +199,13 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
       return isBuy ? quantity : -quantity;
     };
 
+    const originalPriceStr = (Number(order.pricePerDay) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+    const watchedPrice = form.watch("price");
+    const watchedQuantity = form.watch("quantity");
+    const hasChanges =
+      Number(watchedQuantity) !== currentQuantity ||
+      parseFloat(watchedPrice || "0").toFixed(2) !== originalPriceStr;
+
     return (
       <TransactionForm
         onClose={closeForm}
@@ -203,51 +213,53 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
         description="Update the price and quantity for your order"
         inputForm={inputForm}
         validateInput={validateInput}
-        reviewForm={(props) => (
-          <>
-            <div className="mb-4">
-              <h3 className="font-semibold mb-2">Current Order:</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-300">Type:</span>
-                  <span className="text-white">{isBuy ? "Buy" : "Sell"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-300">Price:</span>
-                  <span className="text-white">{Number(order.pricePerDay) / PAYMENT_TOKEN_SCALE_NUM} USDC</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-300">Quantity:</span>
-                  <span className="text-white">{currentQuantity} units</span>
+        disableReview={!hasChanges}
+        reviewForm={(props) => {
+          const oldPrice = Number(order.pricePerDay) / PAYMENT_TOKEN_SCALE_NUM;
+          const newPrice = parseFloat(form.watch("price"));
+          const oldQuantity = currentQuantity;
+          const newQuantity = Number(form.watch("quantity"));
+          const oldSize = oldPrice * oldQuantity;
+          const newSize = newPrice * newQuantity;
+
+          const renderChange = (label: string, oldValue: string, newValue: string) => (
+            <div className="flex justify-between">
+              <span className="text-gray-300">{label}:</span>
+              <span className="text-white">
+                {oldValue === newValue ? (
+                  newValue
+                ) : (
+                  <>
+                    <span className="text-gray-400 line-through">{oldValue}</span>
+                    {" → "}
+                    <span>{newValue}</span>
+                  </>
+                )}
+              </span>
+            </div>
+          );
+
+          return (
+            <>
+              <div className="mb-4">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Side:</span>
+                    <span className="text-white">{isBuy ? "Buy" : "Sell"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Expiration Date:</span>
+                    <span className="text-white">{new Date(Number(order.deliveryAt) * 1000).toLocaleString()}</span>
+                  </div>
+                  {renderChange("Price", `${oldPrice.toFixed(2)} USDC`, `${newPrice.toFixed(2)} USDC`)}
+                  {renderChange("Quantity", `${oldQuantity} units`, `${newQuantity} units`)}
+                  {renderChange("Size", `${oldSize.toFixed(2)} USDC`, `${newSize.toFixed(2)} USDC`)}
                 </div>
               </div>
-            </div>
-            <div className="mb-4">
-              <h3 className="font-semibold mb-2">Modified Order:</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-300">Type:</span>
-                  <span className="text-white">{isBuy ? "Buy" : "Sell"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-300">Price:</span>
-                  <span className="text-white">{parseFloat(form.watch("price")).toFixed(2)} USDC</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-300">Delivery Date:</span>
-                  <span className="text-white">{new Date(Number(order.deliveryAt) * 1000).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-300">Size:</span>
-                  <span className="text-white">
-                    {(parseFloat(form.watch("price")) * form.watch("quantity")).toFixed(2)} USDC
-                  </span>
-                </div>
-              </div>
-            </div>
-            <p className="text-gray-400 text-sm">You are about to modify your order.</p>
-          </>
-        )}
+              <p className="text-gray-400 text-sm">You are about to modify your order.</p>
+            </>
+          );
+        }}
         resultForm={(props) => (
           <>
             <p className="w-6/6 text-left font-normal text-s mt-5">
@@ -290,6 +302,10 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
                 qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
                 address && qc.invalidateQueries({ queryKey: [POSITION_BOOK_QK] }),
                 address && qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
+                // Reset futures history tables back to their newest page.
+                address && qc.resetQueries({ queryKey: [HISTORICAL_ORDERS_QK, address] }),
+                address && qc.resetQueries({ queryKey: [FUTURES_POSITION_HISTORY_QK, address] }),
+                address && qc.resetQueries({ queryKey: [USER_FUTURES_TRADES_QK, address] }),
               ]);
             },
           },

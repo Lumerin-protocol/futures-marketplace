@@ -1,7 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
 import { backgroundRefetchOpts } from "./config";
-import { graphqlRequest } from "./graphql";
 import { UserFuturesTradesQuery } from "./graphql-queries";
+import { usePaginatedHistory, type PaginatedHistoryResult } from "./usePaginatedHistory";
 
 export const USER_FUTURES_TRADES_QK = "UserFuturesTrades";
 
@@ -10,29 +9,13 @@ export const useUserFuturesTrades = (
   props?: {
     refetch?: boolean;
   },
-) => {
-  const query = useQuery({
+): PaginatedHistoryResult<UserFuturesTrade> => {
+  return usePaginatedHistory<UserFuturesTradesResponse, UserFuturesTrade>({
     queryKey: [USER_FUTURES_TRADES_QK, address],
-    queryFn: () => fetchUserFuturesTradesAsync(address!),
-    enabled: !!address,
-    ...(props?.refetch ? backgroundRefetchOpts : {}),
-  });
-
-  return query;
-};
-
-const fetchUserFuturesTradesAsync = async (address: `0x${string}`) => {
-  const variables = {
-    address: address.toLowerCase(),
-  };
-
-  const response = await graphqlRequest<UserFuturesTradesResponse>(
-    UserFuturesTradesQuery,
-    variables,
-  );
-
-  const data: UserFuturesTrades = {
-    trades: response.trades.map((trade) => ({
+    query: UserFuturesTradesQuery,
+    variables: { address: address?.toLowerCase() },
+    selectRows: (response) => response.trades,
+    mapRow: (trade) => ({
       user: {
         id: trade.user.id,
       },
@@ -49,16 +32,12 @@ const fetchUserFuturesTradesAsync = async (address: `0x${string}`) => {
       tradingFee: BigInt(trade.tradingFee),
       isLiquidation: trade.isLiquidation,
       liquidator: trade.liquidator,
-      liquidationFee:
-        trade.liquidationFee != null ? BigInt(trade.liquidationFee) : null,
-    })),
-  };
-
-  return data;
-};
-
-export type UserFuturesTrades = {
-  trades: UserFuturesTrade[];
+      liquidationFee: trade.liquidationFee != null ? BigInt(trade.liquidationFee) : null,
+    }),
+    getId: (trade) => trade.id,
+    enabled: !!address,
+    refetchInterval: props?.refetch ? backgroundRefetchOpts.refetchInterval : undefined,
+  });
 };
 
 /// One on-chain Trade row for a user, sourced from the futures subgraph.

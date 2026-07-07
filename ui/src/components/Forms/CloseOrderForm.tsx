@@ -9,6 +9,12 @@ import { useCreatePerpsOrder } from "../../hooks/data/perps/useCreatePerpsOrder"
 import { useAccount } from "wagmi";
 import { PARTICIPANT_QK } from "../../hooks/data/getUserFuturesOrders";
 import { POSITION_BOOK_QK } from "../../hooks/data/getUserFuturesPositions";
+import { HISTORICAL_ORDERS_QK } from "../../hooks/data/useHistoricalOrders";
+import { FUTURES_POSITION_HISTORY_QK } from "../../hooks/data/useFuturesPositionHistory";
+import { USER_FUTURES_TRADES_QK } from "../../hooks/data/useUserFuturesTrades";
+import { PERPS_ORDER_HISTORY_QK } from "../../hooks/data/perps/usePerpsOrderHistory";
+import { PERPS_POSITION_HISTORY_QK } from "../../hooks/data/perps/usePerpsPositionHistory";
+import { USER_TRADES_QK } from "../../hooks/data/perps/useUserTrades";
 import type { FC } from "react";
 import type { ContractMode } from "../../types/types";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
@@ -116,6 +122,18 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, de
               qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
               address && qc.invalidateQueries({ queryKey: [POSITION_BOOK_QK] }),
               address && qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
+              // Reset history tables back to their newest page after closing.
+              ...(contractMode === "perpetual"
+                ? [
+                    address && qc.resetQueries({ queryKey: [PERPS_ORDER_HISTORY_QK, address] }),
+                    address && qc.resetQueries({ queryKey: [PERPS_POSITION_HISTORY_QK, address] }),
+                    address && qc.resetQueries({ queryKey: [USER_TRADES_QK, address] }),
+                  ]
+                : [
+                    address && qc.resetQueries({ queryKey: [HISTORICAL_ORDERS_QK, address] }),
+                    address && qc.resetQueries({ queryKey: [FUTURES_POSITION_HISTORY_QK, address] }),
+                    address && qc.resetQueries({ queryKey: [USER_FUTURES_TRADES_QK, address] }),
+                  ]),
             ]);
           },
         },

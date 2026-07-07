@@ -3,10 +3,11 @@ import Modal from "@mui/material/Modal";
 import CloseIcon from "@mui/icons-material/Close";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { tokens } from "../../../styles/tokens";
 import { ModalCard } from "../../Modal.styled";
 import { DateTimeCell } from "../../DateTimeCell";
+import { LoadMoreButton } from "../../LoadMoreButton";
 import { useHistoricalPositions } from "../../../hooks/data/useHistoricalPositions";
 import type { PositionBookPosition, FuturesSessionTrade } from "../../../hooks/data/getUserFuturesPositions";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
@@ -208,6 +209,16 @@ export const FuturesTradesModal = ({
     return `${value >= 0 ? "+" : ""}${value.toFixed(2)} USDC`;
   };
 
+  // Client-side "Load More" paging (the full set is already in memory).
+  const PAGE_SIZE = 10;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  // Reset to the first page whenever the modal opens or the selection changes.
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [open, selection]);
+
+  const displayedTrades = matchingTrades.slice(0, visibleCount);
+
   const isLoading = open && historicalPositionsQuery.isLoading;
 
   return (
@@ -240,7 +251,7 @@ export const FuturesTradesModal = ({
                 </tr>
               </thead>
               <tbody>
-                {matchingTrades.map((trade) => (
+                {displayedTrades.map((trade) => (
                   <TableRow key={trade.id}>
                     <td>
                       <DateTimeCell timestamp={trade.timestamp} />
@@ -282,6 +293,13 @@ export const FuturesTradesModal = ({
             </TradesTable>
           )}
         </TradesTableContainer>
+
+        {!isLoading && (
+          <LoadMoreButton
+            hasMore={visibleCount < matchingTrades.length}
+            onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+          />
+        )}
       </TradesModalCard>
     </Modal>
   );

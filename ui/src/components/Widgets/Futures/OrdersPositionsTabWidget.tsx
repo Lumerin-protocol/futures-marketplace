@@ -10,9 +10,10 @@ import { HistoricalPositionsListWidget } from "./HistoricalPositionsListWidget";
 import type { ParticipantOrder } from "../../../hooks/data/getUserFuturesOrders";
 import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPositions";
 import { useHistoricalOrders } from "../../../hooks/data/useHistoricalOrders";
-import { useHistoricalPositions } from "../../../hooks/data/useHistoricalPositions";
+import { useFuturesPositionHistory } from "../../../hooks/data/useFuturesPositionHistory";
 import { useUserFuturesTrades, type UserFuturesTrade } from "../../../hooks/data/useUserFuturesTrades";
 import { DateTimeCell } from "../../DateTimeCell";
+import { LoadMoreButton } from "../../LoadMoreButton";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { getTxUrl } from "../../../lib/indexer";
 import { LiquidationChip, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
@@ -63,7 +64,7 @@ export const OrdersPositionsTabWidget = ({
   // useHistoricalPositions), so this doesn't duplicate work — only auto-refetch
   // is gated on the active tab.
   const historicalOrdersQuery = useHistoricalOrders(participantAddress, true);
-  const historicalPositionsQuery = useHistoricalPositions(participantAddress, true);
+  const historicalPositionsQuery = useFuturesPositionHistory(participantAddress, true);
   const tradesQuery = useUserFuturesTrades(participantAddress, { refetch: activeTab === "TRADES" });
 
   // Counts for the tab badges. For Open Orders / Positions / Order History /
@@ -88,17 +89,11 @@ export const OrdersPositionsTabWidget = ({
     return unique.size;
   }, [positions, participantAddress]);
 
-  const tradesCount = useMemo(() => {
-    return tradesQuery.data?.trades.length ?? 0;
-  }, [tradesQuery.data?.trades]);
+  const tradesCount = tradesQuery.data.length;
 
-  const orderHistoryCount = useMemo(() => {
-    return historicalOrdersQuery.data?.data?.length ?? 0;
-  }, [historicalOrdersQuery.data?.data]);
+  const orderHistoryCount = historicalOrdersQuery.data.length;
 
-  const positionHistoryCount = useMemo(() => {
-    return historicalPositionsQuery.data?.data?.length ?? 0;
-  }, [historicalPositionsQuery.data?.data]);
+  const positionHistoryCount = historicalPositionsQuery.data.length;
 
   // Auto-switch to Positions tab when there are no open orders but there are open positions.
   useEffect(() => {
@@ -107,8 +102,6 @@ export const OrdersPositionsTabWidget = ({
       setActiveTab("POSITIONS");
     }
   }, [ordersLoading, positionsLoading, ordersCount, positionsCount]);
-
-  const [tradesVisibleCount, setTradesVisibleCount] = useState(10);
 
   return (
     <TabContainer>
@@ -157,27 +150,34 @@ export const OrdersPositionsTabWidget = ({
         {activeTab === "TRADES" && (
           <TradesWrapper>
             <FuturesTradesTable
-              trades={tradesQuery.data?.trades ?? []}
-              isLoading={tradesQuery.isLoading}
-              visibleCount={tradesVisibleCount}
-              onLoadMore={() => setTradesVisibleCount((c) => c + 10)}
+              trades={tradesQuery.data}
+              isLoading={tradesQuery.loading}
+              hasMore={tradesQuery.hasMore}
+              isFetchingMore={tradesQuery.isFetchingMore}
+              onLoadMore={tradesQuery.loadMore}
             />
           </TradesWrapper>
         )}
         {activeTab === "POSITION_HISTORY" && (
           <PositionsWrapper>
             <HistoricalPositionsListWidget
-              positions={historicalPositionsQuery.data?.data ?? []}
-              isLoading={historicalPositionsQuery.isLoading}
+              positions={historicalPositionsQuery.data}
+              isLoading={historicalPositionsQuery.loading}
               participantAddress={participantAddress}
+              hasMore={historicalPositionsQuery.hasMore}
+              isFetchingMore={historicalPositionsQuery.isFetchingMore}
+              onLoadMore={historicalPositionsQuery.loadMore}
             />
           </PositionsWrapper>
         )}
         {activeTab === "ORDER_HISTORY" && (
           <OrdersWrapper>
             <HistoricalOrdersListWidget
-              orders={historicalOrdersQuery.data?.data ?? []}
-              isLoading={historicalOrdersQuery.isLoading}
+              orders={historicalOrdersQuery.data}
+              isLoading={historicalOrdersQuery.loading}
+              hasMore={historicalOrdersQuery.hasMore}
+              isFetchingMore={historicalOrdersQuery.isFetchingMore}
+              onLoadMore={historicalOrdersQuery.loadMore}
             />
           </OrdersWrapper>
         )}
@@ -190,11 +190,18 @@ export const OrdersPositionsTabWidget = ({
 interface FuturesTradesTableProps {
   trades: UserFuturesTrade[];
   isLoading?: boolean;
-  visibleCount: number;
+  hasMore?: boolean;
+  isFetchingMore?: boolean;
   onLoadMore: () => void;
 }
 
-const FuturesTradesTable = ({ trades, isLoading, visibleCount, onLoadMore }: FuturesTradesTableProps) => {
+const FuturesTradesTable = ({
+  trades,
+  isLoading,
+  hasMore = false,
+  isFetchingMore,
+  onLoadMore,
+}: FuturesTradesTableProps) => {
   const formatPrice = (price: bigint) => {
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
@@ -205,7 +212,7 @@ const FuturesTradesTable = ({ trades, isLoading, visibleCount, onLoadMore }: Fut
   };
 
   const sortedTrades = [...trades].sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
-  const displayedTrades = sortedTrades.slice(0, visibleCount);
+  const displayedTrades = sortedTrades;
 
   if (isLoading) {
     return (
@@ -283,9 +290,7 @@ const FuturesTradesTable = ({ trades, isLoading, visibleCount, onLoadMore }: Fut
           })}
         </tbody>
       </Table>
-      {visibleCount < sortedTrades.length && (
-        <LoadMoreButton onClick={onLoadMore}>Load next 10 items</LoadMoreButton>
-      )}
+      <LoadMoreButton hasMore={hasMore} isLoading={isFetchingMore} onClick={onLoadMore} />
     </TableContainer>
   );
 };
@@ -452,20 +457,3 @@ const TxLink = styled("a")`
   }
 `;
 
-const LoadMoreButton = styled("button")`
-  display: block;
-  width: 100%;
-  padding: 0.75rem;
-  margin-top: 0.5rem;
-  background: transparent;
-  color: ${tokens.text.secondary};
-  border: none;
-  font-size: 0.875rem;
-  cursor: pointer;
-  text-align: center;
-  transition: color 0.2s ease;
-
-  &:hover {
-    color: ${tokens.text.onDark};
-  }
-`;

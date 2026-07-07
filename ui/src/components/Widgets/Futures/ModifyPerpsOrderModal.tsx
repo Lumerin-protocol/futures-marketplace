@@ -9,17 +9,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { USER_PERPS_ORDERS_QK } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { USER_POSITION_SESSIONS_QK } from "../../../hooks/data/perps/useUserPositionSessions";
 import { USER_PERPS_TRADES_QK } from "../../../hooks/data/perps/useUserPerpsTrades";
+import { PERPS_ORDER_HISTORY_QK } from "../../../hooks/data/perps/usePerpsOrderHistory";
+import { PERPS_POSITION_HISTORY_QK } from "../../../hooks/data/perps/usePerpsPositionHistory";
+import { USER_TRADES_QK } from "../../../hooks/data/perps/useUserTrades";
 import { getOrderBookQueryKey, waitForOrderBookBlockNumber } from "../../../hooks/data/orderBookHelpers";
 import { usePublicClient } from "wagmi";
 import {
   usePerpsOrderForm,
   PerpsOrderFormFields,
   PerpsModalCard,
-  PositionInfoSection,
-  InfoRow,
-  InfoLabel,
-  InfoValue,
-  TypeBadge,
   ErrorText,
   ModalActions,
   ModalCancelButton,
@@ -48,6 +46,7 @@ export const ModifyPerpsOrderModal = ({
 }: ModifyPerpsOrderModalProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showReview, setShowReview] = useState(false);
 
   const { createOrderAsync } = useCreatePerpsOrder();
   const { cancelOrderAsync } = useCancelPerpsOrder();
@@ -67,14 +66,25 @@ export const ModifyPerpsOrderModal = ({
     const initPrice = (Number(order.price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
     form.reset(initPrice, 100);
     setSubmitError(null);
+    setShowReview(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, order]);
 
   const handleClose = useCallback(() => {
     setSubmitError(null);
     setIsSubmitting(false);
+    setShowReview(false);
     onClose();
   }, [onClose]);
+
+  const handleReview = useCallback(() => {
+    if (!order) return;
+    const newQty = form.getCurrentQuantity();
+    if (newQty <= 0 || form.currentPrice <= 0) return;
+    setSubmitError(null);
+    setShowReview(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order, form.currentPrice, form.amount, form.amountMode]);
 
   const handleConfirm = useCallback(async () => {
     if (!order) return;
@@ -107,6 +117,10 @@ export const ModifyPerpsOrderModal = ({
         queryClient.invalidateQueries({ queryKey: [USER_PERPS_ORDERS_QK, participantAddress] }),
         queryClient.invalidateQueries({ queryKey: [USER_POSITION_SESSIONS_QK, participantAddress] }),
         queryClient.invalidateQueries({ queryKey: [USER_PERPS_TRADES_QK, participantAddress] }),
+        // Reset perps history tables back to their newest page.
+        queryClient.resetQueries({ queryKey: [PERPS_ORDER_HISTORY_QK, participantAddress] }),
+        queryClient.resetQueries({ queryKey: [PERPS_POSITION_HISTORY_QK, participantAddress] }),
+        queryClient.resetQueries({ queryKey: [USER_TRADES_QK, participantAddress] }),
       ]);
 
       if (onConfirmed) await onConfirmed();
@@ -122,9 +136,33 @@ export const ModifyPerpsOrderModal = ({
   if (!order) return null;
 
   const side = order.isBuy ? "Long" : "Short";
-  const formatPrice = (p: bigint) => (Number(p) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   const newQtyDisplay = form.getCurrentQuantity();
   const newSizeDisplay = form.getCurrentSize();
+
+  const oldPrice = Number(order.price) / PAYMENT_TOKEN_SCALE_NUM;
+  const oldQty = maxQuantity;
+  const oldSize = oldPrice * oldQty;
+
+  const hasChanges =
+    form.currentPrice.toFixed(2) !== oldPrice.toFixed(2) ||
+    newQtyDisplay.toFixed(6) !== oldQty.toFixed(6);
+
+  const renderChange = (label: string, oldValue: string, newValue: string) => (
+    <div className="flex justify-between">
+      <span className="text-gray-300">{label}:</span>
+      <span className="text-white">
+        {oldValue === newValue ? (
+          newValue
+        ) : (
+          <>
+            <span className="text-gray-400 line-through">{oldValue}</span>
+            {" → "}
+            <span>{newValue}</span>
+          </>
+        )}
+      </span>
+    </div>
+  );
 
   return (
     <Modal open={open} onClose={handleClose}>
@@ -135,65 +173,72 @@ export const ModifyPerpsOrderModal = ({
 
         <h2>Modify Order</h2>
 
-        <PositionInfoSection>
-          <InfoRow>
-            <InfoLabel>Side</InfoLabel>
-            <InfoValue>
-              <TypeBadge $type={side}>{side}</TypeBadge>
-            </InfoValue>
-          </InfoRow>
-          <InfoRow>
-            <InfoLabel>Original Price</InfoLabel>
-            <InfoValue>{formatPrice(order.price)} USDC</InfoValue>
-          </InfoRow>
-          <InfoRow>
-            <InfoLabel>Filled / Original Qty</InfoLabel>
-            <InfoValue>
-              {(Number(order.filledQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6)}
-              {" / "}
-              {(Number(order.originalQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6)}
-            </InfoValue>
-          </InfoRow>
-          {marketPrice !== undefined && (
-            <InfoRow>
-              <InfoLabel>Market Price</InfoLabel>
-              <InfoValue>{formatPrice(marketPrice)} USDC</InfoValue>
-            </InfoRow>
-          )}
-        </PositionInfoSection>
+        {showReview ? (
+          <>
+            <div className="mb-4">
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Side:</span>
+                  <span className="text-white">{side}</span>
+                </div>
+                {renderChange("Price", `${oldPrice.toFixed(2)} USDC`, `${form.currentPrice.toFixed(2)} USDC`)}
+                {renderChange("Quantity", oldQty.toFixed(6), newQtyDisplay.toFixed(6))}
+                {renderChange("Size", `${oldSize.toFixed(2)} USDC`, `${newSizeDisplay.toFixed(2)} USDC`)}
+              </div>
+            </div>
 
-        <PerpsOrderFormFields
-          price={form.price}
-          amount={form.amount}
-          amountMode={form.amountMode}
-          sliderValue={form.sliderValue}
-          disabled={isSubmitting}
-          priceLabel="New Price (USDC)"
-          quantityLabel="New Quantity"
-          sizeLabel="New Size (USDC)"
-          currentQuantity={newQtyDisplay}
-          currentSize={newSizeDisplay}
-          onPriceChange={form.handlePriceChange}
-          onAmountChange={form.handleAmountChange}
-          onAmountModeChange={form.handleAmountModeChange}
-          onSliderChange={form.handleSliderChange}
-          onIncrementPrice={form.incrementPrice}
-          onDecrementPrice={form.decrementPrice}
-        />
+            <p className="text-gray-400 text-sm mb-4">You are about to modify your order.</p>
 
-        {submitError && <ErrorText>{submitError}</ErrorText>}
+            {submitError && <ErrorText>{submitError}</ErrorText>}
 
-        <ModalActions>
-          <ModalCancelButton onClick={handleClose} disabled={isSubmitting}>
-            Cancel
-          </ModalCancelButton>
-          <ModalConfirmButton
-            onClick={handleConfirm}
-            disabled={isSubmitting || newQtyDisplay <= 0 || form.currentPrice <= 0}
-          >
-            {isSubmitting ? "Modifying..." : "Confirm"}
-          </ModalConfirmButton>
-        </ModalActions>
+            <ModalActions>
+              <ModalCancelButton onClick={() => setShowReview(false)} disabled={isSubmitting}>
+                Back
+              </ModalCancelButton>
+              <ModalConfirmButton
+                onClick={handleConfirm}
+                disabled={isSubmitting || newQtyDisplay <= 0 || form.currentPrice <= 0}
+              >
+                {isSubmitting ? "Modifying..." : "Confirm"}
+              </ModalConfirmButton>
+            </ModalActions>
+          </>
+        ) : (
+          <>
+            <PerpsOrderFormFields
+              price={form.price}
+              amount={form.amount}
+              amountMode={form.amountMode}
+              sliderValue={form.sliderValue}
+              disabled={isSubmitting}
+              priceLabel="New Price (USDC)"
+              quantityLabel="New Quantity"
+              sizeLabel="New Size (USDC)"
+              currentQuantity={newQtyDisplay}
+              currentSize={newSizeDisplay}
+              onPriceChange={form.handlePriceChange}
+              onAmountChange={form.handleAmountChange}
+              onAmountModeChange={form.handleAmountModeChange}
+              onSliderChange={form.handleSliderChange}
+              onIncrementPrice={form.incrementPrice}
+              onDecrementPrice={form.decrementPrice}
+            />
+
+            {submitError && <ErrorText>{submitError}</ErrorText>}
+
+            <ModalActions>
+              <ModalCancelButton onClick={handleClose} disabled={isSubmitting}>
+                Cancel
+              </ModalCancelButton>
+              <ModalConfirmButton
+                onClick={handleReview}
+                disabled={isSubmitting || newQtyDisplay <= 0 || form.currentPrice <= 0 || !hasChanges}
+              >
+                Review
+              </ModalConfirmButton>
+            </ModalActions>
+          </>
+        )}
       </PerpsModalCard>
     </Modal>
   );

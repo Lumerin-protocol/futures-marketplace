@@ -19,6 +19,7 @@ interface TransactionFormProps {
   description: ReactNode;
   inputForm?: FC<StepComponentProps> | ReactNode;
   validateInput?: () => Promise<boolean>;
+  disableReview?: boolean;
   reviewForm: FC<StepComponentProps>;
   resultForm?: FC<StepComponentProps>;
   transactionSteps: TransactionStep[];
@@ -55,6 +56,7 @@ export const TransactionForm = (props: TransactionFormProps) => {
                     <MultistepFormActions
                       primary={{
                         label: "Review",
+                        disabled: props.disableReview,
                         onClick: async () => {
                           if (props.validateInput && !(await props.validateInput())) {
                             return;
@@ -159,6 +161,7 @@ export const TransactionFormV2 = (props: TransactionFormProps) => {
                     <MultistepFormActions
                       primary={{
                         label: "Review",
+                        disabled: props.disableReview,
                         onClick: async () => {
                           if (props.validateInput && !(await props.validateInput())) {
                             return;

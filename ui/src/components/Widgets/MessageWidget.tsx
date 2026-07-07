@@ -46,7 +46,7 @@ export const MessageWidget = (props: { isMobile: boolean }) => {
         </a>
         {". "}
         Please provide feedback or submit any bugs to the{" "}
-        <a href="https://github.com/Lumerin-protocol/proxy-router-ui/issues" target="_blank" rel="noreferrer">
+        <a href="https://github.com/Lumerin-protocol/futures-marketplace/issues" target="_blank" rel="noreferrer">
           Github Repo
         </a>
         .

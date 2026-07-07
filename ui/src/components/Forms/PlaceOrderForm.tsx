@@ -12,6 +12,12 @@ import { POSITION_BOOK_QK } from "../../hooks/data/getUserFuturesPositions";
 import { USER_PERPS_ORDERS_QK } from "../../hooks/data/perps/useUserPerpsOrders";
 import { USER_POSITION_SESSIONS_QK } from "../../hooks/data/perps/useUserPositionSessions";
 import { USER_PERPS_TRADES_QK } from "../../hooks/data/perps/useUserPerpsTrades";
+import { HISTORICAL_ORDERS_QK } from "../../hooks/data/useHistoricalOrders";
+import { FUTURES_POSITION_HISTORY_QK } from "../../hooks/data/useFuturesPositionHistory";
+import { USER_FUTURES_TRADES_QK } from "../../hooks/data/useUserFuturesTrades";
+import { PERPS_ORDER_HISTORY_QK } from "../../hooks/data/perps/usePerpsOrderHistory";
+import { PERPS_POSITION_HISTORY_QK } from "../../hooks/data/perps/usePerpsPositionHistory";
+import { USER_TRADES_QK } from "../../hooks/data/perps/useUserTrades";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import type { Participant } from "../../hooks/data/getUserFuturesOrders";
@@ -310,6 +316,10 @@ export const PlaceOrderForm: FC<Props> = ({
                 address && qc.invalidateQueries({ queryKey: [USER_PERPS_ORDERS_QK, address] }),
                 address && qc.invalidateQueries({ queryKey: [USER_POSITION_SESSIONS_QK, address] }),
                 address && qc.invalidateQueries({ queryKey: [USER_PERPS_TRADES_QK, address] }),
+                // Reset every perps history table back to its newest page.
+                address && qc.resetQueries({ queryKey: [PERPS_ORDER_HISTORY_QK, address] }),
+                address && qc.resetQueries({ queryKey: [PERPS_POSITION_HISTORY_QK, address] }),
+                address && qc.resetQueries({ queryKey: [USER_TRADES_QK, address] }),
                 // address && qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
               ]);
             } else {
@@ -318,6 +328,10 @@ export const PlaceOrderForm: FC<Props> = ({
                 qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
                 address && qc.invalidateQueries({ queryKey: [POSITION_BOOK_QK] }),
                 address && qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
+                // Reset every futures history table back to its newest page.
+                address && qc.resetQueries({ queryKey: [HISTORICAL_ORDERS_QK, address] }),
+                address && qc.resetQueries({ queryKey: [FUTURES_POSITION_HISTORY_QK, address] }),
+                address && qc.resetQueries({ queryKey: [USER_FUTURES_TRADES_QK, address] }),
               ]);
             }
 

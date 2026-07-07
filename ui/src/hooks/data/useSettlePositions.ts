@@ -3,6 +3,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getContract } from "viem";
 import { FuturesAbi } from "../../abi/Futures";
 import { waitForBlockNumberPositionBook } from "./getUserFuturesPositions";
+import { HISTORICAL_ORDERS_QK } from "./useHistoricalOrders";
+import { FUTURES_POSITION_HISTORY_QK } from "./useFuturesPositionHistory";
+import { USER_FUTURES_TRADES_QK } from "./useUserFuturesTrades";
 
 interface SettlePositionsProps {
   /// Expiration (deliveryAt) whose matured positions should be settled.
@@ -51,6 +54,12 @@ export function useSettlePositions() {
 
     const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
     await waitForBlockNumberPositionBook(receipt.blockNumber, queryClient);
+
+    // Settling closes positions and writes settlement history — reset the
+    // futures history tables back to their newest page.
+    queryClient.resetQueries({ queryKey: [HISTORICAL_ORDERS_QK, account] });
+    queryClient.resetQueries({ queryKey: [FUTURES_POSITION_HISTORY_QK, account] });
+    queryClient.resetQueries({ queryKey: [USER_FUTURES_TRADES_QK, account] });
 
     return tx;
   };
