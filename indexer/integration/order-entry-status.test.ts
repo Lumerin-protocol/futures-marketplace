@@ -60,7 +60,7 @@ describe("OrderEntryStatus.EXPIRED: removeOutdatedOrder", () => {
 
     // Fast-forward past deliveryAt so the order qualifies as outdated.
     await tc.setNextBlockTimestamp({
-      timestamp: deliveryDate + BigInt(config.deliveryDurationSeconds) + 1n,
+      timestamp: deliveryDate + BigInt(config.expirationIntervalSeconds) + 1n,
     });
 
     const sweepTx = await futures.write.removeOutdatedOrder([restingOrderId], {
