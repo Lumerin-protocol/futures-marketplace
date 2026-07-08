@@ -111,9 +111,8 @@ export function mockFuturesContractCallsAsReverted(): void {
     ["liquidationFee", "liquidationFee():(uint256)"],
     ["marginEngine", "marginEngine():(address)"],
     ["liquidationMarginPercent", "liquidationMarginPercent():(uint8)"],
-    ["speedHps", "speedHps():(uint256)"],
-    ["deliveryDurationDays", "deliveryDurationDays():(uint8)"],
-    ["deliveryIntervalDays", "deliveryIntervalDays():(uint8)"],
+    ["CONTRACT_SIZE_HPS_DAY", "CONTRACT_SIZE_HPS_DAY():(uint256)"],
+    ["expirationIntervalDays", "expirationIntervalDays():(uint8)"],
     ["futureDeliveryDatesCount", "futureDeliveryDatesCount():(uint8)"],
     ["firstFutureDeliveryDate", "firstFutureDeliveryDate():(uint256)"],
     ["collectedFeesBalance", "collectedFeesBalance():(uint256)"],
@@ -124,9 +123,8 @@ export function mockFuturesContractCallsAsReverted(): void {
 }
 
 /// Pre-create the Futures singleton so handlers don't try to call into the
-/// (unmocked) on-chain contract during tests. Default `deliveryDurationDays`
-/// is 30 because exit-pnl arithmetic divides by it.
-export function setupFutures(deliveryDurationDays: i32 = 30): void {
+/// (unmocked) on-chain contract during tests.
+export function setupFutures(): void {
   const f = new Futures(0);
   f.contractAddress = changetype<Bytes>(contractAddress());
   f.collateralToken = Bytes.empty();
@@ -138,9 +136,8 @@ export function setupFutures(deliveryDurationDays: i32 = 30): void {
   f.takerFee = BigInt.zero();
   f.liquidationFee = BigInt.zero();
   f.liquidationMarginPercent = 0;
-  f.speedHps = BigInt.zero();
-  f.deliveryDurationDays = deliveryDurationDays;
-  f.deliveryIntervalDays = 0;
+  f.contractSizeHpsDay = BigInt.zero();
+  f.expirationIntervalDays = 0;
   f.futureDeliveryDatesCount = 0;
   f.firstFutureDeliveryDate = BigInt.zero();
   f.collectedFeesBalance = BigInt.zero();

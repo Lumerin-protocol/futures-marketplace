@@ -26,10 +26,8 @@ async function main() {
 
   const env = requireEnvsSet(
     "LIQUIDATION_MARGIN_PERCENT",
-    "SPEED_HPS",
     "MINIMUM_PRICE_INCREMENT",
-    "DELIVERY_DURATION_DAYS",
-    "DELIVERY_INTERVAL_DAYS",
+    "EXPIRATION_INTERVAL_DAYS",
     "FUTURE_DELIVERY_DATES_COUNT",
   );
 
@@ -95,10 +93,8 @@ async function main() {
     args: [
       hashrateOracleAddress,
       Number(env.LIQUIDATION_MARGIN_PERCENT),
-      BigInt(env.SPEED_HPS),
       BigInt(env.MINIMUM_PRICE_INCREMENT),
-      Number(env.DELIVERY_DURATION_DAYS),
-      Number(env.DELIVERY_INTERVAL_DAYS),
+      Number(env.EXPIRATION_INTERVAL_DAYS),
       Number(env.FUTURE_DELIVERY_DATES_COUNT),
       firstFutureDeliveryDate,
     ],

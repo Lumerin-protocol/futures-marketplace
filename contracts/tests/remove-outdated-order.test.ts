@@ -34,7 +34,7 @@ describe("Futures.removeOutdatedOrder", () => {
     const orderId = created.args.orderId;
 
     await tc.setNextBlockTimestamp({
-      timestamp: dd + BigInt(config.deliveryDurationSeconds) + 1n,
+      timestamp: dd + BigInt(config.expirationIntervalSeconds) + 1n,
     });
 
     const tx = await futures.write.removeOutdatedOrder([orderId], { account: seller.account });
@@ -107,7 +107,7 @@ describe("Futures.removeOutdatedOrder", () => {
     });
 
     await tc.setNextBlockTimestamp({
-      timestamp: dd + BigInt(config.deliveryDurationSeconds) + 1n,
+      timestamp: dd + BigInt(config.expirationIntervalSeconds) + 1n,
     });
 
     // `buyer`, not the order owner, cleans it up.
@@ -152,7 +152,7 @@ describe("Futures.removeOutdatedOrder", () => {
       tc,
       contracts.hashrateOracle,
       expiringDd,
-      BigInt(config.deliveryDurationSeconds),
+      BigInt(config.expirationIntervalSeconds),
     );
     const futureDates = await futures.read.getDeliveryDates();
     const freshDd = futureDates[futureDates.length - 1];

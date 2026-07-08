@@ -155,15 +155,16 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
   const { oracle } = config;
 
   const liquidationMarginPercent = 20;
-  const speedHps = parseUnits("100", 12); // 100 TH/s
-  const deliveryDurationDays = 7;
-  const deliveryDurationSeconds = deliveryDurationDays * 24 * 3600;
+  // Compile-time constant CONTRACT_SIZE_HPS_DAY on Futures.sol; mirrored here for expected-price math in tests.
+  const contractSizeHpsDay = parseUnits("1000", 12); // 1e15 = 1 PH/s over a day (hashes/s·day) → one unit = 1 PH/s/day
+  const expirationIntervalDays = 30;
+  const expirationIntervalSeconds = expirationIntervalDays * 24 * 3600;
   const priceLadderStep = parseUnits("0.01", USDC_DECIMALS);
   const makerFee = 0n;
   const takerFee = parseUnits("1", USDC_DECIMALS);
   const { timestamp: now } = await pc.getBlock({ blockTag: "latest" });
   const futureDeliveryDatesCount = 10;
-  const firstFutureDeliveryDate = now + BigInt(deliveryDurationSeconds);
+  const firstFutureDeliveryDate = now + BigInt(expirationIntervalSeconds);
   const collateralAmount = parseUnits("10000", USDC_DECIMALS);
 
   // Get wallet client for deployments
@@ -216,10 +217,8 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
         args: [
           hashrateOracle.address,
           liquidationMarginPercent,
-          speedHps,
           priceLadderStep,
-          deliveryDurationDays,
-          deliveryDurationDays,
+          expirationIntervalDays,
           futureDeliveryDatesCount,
           firstFutureDeliveryDate,
         ],
@@ -324,17 +323,16 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
   return {
     config: {
       oracle,
-      speedHps,
+      contractSizeHpsDay,
       liquidationMarginPercent,
-      deliveryDurationSeconds,
+      expirationIntervalSeconds,
       priceLadderStep,
       makerFee,
       takerFee,
       deliveryDates,
       futureDeliveryDatesCount,
       firstFutureDeliveryDate,
-      deliveryDurationDays,
-      deliveryIntervalDays: deliveryDurationDays,
+      expirationIntervalDays,
       collateralAmount,
     },
     contracts: {
@@ -380,7 +378,7 @@ export async function deployOnlyFuturesWithDummyData(
 
   const mp = await futures.read.getMarketPrice();
   const inc = config.priceLadderStep;
-  const marginAmount = mp * BigInt(config.deliveryDurationDays);
+  const marginAmount = mp;
   await collateralVault.write.deposit([marginAmount], { account: seller.account });
   await collateralVault.write.deposit([marginAmount], { account: buyer.account });
   await collateralVault.write.deposit([marginAmount], { account: buyer2.account });

@@ -75,7 +75,6 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
 
   // Get contract specs
   const marginPercent = contractSpecsQuery.data?.data?.liquidationMarginPercent ?? 20;
-  const deliveryDurationDays = contractSpecsQuery.data?.data?.deliveryDurationDays ?? 7;
 
   // Get newest item price for high price validation
   const newestItemPrice = marketPrice ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
@@ -84,7 +83,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   const calculateMargin = (pricePerDay: bigint, amount: number, isBuy: boolean): bigint | null => {
     if (!latestPrice) return null;
     const qty = isBuy ? amount : -amount;
-    return getMinMarginForPositionManual(pricePerDay, qty, latestPrice, marginPercent, deliveryDurationDays);
+    return getMinMarginForPositionManual(pricePerDay, qty, latestPrice, marginPercent);
   };
 
   const formatMargin = (margin: bigint | null): string => {
@@ -243,7 +242,6 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
             participantData={participantData}
             latestPrice={latestPrice}
             marginPercent={marginPercent}
-            deliveryDurationDays={deliveryDurationDays}
             minMargin={minMargin}
             newestItemPrice={newestItemPrice}
             accountBalance={accountBalance}

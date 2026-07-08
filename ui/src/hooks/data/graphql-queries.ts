@@ -142,11 +142,10 @@ export const AggregateOrderBookQuery = gql`
 export const ContractSpecsQuery = gql`
   query ContractSpecs {
     futures(id: "0") {
-      deliveryDurationDays
       liquidationMarginPercent
       hashrateOracleAddress
       minimumPriceIncrement
-      speedHps
+      contractSizeHpsDay
       contractAddress
     }
     _meta {

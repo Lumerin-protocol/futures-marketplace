@@ -95,16 +95,13 @@ describe("Futures singleton counters: stepwise consistency through a trade flow"
     assert.equal(String(f.totalTrades), "2", "one Trade per side");
     assert.equal(String(f.totalFills), "2", "one Fill per side");
 
-    // `Futures.totalVolume` = sum over fills of `pricePerDay * deliveryDurationDays * qty`.
-    // The matchstick harness captures real on-chain view-call return values
-    // (see `viewClient` wiring in the hardhat-matchstick-ts plugin), so
-    // `deliveryDurationDays` matches the deployed contract.
-    const expectedDays = await futures.read.deliveryDurationDays();
-    const expectedVolume = price * BigInt(expectedDays);
+    // `Futures.totalVolume` = sum over fills of `pricePerDay * qty`. One matched unit settles
+    // `pricePerDay` of notional (no duration multiplier), so per fill the volume is just the price.
+    const expectedVolume = price;
     assert.equal(
       String(f.totalVolume),
       String(expectedVolume),
-      "totalVolume = pricePerDay * deliveryDurationDays per matched unit",
+      "totalVolume = pricePerDay per matched unit",
     );
   });
 });

@@ -38,10 +38,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     uint256 private _gap5;
     uint256 public firstFutureDeliveryDate; // timestamp of the first future delivery date
-    /// @notice Hashes/second represented by one unit of futures. As of v2 the contract assumes one unit equals
-    ///         100 TH/s per day (matching the hashprice oracle's quote unit), so this value is informational only
-    ///         and no longer participates in market-price calculation. Retained as state for ABI back-compat.
-    uint256 public speedHps;
+    /// @dev Reserved slot — previously `uint256 public speedHps` / `contractSizeHpsDay`, the per-unit
+    ///      contract size. Promoted to the compile-time constant `CONTRACT_SIZE_HPS_DAY` (resizing live
+    ///      contracts is a migration, not a live parameter change). Kept as a private gap to preserve
+    ///      storage layout across upgrade.
+    uint256 private _gapContractSize;
     uint256 public minimumPriceIncrement; // difference between two closest prices in the order table
     /// @notice Flat fee charged to the taker (the incoming order's owner) on every matched unit.
     /// @dev Occupies the storage slot previously named `orderFee` so existing on-chain fee values are preserved across upgrade.
@@ -56,14 +57,16 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     AggregatorV3Interface public hashrateOracle;
     address private _gap6;
 
-    /// @notice Notional multiplier ("contract size"): every unit of a futures position settles
-    ///         `pricePerDay * deliveryDurationDays` of value. The legacy name is kept for ABI
-    ///         back-compat; it no longer denotes a physical-delivery duration.
-    uint8 public deliveryDurationDays;
+    /// @dev Reserved slot — previously `uint8 public deliveryDurationDays`, the notional multiplier.
+    ///      Removed in v2.17: one unit now settles exactly `pricePerDay` of value (multiplier of 1) and
+    ///      the contract size is carried by `CONTRACT_SIZE_HPS_DAY`. Kept as a private gap to preserve storage layout.
+    uint8 private _gapDeliveryDuration;
     /// @notice Spacing, in days, between consecutive expiration dates offered on the book.
-    /// @dev Legacy name retained for ABI back-compat; `deliveryAt`/"delivery date" now means the
-    ///      position's expiration (maturity) timestamp at which it cash-settles.
-    uint8 public deliveryIntervalDays;
+    /// @dev `deliveryAt`/"delivery date" means the position's expiration (maturity) timestamp at which it
+    ///      cash-settles. Delivery *duration* is not a factor (hashpower is settled per day); this only
+    ///      controls how far apart successive expiries are scheduled. A legacy `deliveryIntervalDays()`
+    ///      getter is retained for backwards compatibility.
+    uint8 public expirationIntervalDays;
     uint8 public futureDeliveryDatesCount; // number of future delivery dates to be available for orders
     uint8 public liquidationMarginPercent;
     uint8 private _gap3;
@@ -80,8 +83,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint256 public hashpriceScalingDivisor;
 
     IPortfolioMarginEngine public marginEngine;
-    mapping(address => mapping(uint256 => int256)) private participantExpirationAtNetDelta; // net delta per participant per expiration date (pre-scaled by deliveryDurationDays, without 1e18)
-    mapping(address => mapping(uint256 => int256)) private participantExpirationAtNetEntryValue; // sum of qty_i * entryPrice_i * durationDays per participant per expiration date (token decimals)
+    mapping(address => mapping(uint256 => int256)) private participantExpirationAtNetDelta; // net delta per participant per expiration date (contracts, without 1e18)
+    mapping(address => mapping(uint256 => int256)) private participantExpirationAtNetEntryValue; // sum of qty_i * entryPrice_i per participant per expiration date (token decimals)
 
     /// @notice Set of price levels that currently have at least one resting buy order, per delivery date.
     /// @dev Maintained by `_addOrderToQueue` / `_removeOrderFromQueue`. Used by the off-chain market maker
@@ -126,7 +129,17 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private immutable _decimals; // decimals of the wrapped token
 
     // constants
-    string public constant VERSION = "2.16.0";
+    string public constant VERSION = "2.17.0";
+    /// @notice The hashprice oracle's quote basis, in hashes/s·day (hashrate sustained over one day). It
+    ///         answers the price of 100 TH/s per day, so its basis is 100 TH/s = 100 * 1e12 (hashes/s·day).
+    ///         `CONTRACT_SIZE_HPS_DAY` is rebased against this to convert an oracle answer into the value of
+    ///         one contract unit.
+    uint256 public constant ORACLE_UNIT_HPS_DAY = 100 * 1e12;
+    /// @notice Contract size in hashes/s·day: the hashes produced by a given hashrate sustained over one day.
+    ///         `getMarketPrice()` rebases the oracle answer by `CONTRACT_SIZE_HPS_DAY / ORACLE_UNIT_HPS_DAY`
+    ///         (= 10x). Fixed at 1e15 (1 PH/s over a day) so one unit of futures settles the value of 1 PH/s/day.
+    ///         Intentionally a constant: resizing live contracts is a migration, not a live parameter change.
+    uint256 public constant CONTRACT_SIZE_HPS_DAY = 1e15;
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     /// @notice Maximum absolute quantity accepted in a single `createOrder` call.
     /// @dev Bounded by the int8 parameter type. Exposed as a constant so off-chain
@@ -356,10 +369,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     function initialize(
         AggregatorV3Interface _hashrateOracle,
         uint8 _liquidationMarginPercent,
-        uint256 _speedHps,
         uint256 _minimumPriceIncrement,
-        uint8 _deliveryDurationDays,
-        uint8 _deliveryIntervalDays,
+        uint8 _expirationIntervalDays,
         uint8 _futureDeliveryDatesCount,
         uint256 _firstFutureDeliveryDate
     ) public initializer {
@@ -368,9 +379,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         _setHashrateOracle(_hashrateOracle);
         liquidationMarginPercent = _liquidationMarginPercent;
         minimumPriceIncrement = _minimumPriceIncrement;
-        speedHps = _speedHps;
-        deliveryDurationDays = _deliveryDurationDays;
-        deliveryIntervalDays = _deliveryIntervalDays;
+        expirationIntervalDays = _expirationIntervalDays;
         if (_futureDeliveryDatesCount < 1) {
             revert ValueOutOfRange(1, int256(uint256(type(uint8).max)));
         }
@@ -632,7 +641,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         participantExpirationAtPositionIdsIndex[_temp.buyer][order.deliveryAt].add(positionId);
         participantActiveExpirationAts[_temp.seller].add(order.deliveryAt);
         participantActiveExpirationAts[_temp.buyer].add(order.deliveryAt);
-        int256 _delta = int256(uint256(deliveryDurationDays));
+        // Each matched unit is one contract (qty = 1); notional is `pricePerDay` with no duration multiplier.
+        int256 _delta = int256(1);
         participantExpirationAtNetDelta[_temp.seller][order.deliveryAt] -= _delta;
         participantExpirationAtNetDelta[_temp.buyer][order.deliveryAt] += _delta;
         participantExpirationAtNetEntryValue[_temp.seller][order.deliveryAt] -= int256(_temp.sellPricePerDay) * _delta;
@@ -739,7 +749,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         }
 
         _removePosition(existingPositionId, existingPosition);
-        int256 pnl = pnlPerDay * int256(uint256(deliveryDurationDays));
+        int256 pnl = pnlPerDay;
         _transferPnl(participant, _insuranceFundAccount(), pnl);
 
         if (_temp.buyer == _temp.seller) {
@@ -924,12 +934,12 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     /// @dev Notify the points hook of a matched fill. Skipped when no hook is configured. Not
-    ///      isolated: a reverting hook reverts the fill (unplug via setHook). `notional` follows
-    ///      the indexer convention `pricePerDay * deliveryDurationDays`; each match is one unit.
+    ///      isolated: a reverting hook reverts the fill (unplug via setHook). `notional` is the
+    ///      per-unit `pricePerDay`; each match is one unit.
     function _notifyFill(address _maker, address _taker, uint256 _pricePerDay, uint256 _makerPrice) private {
         IPointsHook _hook = hook;
         if (address(_hook) == address(0)) return;
-        uint256 notional = _pricePerDay * deliveryDurationDays;
+        uint256 notional = _pricePerDay;
         _hook.onFill(_maker, _taker, notional, int256(makerFee), takerFee, _makerPrice, _refPriceForPoints());
     }
 
@@ -1204,7 +1214,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @notice Permissionlessly cash-settles a matured position at its pinned settlement price.
     /// @dev    Callable by ANYONE (typically a keeper) once `block.timestamp >= position.deliveryAt`.
     ///         Pins the expiration's settlement price on first settle (lazy auto-pin), then settles
-    ///         the full position notional (`pricePerDay * deliveryDurationDays`) at that price,
+    ///         the full position notional (`pricePerDay`) at that price,
     ///         routing PnL through the insurance fund and removing the position. Because the price is
     ///         pinned per expiration, settlement is deterministic regardless of when this tx lands.
     ///         No physical delivery, escrow, validator, or breach penalty is involved.
@@ -1228,7 +1238,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     /// @dev Pure mark-to-market cash settlement of the full position notional at `price`. No escrow,
-    ///      no elapsed/remaining split, no breach penalty: the entire `deliveryDurationDays` notional
+    ///      no elapsed/remaining split, no breach penalty: the entire per-unit notional (`pricePerDay`)
     ///      settles at `price`. PnL is routed through the insurance fund. Shared by maturity
     ///      settlement (`settlePosition`, pinned settlement price) and forced liquidation
     ///      (`_forceLiquidatePosition`, live mark price); `reason` distinguishes the two in `LotClosed`.
@@ -1240,10 +1250,9 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         uint256 price
     ) private {
         uint256 currentPrice = price;
-        int256 mult = int256(uint256(deliveryDurationDays));
 
-        int256 sellerPnl = (int256(position.sellPricePerDay) - int256(currentPrice)) * mult;
-        int256 buyerPnl = (int256(currentPrice) - int256(position.buyPricePerDay)) * mult;
+        int256 sellerPnl = int256(position.sellPricePerDay) - int256(currentPrice);
+        int256 buyerPnl = int256(currentPrice) - int256(position.buyPricePerDay);
 
         _transferPnl(_insuranceFundAccount(), position.seller, sellerPnl);
         _transferPnl(_insuranceFundAccount(), position.buyer, buyerPnl);
@@ -1294,7 +1303,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         }
         participantPositionIdsIndex[position.seller].remove(_positionId);
         participantPositionIdsIndex[position.buyer].remove(_positionId);
-        int256 _delta = int256(uint256(deliveryDurationDays));
+        int256 _delta = int256(1);
         participantExpirationAtNetDelta[position.seller][position.deliveryAt] += _delta;
         participantExpirationAtNetDelta[position.buyer][position.deliveryAt] -= _delta;
         participantExpirationAtNetEntryValue[position.seller][position.deliveryAt] +=
@@ -1316,10 +1325,13 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     /// @dev `_hashpriceUsd` is the latest oracle answer (price of 100 TH/s per day expressed in
-    ///      `oracle.decimals()`). One unit of futures equals 100 TH/s per day, so the only conversion needed is
-    ///      rebasing the answer from `oracle.decimals()` to the token's decimals via `hashpriceScalingDivisor`.
+    ///      `oracle.decimals()`). Two conversions are applied: rebasing the answer from `oracle.decimals()`
+    ///      to the token's decimals via `hashpriceScalingDivisor`, and rebasing from the oracle's quote
+    ///      basis (`ORACLE_UNIT_HPS_DAY`, i.e. 100 TH/s per day) to one contract unit (`CONTRACT_SIZE_HPS_DAY` per day).
+    ///      With the fixed `CONTRACT_SIZE_HPS_DAY = 1e15` this multiplies by 10 so one unit equals 1 PH/s per day.
     function _getMarketPrice(uint256 _hashpriceUsd) private view returns (uint256) {
-        return _roundToNearest(_hashpriceUsd / hashpriceScalingDivisor, minimumPriceIncrement);
+        uint256 rebased = (_hashpriceUsd * CONTRACT_SIZE_HPS_DAY) / (hashpriceScalingDivisor * ORACLE_UNIT_HPS_DAY);
+        return _roundToNearest(rebased, minimumPriceIncrement);
     }
 
     function getOrderById(bytes32 _orderId) external view returns (Order memory) {
@@ -1343,8 +1355,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     // ── Portfolio-margin view functions (used by PortfolioMarginEngine) ──────
 
     /// @notice Net linear delta of all active *positions* in WAD (1e18) units.
-    ///         Each long contract contributes +deliveryDurationDays * WAD delta;
-    ///         each short contract contributes -deliveryDurationDays * WAD delta.
+    ///         Each long contract contributes +1 * WAD delta;
+    ///         each short contract contributes -1 * WAD delta.
     ///         Resting orders are excluded — their margin is reported separately
     ///         via `getFuturesOrderMargin`.
     /// @dev    Iterates the participant's active expiration dates so matured-but-unsettled
@@ -1372,7 +1384,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         if (len == 0) return 0;
         uint256 total = 0;
         uint256 marketPricePerDay = getMarketPrice();
-        int256 durationDays = int256(uint256(deliveryDurationDays));
         // Cash-settled futures carry no breach penalty, so the maintenance-margin rate on
         // resting orders is just the liquidation margin percent.
         uint256 marginPct = liquidationMarginPercent;
@@ -1380,8 +1391,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             Order memory order = orders[_orders.at(i)];
             if (order.deliveryAt < block.timestamp) continue;
             int256 qty = order.isBuy ? int256(1) : int256(-1);
-            uint256 maintenanceMargin = order.pricePerDay * uint256(durationDays) * marginPct / 100;
-            int256 pnl = (int256(marketPricePerDay) - int256(order.pricePerDay)) * durationDays * qty;
+            uint256 maintenanceMargin = order.pricePerDay * marginPct / 100;
+            int256 pnl = (int256(marketPricePerDay) - int256(order.pricePerDay)) * qty;
             total += clamp(int256(maintenanceMargin) - pnl);
         }
         return total;
@@ -1395,7 +1406,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     ///         is read lazily so a portfolio whose matured dates are all already priced does not
     ///         depend on a fresh oracle.
     ///         Per date: pnl = markPrice * netDelta - netEntryValue
-    ///                       = Σ(markPrice - entryPrice_i) * durationDays * qty_i
+    ///                       = Σ(markPrice - entryPrice_i) * qty_i
     function getFuturesUnrealizedPnl(address _participant) external view returns (int256) {
         EnumerableSet.UintSet storage dates = participantActiveExpirationAts[_participant];
         uint256 len = dates.length();
@@ -1489,8 +1500,16 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     // Helper functions
 
+    /// @notice Legacy alias for `expirationIntervalDays`, retained for backwards compatibility.
+    /// @dev Deprecated: the field was renamed to `expirationIntervalDays` because it schedules the spacing
+    ///      between expiration dates and has nothing to do with a (now-removed) delivery-duration multiplier.
+    ///      Prefer `expirationIntervalDays`.
+    function deliveryIntervalDays() external view returns (uint8) {
+        return expirationIntervalDays;
+    }
+
     function expirationIntervalSeconds() private view returns (uint256) {
-        return deliveryIntervalDays * SECONDS_PER_DAY;
+        return expirationIntervalDays * SECONDS_PER_DAY;
     }
 
     /// @dev Convenience function to get the order index by delivery date and price

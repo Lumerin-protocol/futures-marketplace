@@ -73,7 +73,7 @@ describe("Futures - Offset & Cash Settlement", () => {
     const buyerBalanceAfterOffset = await collateralVault.read.balanceOf([buyer.account.address]);
     const contractBalanceAfterOffset = await totalContractBalance(contracts);
 
-    const expectedPnL = (exitPrice - initialPrice) * BigInt(config.deliveryDurationDays);
+    const expectedPnL = exitPrice - initialPrice;
     const takerFee = await futures.read.takerFee();
     // Under the post-2.9 model only takers pay (makerFee defaults to 0): buyer was taker on
     // step 2 (entry) and maker on step 4 (exit, via LotTransferred), so only 1× takerFee deducted.
@@ -147,7 +147,7 @@ describe("Futures - Offset & Cash Settlement", () => {
     const buyerBalanceAfterOffset = await collateralVault.read.balanceOf([buyer.account.address]);
     const contractBalanceAfterOffset = await totalContractBalance(contracts);
 
-    const expectedPnL = (exitPrice - initialPrice) * BigInt(config.deliveryDurationDays);
+    const expectedPnL = exitPrice - initialPrice;
     const takerFee = await futures.read.takerFee();
     // Only takers pay (makerFee=0 by default): buyer was taker on step 2 and maker on step 4.
     const expectedBuyerBalanceChange = expectedPnL - takerFee;
@@ -176,12 +176,12 @@ describe("Futures - Offset & Cash Settlement", () => {
 
     const sellerBalance = await collateralVault.read.balanceOf([seller.account.address]);
     const deltaSeller = sellerBalance - sellerBalanceBeforeSettlement;
-    const expectedSellerPnl = (initialPrice - marketPrice) * BigInt(config.deliveryDurationDays);
+    const expectedSellerPnl = initialPrice - marketPrice;
     assert.equal(deltaSeller, expectedSellerPnl);
 
     const buyer2Balance = await collateralVault.read.balanceOf([buyer2.account.address]);
     const deltaBuyer2 = buyer2Balance - buyer2BalanceBeforeSettlement;
-    const expectedBuyer2Pnl = (marketPrice - exitPrice) * BigInt(config.deliveryDurationDays);
+    const expectedBuyer2Pnl = marketPrice - exitPrice;
     assert.equal(deltaBuyer2, expectedBuyer2Pnl);
   });
 });

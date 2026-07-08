@@ -94,14 +94,18 @@ describe("Delivery Date Management", () => {
     assert.equal(await futures.read.firstFutureDeliveryDate(), config.firstFutureDeliveryDate);
   });
 
-  it("should correctly read delivery interval days", async () => {
+  it("should correctly read expiration interval days", async () => {
     const { contracts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    assert.equal(await contracts.futures.read.deliveryIntervalDays(), config.deliveryIntervalDays);
+    assert.equal(await contracts.futures.read.expirationIntervalDays(), config.expirationIntervalDays);
   });
 
-  it("should correctly read delivery duration days", async () => {
-    const { contracts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    assert.equal(await contracts.futures.read.deliveryDurationDays(), config.deliveryDurationDays);
+  it("legacy deliveryIntervalDays() getter mirrors expirationIntervalDays()", async () => {
+    const { contracts } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures } = contracts;
+    assert.equal(
+      await futures.read.deliveryIntervalDays(),
+      await futures.read.expirationIntervalDays(),
+    );
   });
 
   it("should update delivery dates when count is increased", async () => {
@@ -162,7 +166,7 @@ describe("Delivery Date Management", () => {
 
     for (let i = 0; i < deliveryDates.length; i++) {
       const expectedDate =
-        config.firstFutureDeliveryDate + BigInt(config.deliveryDurationSeconds * (i + 1));
+        config.firstFutureDeliveryDate + BigInt(config.expirationIntervalSeconds * (i + 1));
       assert.equal(deliveryDates[i], expectedDate);
     }
   });
@@ -199,7 +203,7 @@ describe("Delivery Date Management", () => {
 
     // within available range but not aligned with interval
     const dateWithinRangeNotAligned =
-      config.firstFutureDeliveryDate + BigInt(config.deliveryDurationSeconds) + 1n;
+      config.firstFutureDeliveryDate + BigInt(config.expirationIntervalSeconds) + 1n;
     await viem.assertions.revertWithCustomError(
       futures.write.createOrder([price, dateWithinRangeNotAligned, "", 1], {
         account: seller.account,
@@ -211,7 +215,7 @@ describe("Delivery Date Management", () => {
     // out of available range
     const dateOutOfRange =
       config.firstFutureDeliveryDate +
-      BigInt(config.deliveryDurationSeconds) * BigInt(config.futureDeliveryDatesCount + 1);
+      BigInt(config.expirationIntervalSeconds) * BigInt(config.futureDeliveryDatesCount + 1);
     await viem.assertions.revertWithCustomError(
       futures.write.createOrder([price, dateOutOfRange, "", 1], { account: seller.account }),
       futures,
@@ -231,7 +235,7 @@ describe("Delivery Date Management", () => {
     // all valid dates
     for (let i = 0; i < config.futureDeliveryDatesCount; i++) {
       const date =
-        config.firstFutureDeliveryDate + BigInt(config.deliveryDurationSeconds) * BigInt(i + 1);
+        config.firstFutureDeliveryDate + BigInt(config.expirationIntervalSeconds) * BigInt(i + 1);
       await futures.write.createOrder([price, date, "", 1], { account: seller.account });
     }
   });

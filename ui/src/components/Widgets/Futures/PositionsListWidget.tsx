@@ -101,13 +101,12 @@ export const PositionsListWidget = ({
 
   // Get contract specs
   const marginPercent = contractSpecsQuery.data?.data?.liquidationMarginPercent ?? 20;
-  const deliveryDurationDays = contractSpecsQuery.data?.data?.deliveryDurationDays ?? 7;
 
   // Calculate margin for a position
   const calculateMargin = (pricePerDay: bigint, amount: number, positionType: string): bigint | null => {
     if (!latestPriceBigInt) return null;
     const qty = positionType === "Long" ? amount : -amount;
-    return getMinMarginForPositionManual(pricePerDay, qty, latestPriceBigInt, marginPercent, deliveryDurationDays);
+    return getMinMarginForPositionManual(pricePerDay, qty, latestPriceBigInt, marginPercent);
   };
 
   const formatMargin = (margin: bigint | null): string => {
@@ -115,12 +114,11 @@ export const PositionsListWidget = ({
     return `${(Number(margin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} USDC`;
   };
 
-  // PnL = (mark - entry) * signedQty * deliveryDays, mirroring the on-chain
-  // settlement math in `getMinMarginForPositionManual`. Signed `netQuantity`
-  // encodes side (long > 0, short < 0), so the sign of the result falls out
-  // naturally. The percentage is taken against entry notional (fixed at fill
-  // time) so it doesn't drift with the market price the way a mark-notional
-  // denominator does.
+  // PnL = (mark - entry) * signedQty, mirroring the on-chain settlement math in
+  // `getMinMarginForPositionManual`. Signed `netQuantity` encodes side
+  // (long > 0, short < 0), so the sign of the result falls out naturally. The
+  // percentage is taken against entry notional (fixed at fill time) so it
+  // doesn't drift with the market price the way a mark-notional denominator does.
   const calculatePnL = (
     entryPrice: bigint,
     netQuantity: number,
@@ -134,10 +132,9 @@ export const PositionsListWidget = ({
 
     const signedQty = BigInt(netQuantity);
     const absQty = signedQty < 0n ? -signedQty : signedQty;
-    const days = BigInt(deliveryDurationDays);
 
-    const pnlScaled = (mark - entryPrice) * signedQty * days;
-    const entryNotionalScaled = entryPrice * absQty * days;
+    const pnlScaled = (mark - entryPrice) * signedQty;
+    const entryNotionalScaled = entryPrice * absQty;
 
     const pnl = Number(pnlScaled) / PAYMENT_TOKEN_SCALE_NUM;
     const percentage =

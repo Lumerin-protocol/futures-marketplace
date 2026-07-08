@@ -97,9 +97,10 @@ describe("Futures: full config + address surface populated by loadFuturesFromCon
       String(entity.liquidationMarginPercent),
       config.liquidationMarginPercent.toString(),
     );
-    assert.equal(String(entity.speedHps), config.speedHps.toString());
-    assert.equal(String(entity.deliveryDurationDays), config.deliveryDurationDays.toString());
-    assert.equal(String(entity.deliveryIntervalDays), config.deliveryIntervalDays.toString());
+    // Contract size is a compile-time constant (CONTRACT_SIZE_HPS_DAY = 1e15), read from the
+    // on-chain getter at bootstrap rather than emitted via ConfigUpdated.
+    assert.equal(String(entity.contractSizeHpsDay), "1000000000000000");
+    assert.equal(String(entity.expirationIntervalDays), config.expirationIntervalDays.toString());
     assert.equal(
       String(entity.futureDeliveryDatesCount),
       config.futureDeliveryDatesCount.toString(),

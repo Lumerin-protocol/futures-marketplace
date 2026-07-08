@@ -45,6 +45,12 @@ const terahashPerSecond: Unit = {
   name: "Terahash per second",
 } as const;
 
+const petahashPerSecond: Unit = {
+  decimals: 15,
+  symbol: "PH/s",
+  name: "Petahash per second",
+} as const;
+
 // Scaling factors for on-chain values. Payment-token values (USDC, prices,
 // margins, balances, PnL, fees) and quantities are both stored with 6 decimals
 // of precision on-chain. These constants should be used instead of hardcoded
@@ -72,6 +78,10 @@ export const formatFeePrice = (priceUnits: string | bigint): Value => {
 
 export const formatHashrateTHPS = (speedHashPerSecond: string | bigint): Value => {
   return formatValue(speedHashPerSecond, terahashPerSecond);
+};
+
+export const formatHashratePHPS = (speedHashPerSecond: string | bigint): Value => {
+  return formatValue(speedHashPerSecond, petahashPerSecond);
 };
 
 export const formatValidatorStake = (stakeUnits: string | bigint): Value => {

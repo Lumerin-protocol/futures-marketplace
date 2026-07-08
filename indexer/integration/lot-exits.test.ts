@@ -659,19 +659,14 @@ describe("mutual exit: close-leg Trade/Fill prices reflect the EXIT price", () =
       read("User", partBAddr),
     ]);
 
-    // Sanity: confirm the realizedPnl wiring is consistent — pnl/days must
-    // equal the price delta between entry and exit. If this fails, the
-    // fixture/setup drifted and the price assertions below are meaningless.
-    const futuresEntity = snap.entity("Futures", "0");
-    const days = futuresEntity ? Number(futuresEntity.deliveryDurationDays) : 0;
-    if (days > 0) {
-      const pnlPerDay = expectedSellerPnl / BigInt(days);
-      assert.equal(
-        pnlPerDay,
-        price - price2,
-        "seller PnL per day should equal entry - exit price delta",
-      );
-    }
+    // Sanity: confirm the realizedPnl wiring is consistent — one unit settles `pricePerDay`
+    // (no duration multiplier), so PnL must equal the entry-exit price delta directly. If this
+    // fails, the fixture/setup drifted and the price assertions below are meaningless.
+    assert.equal(
+      expectedSellerPnl,
+      price - price2,
+      "seller PnL should equal entry - exit price delta",
+    );
 
     const allTrades = snap.saved("Trade");
     const allFills = snap.saved("Fill");

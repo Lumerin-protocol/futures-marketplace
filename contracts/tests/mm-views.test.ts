@@ -130,6 +130,26 @@ describe("MM views", () => {
     assert.equal(await futures.read.getQuantityAtPrice([dd, price, false]), 0n);
   });
 
+  it("getNetPositionDelta reports ±1×WAD per contract (no duration multiplier)", async () => {
+    const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures, collateralVault } = contracts;
+    const { seller, buyer } = accounts;
+    const WAD = 10n ** 18n;
+    const dd = (await futures.read.getDeliveryDates())[0];
+    const price = await futures.read.getMarketPrice();
+
+    await collateralVault.write.deposit([price * 10n], { account: seller.account });
+    await collateralVault.write.deposit([price * 10n], { account: buyer.account });
+
+    await futures.write.createOrder([price, dd, "", -3], { account: seller.account });
+    await futures.write.createOrder([price, dd, "destURL", 3], { account: buyer.account });
+
+    // 3 matched contracts → long buyer +3·WAD, short seller −3·WAD, independent
+    // of the (now-removed) delivery-duration multiplier.
+    assert.equal(await futures.read.getNetPositionDelta([buyer.account.address]), 3n * WAD);
+    assert.equal(await futures.read.getNetPositionDelta([seller.account.address]), -3n * WAD);
+  });
+
   it("closeOrder rejects callers that don't own the order", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;

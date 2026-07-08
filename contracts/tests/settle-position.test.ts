@@ -55,7 +55,7 @@ async function reachMaturityWithMovedMark(
 describe("Futures settlePosition", () => {
   it("lets any address permissionlessly cash-settle a matured position at the mark", async () => {
     const data = await openLot();
-    const { contracts, accounts, config, positionId, deliveryDate } = data;
+    const { contracts, accounts, positionId, deliveryDate } = data;
     const { futures, collateralVault } = contracts;
     const { seller, buyer, buyer2, pc, tc } = accounts;
 
@@ -89,10 +89,8 @@ describe("Futures settlePosition", () => {
     // Position is removed.
     assert.equal((await futures.read.getPositionById([positionId])).seller, ZERO_ADDRESS);
 
-    // Sanity: PnL magnitude equals (mark - entry) * durationDays.
-    const expectedMag =
-      (closed.args.buyerPnl > 0n ? closed.args.buyerPnl : -closed.args.buyerPnl) /
-      BigInt(config.deliveryDurationDays);
+    // Sanity: PnL magnitude equals |mark - entry| (one contract, no duration multiplier).
+    const expectedMag = closed.args.buyerPnl > 0n ? closed.args.buyerPnl : -closed.args.buyerPnl;
     assert.ok(expectedMag > 0n);
   });
 

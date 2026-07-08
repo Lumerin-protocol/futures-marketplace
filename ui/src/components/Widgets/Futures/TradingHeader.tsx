@@ -5,7 +5,7 @@ import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
 import { DetailedSpecsModal } from "./DetailedSpecsModal";
 import { useSettlementPrice } from "../../../hooks/data/useSettlementPrice";
-import { formatHashrateTHPS, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { formatHashratePHPS, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
@@ -51,18 +51,7 @@ export const TradingHeader = ({
       ? (Number(settlementPriceRaw) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)
       : null;
 
-  const formatSpeed = (speedHps: bigint) => formatHashrateTHPS(speedHps).full;
-
-  const formatDuration = (seconds: number) => {
-    const secondsInWeek = 7 * 24 * 60 * 60;
-    const secondsInDay = 24 * 60 * 60;
-    if (seconds < secondsInWeek) {
-      const days = Math.round(seconds / secondsInDay);
-      return `${days} day${days !== 1 ? "s" : ""}`;
-    }
-    const weeks = Math.round(seconds / secondsInWeek);
-    return `${weeks} week${weeks !== 1 ? "s" : ""}`;
-  };
+  const formatSpeed = (contractSizeHpsDay: bigint) => `${formatHashratePHPS(contractSizeHpsDay).full} per day`;
 
   return (
     <>
@@ -116,13 +105,8 @@ export const TradingHeader = ({
                 <>
                   <Divider />
                   <StatItem>
-                    <StatValue>{formatSpeed(contractSpecs.data.speedHps)}</StatValue>
-                    <StatLabel>Contract Speed</StatLabel>
-                  </StatItem>
-                  <Divider />
-                  <StatItem>
-                    <StatValue>{formatDuration(contractSpecs.data.deliveryDurationSeconds)}</StatValue>
-                    <StatLabel>Delivery Duration</StatLabel>
+                    <StatValue>{formatSpeed(contractSpecs.data.contractSizeHpsDay)}</StatValue>
+                    <StatLabel>Contract Size</StatLabel>
                   </StatItem>
                 </>
               )}

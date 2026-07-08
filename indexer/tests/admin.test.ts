@@ -27,7 +27,8 @@ function buildConfigParam(
   marginEngine: Address,
 ): ethereum.EventParam {
   // Tuple field order MUST mirror the Solidity `Config` struct definition in
-  // Futures.sol; matchstick decodes by position, not by name.
+  // Futures.sol; matchstick decodes by position, not by name. Contract size is a
+  // compile-time constant (CONTRACT_SIZE_HPS_DAY) and is not part of the config snapshot.
   const tuple = changetype<ethereum.Tuple>([
     ethereum.Value.fromUnsignedBigInt(makerFee),
     ethereum.Value.fromUnsignedBigInt(takerFee),

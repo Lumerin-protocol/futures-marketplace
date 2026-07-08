@@ -115,9 +115,9 @@ describe("Order Creation", () => {
 
     const qty = 5;
     const price = await futures.read.getMarketPrice();
-    // Generous deposit: |qty| × delivery days × entry price covers any
-    // PME stress + unrealized-loss requirement at entry.
-    const margin = price * BigInt(config.deliveryDurationDays) * BigInt(qty);
+    // Generous deposit: |qty| × entry price covers any PME stress +
+    // unrealized-loss requirement at entry (one contract settles pricePerDay).
+    const margin = price * BigInt(qty);
     const deliveryDate = BigInt(config.deliveryDates[0]);
 
     // Resting orders carry no maker/taker fee under the post-2.9 model.
@@ -459,9 +459,9 @@ describe("Order Creation", () => {
     const price = await futures.read.getMarketPrice();
     const deliveryDate = config.deliveryDates[0];
 
-    // Single-contract IM is bounded above by entryPrice * deliveryDays.
+    // Single-contract IM is bounded above by entryPrice.
     // Resting + self-cancel paths charge no maker/taker fee, so only the IM matters.
-    const margin = price * BigInt(config.deliveryDurationDays);
+    const margin = price;
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
@@ -508,7 +508,7 @@ describe("Order Creation", () => {
       tc,
       contracts.hashrateOracle,
       oldDeliveryDate,
-      BigInt(config.deliveryDurationSeconds),
+      BigInt(config.expirationIntervalSeconds),
     );
     const futureDates = await futures.read.getDeliveryDates();
     const newDeliveryDate = futureDates[futureDates.length - 1];
@@ -548,7 +548,7 @@ describe("Order Creation", () => {
 
     const numOrders = await futures.read.MAX_ORDERS_PER_PARTICIPANT();
     const price = await futures.read.getMarketPrice();
-    const margin = price * BigInt(config.deliveryDurationDays) * BigInt(numOrders);
+    const margin = price * BigInt(numOrders);
     const deliveryDate = config.deliveryDates[0];
 
     await collateralVault.write.deposit([margin], { account: seller.account });

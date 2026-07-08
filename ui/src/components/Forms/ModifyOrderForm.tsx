@@ -35,7 +35,6 @@ interface ModifyOrderFormProps {
   participantData?: Participant | null;
   latestPrice: bigint | null;
   marginPercent: number;
-  deliveryDurationDays: number;
   minMargin?: bigint | null;
   newestItemPrice: number | null;
   accountBalance?: AccountBalance;
@@ -57,7 +56,6 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
     participantData,
     latestPrice,
     marginPercent,
-    deliveryDurationDays,
     minMargin,
     newestItemPrice,
     accountBalance,
@@ -127,7 +125,6 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
         newSignedQuantity,
         latestPrice,
         marginPercent,
-        deliveryDurationDays,
       );
 
       // Reserve the larger of maker/taker fee — see comment on `useMakerTakerFees`.
@@ -320,7 +317,6 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
       prevProps.currentQuantity === nextProps.currentQuantity &&
       prevProps.latestPrice === nextProps.latestPrice &&
       prevProps.marginPercent === nextProps.marginPercent &&
-      prevProps.deliveryDurationDays === nextProps.deliveryDurationDays &&
       prevProps.minMargin === nextProps.minMargin &&
       prevProps.newestItemPrice === nextProps.newestItemPrice
     );

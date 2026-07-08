@@ -742,6 +742,19 @@
   },
   {
     "inputs": [],
+    "name": "CONTRACT_SIZE_HPS_DAY",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "MAX_ORACLE_STALENESS",
     "outputs": [
       {
@@ -774,6 +787,19 @@
         "internalType": "int8",
         "name": "",
         "type": "int8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "ORACLE_UNIT_HPS_DAY",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -922,7 +948,7 @@
   },
   {
     "inputs": [],
-    "name": "deliveryDurationDays",
+    "name": "deliveryIntervalDays",
     "outputs": [
       {
         "internalType": "uint8",
@@ -935,7 +961,7 @@
   },
   {
     "inputs": [],
-    "name": "deliveryIntervalDays",
+    "name": "expirationIntervalDays",
     "outputs": [
       {
         "internalType": "uint8",
@@ -1359,22 +1385,12 @@
       },
       {
         "internalType": "uint256",
-        "name": "_speedHps",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
         "name": "_minimumPriceIncrement",
         "type": "uint256"
       },
       {
         "internalType": "uint8",
-        "name": "_deliveryDurationDays",
-        "type": "uint8"
-      },
-      {
-        "internalType": "uint8",
-        "name": "_deliveryIntervalDays",
+        "name": "_expirationIntervalDays",
         "type": "uint8"
       },
       {
@@ -1780,19 +1796,6 @@
       }
     ],
     "name": "settlementPrice",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "speedHps",
     "outputs": [
       {
         "internalType": "uint256",

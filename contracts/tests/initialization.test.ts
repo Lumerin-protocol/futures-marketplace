@@ -18,10 +18,10 @@ describe("Futures - Initialization", () => {
     );
     // Check margin percentages
     assert.equal(await futures.read.liquidationMarginPercent(), config.liquidationMarginPercent);
-    // Check speed
-    assert.equal(await futures.read.speedHps(), config.speedHps);
-    // Check delivery duration
-    assert.equal(await futures.read.deliveryDurationDays(), config.deliveryDurationDays);
+    // Check contract size (compile-time constant, hashes/s·day driving the mark)
+    assert.equal(await futures.read.CONTRACT_SIZE_HPS_DAY(), config.contractSizeHpsDay);
+    // Check the delivery-date spacing
+    assert.equal(await futures.read.expirationIntervalDays(), config.expirationIntervalDays);
   });
 
   it("should expose the configured oracle staleness window", async function () {
@@ -87,5 +87,28 @@ describe("Futures - Oracle staleness", function () {
       futures,
       "InvalidOracle",
     );
+  });
+});
+
+describe("Futures - contract size (mark price)", function () {
+  it("getMarketPrice rebases the oracle answer by contractSizeHpsDay / ORACLE_UNIT_HPS_DAY", async function () {
+    const { contracts } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures, hashrateOracle } = contracts;
+
+    const [, answer] = await hashrateOracle.read.latestRoundData();
+    const contractSize = await futures.read.CONTRACT_SIZE_HPS_DAY();
+    const oracleUnit = await futures.read.ORACLE_UNIT_HPS_DAY();
+    const divisor = await futures.read.hashpriceScalingDivisor();
+    const step = await futures.read.minimumPriceIncrement();
+
+    const rebased = (answer * contractSize) / (divisor * oracleUnit);
+    const rounded = ((rebased + step / 2n) / step) * step;
+
+    assert.equal(await futures.read.getMarketPrice(), rounded);
+
+    // CONTRACT_SIZE_HPS_DAY = 1 PH/s·day, so the mark is 10× the oracle's
+    // per-100TH answer (rebased to token decimals).
+    const perOracleUnit = answer / divisor;
+    assert.equal(await futures.read.getMarketPrice(), perOracleUnit * 10n);
   });
 });

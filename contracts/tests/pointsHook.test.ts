@@ -79,7 +79,7 @@ describe("Futures - points hook wiring", function () {
       await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
       await futures.write.createOrder([price, deliveryDate, "", 1], { account: buyer.account });
 
-      const notional = price * BigInt(config.deliveryDurationDays);
+      const notional = price;
 
       // wTaker == 1 WAD, so taker points == notional. makerFee is 0, so the maker earns nothing.
       assert.equal(await points.read.balanceOf([buyer.account.address]), notional, "taker earns notional");
@@ -146,7 +146,7 @@ describe("Futures - points hook wiring", function () {
       await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
       await futures.write.createOrder([price, deliveryDate, "", 1], { account: buyer.account });
 
-      const notional = price * BigInt(config.deliveryDurationDays);
+      const notional = price;
 
       // wMaker == 1 WAD and the maker quoted at the reference price → 3x notional.
       assert.equal(
@@ -168,7 +168,10 @@ describe("Futures - points hook wiring", function () {
 
       const price = await futures.read.getMarketPrice();
       const deliveryDate = config.deliveryDates[0];
-      const positionMargin = price * 3n;
+      // A long contract's loss is bounded by its entry price (the mark can't go
+      // below zero), so the deposit must sit above entry IM but below the
+      // maintenance margin after the crash to be liquidatable with one contract.
+      const positionMargin = price / 2n;
 
       await collateralVault.write.deposit([positionMargin], { account: seller.account });
       await collateralVault.write.deposit([positionMargin], { account: buyer.account });
