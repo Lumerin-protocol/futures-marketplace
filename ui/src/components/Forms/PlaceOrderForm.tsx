@@ -88,7 +88,6 @@ export const PlaceOrderForm: FC<Props> = ({
     wMaker !== undefined && weightScale ? (Number(wMaker) * sizeUSDC) / Number(weightScale) : null;
   const takerReward =
     wTaker !== undefined && weightScale ? (Number(wTaker) * sizeUSDC) / Number(weightScale) : null;
-  const deliveryDurationDays = contractSpecsQuery.data?.data?.deliveryDurationDays ?? 7;
   const marginPersent = contractSpecsQuery.data?.data?.liquidationMarginPercent ?? 20;
 
   // State for required margin
@@ -116,7 +115,6 @@ export const PlaceOrderForm: FC<Props> = ({
         quantity,
         latestPrice,
         marginPersent,
-        deliveryDurationDays,
       );
     }
 
@@ -129,7 +127,6 @@ export const PlaceOrderForm: FC<Props> = ({
     contractMode,
     absoluteQuantity,
     marginPersent,
-    deliveryDurationDays,
     leverage,
   ]);
 

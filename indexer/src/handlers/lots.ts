@@ -90,7 +90,8 @@ export function handleLotCreated(event: LotCreated): void {
   );
 
   flushFuturesCounters(futures);
-  const volume = event.params.pricePerDay.times(BigInt.fromI32(futures.deliveryDurationDays));
+  // One matched unit settles `pricePerDay` of notional (no duration multiplier).
+  const volume = event.params.pricePerDay;
   futures.totalVolume = futures.totalVolume.plus(volume);
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
@@ -203,7 +204,8 @@ export function handleLotTransferred(event: LotTransferred): void {
   );
 
   flushFuturesCounters(futures);
-  const volume = matchPrice.times(BigInt.fromI32(futures.deliveryDurationDays));
+  // One matched unit settles `matchPrice` of notional (no duration multiplier).
+  const volume = matchPrice;
   futures.totalVolume = futures.totalVolume.plus(volume);
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();

@@ -40,7 +40,7 @@ describe("Get Positions", () => {
     const { seller, buyer, buyer2, owner } = accounts;
 
     const price = await futures.read.getMarketPrice();
-    const margin = price * BigInt(config.deliveryDurationDays) * 2n;
+    const margin = price * 2n;
     const deliveryDate = config.deliveryDates[0];
 
     await futures.write.setTakerFee([0n], { account: owner.account });

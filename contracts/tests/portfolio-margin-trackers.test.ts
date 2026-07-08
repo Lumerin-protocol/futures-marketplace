@@ -66,17 +66,17 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     // Advance to maturity and cash-settle: this is the permissionless settlePosition
     // path that flows through _settleAtMark → _removePosition.
     await tc.setNextBlockTimestamp({
-      timestamp: deliveryDate + BigInt(config.deliveryDurationSeconds) / 2n,
+      timestamp: deliveryDate + BigInt(config.expirationIntervalSeconds) / 2n,
     });
     await refreshHashprice(hashrateOracle);
     await futures.write.settlePosition([positionId], { account: validator.account });
 
     // Re-open one position at a *different* delivery date. If
     // _settleAtMark had failed to decrement the original tracker
-    // for `deliveryDate`, that mapping would still hold ±deliveryDurationDays.
-    // Reopening at `laterDeliveryDate` adds another ±deliveryDurationDays. The
-    // observable post-state is the *sum* of both — so a leak shows up as a
-    // doubled magnitude.
+    // for `deliveryDate`, that mapping would still hold ±1 per contract.
+    // Reopening at `laterDeliveryDate` adds another ±1. The observable
+    // post-state is the *sum* of both — so a leak shows up as a doubled
+    // magnitude.
     const laterDeliveryDate = config.deliveryDates[2];
     await futures.write.createOrder([price, laterDeliveryDate, "", -1], {
       account: seller.account,
@@ -113,9 +113,9 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     const dst = "https://destination-url.com";
     const price = quantizePrice(parseUnits("100", 6), config.priceLadderStep);
 
-    // Seller deposits exactly `entry × duration`: enough to enter, but a small
-    // adverse move pushes them past the liquidation threshold.
-    const sellerMargin = price * BigInt(config.deliveryDurationDays);
+    // Seller deposits roughly one contract's entry value: enough to enter, but a
+    // small adverse move pushes them past the liquidation threshold.
+    const sellerMargin = price;
     const buyerMargin = parseUnits("5000", 6);
     await collateralVault.write.deposit([sellerMargin], { account: seller.account });
     await collateralVault.write.deposit([buyerMargin], { account: buyer.account });
@@ -142,14 +142,15 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     // settlement still has to complete, so the move must remain bounded by the
     // seller's collateral.
     //
-    // Seller short 1 contract over 7 days. PME stress MM ≈ mmSpot · spot · |Δ|/WAD
-    // (≈ 0.05 · C · 7 = 0.35·C in token units), plus unrealized loss
-    // (C − price) · 7. Balance ≈ 700. Solve 0.35·C + 7·(C − 100) > 700 ⇒ C > 190.
+    // Seller short 1 contract (no duration multiplier). PME stress MM ≈
+    // mmShock · spot · |Δ|/WAD (0.20·C) plus unrealized loss (C − price).
+    // Balance ≈ 100. Solve 0.20·C + (C − 100) > 100 ⇒ C > 166.
     // Pick C = 1.95 × price = 195 to clear the threshold with margin to spare.
     const targetMarketPrice = (price * 195n) / 100n;
-    // market = hashpriceUsd / hashpriceScalingDivisor → hashpriceUsd = market × divisor.
-    // hashpriceScalingDivisor = 10^(oracleDecimals − tokenDecimals) = 10^(8−6) = 100.
-    await hashrateOracle.write.setPrice([targetMarketPrice * 100n]);
+    // market = hashpriceUsd × contractSizeHpsDay / (hashpriceScalingDivisor × ORACLE_UNIT_HPS_DAY)
+    //        = hashpriceUsd × 1e15 / (100 × 1e14) = hashpriceUsd / 10
+    // ⇒ hashpriceUsd = market × 10. (divisor = 10^(oracleDecimals − tokenDecimals) = 10^(8−6) = 100.)
+    await hashrateOracle.write.setPrice([targetMarketPrice * 10n]);
     await tc.mine({ blocks: 1 });
 
     await futures.write.liquidatePosition([seller.account.address, positionId]);

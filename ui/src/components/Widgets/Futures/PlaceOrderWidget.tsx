@@ -129,8 +129,6 @@ export const PlaceOrderWidget = ({
     ? Number(contractSpecsQuery.data.data.minimumPriceIncrement) / PAYMENT_TOKEN_SCALE_NUM
     : null;
 
-  // Get delivery duration days from contract specs
-  const deliveryDurationDays = contractSpecsQuery.data?.data?.deliveryDurationDays ?? 7;
   const marginPercent = contractSpecsQuery.data?.data?.liquidationMarginPercent ?? 20;
 
 
@@ -330,7 +328,6 @@ export const PlaceOrderWidget = ({
         mid,
         latestPrice,
         marginPercent,
-        deliveryDurationDays,
       );
 
       if (requiredMargin <= balanceForMargin) {
@@ -695,7 +692,6 @@ export const PlaceOrderWidget = ({
       numericAmount, // Positive quantity for Buy
       latestPrice,
       marginPercent,
-      deliveryDurationDays,
     );
 
     // Reserve the larger of maker/taker fee — see comment on `useMakerTakerFees`.
@@ -788,7 +784,6 @@ export const PlaceOrderWidget = ({
       -numericAmount, // Negative quantity for Sell
       latestPrice,
       marginPercent,
-      deliveryDurationDays,
     );
 
     // Reserve the larger of maker/taker fee — see comment on `useMakerTakerFees`.
@@ -1316,7 +1311,6 @@ const HighPriceConfirmationModal = ({
 
   const percentageOver = ((pendingOrder.price / newestItemPrice) * 100).toFixed(1);
   const isBuy = pendingOrder.quantity > 0;
-  const deliveryDurationDays = contractSpecsQuery.data?.data?.deliveryDurationDays ?? 7;
 
   return (
     <div className="space-y-6">

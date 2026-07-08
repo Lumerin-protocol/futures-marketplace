@@ -174,6 +174,11 @@ export const FuturesAbi = [
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "OverLiquidation",
+    "type": "error"
+  },
+  {
     "inputs": [
       {
         "internalType": "address",
@@ -737,6 +742,19 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "CONTRACT_SIZE_HPS_DAY",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "MAX_ORACLE_STALENESS",
     "outputs": [
       {
@@ -769,6 +787,19 @@ export const FuturesAbi = [
         "internalType": "int8",
         "name": "",
         "type": "int8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "ORACLE_UNIT_HPS_DAY",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -917,7 +948,7 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "deliveryDurationDays",
+    "name": "deliveryIntervalDays",
     "outputs": [
       {
         "internalType": "uint8",
@@ -930,7 +961,7 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "deliveryIntervalDays",
+    "name": "expirationIntervalDays",
     "outputs": [
       {
         "internalType": "uint8",
@@ -1354,22 +1385,12 @@ export const FuturesAbi = [
       },
       {
         "internalType": "uint256",
-        "name": "_speedHps",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
         "name": "_minimumPriceIncrement",
         "type": "uint256"
       },
       {
         "internalType": "uint8",
-        "name": "_deliveryDurationDays",
-        "type": "uint8"
-      },
-      {
-        "internalType": "uint8",
-        "name": "_deliveryIntervalDays",
+        "name": "_expirationIntervalDays",
         "type": "uint8"
       },
       {
@@ -1452,6 +1473,24 @@ export const FuturesAbi = [
       }
     ],
     "name": "liquidatePosition",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32[]",
+        "name": "_positionIds",
+        "type": "bytes32[]"
+      }
+    ],
+    "name": "liquidatePositions",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1757,19 +1796,6 @@ export const FuturesAbi = [
       }
     ],
     "name": "settlementPrice",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "speedHps",
     "outputs": [
       {
         "internalType": "uint256",

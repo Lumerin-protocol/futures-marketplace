@@ -37,7 +37,6 @@ describe("Futures collateral hold until settlement", () => {
     const { seller, buyer, tc } = accounts;
     const deliveryDate = config.deliveryDates[0];
     const entry = quantizePrice(ENTRY, config.priceLadderStep);
-    const days = BigInt(config.deliveryDurationDays);
     const margin = parseUnits("10000", 6);
 
     await collateralVault.write.deposit([margin], { account: seller.account });
@@ -49,7 +48,7 @@ describe("Futures collateral hold until settlement", () => {
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
     await futures.write.recordSettlementPrice([deliveryDate], { account: seller.account });
     const pinned = await futures.read.settlementPrice([deliveryDate]);
-    const expectedLoss = (entry - pinned) * days; // positive magnitude of the long's loss
+    const expectedLoss = entry - pinned; // positive magnitude of the long's loss
 
     // The matured position still imposes IM equal to the pinned loss, with no stress delta
     // (the priced date carries no remaining market risk).
@@ -72,7 +71,6 @@ describe("Futures collateral hold until settlement", () => {
     const { seller, buyer, validator, tc, pc } = accounts;
     const deliveryDate = config.deliveryDates[0];
     const entry = quantizePrice(ENTRY, config.priceLadderStep);
-    const days = BigInt(config.deliveryDurationDays);
     const margin = parseUnits("10000", 6);
 
     await collateralVault.write.deposit([margin], { account: seller.account });
@@ -83,7 +81,7 @@ describe("Futures collateral hold until settlement", () => {
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
     await futures.write.recordSettlementPrice([deliveryDate], { account: seller.account });
     const pinned = await futures.read.settlementPrice([deliveryDate]);
-    const expectedLoss = (entry - pinned) * days;
+    const expectedLoss = entry - pinned;
 
     // Loser withdraws everything they are allowed to (balance - IM), leaving exactly the loss.
     const balance = await collateralVault.read.balanceOf([buyer.account.address]);

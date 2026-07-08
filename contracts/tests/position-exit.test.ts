@@ -13,7 +13,7 @@ describe("Position Exit", () => {
 
     const price = await futures.read.getMarketPrice();
     const price2 = price - config.priceLadderStep;
-    const margin = price * BigInt(config.deliveryDurationDays) * 2n;
+    const margin = price * 2n;
     const deliveryDate = config.deliveryDates[0];
 
     await futures.write.setTakerFee([0n], { account: owner.account });
@@ -46,8 +46,8 @@ describe("Position Exit", () => {
     ]);
     assert.equal(partBPositions.length, 0);
 
-    const expPartApnl = (price - price2) * BigInt(config.deliveryDurationDays);
-    const expPartBpnl = (price2 - price) * BigInt(config.deliveryDurationDays);
+    const expPartApnl = price - price2;
+    const expPartBpnl = price2 - price;
 
     const partABalance = await collateralVault.read.balanceOf([partA.account.address]);
     const partBBalance = await collateralVault.read.balanceOf([partB.account.address]);
@@ -74,7 +74,7 @@ describe("Position Exit", () => {
     const { seller: partA, buyer: partB, buyer2: partC, owner } = accounts;
 
     const price = await futures.read.getMarketPrice();
-    const margin = price * BigInt(config.deliveryDurationDays) * 2n;
+    const margin = price * 2n;
     const deliveryDate = config.deliveryDates[0];
 
     await futures.write.setTakerFee([0n], { account: owner.account });

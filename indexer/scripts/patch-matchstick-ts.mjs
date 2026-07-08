@@ -11,7 +11,7 @@
  *     The AS-generated event class then called `.toTuple()` on the wrapper
  *     and aborted with "Ethereum value is not a tuple".
  *
- * The contract emits `ConfigUpdated(Config)` (a 11-field struct) on
+ * The contract emits `ConfigUpdated(Config)` (a 9-field struct) on
  * initialize and on every admin setter call, so *every* integration test
  * tripped over this. Until upstream lands the fix, this script rewrites both
  * sides of the matchstick-ts wire format to encode tuples as JSON arrays.

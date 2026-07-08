@@ -26,9 +26,8 @@ export function getOrCreateFutures(): Futures {
     futures.takerFee = BigInt.zero();
     futures.liquidationFee = BigInt.zero();
     futures.liquidationMarginPercent = 0;
-    futures.speedHps = BigInt.zero();
-    futures.deliveryDurationDays = 0;
-    futures.deliveryIntervalDays = 0;
+    futures.contractSizeHpsDay = BigInt.zero();
+    futures.expirationIntervalDays = 0;
     futures.futureDeliveryDatesCount = 0;
     futures.firstFutureDeliveryDate = BigInt.zero();
     futures.collectedFeesBalance = BigInt.zero();
@@ -86,14 +85,11 @@ export function loadFuturesFromContract(futures: Futures): void {
   const liqMargin = contract.try_liquidationMarginPercent();
   if (!liqMargin.reverted) futures.liquidationMarginPercent = liqMargin.value;
 
-  const speedHps = contract.try_speedHps();
-  if (!speedHps.reverted) futures.speedHps = speedHps.value;
+  const contractSizeHpsDay = contract.try_CONTRACT_SIZE_HPS_DAY();
+  if (!contractSizeHpsDay.reverted) futures.contractSizeHpsDay = contractSizeHpsDay.value;
 
-  const deliveryDuration = contract.try_deliveryDurationDays();
-  if (!deliveryDuration.reverted) futures.deliveryDurationDays = deliveryDuration.value;
-
-  const deliveryInterval = contract.try_deliveryIntervalDays();
-  if (!deliveryInterval.reverted) futures.deliveryIntervalDays = deliveryInterval.value;
+  const deliveryInterval = contract.try_expirationIntervalDays();
+  if (!deliveryInterval.reverted) futures.expirationIntervalDays = deliveryInterval.value;
 
   const futureCount = contract.try_futureDeliveryDatesCount();
   if (!futureCount.reverted) futures.futureDeliveryDatesCount = futureCount.value;

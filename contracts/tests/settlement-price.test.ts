@@ -140,7 +140,6 @@ describe("Futures settlement price (pinned)", () => {
     const { seller, buyer, buyer2, tc, pc } = accounts;
     const deliveryDate = config.deliveryDates[0];
     const entryPrice = quantizePrice(parseUnits("100", 6), config.priceLadderStep);
-    const days = BigInt(config.deliveryDurationDays);
 
     const margin = parseUnits("10000", 6);
     for (const a of [seller, buyer, buyer2]) {
@@ -175,7 +174,7 @@ describe("Futures settlement price (pinned)", () => {
     const [closedB] = parseEventLogs({ logs: rB.logs, abi: futures.abi, eventName: "LotClosed" });
 
     // Both longs realize identical PnL computed at the pinned price, not the moving live mark.
-    const expectedLongPnl = (pinned - entryPrice) * days;
+    const expectedLongPnl = pinned - entryPrice;
     assert.equal(closedA.args.buyerPnl, expectedLongPnl);
     assert.equal(closedB.args.buyerPnl, expectedLongPnl);
     assert.equal(closedA.args.buyerPnl, closedB.args.buyerPnl);

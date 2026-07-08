@@ -27,15 +27,15 @@ async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
   const entryPricePerDay = await futures.read.getMarketPrice();
   const deliveryDate = config.deliveryDates[0];
 
-  // Tight collateral so a hashprice drop drives the buyer underwater. Mirrors the
-  // sizing pattern from `liquidation.test.ts` "should close orders first" so the
-  // buyer is healthy at entry but breaks MM once price drops.
+  // Seller / buyer2 are amply funded — they stay healthy through the crash.
   const positionMargin = entryPricePerDay * 3n;
-  const orderHeadroom =
-    ((entryPricePerDay * BigInt(config.deliveryDurationDays) * BigInt(config.liquidationMarginPercent)) /
-      100n) *
-    2n;
-  const buyerMargin = positionMargin + orderHeadroom;
+  // The buyer is funded tight: enough to open the long plus two resting buys
+  // (entry IM ≈ 0.6× entry), but below the maintenance margin the long alone
+  // imposes once a deep hashprice crash is applied. A long contract's loss is
+  // bounded by its entry price (the mark can't go negative), so with the
+  // duration multiplier gone the deposit must sit under 1× entry for the
+  // position to stay underwater even after the resting orders are cancelled.
+  const buyerMargin = (entryPricePerDay * 4n) / 5n;
 
   await collateralVault.write.deposit([positionMargin], { account: seller.account });
   await collateralVault.write.deposit([buyerMargin], { account: buyer.account });
@@ -74,12 +74,12 @@ async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
     config: { ...config, entryPricePerDay, deliveryDate, liquidationFee },
     positionId,
     async makeUnderwater() {
-      // Drop hashprice aggressively so the buyer (long) breaks MM even after
+      // Drop hashprice deeply (÷20) so the buyer (long) breaks MM even after
       // resting orders are force-cancelled by the keeper's first step. The MM
       // includes the position's mark-to-market loss (`futuresUnrealizedLoss`), so
       // a deep drop leaves the position itself underwater once the order-margin
       // contribution is gone — no reliance on any liquidation-fee balance drain.
-      await scaleHashprice(contracts.hashrateOracle, 100n, 600n);
+      await scaleHashprice(contracts.hashrateOracle, 1n, 20n);
     },
   };
 }

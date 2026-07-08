@@ -2,7 +2,7 @@ import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import Tooltip from "@mui/material/Tooltip";
 import { useMemo, useState, type ReactNode } from "react";
-import { formatHashrateTHPS, HASHRATE_TH_SCALE_NUM, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { formatHashratePHPS, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { useGetDeliveryDates } from "../../../hooks/data/useGetDeliveryDates";
 import { useFuturesContractConstants } from "../../../hooks/data/useFuturesContractConstants";
 import { useFuturesTokenInfo } from "../../../hooks/data/useFuturesTokenInfo";
@@ -82,16 +82,6 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
     });
   };
 
-  const formatSpeed = (speedHps: bigint) => {
-    return formatHashrateTHPS(speedHps).full;
-  };
-
-  // Calculate TH/s (speedHps / HASHRATE_TH_SCALE_NUM)
-  const formatSpeedTHs = (speedHps: bigint) => {
-    const thps = Number(speedHps) / HASHRATE_TH_SCALE_NUM;
-    return thps.toFixed(0);
-  };
-
   if (!contractSpecs && contractMode === "futures") {
     return (
       <SpecsShell>
@@ -117,14 +107,12 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
   const contractAddress = process.env.REACT_APP_FUTURES_TOKEN_ADDRESS;
   const docsUrl = process.env.REACT_APP_FUTURES_DOCS_URL;
 
-  // Calculate tick value: minimumPriceIncrement * deliveryDurationDays
   const tickSize = Number(contractSpecs.minimumPriceIncrement) / PAYMENT_TOKEN_SCALE_NUM;
-  const tickValue = tickSize * contractSpecs.deliveryDurationDays;
 
   // Calculate total coverage days
   const totalCoverageDays =
-    contractConstants.futureDeliveryDatesCount && contractConstants.deliveryIntervalDays
-      ? contractConstants.futureDeliveryDatesCount * contractConstants.deliveryIntervalDays
+    contractConstants.futureDeliveryDatesCount && contractConstants.expirationIntervalDays
+      ? contractConstants.futureDeliveryDatesCount * contractConstants.expirationIntervalDays
       : null;
 
   return (
@@ -134,7 +122,7 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
         <SectionTitle>CONTRACT DETAILS</SectionTitle>
         <SpecItem>
           <SpecLabel>Contract Unit</SpecLabel>
-          <SpecValue>{formatSpeedTHs(contractSpecs.speedHps)} TH/s per day</SpecValue>
+          <SpecValue>{formatHashratePHPS(contractSpecs.contractSizeHpsDay).full} per day</SpecValue>
         </SpecItem>
 
 
@@ -166,7 +154,7 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
         <SpecItem>
           <SpecLabel>Expiration Interval</SpecLabel>
           <SpecValue>
-            Every {contractConstants.deliveryIntervalDays ?? "..."} days
+            Every {contractConstants.expirationIntervalDays ?? "..."} days
             {/* {totalCoverageDays && ` (${totalCoverageDays} days)`} */}
           </SpecValue>
         </SpecItem>
@@ -186,20 +174,6 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
           <SpecLabel>Tick Size</SpecLabel>
           <SpecValue>
             {tickSize.toFixed(2)} {tokenSymbol}
-          </SpecValue>
-        </SpecItem>
-
-        <SpecItem>
-          <SpecLabel>Tick Value</SpecLabel>
-          <SpecValue>
-            {tickValue.toFixed(2)} {tokenSymbol}
-          </SpecValue>
-        </SpecItem>
-
-        <SpecItem>
-          <SpecLabel>Contract Multiplier</SpecLabel>
-          <SpecValue>
-            {contractSpecs.deliveryDurationDays} day{contractSpecs.deliveryDurationDays !== 1 ? "s" : ""}
           </SpecValue>
         </SpecItem>
       </SpecSection>

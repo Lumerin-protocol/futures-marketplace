@@ -20,7 +20,7 @@ const { viem, networkHelpers } = await network.getOrCreate();
  * Fixture shape (chosen so behaviour is robust to PME rounding):
  *   - PME shocks IM 20% / MM 10% → a genuine buffer (IM > MM).
  *   - 10 long lots for `buyer`, matched by `seller`.
- *   - Deposit ≈ 2.2·(entry·days·10)/10 — clears entry IM (2.0·u) so the
+ *   - Deposit ≈ 2.2·(entry·10)/10 — clears entry IM (2.0·u) so the
  *     position opens, but a 15% hashprice crash breaks MM (MM_req₀ ≈ 2.35·u).
  *   - After the crash: closing a FEW lots stays at/under IM (no revert),
  *     closing almost ALL lots overshoots IM (OverLiquidation), closing EVERY
@@ -45,12 +45,12 @@ async function partialLiquidationFixture(conn: NetworkConnection) {
 
   const entry = await futures.read.getMarketPrice();
   const deliveryDate = config.deliveryDates[0];
-  const days = BigInt(config.deliveryDurationDays);
   const lotCount = 10;
 
-  // u = entry·days (per-lot notional). Deposit 2.2·u·(lotCount/10) = 2.2·u for
-  // 10 lots. See header for why this lands underwater-but-partially-recoverable.
-  const u = entry * days;
+  // u = entry (per-lot notional; one contract settles pricePerDay, no duration
+  // multiplier). Deposit 2.2·u·(lotCount/10) = 2.2·u for 10 lots. See header for
+  // why this lands underwater-but-partially-recoverable.
+  const u = entry;
   const buyerDeposit = (u * 22n) / 10n;
   const bigDeposit = u * 100n;
 
@@ -83,7 +83,7 @@ async function partialLiquidationFixture(conn: NetworkConnection) {
 
   return {
     ...data,
-    config: { ...config, entry, deliveryDate, days, lotCount },
+    config: { ...config, entry, deliveryDate, lotCount },
     foreignPositionId,
     /** 15% hashprice crash — moderate: breaks MM but keeps a recoverable band. */
     async makeUnderwater() {
@@ -269,9 +269,9 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
     await scaleHashprice(hashrateOracle, 1n, 100n);
 
     // Both legs matched at `config.entry`, so each closed lot's seller PnL is
-    // (entry − mark)·days; the buyer's loss is the exact negative of that.
+    // (entry − mark); the buyer's loss is the exact negative of that.
     const marketAfter = await futures.read.getMarketPrice();
-    const totalSellerPnl = (config.entry - marketAfter) * config.days * BigInt(config.lotCount);
+    const totalSellerPnl = (config.entry - marketAfter) * BigInt(config.lotCount);
 
     const ids = await futures.read.getPositionIds([buyer.account.address]);
     const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);

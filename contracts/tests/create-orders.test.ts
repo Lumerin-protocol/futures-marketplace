@@ -207,7 +207,7 @@ describe("Futures.createOrders (batch placement)", () => {
       tc,
       contracts.hashrateOracle,
       dd,
-      BigInt(config.deliveryDurationSeconds),
+      BigInt(config.expirationIntervalSeconds),
     );
 
     // The stale order is now past `deliveryAt`, but a fresh `createOrders`

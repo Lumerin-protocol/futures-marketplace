@@ -56,9 +56,9 @@ export async function warpPastDeliveryWithFreshOracle(
   tc: TestClock,
   feed: ScalablePriceFeed,
   deliveryAt: bigint,
-  deliveryDurationSeconds: bigint,
+  intervalSeconds: bigint,
 ): Promise<bigint> {
-  const jumpedTo = deliveryAt + deliveryDurationSeconds + 1n;
+  const jumpedTo = deliveryAt + intervalSeconds + 1n;
   await tc.setNextBlockTimestamp({ timestamp: jumpedTo });
   await tc.mine({ blocks: 1 });
   await refreshHashprice(feed, jumpedTo);

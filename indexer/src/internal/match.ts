@@ -10,7 +10,7 @@ import {
 import { PositionSessionStatus } from "../enums";
 import { absI32, isSameSignI32, minI32 } from "../lib";
 import { fillAggregateId, positionSessionId, tradeAggregateId } from "../ids";
-import { getOrCreateFutures, getOrCreateFuturesExpiration, getOrCreatePointer } from "./store";
+import { getOrCreateFuturesExpiration, getOrCreatePointer } from "./store";
 
 // ============================================================================
 // Pending Futures-singleton counter deltas
@@ -124,14 +124,11 @@ export function applyExitFill(
   );
 }
 
-/// pnl_event = side_sign * (trigger_price - entry_price) * deliveryDurationDays
-/// where side_sign = +1 for buyer-exit, -1 for seller-exit.
+/// pnl_event = side_sign * (trigger_price - entry_price)
+/// where side_sign = +1 for buyer-exit, -1 for seller-exit. One unit settles `pricePerDay` of
+/// notional (no duration multiplier), so the price delta equals the realized PnL directly.
 export function derivePriceFromExit(wasBuyer: boolean, pnl: BigInt, entryPrice: BigInt): BigInt {
-  const futures = getOrCreateFutures();
-  const days = futures.deliveryDurationDays;
-  if (days <= 0) return entryPrice;
-  const pricePerDayDelta = pnl.div(BigInt.fromI32(days));
-  return wasBuyer ? entryPrice.plus(pricePerDayDelta) : entryPrice.minus(pricePerDayDelta);
+  return wasBuyer ? entryPrice.plus(pnl) : entryPrice.minus(pnl);
 }
 
 // ============================================================================

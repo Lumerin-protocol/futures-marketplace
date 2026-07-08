@@ -20,12 +20,10 @@ export const useFuturesContractSpecs = (props?: { refetch?: boolean }) => {
 const fetchContractSpecsAsync = async (): Promise<GetResponse<FuturesContractSpecs>> => {
   const response = await graphqlRequest<ContractSpecsResponse>(ContractSpecsQuery);
   const data: FuturesContractSpecs = {
-    deliveryDurationDays: response.futures.deliveryDurationDays,
-    deliveryDurationSeconds: response.futures.deliveryDurationDays * 24 * 60 * 60,
     hashrateOracleAddress: response.futures.hashrateOracleAddress,
     minimumPriceIncrement: BigInt(response.futures.minimumPriceIncrement),
     liquidationMarginPercent: response.futures.liquidationMarginPercent,
-    speedHps: BigInt(+response.futures.speedHps),
+    contractSizeHpsDay: BigInt(+response.futures.contractSizeHpsDay),
     tokenAddress: response.futures.contractAddress,
   };
   return {
@@ -35,12 +33,10 @@ const fetchContractSpecsAsync = async (): Promise<GetResponse<FuturesContractSpe
 };
 
 export type FuturesContractSpecs = {
-  deliveryDurationDays: number;
-  deliveryDurationSeconds: number;
   hashrateOracleAddress: `0x${string}`;
   minimumPriceIncrement: bigint;
   liquidationMarginPercent: number;
-  speedHps: bigint;
+  contractSizeHpsDay: bigint;
   tokenAddress: `0x${string}`;
 };
 
@@ -53,10 +49,9 @@ type ContractSpecsResponse = {
   };
   futures: {
     liquidationMarginPercent: number;
-    deliveryDurationDays: number;
     hashrateOracleAddress: `0x${string}`;
     minimumPriceIncrement: string;
-    speedHps: string;
+    contractSizeHpsDay: string;
     contractAddress: `0x${string}`;
   };
 };
