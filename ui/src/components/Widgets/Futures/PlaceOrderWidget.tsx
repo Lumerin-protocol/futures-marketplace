@@ -43,7 +43,13 @@ import { useMakerTakerFees } from "../../../hooks/data/useMakerTakerFees";
 import { ModeToggle, ModeButton, type AmountMode } from "./PerpsOrderFormFields";
 import { useSimulatePerpsOrder } from "../../../hooks/data/perps/useSimulatePerpsOrder";
 import { useGetPerpsInitialMargin } from "../../../hooks/data/perps/useGetPerpsInitialMargin";
-import { PAYMENT_TOKEN_SCALE, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import {
+  formatHashratePHPS,
+  PAYMENT_TOKEN_SCALE,
+  PAYMENT_TOKEN_SCALE_NUM,
+  QUANTITY_SCALE,
+  QUANTITY_SCALE_NUM,
+} from "../../../lib/units";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -1312,6 +1318,17 @@ const HighPriceConfirmationModal = ({
   const percentageOver = ((pendingOrder.price / newestItemPrice) * 100).toFixed(1);
   const isBuy = pendingOrder.quantity > 0;
 
+  // Expected hashrate = order quantity × on-chain contract size (hashes/s·day),
+  // formatted as PH/s. One unit settles the value of `contractSizeHpsDay`.
+  const contractSizeHpsDay = contractSpecsQuery.data?.data?.contractSizeHpsDay;
+  const expectedHashrate =
+    contractSizeHpsDay !== undefined
+      ? formatHashratePHPS(
+          (contractSizeHpsDay * BigInt(Math.round(pendingOrder.amount * QUANTITY_SCALE_NUM))) /
+            QUANTITY_SCALE,
+        ).full
+      : null;
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-semibold text-white mb-6">High Price Warning</h2>
@@ -1356,7 +1373,7 @@ const HighPriceConfirmationModal = ({
           {contractMode === "futures" && (
             <div className="flex justify-between">
               <span className="text-gray-300">Expected Hashrate:</span>
-              <span className="text-white">{pendingOrder.amount * 100} Th/s</span>
+              <span className="text-white">{expectedHashrate ?? "—"}</span>
             </div>
           )}
         </div>
