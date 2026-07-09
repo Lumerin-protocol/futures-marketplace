@@ -9,6 +9,7 @@ import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { createFinalOrderBookData } from "./orderBookHelpers";
 import { ClassicOrderBook } from "./ClassicOrderBook";
 import { VolumeOrderBook } from "./VolumeOrderBook";
+import { TradesList } from "./TradesList";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
@@ -36,8 +37,8 @@ export const OrderBookTable = ({
   targetDeliveryDate,
 }: OrderBookTableProps) => {
   const [selectedDateIndex, setSelectedDateIndex] = useState(0);
-  // Order book display mode. Only exposed for PERP markets; defaults to Classic.
-  const [viewMode, setViewMode] = useState<"classic" | "volume">("classic");
+  // Order book display mode: Classic / Volume ladders, or the all-users Trades feed.
+  const [viewMode, setViewMode] = useState<"classic" | "volume" | "trades">("volume");
   const tableContainerRef = useRef<HTMLDivElement>(null);
   // Track previous basePrice to detect changes
   const previousBasePriceRef = useRef<number | null>(null);
@@ -378,26 +379,30 @@ export const OrderBookTable = ({
 
   return (
     <OrderBookWidget>
-      <OrderBookTitle>Order Book{contractMode === "perpetual" ? " — PERP" : ""}</OrderBookTitle>
-      {contractMode === "perpetual" && (
-        <ViewToggle>
-          <ToggleButton
-            type="button"
-            $active={viewMode === "classic"}
-            onClick={() => setViewMode("classic")}
-          >
-            Classic
-          </ToggleButton>
-          <ToggleButton
-            type="button"
-            $active={viewMode === "volume"}
-            onClick={() => setViewMode("volume")}
-          >
-            Volume
-          </ToggleButton>
-        </ViewToggle>
-      )}
-      {contractMode === "futures" && (
+      <ViewToggle>
+        {/* <ToggleButton
+          type="button"
+          $active={viewMode === "classic"}
+          onClick={() => setViewMode("classic")}
+        >
+          Classic
+        </ToggleButton> */}
+        <ToggleButton
+          type="button"
+          $active={viewMode === "volume"}
+          onClick={() => setViewMode("volume")}
+        >
+          Order Book
+        </ToggleButton>
+        <ToggleButton
+          type="button"
+          $active={viewMode === "trades"}
+          onClick={() => setViewMode("trades")}
+        >
+          Trades
+        </ToggleButton>
+      </ViewToggle>
+      {contractMode === "futures" && viewMode !== "trades" && (
         <Header>
           <button onClick={goToPreviousDate} className="nav-arrow" disabled={selectedDateIndex === 0 || isLoading}>
             ←
@@ -414,7 +419,9 @@ export const OrderBookTable = ({
       )}
 
       <TableContainer ref={tableContainerRef}>
-        {viewMode === "volume" && contractMode === "perpetual" ? (
+        {viewMode === "trades" ? (
+          <TradesList contractMode={contractMode} />
+        ) : viewMode === "volume" ? (
           <VolumeOrderBook
             rows={finalOrderBookDataWithHighlights}
             contractMode={contractMode}
@@ -506,37 +513,27 @@ const TableContainer = styled("div")`
 const ViewToggle = styled("div")`
   display: inline-flex;
   align-self: flex-start;
-  gap: 2px;
-  padding: 2px;
   margin-bottom: 0.4rem;
+  border: 1px solid ${tokens.overlay.white15};
   border-radius: 6px;
-  background-color: ${tokens.overlay.white05};
+  overflow: hidden;
 `;
 
 const ToggleButton = styled("button")<{ $active?: boolean }>`
   border: none;
   cursor: pointer;
   padding: 0.2rem 0.6rem;
-  border-radius: 4px;
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  transition: all 0.15s ease;
-  background-color: ${(props) => (props.$active ? tokens.overlay.white10 : "transparent")};
-  color: ${(props) => (props.$active ? tokens.text.onDark : tokens.text.secondary)};
+  transition: background 0.15s ease, color 0.15s ease;
+  background: ${(props) => (props.$active ? tokens.surface.tabActive : "transparent")};
+  color: ${(props) => (props.$active ? "#FFFFFF" : tokens.text.secondary)};
 
   &:hover {
-    color: ${tokens.text.onDark};
+    background: ${(props) => (props.$active ? tokens.surface.tabHover : tokens.overlay.white08)};
+    color: #FFFFFF;
   }
-`;
-
-const OrderBookTitle = styled("div")`
-  font-size: 0.7rem;
-  font-weight: 500;
-  color: ${tokens.text.secondary};
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  margin-bottom: 0.3rem;
 `;
 
 const PerpsInfoHeader = styled("div")`
