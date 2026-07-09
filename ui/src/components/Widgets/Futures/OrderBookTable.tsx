@@ -7,6 +7,9 @@ import { useAggregateOrderBook } from "../../../hooks/data/useAggregateOrderBook
 import { usePerpsOrderBook } from "../../../hooks/data/perps/usePerpsOrderBook";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { createFinalOrderBookData } from "./orderBookHelpers";
+import { ClassicOrderBook } from "./ClassicOrderBook";
+import { VolumeOrderBook } from "./VolumeOrderBook";
+import { TradesList } from "./TradesList";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
@@ -34,6 +37,8 @@ export const OrderBookTable = ({
   targetDeliveryDate,
 }: OrderBookTableProps) => {
   const [selectedDateIndex, setSelectedDateIndex] = useState(0);
+  // Order book display mode: Classic / Volume ladders, or the all-users Trades feed.
+  const [viewMode, setViewMode] = useState<"classic" | "volume" | "trades">("volume");
   const tableContainerRef = useRef<HTMLDivElement>(null);
   // Track previous basePrice to detect changes
   const previousBasePriceRef = useRef<number | null>(null);
@@ -212,6 +217,11 @@ export const OrderBookTable = ({
 
   const currentBasePrice = finalOrderBookDataWithHighlights.find((o) => o.isLastHashprice);
 
+  // Market price (in token units) for the Binance-style center row. Falls back
+  // to the ladder's base/hashprice row when the raw market price is unavailable.
+  const marketPriceNumber =
+    marketPrice != null ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : currentBasePrice?.price ?? null;
+
   // Auto-scroll to last hashprice row when basePrice (hashprice) updates
   useEffect(() => {
     if (!tableContainerRef.current) {
@@ -369,8 +379,30 @@ export const OrderBookTable = ({
 
   return (
     <OrderBookWidget>
-      <OrderBookTitle>Order Book{contractMode === "perpetual" ? " — PERP" : ""}</OrderBookTitle>
-      {contractMode === "futures" && (
+      <ViewToggle>
+        {/* <ToggleButton
+          type="button"
+          $active={viewMode === "classic"}
+          onClick={() => setViewMode("classic")}
+        >
+          Classic
+        </ToggleButton> */}
+        <ToggleButton
+          type="button"
+          $active={viewMode === "volume"}
+          onClick={() => setViewMode("volume")}
+        >
+          Order Book
+        </ToggleButton>
+        <ToggleButton
+          type="button"
+          $active={viewMode === "trades"}
+          onClick={() => setViewMode("trades")}
+        >
+          Trades
+        </ToggleButton>
+      </ViewToggle>
+      {contractMode === "futures" && viewMode !== "trades" && (
         <Header>
           <button onClick={goToPreviousDate} className="nav-arrow" disabled={selectedDateIndex === 0 || isLoading}>
             ←
@@ -387,51 +419,24 @@ export const OrderBookTable = ({
       )}
 
       <TableContainer ref={tableContainerRef}>
-        <Table>
-          <thead>
-            <tr>
-              <th>Bid</th>
-              <th>Price</th>
-              <th>Ask</th>
-            </tr>
-          </thead>
-          <tbody>
-            {finalOrderBookDataWithHighlights.map((row, index) => {
-              // Calculate fill percentages for bid and ask
-              const bidFillPercent = row.bidUnits && maxBidAmount > 0 ? (row.bidUnits / maxBidAmount) * 100 : 0;
-              const askFillPercent = row.askUnits && maxAskAmount > 0 ? (row.askUnits / maxAskAmount) * 100 : 0;
-
-              return (
-                <TableRow
-                  key={row.price}
-                  $bidFillPercent={bidFillPercent}
-                  $askFillPercent={askFillPercent}
-                  onClick={() => {
-                    // Use askUnits if available, otherwise bidUnits, otherwise null
-                    const amount = row.askUnits || row.bidUnits || null;
-                    onRowClick?.(row.price.toFixed(2), amount);
-                  }}
-                >
-                  <BidCell $isHighlighted={row.highlightBid}>
-                    {row.bidUnits
-                      ? contractMode === "perpetual"
-                        ? (row.bidUnits * row.price).toFixed(2)
-                        : `${row.bidUnits} (${(row.bidUnits * row.price).toFixed(2)})`
-                      : ""}
-                  </BidCell>
-                  <PriceCell $isLastHashprice={row.isLastHashprice}>{row.price.toFixed(2)}</PriceCell>
-                  <AskCell $isHighlighted={row.highlightAsk}>
-                    {row.askUnits
-                      ? contractMode === "perpetual"
-                        ? (row.askUnits * row.price).toFixed(2)
-                        : `${row.askUnits} (${(row.askUnits * row.price).toFixed(2)})`
-                      : ""}
-                  </AskCell>
-                </TableRow>
-              );
-            })}
-          </tbody>
-        </Table>
+        {viewMode === "trades" ? (
+          <TradesList contractMode={contractMode} />
+        ) : viewMode === "volume" ? (
+          <VolumeOrderBook
+            rows={finalOrderBookDataWithHighlights}
+            contractMode={contractMode}
+            onRowClick={onRowClick}
+            marketPrice={marketPriceNumber}
+          />
+        ) : (
+          <ClassicOrderBook
+            rows={finalOrderBookDataWithHighlights}
+            maxBidAmount={maxBidAmount}
+            maxAskAmount={maxAskAmount}
+            contractMode={contractMode}
+            onRowClick={onRowClick}
+          />
+        )}
       </TableContainer>
     </OrderBookWidget>
   );
@@ -505,157 +510,30 @@ const TableContainer = styled("div")`
   }
 `;
 
-const Table = styled("table")`
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-
-  th {
-    text-align: center;
-    padding: 0.3rem 0.4rem;
-    font-size: 0.65rem;
-    font-weight: 600;
-    color: ${tokens.text.secondary};
-    border-bottom: 1px solid ${tokens.overlay.white10};
-    position: sticky;
-    top: -1px;
-    background-color: ${tokens.surface.panel};
-    z-index: 2;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-    width: 33.33%;
-  }
-
-  td {
-    text-align: center;
-    padding: 0.15rem 0.4rem;
-    font-size: 0.75rem;
-    color: ${tokens.text.onDark};
-    height: 20px;
-    line-height: 20px;
-    width: 33.33%;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
+const ViewToggle = styled("div")`
+  display: inline-flex;
+  align-self: flex-start;
+  margin-bottom: 0.4rem;
+  border: 1px solid ${tokens.overlay.white15};
+  border-radius: 6px;
+  overflow: hidden;
 `;
 
-const TableRow = styled("tr")<{
-  $bidFillPercent?: number;
-  $askFillPercent?: number;
-}>`
-  position: relative;
+const ToggleButton = styled("button")<{ $active?: boolean }>`
+  border: none;
   cursor: pointer;
-  border-bottom: 1px solid ${tokens.overlay.white05};
-  
-  /* Background fills for order book depth visualization */
-  background: ${(props) => {
-    const bidFill = props.$bidFillPercent || 0;
-    const askFill = props.$askFillPercent || 0;
-
-    // Both bid and ask fills - split gradient
-    if (bidFill > 0 && askFill > 0) {
-      // Bid fills from center-left to left, Ask fills from center-right to right
-      // Using 33% as bid column width, 33% center, 33% ask column width
-      const bidStart = 33 - bidFill * 0.33;
-      const askEnd = 67 + askFill * 0.33;
-      return `linear-gradient(
-        to right,
-        transparent 0%,
-        transparent ${bidStart}%,
-        ${tokens.trading.longRowBgAlt} ${bidStart}%,
-        ${tokens.trading.longRowBgAlt} 33%,
-        transparent 33%,
-        transparent 67%,
-        ${tokens.trading.shortRowBgAlt} 67%,
-        ${tokens.trading.shortRowBgAlt} ${askEnd}%,
-        transparent ${askEnd}%,
-        transparent 100%
-      )`;
-    }
-
-    // Only bid fill - green from right edge of bid column
-    if (bidFill > 0) {
-      const bidStart = 33 - bidFill * 0.33;
-      return `linear-gradient(
-        to right,
-        transparent 0%,
-        transparent ${bidStart}%,
-        ${tokens.trading.longRowBgAlt} ${bidStart}%,
-        ${tokens.trading.longRowBgAlt} 33%,
-        transparent 33%,
-        transparent 100%
-      )`;
-    }
-
-    // Only ask fill - red from left edge of ask column
-    if (askFill > 0) {
-      const askEnd = 67 + askFill * 0.33;
-      return `linear-gradient(
-        to right,
-        transparent 0%,
-        transparent 67%,
-        ${tokens.trading.shortRowBgAlt} 67%,
-        ${tokens.trading.shortRowBgAlt} ${askEnd}%,
-        transparent ${askEnd}%,
-        transparent 100%
-      )`;
-    }
-
-    return "transparent";
-  }};
-  
-  &:hover {
-    background: ${tokens.overlay.white10} !important;
-  }
-  
-  &:last-child {
-    border-bottom: none;
-  }
-`;
-
-const BidCell = styled("td")<{ $isHighlighted?: boolean }>`
-  border-right: 1px solid ${tokens.overlay.white05};
-  background-color: ${(props) => (props.$isHighlighted ? tokens.trading.longHighlightBg : "transparent")};
-  ${(props) =>
-    props.$isHighlighted &&
-    `
-    box-shadow: inset 0 0 8px ${tokens.trading.longHighlightGlow};
-  `}
-`;
-
-const AskCell = styled("td")<{ $isHighlighted?: boolean }>`
-  border-left: 1px solid ${tokens.overlay.white05};
-  background-color: ${(props) => (props.$isHighlighted ? tokens.trading.shortHighlightBg : "transparent")};
-  ${(props) =>
-    props.$isHighlighted &&
-    `
-    box-shadow: inset 0 0 8px ${tokens.trading.shortHighlightGlow};
-  `}
-`;
-
-const PriceCell = styled("td")<{ $isLastHashprice?: boolean }>`
-  background-color: ${(props) => (props.$isLastHashprice ? tokens.trading.infoHighlightBg : "transparent")};
-  font-weight: ${(props) => (props.$isLastHashprice ? "700" : "normal")};
-  font-family: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
-  position: relative;
-  
-  ${(props) =>
-    props.$isLastHashprice &&
-    `
-    box-shadow: 0 0 8px ${tokens.trading.infoHighlightGlow};
-    outline: 1px solid ${tokens.trading.infoBorder};
-    outline-offset: -1px;
-  `}
-`;
-
-const OrderBookTitle = styled("div")`
+  padding: 0.2rem 0.6rem;
   font-size: 0.7rem;
-  font-weight: 500;
-  color: ${tokens.text.secondary};
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  margin-bottom: 0.3rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: background 0.15s ease, color 0.15s ease;
+  background: ${(props) => (props.$active ? tokens.surface.tabActive : "transparent")};
+  color: ${(props) => (props.$active ? "#FFFFFF" : tokens.text.secondary)};
+
+  &:hover {
+    background: ${(props) => (props.$active ? tokens.surface.tabHover : tokens.overlay.white08)};
+    color: #FFFFFF;
+  }
 `;
 
 const PerpsInfoHeader = styled("div")`

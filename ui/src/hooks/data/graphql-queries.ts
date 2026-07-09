@@ -290,6 +290,22 @@ export const HistoricalOrdersQuery = gql`
   }
 `;
 
+// All-users recent Trades feed for the order book "Trades" tab. Works against
+// both the futures and perps subgraphs since both expose the per-user `Trade`
+// entity with a signed `tradeQuantity` (positive = buy/long, negative =
+// sell/short), `tradePrice`, `timestamp` and `transactionHash`.
+export const RecentTradesQuery = gql`
+  query RecentTrades($first: Int!) {
+    trades(orderBy: timestamp, orderDirection: desc, first: $first) {
+      id
+      tradePrice
+      tradeQuantity
+      timestamp
+      transactionHash
+    }
+  }
+`;
+
 // BTC Price Oracle queries (similar to Hashrate Index)
 export const BtcPriceIndexQuery = gql`
   query BtcPriceIndex($startDate: BigInt!, $first: Int!, $skip: Int!) {
