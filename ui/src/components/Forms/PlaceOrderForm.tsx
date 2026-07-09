@@ -33,7 +33,12 @@ import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import { useMakerTakerFees } from "../../hooks/data/useMakerTakerFees";
 import { usePointsHookWeights } from "../../hooks/data/usePointsHookWeights";
 import type { PerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
-import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE, QUANTITY_SCALE_NUM } from "../../lib/units";
+import {
+  formatHashratePHPS,
+  PAYMENT_TOKEN_SCALE_NUM,
+  QUANTITY_SCALE,
+  QUANTITY_SCALE_NUM,
+} from "../../lib/units";
 
 interface Props {
   price: bigint;
@@ -82,6 +87,17 @@ export const PlaceOrderForm: FC<Props> = ({
 
   // Notional size (USDC) of this order — matches the "Size" row below.
   const sizeUSDC = (Number(price) / PAYMENT_TOKEN_SCALE_NUM) * absoluteQuantity;
+
+  // Expected hashrate = order quantity × on-chain contract size (hashes/s·day),
+  // formatted as PH/s. One unit settles the value of `contractSizeHpsDay`.
+  const contractSizeHpsDay = contractSpecsQuery.data?.data?.contractSizeHpsDay;
+  const expectedHashrate =
+    contractSizeHpsDay !== undefined
+      ? formatHashratePHPS(
+          (contractSizeHpsDay * BigInt(Math.round(absoluteQuantity * QUANTITY_SCALE_NUM))) /
+            QUANTITY_SCALE,
+        ).full
+      : null;
 
   // Estimated points rewards: points = weight * size / WEIGHT_SCALE.
   const makerReward =
@@ -183,7 +199,7 @@ export const PlaceOrderForm: FC<Props> = ({
               {contractMode === "futures" && (
                 <div className="flex justify-between">
                   <span className="text-gray-300">Expected Hashrate:</span>
-                  <span className="text-white">{absoluteQuantity * 100} Th/s</span>
+                  <span className="text-white">{expectedHashrate ?? "—"}</span>
                 </div>
               )}
               <div className="flex justify-between">
