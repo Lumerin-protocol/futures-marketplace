@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styled from "@mui/material/styles/styled";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { tokens } from "../../../styles/tokens";
 import type { OrderBookRow } from "./ClassicOrderBook";
 import type { ContractMode } from "../../../types/types";
@@ -11,18 +12,19 @@ interface VolumeOrderBookProps {
   marketPrice: number | null;
 }
 
-// Number of empty placeholder rows padded above the asks and below the bids so
-// the ladder always extends past the outermost real level.
-const PAD_ROWS = 10;
+// Fixed row height (px). Used both for the styled rows and as the virtualizer's
+// size estimate so scroll math stays exact.
+const ROW_HEIGHT = 22;
+// Visible scroll viewport height. Kept just under the parent container's
+// max-height so the parent never adds a second scrollbar.
+const VIEWPORT_HEIGHT = 480;
 
-type DerivedLevel = {
-  price: number;
-  units: number;
-  size: number;
-  total: number;
-  highlight: boolean;
-  isEmpty?: boolean;
-};
+// Scroll offset that puts the given row index in the vertical middle of the
+// viewport. Deterministic because every row is exactly ROW_HEIGHT tall.
+const centerOffset = (scroller: HTMLDivElement, index: number): number =>
+  Math.max(0, index * ROW_HEIGHT - scroller.clientHeight / 2 + ROW_HEIGHT / 2);
+
+type Depth = { size: number; total: number };
 
 // Size/Total are notional values (quantity * price), which are large, so use
 // compact notation (e.g. 15.04K, 17.5M) to match the Binance-style layout.
@@ -48,163 +50,145 @@ type TooltipState = {
 
 export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBookProps) => {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
-  // Compute cumulative totals once per order book update (not per row).
-  const { askLevels, bidLevels, maxAskTotal, maxBidTotal, bestAsk, bestBid } = useMemo(() => {
-    // Input rows are sorted high -> low price.
-    let askRows = rows.filter((r) => r.askUnits && r.askUnits > 0);
-    let bidRows = rows.filter((r) => r.bidUnits && r.bidUnits > 0);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-    // Hide crossed / overlapping levels: relative to the market price an ask
-    // priced below market (or a bid priced above it) would cross the book, so
-    // drop those levels entirely.
-    if (marketPrice != null) {
-      askRows = askRows.filter((r) => r.price >= marketPrice);
-      bidRows = bidRows.filter((r) => r.price <= marketPrice);
+  // Compute cumulative depth per side once per order-book update. Rows arrive as
+  // one contiguous, tick-by-tick ladder sorted high -> low (empty rows included),
+  // with exactly one row flagged `isLastHashprice` marking the market price.
+  const { askDepth, bidDepth, maxAskTotal, maxBidTotal, bestAsk, bestBid, centerIndex } = useMemo(() => {
+    const askDepth = new Map<number, Depth>();
+    const bidDepth = new Map<number, Depth>();
+
+    let centerIndex = rows.findIndex((r) => r.isLastHashprice);
+    if (centerIndex < 0 && marketPrice != null && rows.length > 0) {
+      // Fallback: closest row to the market price.
+      let best = 0;
+      let bestDist = Infinity;
+      for (let i = 0; i < rows.length; i++) {
+        const dist = Math.abs(rows[i].price - marketPrice);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = i;
+        }
+      }
+      centerIndex = best;
     }
 
-    // Derive the price tick from the smallest gap between adjacent levels so
-    // the padded rows follow the market's real increment (e.g. 0.01, 0.0001).
-    const allPrices = [...askRows, ...bidRows].map((r) => r.price).sort((a, b) => a - b);
-    let step = Infinity;
-    for (let i = 1; i < allPrices.length; i++) {
-      const gap = allPrices[i] - allPrices[i - 1];
-      if (gap > 1e-9 && gap < step) step = gap;
-    }
-    if (!isFinite(step)) step = 0.01;
-    const snap = (value: number) => Number(value.toFixed(8));
-
-    // Ask cumulative: iterate from best ask (lowest price = last element)
-    // towards higher prices. Preserve high -> low order for rendering.
-    // Size is notional (units * price); Total is the cumulative sum of Size.
-    const asks: DerivedLevel[] = new Array(askRows.length);
-    let askRunningTotal = 0;
-    for (let i = askRows.length - 1; i >= 0; i--) {
-      const units = askRows[i].askUnits as number;
-      const size = units * askRows[i].price;
-      askRunningTotal += size;
-      asks[i] = {
-        price: askRows[i].price,
-        units,
-        size,
-        total: askRunningTotal,
-        highlight: Boolean(askRows[i].highlightAsk),
-      };
-    }
-    // Top row (highest ask) holds the largest cumulative total.
-    const maxAskTotal = asks.length > 0 ? asks[0].total : 0;
-
-    // Bid cumulative: iterate from best bid (highest price = first element)
-    // towards lower prices.
-    let bidRunningTotal = 0;
-    const bids: DerivedLevel[] = bidRows.map((r) => {
-      const units = r.bidUnits as number;
-      const size = units * r.price;
-      bidRunningTotal += size;
-      return {
-        price: r.price,
-        units,
-        size,
-        total: bidRunningTotal,
-        highlight: Boolean(r.highlightBid),
-      };
-    });
-    // Bottom row (lowest bid) holds the largest cumulative total.
-    const maxBidTotal = bids.length > 0 ? bids[bids.length - 1].total : 0;
-
-    const bestAsk = asks.length > 0 ? asks[asks.length - 1].price : null;
-    const bestBid = bids.length > 0 ? bids[0].price : null;
-
-    const emptyLevel = (price: number): DerivedLevel => ({
-      price,
-      units: 0,
-      size: 0,
-      total: 0,
-      highlight: false,
-      isEmpty: true,
-    });
-
-    // Pad above the highest ask (higher prices). Anchor to the highest ask, or
-    // to the market price when there are no asks yet.
-    const askAnchor = asks.length > 0 ? asks[0].price : marketPrice != null ? snap(marketPrice) : null;
-    const askPads: DerivedLevel[] = [];
-    if (askAnchor != null) {
-      for (let i = PAD_ROWS; i >= 1; i--) {
-        askPads.push(emptyLevel(snap(askAnchor + i * step)));
+    // Asks sit above the market price. Best ask = lowest ask (closest to market);
+    // cumulative depth grows from the best ask outward to higher prices. Walk the
+    // ladder bottom -> top so the running total accumulates in that direction.
+    let askRunning = 0;
+    let bestAsk: number | null = null;
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const r = rows[i];
+      if (r.isLastHashprice) continue;
+      const units = r.askUnits ?? 0;
+      if (units > 0 && (marketPrice == null || r.price >= marketPrice)) {
+        const size = units * r.price;
+        askRunning += size;
+        askDepth.set(r.price, { size, total: askRunning });
+        if (bestAsk == null) bestAsk = r.price;
       }
     }
+    const maxAskTotal = askRunning;
 
-    // Pad below the lowest bid (lower prices). Anchor to the lowest bid, or to
-    // the market price when there are no bids yet.
-    const bidAnchor =
-      bids.length > 0 ? bids[bids.length - 1].price : marketPrice != null ? snap(marketPrice) : null;
-    const bidPads: DerivedLevel[] = [];
-    if (bidAnchor != null) {
-      for (let i = 1; i <= PAD_ROWS; i++) {
-        const p = snap(bidAnchor - i * step);
-        if (p <= 0) break;
-        bidPads.push(emptyLevel(p));
+    // Bids sit below the market price. Best bid = highest bid; cumulative depth
+    // grows downward to lower prices. Walk top -> bottom.
+    let bidRunning = 0;
+    let bestBid: number | null = null;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (r.isLastHashprice) continue;
+      const units = r.bidUnits ?? 0;
+      if (units > 0 && (marketPrice == null || r.price <= marketPrice)) {
+        const size = units * r.price;
+        bidRunning += size;
+        bidDepth.set(r.price, { size, total: bidRunning });
+        if (bestBid == null) bestBid = r.price;
       }
     }
+    const maxBidTotal = bidRunning;
 
-    return {
-      askLevels: [...askPads, ...asks],
-      bidLevels: [...bids, ...bidPads],
-      maxAskTotal,
-      maxBidTotal,
-      bestAsk,
-      bestBid,
-    };
+    return { askDepth, bidDepth, maxAskTotal, maxBidTotal, bestAsk, bestBid, centerIndex };
   }, [rows, marketPrice]);
 
-  const renderRow = (level: DerivedLevel, side: "ask" | "bid") => {
-    // Empty padding rows: show the price ladder only, no depth bars/tooltip.
-    if (level.isEmpty) {
-      return (
-        <Row
-          key={`${side}-${level.price}`}
-          $side={side}
-          $empty
-          onClick={() => onRowClick?.(formatPrice(level.price), null)}
-        >
-          <PriceCol $side={side}>{formatPrice(level.price)}</PriceCol>
-          <SizeCol>0</SizeCol>
-          <TotalCol />
-        </Row>
-      );
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 12,
+  });
+
+  // Keep the market-price row centered by default. Row height is fixed, so the
+  // target offset is deterministic (no dependency on the virtualizer having
+  // measured yet, which made `scrollToIndex` unreliable on first paint). We keep
+  // re-centering as the market price moves, but stop once the user scrolls so we
+  // never fight their navigation.
+  const userScrolledRef = useRef(false);
+  const lastTargetRef = useRef<number | null>(null);
+  // Overlay "Scroll to Market" button, shown when the market row is scrolled
+  // out of view. `dir` points the user back towards it.
+  const [marketButton, setMarketButton] = useState<{ show: boolean; dir: "up" | "down" }>({
+    show: false,
+    dir: "down",
+  });
+
+  // Toggle the overlay button based on whether the market row is inside the
+  // current viewport (with the ladder potentially thousands of rows tall).
+  const updateMarketButton = useCallback(
+    (scroller: HTMLDivElement) => {
+      if (centerIndex < 0) {
+        setMarketButton((prev) => (prev.show ? { show: false, dir: prev.dir } : prev));
+        return;
+      }
+      const centerPx = centerIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
+      const viewTop = scroller.scrollTop;
+      const viewBottom = viewTop + scroller.clientHeight;
+      const next: { show: boolean; dir: "up" | "down" } =
+        centerPx < viewTop
+          ? { show: true, dir: "up" }
+          : centerPx > viewBottom
+            ? { show: true, dir: "down" }
+            : { show: false, dir: "down" };
+      setMarketButton((prev) => (prev.show === next.show && prev.dir === next.dir ? prev : next));
+    },
+    [centerIndex],
+  );
+
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller || rows.length === 0 || centerIndex < 0) return;
+    // Once the user has taken over scrolling we no longer auto-center, but the
+    // market row may have moved in/out of view, so keep the button in sync.
+    if (userScrolledRef.current) {
+      updateMarketButton(scroller);
+      return;
     }
+    const target = centerOffset(scroller, centerIndex);
+    lastTargetRef.current = target;
+    scroller.scrollTop = target;
+    setMarketButton((prev) => (prev.show ? { show: false, dir: prev.dir } : prev));
+  }, [rows.length, centerIndex, updateMarketButton]);
 
-    // Both bars share the same scale (largest cumulative total) so the bright
-    // bar — this level's actual size — always sits nested inside the darker
-    // accumulated-depth bar (size ≤ total at every level).
-    const maxTotal = side === "ask" ? maxAskTotal : maxBidTotal;
-    const sizeWidth = maxTotal > 0 ? Math.min(100, (level.size / maxTotal) * 100) : 0;
-    const totalWidth = maxTotal > 0 ? Math.min(100, (level.total / maxTotal) * 100) : 0;
+  // Distinguish user scrolling from our programmatic centering: our set lands on
+  // `lastTargetRef`, so any material deviation means the user took over.
+  const handleScroll = () => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    if (lastTargetRef.current == null || Math.abs(scroller.scrollTop - lastTargetRef.current) > 2) {
+      userScrolledRef.current = true;
+    }
+    updateMarketButton(scroller);
+  };
 
-    const showTooltip = (e: React.MouseEvent) => {
-      const distancePct =
-        marketPrice != null && marketPrice !== 0
-          ? ((level.price - marketPrice) / marketPrice) * 100
-          : null;
-      setTooltip({ price: level.price, total: level.total, distancePct, x: e.clientX, y: e.clientY });
-    };
-
-    return (
-      <Row
-        key={`${side}-${level.price}`}
-        $side={side}
-        $highlight={level.highlight}
-        onClick={() => onRowClick?.(formatPrice(level.price), level.units)}
-        onMouseEnter={showTooltip}
-        onMouseMove={showTooltip}
-        onMouseLeave={() => setTooltip(null)}
-      >
-        <DimLayer $side={side} $width={totalWidth} />
-        <BrightLayer $side={side} $width={sizeWidth} />
-        <PriceCol $side={side}>{formatPrice(level.price)}</PriceCol>
-        <SizeCol>{formatVolume(level.size)}</SizeCol>
-        <TotalCol>{formatVolume(level.total)}</TotalCol>
-      </Row>
-    );
+  const handleScrollToMarketClick = () => {
+    const scroller = scrollRef.current;
+    if (!scroller || centerIndex < 0) return;
+    const target = centerOffset(scroller, centerIndex);
+    lastTargetRef.current = target;
+    userScrolledRef.current = false; // resume auto-centering
+    scroller.scrollTop = target;
+    setMarketButton((prev) => (prev.show ? { show: false, dir: prev.dir } : prev));
   };
 
   // Best price = the order-book level (best ask or best bid) closest to the
@@ -216,46 +200,105 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
   } else {
     bestPrice = bestAsk ?? bestBid ?? marketPrice;
   }
-
   const isUp = bestPrice != null && marketPrice != null ? bestPrice >= marketPrice : true;
 
-  // Center the spread on first load so asks scroll to their bottom (best ask)
-  // and bids to their top (best bid), keeping the market-price row in view.
-  const containerRef = useRef<HTMLDivElement>(null);
-  const centerRef = useRef<HTMLDivElement>(null);
-  const hasCenteredRef = useRef(false);
-  useEffect(() => {
-    if (hasCenteredRef.current) return;
-    if (askLevels.length === 0 && bidLevels.length === 0) return;
-    const center = centerRef.current;
-    const scroller = containerRef.current?.parentElement;
-    if (!center || !scroller) return;
-    scroller.scrollTop = Math.max(
-      0,
-      center.offsetTop - scroller.clientHeight / 2 + center.clientHeight / 2,
+  const renderRow = (index: number) => {
+    const row = rows[index];
+
+    // Market-price row: rendered as the Binance-style center marker instead of a
+    // regular ladder level.
+    if (row.isLastHashprice) {
+      return (
+        <CenterRow>
+          <span className={`best ${isUp ? "up" : "down"}`}>
+            {bestPrice != null ? formatPrice(bestPrice) : "—"}
+            <span className="arrow">{isUp ? "↑" : "↓"}</span>
+          </span>
+          <span className="market">{marketPrice != null ? formatPrice(marketPrice) : "—"}</span>
+        </CenterRow>
+      );
+    }
+
+    // Side is derived from position relative to the center row so it stays
+    // correct even when the market price is unavailable.
+    const side: "ask" | "bid" = centerIndex >= 0 && index < centerIndex ? "ask" : "bid";
+    const depth = side === "ask" ? askDepth.get(row.price) : bidDepth.get(row.price);
+
+    // Empty ladder rows: show only the price so the user can click any tick
+    // (e.g. 3.01, 3.02, ...) to place an order there even with no resting order.
+    if (!depth) {
+      return (
+        <Row $side={side} $empty onClick={() => onRowClick?.(formatPrice(row.price), null)}>
+          <PriceCol $side={side}>{formatPrice(row.price)}</PriceCol>
+          <SizeCol />
+          <TotalCol />
+        </Row>
+      );
+    }
+
+    const highlight = side === "ask" ? Boolean(row.highlightAsk) : Boolean(row.highlightBid);
+    const units = side === "ask" ? row.askUnits : row.bidUnits;
+
+    // Both bars share the same scale (largest cumulative total) so the bright
+    // bar — this level's actual size — always sits nested inside the darker
+    // accumulated-depth bar (size <= total at every level).
+    const maxTotal = side === "ask" ? maxAskTotal : maxBidTotal;
+    const sizeWidth = maxTotal > 0 ? Math.min(100, (depth.size / maxTotal) * 100) : 0;
+    const totalWidth = maxTotal > 0 ? Math.min(100, (depth.total / maxTotal) * 100) : 0;
+
+    const showTooltip = (e: React.MouseEvent) => {
+      const distancePct =
+        marketPrice != null && marketPrice !== 0
+          ? ((row.price - marketPrice) / marketPrice) * 100
+          : null;
+      setTooltip({ price: row.price, total: depth.total, distancePct, x: e.clientX, y: e.clientY });
+    };
+
+    return (
+      <Row
+        $side={side}
+        $highlight={highlight}
+        onClick={() => onRowClick?.(formatPrice(row.price), units ?? null)}
+        onMouseEnter={showTooltip}
+        onMouseMove={showTooltip}
+        onMouseLeave={() => setTooltip(null)}
+      >
+        <DimLayer $side={side} $width={totalWidth} />
+        <BrightLayer $side={side} $width={sizeWidth} />
+        <PriceCol $side={side}>{formatPrice(row.price)}</PriceCol>
+        <SizeCol>{formatVolume(depth.size)}</SizeCol>
+        <TotalCol>{formatVolume(depth.total)}</TotalCol>
+      </Row>
     );
-    hasCenteredRef.current = true;
-  }, [askLevels.length, bidLevels.length]);
+  };
 
   return (
-    <Container ref={containerRef}>
+    <Container>
       <ColumnHeader>
         <span>Price</span>
         <span>Size</span>
         <span>Total</span>
       </ColumnHeader>
 
-      <AskSection>{askLevels.map((level) => renderRow(level, "ask"))}</AskSection>
+      <Scroller ref={scrollRef} onScroll={handleScroll}>
+        <ListInner style={{ height: rowVirtualizer.getTotalSize() }}>
+          {rowVirtualizer.getVirtualItems().map((virtualRow) => (
+            <VirtualRow
+              key={virtualRow.key}
+              style={{ height: virtualRow.size, transform: `translateY(${virtualRow.start}px)` }}
+            >
+              {renderRow(virtualRow.index)}
+            </VirtualRow>
+          ))}
+        </ListInner>
+      </Scroller>
 
-      <CenterRow ref={centerRef}>
-        <span className={`best ${isUp ? "up" : "down"}`}>
-          {bestPrice != null ? formatPrice(bestPrice) : "—"}
-          <span className="arrow">{isUp ? "↑" : "↓"}</span>
-        </span>
-        <span className="market">{marketPrice != null ? formatPrice(marketPrice) : "—"}</span>
-      </CenterRow>
-
-      <BidSection>{bidLevels.map((level) => renderRow(level, "bid"))}</BidSection>
+      {marketButton.show && (
+        <ScrollToMarketButton type="button" onClick={handleScrollToMarketClick}>
+          <span className="arrow">{marketButton.dir === "up" ? "↑" : "↓"}</span>
+          Scroll to Market
+        </ScrollToMarketButton>
+      )}
 
       {tooltip && (
         <Tooltip
@@ -266,7 +309,7 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
         >
           <div className="row">
             <span className="label">Price</span>
-            <span className="value">{tooltip.price.toFixed(2)}</span>
+            <span className="value">{formatPrice(tooltip.price)}</span>
           </div>
           <div className="row">
             <span className="label">Total</span>
@@ -287,17 +330,52 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
 };
 
 const Container = styled("div")`
+  position: relative;
   width: 100%;
-  min-height: 480px;
   display: flex;
   flex-direction: column;
+`;
+
+// Floating pill shown when the market row is scrolled out of view; clicking it
+// re-centers the ladder on the market price and resumes auto-centering.
+const ScrollToMarketButton = styled("button")`
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid ${tokens.overlay.white20};
+  border-radius: 999px;
+  background: ${tokens.surface.tabActive};
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  transition: background 0.15s ease, transform 0.05s ease;
+
+  .arrow {
+    font-size: 0.8rem;
+    line-height: 1;
+  }
+
+  &:hover {
+    background: ${tokens.surface.tabHover};
+  }
+
+  &:active {
+    transform: translateX(-50%) scale(0.97);
+  }
 `;
 
 const ColumnHeader = styled("div")`
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  position: sticky;
-  top: -1px;
   z-index: 2;
   background-color: ${tokens.surface.panel};
   border-bottom: 1px solid ${tokens.overlay.white10};
@@ -320,22 +398,44 @@ const ColumnHeader = styled("div")`
   }
 `;
 
-// Asks fill the space above the center row, stacked so the best (lowest) ask
-// sits just above the market-price row even when there are only a few levels.
-const AskSection = styled("div")`
-  flex: 1 0 auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
+// Virtualized scroll viewport. Only the rows currently in view are mounted.
+const Scroller = styled("div")`
+  position: relative;
+  overflow-y: auto;
+  width: 100%;
+  height: ${VIEWPORT_HEIGHT}px;
+
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: ${tokens.overlay.white05};
+    border-radius: 2px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: ${tokens.overlay.white20};
+    border-radius: 2px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: ${tokens.overlay.white40};
+  }
 `;
 
-// Bids fill the space below the center row, anchored to the top so the best
-// (highest) bid sits just below the market-price row.
-const BidSection = styled("div")`
-  flex: 1 0 auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
+// Spacer sized to the full ladder height; virtual rows are absolutely
+// positioned within it.
+const ListInner = styled("div")`
+  position: relative;
+  width: 100%;
+`;
+
+const VirtualRow = styled("div")`
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
 `;
 
 const Row = styled("div")<{ $side: "ask" | "bid"; $highlight?: boolean; $empty?: boolean }>`
@@ -343,7 +443,7 @@ const Row = styled("div")<{ $side: "ask" | "bid"; $highlight?: boolean; $empty?:
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   align-items: center;
-  height: 22px;
+  height: ${ROW_HEIGHT}px;
   padding: 0 0.5rem;
   cursor: pointer;
   font-size: 0.75rem;
@@ -444,7 +544,7 @@ const CenterRow = styled("div")`
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  height: 22px;
+  height: ${ROW_HEIGHT}px;
   padding: 0 0.5rem;
   background-color: ${tokens.surface.inputIsland};
   border-top: 1px solid ${tokens.overlay.white10};
