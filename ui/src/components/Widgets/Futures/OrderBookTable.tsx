@@ -395,44 +395,46 @@ export const OrderBookTable = ({
 
   return (
     <OrderBookWidget>
-      <ViewToggle>
-        {/* <ToggleButton
-          type="button"
-          $active={viewMode === "classic"}
-          onClick={() => setViewMode("classic")}
-        >
-          Classic
-        </ToggleButton> */}
-        <ToggleButton
-          type="button"
-          $active={viewMode === "volume"}
-          onClick={() => setViewMode("volume")}
-        >
-          Order Book
-        </ToggleButton>
-        <ToggleButton
-          type="button"
-          $active={viewMode === "trades"}
-          onClick={() => setViewMode("trades")}
-        >
-          Trades
-        </ToggleButton>
-      </ViewToggle>
-      {contractMode === "futures" && viewMode !== "trades" && (
-        <Header>
-          <button onClick={goToPreviousDate} className="nav-arrow" disabled={selectedDateIndex === 0 || isLoading}>
-            ←
-          </button>
-          <h3>{selectedDateDisplay}</h3>
-          <button
-            onClick={goToNextDate}
-            className="nav-arrow"
-            disabled={selectedDateIndex === deliveryDates.length - 1 || isLoading}
+      <TopBar>
+        <ViewToggle>
+          {/* <ToggleButton
+            type="button"
+            $active={viewMode === "classic"}
+            onClick={() => setViewMode("classic")}
           >
-            →
-          </button>
-        </Header>
-      )}
+            Classic
+          </ToggleButton> */}
+          <ToggleButton
+            type="button"
+            $active={viewMode === "volume"}
+            onClick={() => setViewMode("volume")}
+          >
+            Order Book
+          </ToggleButton>
+          <ToggleButton
+            type="button"
+            $active={viewMode === "trades"}
+            onClick={() => setViewMode("trades")}
+          >
+            Trades
+          </ToggleButton>
+        </ViewToggle>
+        {contractMode === "futures" && viewMode !== "trades" && (
+          <DateSwitcher>
+            <button onClick={goToPreviousDate} className="nav-arrow" disabled={selectedDateIndex === 0 || isLoading}>
+              ←
+            </button>
+            <span className="date-label">{selectedDateDisplay}</span>
+            <button
+              onClick={goToNextDate}
+              className="nav-arrow"
+              disabled={selectedDateIndex === deliveryDates.length - 1 || isLoading}
+            >
+              →
+            </button>
+          </DateSwitcher>
+        )}
+      </TopBar>
 
       <TableContainer ref={tableContainerRef}>
         {viewMode === "trades" ? (
@@ -466,6 +468,15 @@ const OrderBookWidget = styled(SmallWidget)`
   border: 1px solid ${tokens.border.muted04};
 `;
 
+const TopBar = styled("div")`
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+`;
+
 const Header = styled("div")`
   display: flex;
   justify-content: space-between;
@@ -476,6 +487,40 @@ const Header = styled("div")`
     margin: 0;
     font-size: 0.85rem;
     font-weight: 600;
+  }
+
+  .nav-arrow {
+    background: none;
+    border: none;
+    color: ${tokens.text.onDark};
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+
+    &:hover:not(:disabled) {
+      background-color: ${tokens.overlay.white10};
+    }
+
+    &:disabled {
+      color: ${tokens.text.orderBookMuted};
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+  }
+`;
+
+const DateSwitcher = styled("div")`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+
+  .date-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+    color: ${tokens.text.onDark};
   }
 
   .nav-arrow {
@@ -528,8 +573,6 @@ const TableContainer = styled("div")`
 
 const ViewToggle = styled("div")`
   display: inline-flex;
-  align-self: flex-start;
-  margin-bottom: 0.4rem;
   border: 1px solid ${tokens.overlay.white15};
   border-radius: 6px;
   overflow: hidden;
