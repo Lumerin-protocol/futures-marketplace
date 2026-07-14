@@ -36,6 +36,7 @@
     "@reown/appkit-adapter-wagmi": "^1.7.9",
     "@tanstack/react-query": "^5.75.2",
     "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.14.6",
     "buffer": "^6.0.3",
     "contracts-js": "https://github.com/Lumerin-protocol/contracts-js#v2.0.7",
     "ecies-geth": "^1.6.2",

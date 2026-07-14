@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useGetDeliveryDates } from "../../../hooks/data/useGetDeliveryDates";
 import { useAggregateOrderBook } from "../../../hooks/data/useAggregateOrderBook";
 import { usePerpsOrderBook } from "../../../hooks/data/perps/usePerpsOrderBook";
+import { usePerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { createFinalOrderBookData } from "./orderBookHelpers";
 import { ClassicOrderBook } from "./ClassicOrderBook";
@@ -48,6 +49,19 @@ export const OrderBookTable = ({
 
   const { data: deliveryDatesRaw, isLoading, isError } = useGetDeliveryDates();
   const { data: marketPrice } = useGetMarketPrice();
+  const perpsCollectionQuery = usePerpsCollection();
+
+  // The contiguous ladder needs the exact tick size for the active market.
+  // Futures specs are passed in as a prop, but perps carry their own increment
+  // on the collection, so resolve it per mode.
+  const minimumPriceIncrement = useMemo(() => {
+    const rawIncrement =
+      contractMode === "perpetual"
+        ? perpsCollectionQuery.data?.data?.minimumPriceIncrement
+        : contractSpecsQuery.data?.data?.minimumPriceIncrement;
+    if (rawIncrement == null) return null;
+    return Number(rawIncrement) / PAYMENT_TOKEN_SCALE_NUM;
+  }, [contractMode, perpsCollectionQuery.data?.data?.minimumPriceIncrement, contractSpecsQuery.data?.data?.minimumPriceIncrement]);
 
   // Transform delivery dates from bigint[] to [{ deliveryDate: number }]
   // Filter out dates that are earlier than now
@@ -164,9 +178,6 @@ export const OrderBookTable = ({
   // Get current order book state from pre-aggregated data
   const currentOrderBookState = useMemo(() => {
     const state = new Map<number, { bidUnits: number; askUnits: number }>();
-    const minimumPriceIncrement = contractSpecsQuery.data?.data?.minimumPriceIncrement
-      ? Number(contractSpecsQuery.data.data.minimumPriceIncrement) / PAYMENT_TOKEN_SCALE_NUM
-      : null;
 
     if (!orderBookData || orderBookData.length <= 0) {
       return state;
@@ -183,10 +194,15 @@ export const OrderBookTable = ({
     }
 
     return state;
-  }, [orderBookData]);
+  }, [orderBookData, minimumPriceIncrement]);
 
-  // Create final order book data
-  const finalOrderBookData = createFinalOrderBookData(orderBookData, marketPrice, contractSpecsQuery.data?.data);
+  // Create final order book data — a contiguous tick ladder (empty + live rows)
+  // spanning +/-50% of the market price. Memoized because it can produce
+  // thousands of rows for high-priced markets.
+  const finalOrderBookData = useMemo(
+    () => createFinalOrderBookData(orderBookData, marketPrice, minimumPriceIncrement),
+    [orderBookData, marketPrice, minimumPriceIncrement],
+  );
 
   // Add highlighting to final order book data based on price changes
   const finalOrderBookDataWithHighlights = useMemo(() => {
