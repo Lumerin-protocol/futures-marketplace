@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styled from "@mui/material/styles/styled";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { tokens } from "../../../styles/tokens";
 import type { OrderBookRow } from "./ClassicOrderBook";
@@ -51,6 +52,10 @@ type TooltipState = {
 export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBookProps) => {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // On mobile the hover tooltip (price/total/distance-from-market) is more of a
+  // hindrance than help, so suppress it entirely for touch/narrow layouts.
+  const isMobile = useMediaQuery("(max-width: 768px)", { noSsr: true });
 
   // Compute cumulative depth per side once per order-book update. Rows arrive as
   // one contiguous, tick-by-tick ladder sorted high -> low (empty rows included),
@@ -247,6 +252,7 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
     const totalWidth = maxTotal > 0 ? Math.min(100, (depth.total / maxTotal) * 100) : 0;
 
     const showTooltip = (e: React.MouseEvent) => {
+      if (isMobile) return;
       const distancePct =
         marketPrice != null && marketPrice !== 0
           ? ((row.price - marketPrice) / marketPrice) * 100
@@ -300,7 +306,7 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
         </ScrollToMarketButton>
       )}
 
-      {tooltip && (
+      {tooltip && !isMobile && (
         <Tooltip
           style={{
             left: Math.max(8, tooltip.x - 236),
