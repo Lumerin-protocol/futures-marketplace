@@ -19,13 +19,18 @@ export const LiquidationToast = ({ notifications, onDismiss }: LiquidationToastP
   return (
     <ToastStack>
       {notifications.map((n) => (
-        <Toast key={n.id}>
+        <Toast
+          key={n.id}
+          type="button"
+          onClick={() => onDismiss(n.id)}
+          aria-label="Dismiss liquidation alert"
+        >
           <ToastText>
             ⚠️ Your {n.product === "perps" ? "perps" : "futures"} position was liquidated.
           </ToastText>
-          <DismissButton onClick={() => onDismiss(n.id)} aria-label="Dismiss">
+          <DismissIcon>
             <CloseIcon fontSize="small" />
-          </DismissButton>
+          </DismissIcon>
         </Toast>
       ))}
     </ToastStack>
@@ -43,36 +48,39 @@ const ToastStack = styled("div")`
   max-width: min(360px, calc(100vw - 2rem));
 `;
 
-const Toast = styled("div")`
+const Toast = styled("button")`
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  width: 100%;
   padding: 0.6rem 0.75rem;
-  background-color: ${tokens.perps.highlightBg};
-  border: 1px solid ${tokens.status.error};
+  background-color: ${tokens.surface.panel};
+  border: 1px solid ${tokens.trading.highlight};
   border-radius: 6px;
   color: ${tokens.trading.highlight};
   font-size: 0.8rem;
   font-weight: 600;
-  box-shadow: 0 6px 20px ${tokens.overlay.white10};
+  text-align: left;
+  cursor: pointer;
+  box-shadow: ${tokens.shadow.level3};
+
+  &:hover {
+    background-color: ${tokens.surface.inputIslandHover};
+  }
 `;
 
 const ToastText = styled("span")`
   flex: 1;
 `;
 
-const DismissButton = styled("button")`
+const DismissIcon = styled("span")`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
-  background: transparent;
-  border: none;
   color: ${tokens.trading.highlight};
-  cursor: pointer;
   opacity: 0.8;
 
-  &:hover {
+  ${Toast}:hover & {
     opacity: 1;
   }
 `;
