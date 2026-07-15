@@ -18,10 +18,10 @@ import type { ContractMode } from "../../../types/types";
 // percentage (e.g. 0.1e18 -> "±10%"); vol shocks render as vol points using the
 // same magnitude (e.g. 0.1e18 -> "±10 vol pts").
 const formatSpotShock = (value: bigint | undefined) =>
-  value === undefined ? "..." : `±${(Number(value) / 1e18) * 100}%`;
+  value === undefined ? "..." : `${(Number(value) / 1e18) * 100}%`;
 
 const formatVolShock = (value: bigint | undefined) =>
-  value === undefined ? "..." : `±${(Number(value) / 1e18) * 100} vol pts`;
+  value === undefined ? "..." : `${(Number(value) / 1e18) * 100} vol pts`;
 
 // Shared RISK PARAMETERS section rendered in both futures and perpetual views.
 const RiskParametersSection = () => {
