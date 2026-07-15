@@ -3,6 +3,8 @@ import { Link, useLocation } from "react-router";
 import { tokens } from "../styles/tokens";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
+import EmojiEventsOutlinedIcon from "@mui/icons-material/EmojiEventsOutlined";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { safeLazy } from "../utils/safeLazy";
 import { PathName } from "../types/types";
 import LogoIcon from "../images/icons/hpdx-logo.png";
@@ -30,17 +32,26 @@ export const Header = (props: Props) => {
       <TitleWrapper>
         <Logo src={LogoIcon} alt="HPDX" onClick={handleLogoClick} />
         <BrandName onClick={handleLogoClick}>
-          HashPower Derivatives Exchange{isLeaderboardActive ? " Leaderboard" : ""}
+          <FullBrand>
+            HashPower Derivatives Exchange{isLeaderboardActive ? " Leaderboard" : ""}
+          </FullBrand>
+          <ShortBrand>HPDX{isLeaderboardActive ? " Leaderboard" : ""}</ShortBrand>
         </BrandName>
       </TitleWrapper>
       <Nav>
         {isLeaderboardActive ? (
-          <NavLink to={PathName.Landing} $active={false}>
-            Back to Trading
+          <NavLink to={PathName.Landing} $active={false} aria-label="Back to Trading">
+            <NavIcon>
+              <ArrowBackIcon fontSize="small" />
+            </NavIcon>
+            <NavLabel>Back to Trading</NavLabel>
           </NavLink>
         ) : (
-          <NavLink to={PathName.Leaderboard} $active={false}>
-            Leaderboard
+          <NavLink to={PathName.Leaderboard} $active={false} aria-label="Leaderboard">
+            <NavIcon>
+              <EmojiEventsOutlinedIcon fontSize="small" />
+            </NavIcon>
+            <NavLabel>Leaderboard</NavLabel>
           </NavLink>
         )}
       </Nav>
@@ -66,6 +77,8 @@ const Nav = styled("nav")`
 `;
 
 const NavLink = styled(Link)<{ $active: boolean }>`
+  display: inline-flex;
+  align-items: center;
   font-family: "Inter", sans-serif;
   font-size: 0.95rem;
   font-weight: ${(props) => (props.$active ? 700 : 500)};
@@ -81,16 +94,38 @@ const NavLink = styled(Link)<{ $active: boolean }>`
   }
 `;
 
+const NavLabel = styled("span")`
+  @media (max-width: 768px) {
+    display: none;
+  }
+`;
+
+const NavIcon = styled("span")`
+  display: none;
+  align-items: center;
+  justify-content: center;
+
+  @media (max-width: 768px) {
+    display: inline-flex;
+  }
+`;
+
 const TitleWrapper = styled("div")`
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
 `;
 
 const Logo = styled("img")`
   height: 46px;
   width: 46px;
   cursor: pointer;
+
+  @media (max-width: 768px) {
+    height: 36px;
+    width: 36px;
+  }
 `;
 
 const BrandName = styled(Typography)`
@@ -100,4 +135,23 @@ const BrandName = styled(Typography)`
   font-size: 1.6rem;
   letter-spacing: 0.04em;
   cursor: pointer;
+  white-space: nowrap;
+
+  @media (max-width: 768px) {
+    font-size: 1.25rem;
+  }
+`;
+
+const FullBrand = styled("span")`
+  @media (max-width: 768px) {
+    display: none;
+  }
+`;
+
+const ShortBrand = styled("span")`
+  display: none;
+
+  @media (max-width: 768px) {
+    display: inline;
+  }
 `;
