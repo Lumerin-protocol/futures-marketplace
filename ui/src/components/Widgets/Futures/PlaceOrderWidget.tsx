@@ -3,6 +3,7 @@ import { keyframes, css } from "@emotion/react";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { useState, useEffect, useCallback } from "react";
 import Slider from "@mui/material/Slider";
+import Tooltip from "@mui/material/Tooltip";
 import { tokens } from "../../../styles/tokens";
 
 // Pulsing background animation - single blue color for all inputs
@@ -52,6 +53,12 @@ import {
   QUANTITY_SCALE_NUM,
 } from "../../../lib/units";
 import { TimeInForce, type TimeInForceValue } from "../../../types/timeInForce";
+
+const TIF_TOOLTIPS = {
+  GTC: "Good Till Cancel — fill what you can now; any remainder rests on the book until filled or cancelled.",
+  IOC: "Immediate or Cancel — fill what you can right now; cancel anything left. Nothing rests on the book.",
+  FOK: "Fill or Kill — fill the entire size immediately, or cancel the whole order. No partial fills.",
+} as const;
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -967,28 +974,40 @@ export const PlaceOrderWidget = ({
 
               <ModeToggle>
                 {orderType === "limit" && (
-                  <ModeButton
-                    $active={timeInForce === TimeInForce.GTC}
-                    onClick={() => setTimeInForce(TimeInForce.GTC)}
-                    disabled={showOrderForm}
-                  >
-                    GTC
-                  </ModeButton>
+                  <Tooltip title={TIF_TOOLTIPS.GTC} arrow>
+                    <span style={{ display: "inline-flex" }}>
+                      <ModeButton
+                        $active={timeInForce === TimeInForce.GTC}
+                        onClick={() => setTimeInForce(TimeInForce.GTC)}
+                        disabled={showOrderForm}
+                      >
+                        GTC
+                      </ModeButton>
+                    </span>
+                  </Tooltip>
                 )}
-                <ModeButton
-                  $active={timeInForce === TimeInForce.IOC}
-                  onClick={() => setTimeInForce(TimeInForce.IOC)}
-                  disabled={showOrderForm}
-                >
-                  IOC
-                </ModeButton>
-                <ModeButton
-                  $active={timeInForce === TimeInForce.FOK}
-                  onClick={() => setTimeInForce(TimeInForce.FOK)}
-                  disabled={showOrderForm}
-                >
-                  FOK
-                </ModeButton>
+                <Tooltip title={TIF_TOOLTIPS.IOC} arrow>
+                  <span style={{ display: "inline-flex" }}>
+                    <ModeButton
+                      $active={timeInForce === TimeInForce.IOC}
+                      onClick={() => setTimeInForce(TimeInForce.IOC)}
+                      disabled={showOrderForm}
+                    >
+                      IOC
+                    </ModeButton>
+                  </span>
+                </Tooltip>
+                <Tooltip title={TIF_TOOLTIPS.FOK} arrow>
+                  <span style={{ display: "inline-flex" }}>
+                    <ModeButton
+                      $active={timeInForce === TimeInForce.FOK}
+                      onClick={() => setTimeInForce(TimeInForce.FOK)}
+                      disabled={showOrderForm}
+                    >
+                      FOK
+                    </ModeButton>
+                  </span>
+                </Tooltip>
               </ModeToggle>
 
               {contractMode === "perpetual" && (
