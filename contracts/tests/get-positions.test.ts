@@ -6,7 +6,7 @@ import { deployFuturesFixture } from "./fixtures.ts";
 const { networkHelpers } = await network.getOrCreate();
 
 describe("Get Positions", () => {
-  it("should get positions by participant and delivery date", async () => {
+  it("should get positions by participant and expiration date", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, buyer } = accounts;

@@ -7,7 +7,7 @@ interface CreateOrderProps {
   price: bigint;
   /** Signed whole-contract quantity: positive = buy/long, negative = sell/short. */
   quantity: number | bigint;
-  deliveryDate: bigint;
+  expirationAt: bigint;
 }
 
 export function useCreateOrder() {
@@ -30,7 +30,7 @@ export function useCreateOrder() {
     }
 
     const req = await futuresContract.simulate.createOrder(
-      [props.price, props.deliveryDate, quantity],
+      [props.price, props.expirationAt, quantity],
       { account: walletClient.account.address },
     );
 

@@ -22,13 +22,13 @@ import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 export interface CloseOrderFormProps {
   isBuy: boolean;
   pricePerDay: bigint;
-  deliveryAt: bigint;
+  expirationAt: bigint;
   amount: number;
   closeForm: () => void;
   contractMode?: ContractMode;
 }
 
-export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, deliveryAt, amount, closeForm, contractMode = "futures" }) => {
+export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, expirationAt, amount, closeForm, contractMode = "futures" }) => {
   const qc = useQueryClient();
   const { address } = useAccount();
   
@@ -46,8 +46,8 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, de
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
-  const formatDeliveryDate = (deliveryDate: bigint) => {
-    const date = new Date(Number(deliveryDate) * 1000);
+  const formatExpirationAt = (expirationAt: bigint) => {
+    const date = new Date(Number(expirationAt) * 1000);
     return date.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
   };
 
@@ -75,7 +75,7 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, de
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-300">Delivery Date:</span>
-                <span className="text-white">{formatDeliveryDate(deliveryAt)}</span>
+                <span className="text-white">{formatExpirationAt(expirationAt)}</span>
               </div>
             </div>
           </div>
@@ -105,7 +105,7 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, de
             } else {
               txhash = await createOrderAsync({
                 price: pricePerDay,
-                deliveryDate: deliveryAt,
+                expirationAt: expirationAt,
                 quantity: oppositeQuantity,
               });
             }
@@ -113,7 +113,7 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, de
           },
           postConfirmation: async (receipt: TransactionReceipt) => {
             // Wait for block number to ensure indexer has updated
-            await waitForOrderBookBlockNumber(receipt.blockNumber, qc, contractMode, Number(deliveryAt));
+            await waitForOrderBookBlockNumber(receipt.blockNumber, qc, contractMode, Number(expirationAt));
 
             // Refetch order book, positions, and participant data
             await Promise.all([

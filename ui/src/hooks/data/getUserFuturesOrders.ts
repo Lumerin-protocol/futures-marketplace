@@ -53,7 +53,7 @@ const fetchParticipantAsync = async (
     isBuy: order.isBuy,
     isActive: isActiveStatus(order.status),
     pricePerDay: BigInt(order.price),
-    deliveryAt: BigInt(order.deliveryAt),
+    expirationAt: BigInt(order.expirationAt),
     timestamp: order.createdAt,
     closedAt: order.closedAt,
     // 3.0: one createOrder → one OrderEntry with abs qty; aggregates may still
@@ -113,7 +113,7 @@ export type Participant = {
 export type ParticipantOrder = {
   closedAt: string | null;
   closedBy: string | null;
-  deliveryAt: bigint;
+  expirationAt: bigint;
   id: string;
   isActive: boolean;
   isBuy: boolean;
@@ -146,7 +146,7 @@ type UserFuturesOrdersResponse = {
     blockNumber: string;
     cancelledQuantity: number;
     closedAt: string | null;
-    deliveryAt: string;
+    expirationAt: string;
     createdAt: string;
     filledQuantity: number;
     id: string;

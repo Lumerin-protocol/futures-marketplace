@@ -35,7 +35,7 @@ interface OrdersPositionsTabWidgetProps {
   ordersLoading?: boolean;
   positionsLoading?: boolean;
   participantAddress?: `0x${string}`;
-  onClosePosition?: (price: string, amount: number, isBuy: boolean, deliveryAt?: number) => void;
+  onClosePosition?: (price: string, amount: number, isBuy: boolean, expirationAt?: number) => void;
   participantData?: any;
   minMargin?: bigint | null;
   accountBalance?: AccountBalance;
@@ -68,13 +68,13 @@ export const OrdersPositionsTabWidget = ({
   const tradesQuery = useUserFuturesTrades(participantAddress, { refetch: activeTab === "TRADES" });
 
   // Counts for the tab badges. For Open Orders / Positions / Order History /
-  // Position History we use the same `(pricePerDay, deliveryAt[, side])`
+  // Position History we use the same `(pricePerDay, expirationAt[, side])`
   // grouping the underlying widgets render with, so the badge matches the row
   // count in the table. Trades is a flat list — same as perps.
   const ordersCount = useMemo(() => {
     const unique = new Set<string>();
     orders.forEach((order) => {
-      unique.add(`${order.deliveryAt.toString()}_${order.pricePerDay.toString()}`);
+      unique.add(`${order.expirationAt.toString()}_${order.pricePerDay.toString()}`);
     });
     return unique.size;
   }, [orders]);
@@ -84,7 +84,7 @@ export const OrdersPositionsTabWidget = ({
     positions.forEach((p) => {
       const isLong = participantAddress && p.buyer.address.toLowerCase() === participantAddress.toLowerCase();
       const pricePerDay = isLong ? p.buyPricePerDay : p.sellPricePerDay;
-      unique.add(`${p.deliveryAt.toString()}_${pricePerDay.toString()}`);
+      unique.add(`${p.expirationAt.toString()}_${pricePerDay.toString()}`);
     });
     return unique.size;
   }, [positions, participantAddress]);
@@ -257,7 +257,7 @@ const FuturesTradesTable = ({
                   <DateTimeCell timestamp={trade.timestamp} />
                 </td>
                 <td>
-                  <DateTimeCell timestamp={trade.deliveryAt} />
+                  <DateTimeCell timestamp={trade.expirationAt} />
                 </td>
                 <td>
                   <SideCell>

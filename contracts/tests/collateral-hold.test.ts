@@ -7,21 +7,21 @@ import { quantizePrice, refreshHashprice } from "./utils.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
-// Opens a matched lot (seller short / buyer long) at `entryPrice` on the first delivery date.
+// Opens a matched lot (seller short / buyer long) at `entryPrice` on the first expiration date.
 async function openLot(
   data: FuturesFixture,
   entryPrice: bigint,
-  deliveryAt: bigint,
+  expirationAt: bigint,
 ) {
   const { futures } = data.contracts;
   const { seller, buyer, pc } = data.accounts;
-  await futures.write.createOrder([entryPrice, deliveryAt, -1], { account: seller.account });
-  const txHash = await futures.write.createOrder([entryPrice, deliveryAt, 1], {
+  await futures.write.createOrder([entryPrice, expirationAt, -1], { account: seller.account });
+  const txHash = await futures.write.createOrder([entryPrice, expirationAt, 1], {
     account: buyer.account,
   });
   const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
   const [matched] = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "OrderMatched" });
-  return matched.args.deliveryAt as bigint;
+  return matched.args.expirationAt as bigint;
 }
 
 // The buyer (long at a price well above the ~$3.44 oracle mark) is the loser: at settlement

@@ -64,7 +64,7 @@ describe("liquidatePosition: PositionLiquidated, seller netQty=0", () => {
     });
     assert.equal(positionLiquidatedEvents.length, 1, "must emit exactly 1 PositionLiquidated");
     const positionLiquidated = positionLiquidatedEvents[0];
-    assert.equal(positionLiquidated.args.deliveryAt, deliveryDate);
+    assert.equal(positionLiquidated.args.expirationAt, deliveryDate);
 
     const sellerAddr = seller.account.address.toLowerCase() as `0x${string}`;
     const buyerAddr = buyer.account.address.toLowerCase() as `0x${string}`;

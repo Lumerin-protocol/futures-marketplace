@@ -14,17 +14,17 @@ async function openLotBetween(
   short: FuturesFixture["accounts"]["seller"],
   long: FuturesFixture["accounts"]["buyer"],
   entryPrice: bigint,
-  deliveryAt: bigint,
+  expirationAt: bigint,
 ) {
   const { futures } = data.contracts;
   const { pc } = data.accounts;
-  await futures.write.createOrder([entryPrice, deliveryAt, -1], { account: short.account });
-  const txHash = await futures.write.createOrder([entryPrice, deliveryAt, 1], {
+  await futures.write.createOrder([entryPrice, expirationAt, -1], { account: short.account });
+  const txHash = await futures.write.createOrder([entryPrice, expirationAt, 1], {
     account: long.account,
   });
   const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
   const [matched] = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "OrderMatched" });
-  return matched.args.deliveryAt as bigint;
+  return matched.args.expirationAt as bigint;
 }
 
 describe("Futures settlement price (pinned)", () => {
@@ -63,7 +63,7 @@ describe("Futures settlement price (pinned)", () => {
 
     // Read the live mark only after the tx has mined at maturity (oracle is fresh there).
     const expected = await futures.read.getMarketPrice();
-    assert.equal(recorded.args.deliveryAt, deliveryDate);
+    assert.equal(recorded.args.expirationAt, deliveryDate);
     assert.equal(recorded.args.price, expected);
     assert.equal(getAddress(recorded.args.recordedBy), getAddress(buyer2.account.address));
     assert.equal(await futures.read.settlementPrice([deliveryDate]), expected);

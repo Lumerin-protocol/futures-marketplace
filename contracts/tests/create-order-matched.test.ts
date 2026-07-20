@@ -46,7 +46,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     assert.equal(getAddress(match.args.maker), getAddress(seller.account.address));
     assert.equal(getAddress(match.args.taker), getAddress(buyer.account.address));
     assert.equal(match.args.tradePrice, price);
-    assert.equal(match.args.deliveryAt, BigInt(deliveryDate));
+    assert.equal(match.args.expirationAt, BigInt(deliveryDate));
     assert.equal(match.args.takerQuantity, 2n);
     assert.equal(match.args.makerNetQtyAfter, -2n);
     assert.equal(match.args.takerNetQtyAfter, 2n);
@@ -87,7 +87,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     assert.equal(getAddress(match.args.maker), getAddress(buyer.account.address));
     assert.equal(getAddress(match.args.taker), getAddress(seller.account.address));
     assert.equal(match.args.tradePrice, price);
-    assert.equal(match.args.deliveryAt, BigInt(deliveryDate));
+    assert.equal(match.args.expirationAt, BigInt(deliveryDate));
     assert.equal(match.args.takerQuantity, -2n);
 
     const buyerPos = await futures.read.getUserPosition([buyer.account.address, deliveryDate]);
@@ -315,7 +315,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     const takerOrderCreated = ordersCreated[0];
     assert.equal(getAddress(takerOrderCreated.args.participant), getAddress(buyer.account.address));
     assert.equal(takerOrderCreated.args.price, price);
-    assert.equal(takerOrderCreated.args.deliveryAt, BigInt(deliveryDate));
+    assert.equal(takerOrderCreated.args.expirationAt, BigInt(deliveryDate));
     assert.equal(takerOrderCreated.args.quantity, 1n);
 
     const updatedByOrderId = new Map(ordersUpdated.map((e) => [e.args.orderId, e.args.newQuantity]));

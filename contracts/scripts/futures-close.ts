@@ -12,7 +12,7 @@ async function main() {
   const futuresAddress = requireAddress("FUTURES_ADDRESS");
   const env = requireEnvsSet("USER_ADDRESS", "DELIVERY_AT");
   const user = getAddress(env.USER_ADDRESS) as Address;
-  const deliveryAt = BigInt(env.DELIVERY_AT);
+  const expirationAt = BigInt(env.DELIVERY_AT);
 
   // Cash settlement is permissionless — any funded signer can call settlePosition.
   const [keeper] = await viem.getWalletClients();
@@ -21,30 +21,30 @@ async function main() {
   logInfo("inputs", {
     Futures: addrUrl(pc, futuresAddress),
     User: user,
-    DeliveryAt: new Date(Number(deliveryAt) * 1000).toISOString(),
+    ExpirationAt: new Date(Number(expirationAt) * 1000).toISOString(),
     Caller: keeper.account.address,
   });
 
   const futures = await viem.getContractAt("Futures", futuresAddress);
 
-  const position = await futures.read.getUserPosition([user, deliveryAt]);
+  const position = await futures.read.getUserPosition([user, expirationAt]);
   logInfo("position", {
     NetQuantity: position.netQuantity.toString(),
     NetEntryValue: position.netEntryValue.toString(),
   });
 
   if (position.netQuantity === 0n) {
-    throw new Error(`User ${user} has no position at deliveryAt ${deliveryAt}`);
+    throw new Error(`User ${user} has no position at expirationAt ${expirationAt}`);
   }
 
-  const tx = await futures.write.settlePosition([user, deliveryAt], {
+  const tx = await futures.write.settlePosition([user, expirationAt], {
     account: keeper.account,
   });
 
   const receipt = await pc.waitForTransactionReceipt({ hash: tx });
   logStep("Settled", txUrl(pc, receipt.transactionHash));
   logStep("Gas used", receipt.gasUsed.toString());
-  logSuccess(`Settled ${user} @ ${deliveryAt}`);
+  logSuccess(`Settled ${user} @ ${expirationAt}`);
 }
 
 main().catch((error) => {

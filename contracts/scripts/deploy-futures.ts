@@ -85,7 +85,7 @@ async function main() {
   const nearestMonday = new Date();
   nearestMonday.setUTCDate(nearestMonday.getUTCDate() + 8 - nearestMonday.getUTCDay());
   nearestMonday.setUTCHours(12, 0, 0, 0);
-  const firstFutureDeliveryDate = BigInt(Math.floor(nearestMonday.getTime() / 1000));
+  const firstFutureExpirationDate = BigInt(Math.floor(nearestMonday.getTime() / 1000));
 
   const initData = encodeFunctionData({
     abi: futuresImpl.abi,
@@ -96,7 +96,7 @@ async function main() {
       BigInt(env.MINIMUM_PRICE_INCREMENT),
       Number(env.EXPIRATION_INTERVAL_DAYS),
       Number(env.FUTURE_DELIVERY_DATES_COUNT),
-      firstFutureDeliveryDate,
+      firstFutureExpirationDate,
     ],
   });
 

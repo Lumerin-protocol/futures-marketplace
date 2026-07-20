@@ -9,7 +9,7 @@ const { viem, networkHelpers } = await network.getOrCreate();
 
 type OrderIntent = {
   price: bigint;
-  deliveryAt: bigint;
+  expirationAt: bigint;
   quantity: number;
 };
 
@@ -63,7 +63,7 @@ describe("Futures.removeOutdatedOrder", () => {
     );
   });
 
-  it("reverts OrderNotExpired when the order's deliveryAt is still in the future", async () => {
+  it("reverts OrderNotExpired when the order's expirationAt is still in the future", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, pc } = accounts;
@@ -151,7 +151,7 @@ describe("Futures.removeOutdatedOrder", () => {
       expiringDd,
       BigInt(config.expirationIntervalSeconds),
     );
-    const futureDates = await futures.read.getDeliveryDates();
+    const futureDates = await futures.read.getExpirationDates();
     const freshDd = futureDates[futureDates.length - 1];
 
     // Build a single multicall: [N × removeOutdatedOrder, createOrders([1 new])].
@@ -173,7 +173,7 @@ describe("Futures.removeOutdatedOrder", () => {
           [
             {
               price: mp,
-              deliveryAt: freshDd,
+              expirationAt: freshDd,
               quantity: -1,
             } satisfies OrderIntent,
           ],
@@ -197,7 +197,7 @@ describe("Futures.removeOutdatedOrder", () => {
       eventName: "OrderCreated",
     });
     assert.equal(created.length, 1);
-    assert.equal(created[0].args.deliveryAt, freshDd);
+    assert.equal(created[0].args.expirationAt, freshDd);
 
     const finalOrders = await futures.read.getUserOrders([seller.account.address]);
     assert.equal(finalOrders.length, 1, "only the freshly placed order remains");

@@ -75,7 +75,7 @@ const sessionToPosition = (
   return {
     id: session.id,
     timestamp: session.openedAt,
-    deliveryAt: session.deliveryAt,
+    expirationAt: session.expirationAt,
     sellPricePerDay: isLong ? 0n : entryPrice,
     buyPricePerDay: isLong ? entryPrice : 0n,
     netQuantity: session.netQuantity,
@@ -156,10 +156,10 @@ export type PositionBook = {
 export type PositionBookPosition = {
   transactionHash: `0x${string}`;
   timestamp: string;
-  deliveryAt: string;
+  expirationAt: string;
   sellPricePerDay: bigint;
   buyPricePerDay: bigint;
-  /// Signed running net qty for the (user, deliveryAt) pair the source
+  /// Signed running net qty for the (user, expirationAt) pair the source
   /// PositionSession belongs to. Mirrors `UserDeliverySessionPointer.netQuantity`
   /// while the session is OPEN; 0 once the session is CLOSE.
   netQuantity: number;
@@ -168,7 +168,7 @@ export type PositionBookPosition = {
   liquidatedQuantity: number;
   isActive: boolean;
   /// Pinned cash-settlement price for this position's expiration (token decimals),
-  /// or null until `SettlementPriceRecorded` has fired for the deliveryAt.
+  /// or null until `SettlementPriceRecorded` has fired for the expirationAt.
   settlementPrice: bigint | null;
   /// Block timestamp at which the settlement price was pinned, or null.
   settledAt: string | null;
@@ -196,7 +196,7 @@ type PositionsBookResponse = {
   positionSessions: {
     id: string;
     status: string;
-    deliveryAt: string;
+    expirationAt: string;
     entryPrice: string;
     closePrice: string;
     closedQuantity: number;
@@ -217,7 +217,7 @@ type PositionsBookResponse = {
     trades: {
       id: string;
       blockNumber: string;
-      deliveryAt: string;
+      expirationAt: string;
       fillCount: number;
       netQuantityAfter: number;
       realizedPnl: string;

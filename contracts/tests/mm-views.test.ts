@@ -10,7 +10,7 @@ const { viem, networkHelpers } = await network.getOrCreate();
 /**
  * Tests covering the views added for the off-chain market maker:
  *   - getUserOrders(participant)
- *   - getActiveDeliveryDates(participant)
+ *   - getActiveExpirationDates(participant)
  *   - MAX_ORDERS_PER_PARTICIPANT constant
  *   - getBidPrices / getAskPrices / getQuantityAtPrice (per-delivery-date depth)
  *
@@ -30,7 +30,7 @@ describe("MM views", () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller } = accounts;
-    const deliveryDates = await futures.read.getDeliveryDates();
+    const deliveryDates = await futures.read.getExpirationDates();
     const dd = deliveryDates[0];
 
     const p1 = parseUnits("100", 6);
@@ -47,11 +47,11 @@ describe("MM views", () => {
     assert.equal(ids.length, 2, "two resting orders");
   });
 
-  it("getActiveDeliveryDates returns positions where caller is buyer or seller", async () => {
+  it("getActiveExpirationDates returns positions where caller is buyer or seller", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, buyer } = accounts;
-    const deliveryDates = await futures.read.getDeliveryDates();
+    const deliveryDates = await futures.read.getExpirationDates();
     const dd = deliveryDates[0];
     const price = parseUnits("100", 6);
 
@@ -62,8 +62,8 @@ describe("MM views", () => {
     await refreshHashprice(contracts.hashrateOracle);
     await futures.write.createOrder([price, dd, 1], { account: buyer.account });
 
-    const sellerIds = await futures.read.getActiveDeliveryDates([seller.account.address]);
-    const buyerIds = await futures.read.getActiveDeliveryDates([buyer.account.address]);
+    const sellerIds = await futures.read.getActiveExpirationDates([seller.account.address]);
+    const buyerIds = await futures.read.getActiveExpirationDates([buyer.account.address]);
     assert.equal(sellerIds.length, 1);
     assert.equal(buyerIds.length, 1);
     assert.equal(sellerIds[0], buyerIds[0]);
@@ -73,7 +73,7 @@ describe("MM views", () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, buyer } = accounts;
-    const dd = (await futures.read.getDeliveryDates())[0];
+    const dd = (await futures.read.getExpirationDates())[0];
 
     const ask1 = parseUnits("100", 6);
     const ask2 = parseUnits("101", 6);
@@ -95,6 +95,11 @@ describe("MM views", () => {
     assert.deepEqual(asks, [ask1, ask2]);
     assert.deepEqual(bids, [bid1]);
 
+    // getOrderBookPrices must match the split getters (same expirationAt + depth).
+    const [bookBids, bookAsks] = await futures.read.getOrderBookPrices([dd, 50n]);
+    assert.deepEqual([...bookAsks].sort((a, b) => Number(a - b)), asks);
+    assert.deepEqual([...bookBids].sort((a, b) => Number(a - b)), bids);
+
     assert.equal(await futures.read.getQuantityAtPrice([dd, ask1, false]), 2n);
     assert.equal(await futures.read.getQuantityAtPrice([dd, ask2, false]), 1n);
     assert.equal(await futures.read.getQuantityAtPrice([dd, bid1, true]), 1n);
@@ -104,7 +109,7 @@ describe("MM views", () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller } = accounts;
-    const dd = (await futures.read.getDeliveryDates())[0];
+    const dd = (await futures.read.getExpirationDates())[0];
     const price = parseUnits("100", 6);
 
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
@@ -136,7 +141,7 @@ describe("MM views", () => {
     const { futures, collateralVault } = contracts;
     const { seller, buyer } = accounts;
     const WAD = 10n ** 18n;
-    const dd = (await futures.read.getDeliveryDates())[0];
+    const dd = (await futures.read.getExpirationDates())[0];
     const price = await futures.read.getMarketPrice();
 
     await collateralVault.write.deposit([price * 10n], { account: seller.account });
@@ -155,7 +160,7 @@ describe("MM views", () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, buyer } = accounts;
-    const dd = (await futures.read.getDeliveryDates())[0];
+    const dd = (await futures.read.getExpirationDates())[0];
 
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await refreshHashprice(contracts.hashrateOracle);

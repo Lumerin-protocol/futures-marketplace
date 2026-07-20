@@ -3,7 +3,7 @@ import styled from "@mui/material/styles/styled";
 import Tooltip from "@mui/material/Tooltip";
 import { useMemo, useState, type ReactNode } from "react";
 import { formatHashratePHPS, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
-import { useGetDeliveryDates } from "../../../hooks/data/useGetDeliveryDates";
+import { useGetExpirationDates } from "../../../hooks/data/useGetExpirationDates";
 import { useFuturesContractConstants } from "../../../hooks/data/useFuturesContractConstants";
 import { useFuturesTokenInfo } from "../../../hooks/data/useFuturesTokenInfo";
 import { usePerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
@@ -56,20 +56,20 @@ interface DetailedSpecsModalProps {
 }
 
 export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "futures" }: DetailedSpecsModalProps) => {
-  const { data: deliveryDatesRaw } = useGetDeliveryDates();
+  const { data: expirationDatesRaw } = useGetExpirationDates();
   const contractConstants = useFuturesContractConstants();
   const tokenInfo = useFuturesTokenInfo();
 
-  // Get the first available delivery date (filtered and sorted)
-  const firstDeliveryDate = useMemo(() => {
-    if (!deliveryDatesRaw) return null;
+  // Get the first available expiration date (filtered and sorted)
+  const firstExpirationAt = useMemo(() => {
+    if (!expirationDatesRaw) return null;
     const now = Math.floor(Date.now() / 1000);
-    const validDates = deliveryDatesRaw
+    const validDates = expirationDatesRaw
       .map((date) => Number(date))
-      .filter((deliveryDate) => deliveryDate >= now)
+      .filter((expirationAt) => expirationAt >= now)
       .sort((a, b) => a - b);
     return validDates.length > 0 ? validDates[0] : null;
-  }, [deliveryDatesRaw]);
+  }, [expirationDatesRaw]);
 
   // Format time only from timestamp (UTC)
   const formatExpirationTime = (timestamp: number) => {
@@ -111,8 +111,8 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
 
   // Calculate total coverage days
   const totalCoverageDays =
-    contractConstants.futureDeliveryDatesCount && contractConstants.expirationIntervalDays
-      ? contractConstants.futureDeliveryDatesCount * contractConstants.expirationIntervalDays
+    contractConstants.futureExpirationDatesCount && contractConstants.expirationIntervalDays
+      ? contractConstants.futureExpirationDatesCount * contractConstants.expirationIntervalDays
       : null;
 
   return (
@@ -129,7 +129,7 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
         <SpecItem>
           <SpecLabel>Expiration Time</SpecLabel>
           <SpecValue>
-            {firstDeliveryDate ? `${formatExpirationTime(firstDeliveryDate)} (UTC)` : "No dates available"} on each
+            {firstExpirationAt ? `${formatExpirationTime(firstExpirationAt)} (UTC)` : "No dates available"} on each
             contract date
           </SpecValue>
         </SpecItem>
@@ -146,8 +146,8 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
         <SpecItem>
           <SpecLabel>Forward Expirations</SpecLabel>
           <SpecValue>
-            {contractConstants.futureDeliveryDatesCount ?? "..."} contract
-            {contractConstants.futureDeliveryDatesCount !== 1 ? "s" : ""}
+            {contractConstants.futureExpirationDatesCount ?? "..."} contract
+            {contractConstants.futureExpirationDatesCount !== 1 ? "s" : ""}
           </SpecValue>
         </SpecItem>
 

@@ -2,7 +2,7 @@ import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useGetDeliveryDates } from "../../../hooks/data/useGetDeliveryDates";
+import { useGetExpirationDates } from "../../../hooks/data/useGetExpirationDates";
 import { useAggregateOrderBook } from "../../../hooks/data/useAggregateOrderBook";
 import { usePerpsOrderBook } from "../../../hooks/data/perps/usePerpsOrderBook";
 import { usePerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
@@ -19,23 +19,23 @@ import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE_NUM } from "../../../lib/units"
 
 interface OrderBookTableProps {
   onRowClick?: (price: string, amount: number | null) => void;
-  onDeliveryDateChange?: (deliveryDate: number | undefined) => void;
+  onExpirationAtChange?: (expirationAt: number | undefined) => void;
   contractSpecsQuery: UseQueryResult<GetResponse<FuturesContractSpecs>, Error>;
   previousOrderBookStateRef: React.MutableRefObject<Map<number, { bidUnits: number | null; askUnits: number | null }>>;
   contractMode?: ContractMode;
-  // When set, the carousel snaps to the matching delivery date (futures only).
+  // When set, the carousel snaps to the matching expiration date (futures only).
   // Used by the close-position flow to align the order book with the position
   // being closed.
-  targetDeliveryDate?: number;
+  targetExpirationAt?: number;
 }
 
 export const OrderBookTable = ({
   onRowClick,
-  onDeliveryDateChange,
+  onExpirationAtChange,
   contractSpecsQuery,
   previousOrderBookStateRef,
   contractMode = "futures",
-  targetDeliveryDate,
+  targetExpirationAt,
 }: OrderBookTableProps) => {
   const [selectedDateIndex, setSelectedDateIndex] = useState(0);
   // Order book display mode: Classic / Volume ladders, or the all-users Trades feed.
@@ -47,7 +47,7 @@ export const OrderBookTable = ({
     new Map(),
   );
 
-  const { data: deliveryDatesRaw, isLoading, isError } = useGetDeliveryDates();
+  const { data: expirationDatesRaw, isLoading, isError } = useGetExpirationDates();
   const { data: marketPrice } = useGetMarketPrice();
   const perpsCollectionQuery = usePerpsCollection();
 
@@ -63,51 +63,51 @@ export const OrderBookTable = ({
     return Number(rawIncrement) / PAYMENT_TOKEN_SCALE_NUM;
   }, [contractMode, perpsCollectionQuery.data?.data?.minimumPriceIncrement, contractSpecsQuery.data?.data?.minimumPriceIncrement]);
 
-  // Transform delivery dates from bigint[] to [{ deliveryDate: number }]
+  // Transform expiration dates from bigint[] to [{ expirationAt: number }]
   // Filter out dates that are earlier than now
-  const deliveryDates = useMemo(() => {
-    if (!deliveryDatesRaw) return [];
+  const expirationDates = useMemo(() => {
+    if (!expirationDatesRaw) return [];
     const now = Math.floor(Date.now() / 1000); // Current time in Unix timestamp (seconds)
-    return deliveryDatesRaw
+    return expirationDatesRaw
       .map((date) => ({
-        deliveryDate: Number(date),
+        expirationAt: Number(date),
       }))
-      .filter(({ deliveryDate }) => deliveryDate >= now)
-      .sort((a, b) => a.deliveryDate - b.deliveryDate); // Sort by date ascending
-  }, [deliveryDatesRaw]);
+      .filter(({ expirationAt }) => expirationAt >= now)
+      .sort((a, b) => a.expirationAt - b.expirationAt); // Sort by date ascending
+  }, [expirationDatesRaw]);
 
   // Reset selected date index if it's out of bounds after filtering
   useEffect(() => {
-    if (deliveryDates.length > 0 && selectedDateIndex >= deliveryDates.length) {
+    if (expirationDates.length > 0 && selectedDateIndex >= expirationDates.length) {
       setSelectedDateIndex(0);
     }
-  }, [deliveryDates.length, selectedDateIndex]);
+  }, [expirationDates.length, selectedDateIndex]);
 
-  // Snap the carousel to a target delivery date when the parent requests it
+  // Snap the carousel to a target expiration date when the parent requests it
   // (e.g. closing a position on a different expiry than the one currently shown).
   useEffect(() => {
-    if (!targetDeliveryDate || deliveryDates.length === 0) return;
-    const idx = deliveryDates.findIndex((d) => d.deliveryDate === targetDeliveryDate);
+    if (!targetExpirationAt || expirationDates.length === 0) return;
+    const idx = expirationDates.findIndex((d) => d.expirationAt === targetExpirationAt);
     if (idx >= 0 && idx !== selectedDateIndex) {
       setSelectedDateIndex(idx);
     }
-  }, [targetDeliveryDate, deliveryDates]);
+  }, [targetExpirationAt, expirationDates]);
 
-  // Get selected delivery date
-  const selectedDeliveryDate = deliveryDates[selectedDateIndex]?.deliveryDate;
+  // Get selected expiration date
+  const selectedExpirationAt = expirationDates[selectedDateIndex]?.expirationAt;
 
-  // Notify parent component when delivery date changes
+  // Notify parent component when expiration date changes
   useEffect(() => {
-    if (selectedDeliveryDate) {
-      onDeliveryDateChange?.(selectedDeliveryDate);
+    if (selectedExpirationAt) {
+      onExpirationAtChange?.(selectedExpirationAt);
     } else {
-      onDeliveryDateChange?.(undefined);
+      onExpirationAtChange?.(undefined);
     }
-  }, [selectedDeliveryDate]);
+  }, [selectedExpirationAt]);
 
   // Fetch order book based on contract mode
   const futuresOrderBookQuery = useAggregateOrderBook(
-    contractMode === "futures" ? selectedDeliveryDate : undefined,
+    contractMode === "futures" ? selectedExpirationAt : undefined,
     { refetch: true, interval: 15000 }
   );
   const perpsOrderBookQuery = usePerpsOrderBook(
@@ -117,7 +117,7 @@ export const OrderBookTable = ({
   const orderBookQuery = contractMode === "perpetual" ? perpsOrderBookQuery : futuresOrderBookQuery;
 
   // Both subgraphs expose the same `priceLevels` collection (one row per
-  // {price, isBid} pair, plus `deliveryAt` on futures). Reduce either source
+  // {price, isBid} pair, plus `expirationAt` on futures). Reduce either source
   // to the per-price shape the renderer expects.
   //
   // The only schema difference is how `totalQuantity` is denominated:
@@ -314,7 +314,7 @@ export const OrderBookTable = ({
   };
 
   const goToNextDate = () => {
-    if (selectedDateIndex < deliveryDates.length - 1) {
+    if (selectedDateIndex < expirationDates.length - 1) {
       setSelectedDateIndex(selectedDateIndex + 1);
     }
   };
@@ -337,8 +337,8 @@ export const OrderBookTable = ({
     }, 100);
   };
 
-  // Format delivery date for display
-  const formatDeliveryDate = (timestamp: number) => {
+  // Format expiration date for display
+  const formatExpirationAt = (timestamp: number) => {
     const date = new Date(timestamp * 1000);
     return date.toLocaleDateString("en-US", {
       month: "long",
@@ -347,8 +347,8 @@ export const OrderBookTable = ({
     });
   };
 
-  const selectedDateDisplay = selectedDeliveryDate
-    ? formatDeliveryDate(selectedDeliveryDate)
+  const selectedDateDisplay = selectedExpirationAt
+    ? formatExpirationAt(selectedExpirationAt)
     : isLoading
       ? "Loading..."
       : "No dates available";
@@ -428,7 +428,7 @@ export const OrderBookTable = ({
             <button
               onClick={goToNextDate}
               className="nav-arrow"
-              disabled={selectedDateIndex === deliveryDates.length - 1 || isLoading}
+              disabled={selectedDateIndex === expirationDates.length - 1 || isLoading}
             >
               →
             </button>

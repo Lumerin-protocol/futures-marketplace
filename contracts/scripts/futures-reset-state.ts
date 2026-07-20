@@ -17,17 +17,17 @@ import { SafeWallet } from "../lib/safe.ts";
 
 /** Pre-3.0 and 3.0 OrderCreated — scan both shapes so cutover logs still find users. */
 const ORDER_CREATED_V2_EVENT = parseAbiItem(
-  "event OrderCreated(bytes32 indexed orderId, address indexed participant, string destURL, uint256 pricePerDay, uint256 deliveryAt, bool isBuy)",
+  "event OrderCreated(bytes32 indexed orderId, address indexed participant, string destURL, uint256 pricePerDay, uint256 expirationAt, bool isBuy)",
 );
 const ORDER_CREATED_V3_EVENT = parseAbiItem(
-  "event OrderCreated(bytes32 indexed orderId, address indexed participant, uint256 price, int256 quantity, uint256 deliveryAt)",
+  "event OrderCreated(bytes32 indexed orderId, address indexed participant, uint256 price, int256 quantity, uint256 expirationAt)",
 );
 /** Legacy bilateral lot / position create (pre-3.0). */
 const POSITION_CREATED_EVENT = parseAbiItem(
-  "event PositionCreated(bytes32 indexed positionId, address indexed seller, address indexed buyer, uint256 sellPricePerDay, uint256 buyPricePerDay, uint256 deliveryAt, string destURL, bytes32 orderId, bytes32 takerOrderId)",
+  "event PositionCreated(bytes32 indexed positionId, address indexed seller, address indexed buyer, uint256 sellPricePerDay, uint256 buyPricePerDay, uint256 expirationAt, string destURL, bytes32 orderId, bytes32 takerOrderId)",
 );
 const ORDER_MATCHED_V3_EVENT = parseAbiItem(
-  "event OrderMatched(bytes32 indexed makerOrderId, address indexed maker, address indexed taker, uint256 deliveryAt, uint256 tradePrice, int256 takerQuantity, int256 makerFee, int256 takerFee, int256 makerNetQtyAfter, int256 takerNetQtyAfter, uint256 makerEntryPriceAfter, uint256 takerEntryPriceAfter)",
+  "event OrderMatched(bytes32 indexed makerOrderId, address indexed maker, address indexed taker, uint256 expirationAt, uint256 tradePrice, int256 takerQuantity, int256 makerFee, int256 takerFee, int256 makerNetQtyAfter, int256 takerNetQtyAfter, uint256 makerEntryPriceAfter, uint256 takerEntryPriceAfter)",
 );
 
 const DEFAULT_BLOCK_CHUNK = 10_000n;

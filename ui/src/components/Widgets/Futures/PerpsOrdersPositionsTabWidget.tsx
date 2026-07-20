@@ -36,7 +36,7 @@ interface PerpsOrdersPositionsTabWidgetProps {
   ordersLoading?: boolean;
   positionsLoading?: boolean;
   participantAddress?: `0x${string}`;
-  onClosePosition?: (price: string, amount: number, isBuy: boolean, deliveryAt?: number) => void;
+  onClosePosition?: (price: string, amount: number, isBuy: boolean, expirationAt?: number) => void;
   participantData?: any;
   minMargin?: bigint | null;
   accountBalance?: AccountBalance;

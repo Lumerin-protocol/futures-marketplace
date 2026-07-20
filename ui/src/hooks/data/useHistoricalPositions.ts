@@ -12,7 +12,7 @@ const ZERO_HASH = "0x00000000000000000000000000000000000000000000000000000000000
 export type HistoricalPosition = {
   id: string;
   timestamp: string;
-  deliveryAt: string;
+  expirationAt: string;
   /// Session entry price (per day). Replaces the legacy buy/sell split — the
   /// session is owned by a single user, so a single price is sufficient and
   /// the side is conveyed via `isLong`.
@@ -47,7 +47,7 @@ export type HistoricalPosition = {
 export type RawHistoricalPositionSession = {
   id: string;
   status: string;
-  deliveryAt: string;
+  expirationAt: string;
   entryPrice: string;
   closePrice: string;
   closedQuantity: number;
@@ -67,7 +67,7 @@ export type RawHistoricalPositionSession = {
   trades: {
     id: string;
     blockNumber: string;
-    deliveryAt: string;
+    expirationAt: string;
     fillCount: number;
     netQuantityAfter: number;
     realizedPnl: string;
@@ -128,7 +128,7 @@ export const sessionToHistoricalPosition = (
   return {
     id: session.id,
     timestamp: session.openedAt,
-    deliveryAt: session.deliveryAt,
+    expirationAt: session.expirationAt,
     pricePerDay: BigInt(session.entryPrice),
     pnl: Number(session.realizedPnl),
     isLong,

@@ -77,9 +77,9 @@ describe("qty=3 single sell order: Order aggregate and OrderEntry promotion", ()
     assert.equal(String(order1.user).toLowerCase(), sellerAddr, "Order.user mirrors maker EOA");
     assert.equal(String(order1.price), price.toString(), "Order.price = createOrder price");
     assert.equal(
-      String(order1.deliveryAt),
+      String(order1.expirationAt),
       deliveryDate.toString(),
-      "Order.deliveryAt = createOrder delivery date",
+      "Order.expirationAt = createOrder expiration date",
     );
     assert.ok(BigInt(String(order1.createdAt)) > 0n, "Order.createdAt set from event.block.timestamp");
     assert.ok(BigInt(String(order1.updatedAt)) > 0n, "Order.updatedAt set on every save");

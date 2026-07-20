@@ -21,8 +21,8 @@ type Futures @entity(immutable: false) {
   "Contract size in hashes/s\u00b7day (hashrate sustained over one day), read from the on-chain constant CONTRACT_SIZE_HPS_DAY. Oracle answers are rebased by CONTRACT_SIZE_HPS_DAY / (100 TH/s\u00b7day). Fixed at 1e15 (1 PH/s over a day), so one unit = 1 PH/s/day."
   contractSizeHpsDay: BigInt!
   expirationIntervalDays: Int!
-  futureDeliveryDatesCount: Int!
-  firstFutureDeliveryDate: BigInt!
+  futureExpirationDatesCount: Int!
+  firstFutureExpirationDate: BigInt!
 
   # Pool balances
   collectedFeesBalance: BigInt!
@@ -42,14 +42,14 @@ type Futures @entity(immutable: false) {
   lastUpdatedAt: BigInt!
 }
 
-# First-class expiration entity holding cash-settlement metadata for one delivery date.
-# Created lazily the first time any entity at that `deliveryAt` is indexed; the settlement
+# First-class expiration entity holding cash-settlement metadata for one expiration date.
+# Created lazily the first time any entity at that `expirationAt` is indexed; the settlement
 # fields stay null until a `SettlementPriceRecorded` event pins the price.
 type FuturesExpiration @entity(immutable: false) {
-  "32-byte big-endian encoding of the expiration timestamp (deliveryAt)."
+  "32-byte big-endian encoding of the expiration timestamp (expirationAt)."
   id: Bytes!
   "The expiration timestamp this entity represents."
-  deliveryAt: BigInt!
+  expirationAt: BigInt!
 
   "Pinned cash-settlement price (token decimals). Null until SettlementPriceRecorded fires; its presence is the 'settled' signal (no separate boolean)."
   settlementPrice: BigInt
@@ -60,7 +60,7 @@ type FuturesExpiration @entity(immutable: false) {
   recordTransactionHash: Bytes
   recordBlockNumber: BigInt
 
-  # Back-links (backward-compatible: existing entities keep their `deliveryAt` scalar)
+  # Back-links (backward-compatible: existing entities keep their `expirationAt` scalar)
   orders: [Order!]! @derivedFrom(field: "expiration")
   positionSessions: [PositionSession!]! @derivedFrom(field: "expiration")
   trades: [Trade!]! @derivedFrom(field: "expiration")
@@ -87,7 +87,7 @@ type User @entity(immutable: false) {
   trades: [Trade!]! @derivedFrom(field: "user")
   fills: [Fill!]! @derivedFrom(field: "user")
   positionSessions: [PositionSession!]! @derivedFrom(field: "user")
-  "Per-(user, deliveryAt) running net qty + open-session pointers, one entry per delivery date the user has touched."
+  "Per-(user, expirationAt) running net qty + open-session pointers, one entry per expiration date the user has touched."
   deliveryPointers: [UserDeliverySessionPointer!]! @derivedFrom(field: "user")
   badDebts: [BadDebtEvent!]! @derivedFrom(field: "user")
 
@@ -96,15 +96,15 @@ type User @entity(immutable: false) {
   lastActivityAt: BigInt!
 }
 
-# Aggregate of OrderCreated events for one (user, price, deliveryAt, side) within a single tx.
+# Aggregate of OrderCreated events for one (user, price, expirationAt, side) within a single tx.
 # In 3.0 one createOrder emits one OrderCreated with abs qty; same-price placements in one tx
 # still collapse into a single Order aggregate when they share the aggregate key.
 type Order @entity(immutable: false) {
-  id: Bytes! # tx hash + user + price + deliveryAt + side
+  id: Bytes! # tx hash + user + price + expirationAt + side
   user: User!
   price: BigInt!
-  deliveryAt: BigInt!
-  "Expiration metadata for `deliveryAt` (settlement price, etc.). Nullable, backward-compatible add-on."
+  expirationAt: BigInt!
+  "Expiration metadata for `expirationAt` (settlement price, etc.). Nullable, backward-compatible add-on."
   expiration: FuturesExpiration
   isBuy: Boolean!
 
@@ -168,8 +168,8 @@ type Trade @entity(immutable: false) {
   id: Bytes! # tx hash + user address
   user: User!
   positionSession: PositionSession!
-  deliveryAt: BigInt!
-  "Expiration metadata for `deliveryAt` (settlement price, etc.). Nullable, backward-compatible add-on."
+  expirationAt: BigInt!
+  "Expiration metadata for `expirationAt` (settlement price, etc.). Nullable, backward-compatible add-on."
   expiration: FuturesExpiration
 
   tradePrice: BigInt! # qty-weighted average fill price
@@ -201,11 +201,11 @@ type Fill @entity(immutable: false) {
   user: User!
   counterparty: User!
   positionSession: PositionSession!
-  deliveryAt: BigInt!
+  expirationAt: BigInt!
 
   fillPrice: BigInt! # qty-weighted average fill price
   fillQuantity: Int! # signed sum for this user (+buy / -sell)
-  netQuantityAfter: Int! # user's (deliveryAt) net qty after this fill
+  netQuantityAfter: Int! # user's (expirationAt) net qty after this fill
   realizedPnl: BigInt! # accumulated pnl on this fill aggregation
   # Metadata
   timestamp: BigInt!
@@ -213,14 +213,14 @@ type Fill @entity(immutable: false) {
   transactionHash: Bytes!
 }
 
-# Open→close cycle for a (user, deliveryAt) pair.
-# A user can have multiple sessions concurrently — one per delivery date.
+# Open→close cycle for a (user, expirationAt) pair.
+# A user can have multiple sessions concurrently — one per expiration date.
 type PositionSession @entity(immutable: false) {
   id: String! # blockNumber (12 digits) + logIndex (6 digits) + side; deterministic
   status: PositionSessionStatus!
   user: User!
-  deliveryAt: BigInt!
-  "Expiration metadata for `deliveryAt` (settlement price, etc.). Nullable, backward-compatible add-on."
+  expirationAt: BigInt!
+  "Expiration metadata for `expirationAt` (settlement price, etc.). Nullable, backward-compatible add-on."
   expiration: FuturesExpiration
 
   entryPrice: BigInt! # qty-weighted average entry price
@@ -264,12 +264,12 @@ type BadDebtEvent @entity(immutable: true) {
   transactionHash: Bytes!
 }
 
-# Order book price level aggregation per (deliveryAt, price, side).
+# Order book price level aggregation per (expirationAt, price, side).
 type PriceLevel @entity(immutable: false) {
-  "ID format: {deliveryAt}-{price}-{bid|ask}"
+  "ID format: {expirationAt}-{price}-{bid|ask}"
   id: String!
-  deliveryAt: BigInt!
-  "Expiration metadata for `deliveryAt` (settlement price, etc.). Nullable, backward-compatible add-on."
+  expirationAt: BigInt!
+  "Expiration metadata for `expirationAt` (settlement price, etc.). Nullable, backward-compatible add-on."
   expiration: FuturesExpiration
   price: BigInt!
   isBid: Boolean!
@@ -277,15 +277,15 @@ type PriceLevel @entity(immutable: false) {
 }
 
 # Internal indexer lookup: tracks the open PositionSession + running net qty / entry price
-# for a (user, deliveryAt) pair. Not derived because GraphQL has no Map<deliveryAt, …> support.
+# for a (user, expirationAt) pair. Not derived because GraphQL has no Map<expirationAt, …> support.
 type UserDeliverySessionPointer @entity(immutable: false) {
-  id: Bytes! # user address ++ deliveryAt encoded
+  id: Bytes! # user address ++ expirationAt encoded
   user: User!
-  deliveryAt: BigInt!
+  expirationAt: BigInt!
   netQuantity: Int! # signed running net qty
   aggregatedEntryPrice: BigInt!
-  "ID of the currently-OPEN PositionSession for this (user, deliveryAt). Empty string when flat."
+  "ID of the currently-OPEN PositionSession for this (user, expirationAt). Empty string when flat."
   currentSessionId: String!
-  "ID of the most recently CLOSED PositionSession for this (user, deliveryAt). Empty string until the first close. Lets same-tx PositionLiquidated re-derive the closing Trade id after the pointer has gone flat."
+  "ID of the most recently CLOSED PositionSession for this (user, expirationAt). Empty string until the first close. Lets same-tx PositionLiquidated re-derive the closing Trade id after the pointer has gone flat."
   lastClosedSessionId: String!
 }

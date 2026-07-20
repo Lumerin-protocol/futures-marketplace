@@ -7,7 +7,7 @@ interface ModifyOrderProps {
   oldQuantity: number; // Current quantity (positive for Buy, negative for Sell)
   newPrice: bigint;
   newQuantity: number; // New quantity (positive for Buy, negative for Sell)
-  deliveryDate: bigint;
+  expirationAt: bigint;
 }
 
 export function useModifyOrder() {
@@ -30,12 +30,12 @@ export function useModifyOrder() {
       encodeFunctionData({
         abi: FuturesAbi,
         functionName: "createOrder",
-        args: [props.oldPrice, props.deliveryDate, BigInt(oppositeOldQuantity)],
+        args: [props.oldPrice, props.expirationAt, BigInt(oppositeOldQuantity)],
       }),
       encodeFunctionData({
         abi: FuturesAbi,
         functionName: "createOrder",
-        args: [props.newPrice, props.deliveryDate, BigInt(props.newQuantity)],
+        args: [props.newPrice, props.expirationAt, BigInt(props.newQuantity)],
       }),
     ];
 

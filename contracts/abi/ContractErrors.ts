@@ -47,11 +47,6 @@ export const contractErrors = [
     "type": "error"
   },
   {
-    "inputs": [],
-    "name": "DeliveryDateShouldBeInTheFuture",
-    "type": "error"
-  },
-  {
     "inputs": [
       {
         "internalType": "address",
@@ -70,6 +65,11 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "UnsupportedTokenDecimals",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PositionExpirationNotStartedYet",
     "type": "error"
   },
   {
@@ -137,7 +137,7 @@ export const contractErrors = [
   },
   {
     "inputs": [],
-    "name": "DeliveryDateNotAvailable",
+    "name": "ExpirationDateNotAvailable",
     "type": "error"
   },
   {
@@ -191,6 +191,11 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "ArrayLengthMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ExpirationDateShouldBeInTheFuture",
     "type": "error"
   },
   {
@@ -357,11 +362,6 @@ export const contractErrors = [
       }
     ],
     "name": "ERC20InsufficientAllowance",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "PositionDeliveryNotStartedYet",
     "type": "error"
   }
 ] as const;

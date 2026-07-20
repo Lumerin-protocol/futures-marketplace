@@ -65,7 +65,7 @@ export function applyOpenFill(
   signedQty: i32,
   tradePrice: BigInt,
   tradingFee: BigInt,
-  deliveryAt: BigInt,
+  expirationAt: BigInt,
   txHash: Bytes,
   blockNumber: BigInt,
   timestamp: BigInt,
@@ -79,7 +79,7 @@ export function applyOpenFill(
     tradePrice,
     BigInt.zero(),
     tradingFee,
-    deliveryAt,
+    expirationAt,
     txHash,
     blockNumber,
     timestamp,
@@ -97,7 +97,7 @@ export function applyExitFill(
   exitPrice: BigInt,
   exitPnl: BigInt,
   tradingFee: BigInt,
-  deliveryAt: BigInt,
+  expirationAt: BigInt,
   txHash: Bytes,
   blockNumber: BigInt,
   timestamp: BigInt,
@@ -111,7 +111,7 @@ export function applyExitFill(
     exitPrice,
     exitPnl,
     tradingFee,
-    deliveryAt,
+    expirationAt,
     txHash,
     blockNumber,
     timestamp,
@@ -129,7 +129,7 @@ export function applyMatchFill(
   signedQty: i32,
   tradePrice: BigInt,
   tradingFeeTotal: BigInt,
-  deliveryAt: BigInt,
+  expirationAt: BigInt,
   txHash: Bytes,
   blockNumber: BigInt,
   timestamp: BigInt,
@@ -141,7 +141,7 @@ export function applyMatchFill(
     absQty > 0 ? tradingFeeTotal.div(BigInt.fromI32(absQty)) : BigInt.zero();
 
   const userAddr = changetype<Address>(user.id);
-  const pointer = getOrCreatePointer(userAddr, deliveryAt);
+  const pointer = getOrCreatePointer(userAddr, expirationAt);
   const oldNet = pointer.netQuantity;
 
   let pnl = BigInt.zero();
@@ -160,7 +160,7 @@ export function applyMatchFill(
     tradePrice,
     pnl,
     feePerUnit,
-    deliveryAt,
+    expirationAt,
     txHash,
     blockNumber,
     timestamp,
@@ -173,7 +173,7 @@ export function applyMatchFill(
 // Core: net-qty bookkeeping + session lifecycle + Fill/Trade aggregation
 // ============================================================================
 
-/// Applies one signed-unit fill against the user's `(user, deliveryAt)` session
+/// Applies one signed-unit fill against the user's `(user, expirationAt)` session
 /// pointer, opening / scaling / closing the session as needed and upserting the
 /// per-(tx, user, counterparty, session) Fill and per-(tx, user, session) Trade
 /// aggregates. Returns the Trade id so liquidation callers can flag it.
@@ -184,7 +184,7 @@ function processUserMatch(
   tradePrice: BigInt,
   preComputedPnl: BigInt,
   tradingFee: BigInt,
-  deliveryAt: BigInt,
+  expirationAt: BigInt,
   txHash: Bytes,
   blockNumber: BigInt,
   timestamp: BigInt,
@@ -192,7 +192,7 @@ function processUserMatch(
   sideIndex: i32,
 ): Bytes {
   const userAddr = changetype<Address>(user.id);
-  const pointer = getOrCreatePointer(userAddr, deliveryAt);
+  const pointer = getOrCreatePointer(userAddr, expirationAt);
 
   const oldNet = pointer.netQuantity;
   const oldEntry = pointer.aggregatedEntryPrice;
@@ -219,7 +219,7 @@ function processUserMatch(
     wasFlat,
     isNowFlat,
     reducingExisting,
-    deliveryAt,
+    expirationAt,
     txHash,
     blockNumber,
     timestamp,
@@ -281,7 +281,7 @@ function handleFill(
   wasFlat: boolean,
   isNowFlat: boolean,
   reducingExisting: boolean,
-  deliveryAt: BigInt,
+  expirationAt: BigInt,
   txHash: Bytes,
   blockNumber: BigInt,
   timestamp: BigInt,
@@ -292,18 +292,18 @@ function handleFill(
 
   if (wasFlat) {
     const id = positionSessionId(blockNumber, logIndex, sideIndex);
-    session = openSession(id, user.id, deliveryAt, newEntry, newNet, timestamp);
+    session = openSession(id, user.id, expirationAt, newEntry, newNet, timestamp);
     pointer.currentSessionId = id;
   } else {
     const loaded = PositionSession.load(pointer.currentSessionId);
     if (!loaded) {
-      log.warning("PositionSession not found for user {} sessionId '{}' deliveryAt {}", [
+      log.warning("PositionSession not found for user {} sessionId '{}' expirationAt {}", [
         user.id.toHexString(),
         pointer.currentSessionId,
-        deliveryAt.toString(),
+        expirationAt.toString(),
       ]);
       const id = positionSessionId(blockNumber, logIndex, sideIndex);
-      session = openSession(id, user.id, deliveryAt, newEntry, newNet, timestamp);
+      session = openSession(id, user.id, expirationAt, newEntry, newNet, timestamp);
       pointer.currentSessionId = id;
     } else {
       session = loaded;
@@ -353,7 +353,7 @@ function handleFill(
     user,
     counterpartyId,
     session.id,
-    deliveryAt,
+    expirationAt,
     tradePrice,
     tradeQty,
     newNet,
@@ -368,7 +368,7 @@ function handleFill(
 function openSession(
   id: string,
   userId: Bytes,
-  deliveryAt: BigInt,
+  expirationAt: BigInt,
   entryPrice: BigInt,
   initialNetQty: i32,
   timestamp: BigInt,
@@ -376,8 +376,8 @@ function openSession(
   const s = new PositionSession(id);
   s.status = PositionSessionStatus.OPEN;
   s.user = userId;
-  s.deliveryAt = deliveryAt;
-  s.expiration = getOrCreateFuturesExpiration(deliveryAt).id;
+  s.expirationAt = expirationAt;
+  s.expiration = getOrCreateFuturesExpiration(expirationAt).id;
   s.entryPrice = entryPrice;
   s.closePrice = BigInt.zero();
   s.netQuantity = initialNetQty;
@@ -399,7 +399,7 @@ function upsertFill(
   user: User,
   counterpartyId: Bytes,
   sessionId: string,
-  deliveryAt: BigInt,
+  expirationAt: BigInt,
   fillPrice: BigInt,
   fillQty: i32,
   netQuantityAfter: i32,
@@ -423,8 +423,8 @@ function upsertFill(
     trade = new Trade(tradeId);
     trade.user = user.id;
     trade.positionSession = sessionId;
-    trade.deliveryAt = deliveryAt;
-    trade.expiration = getOrCreateFuturesExpiration(deliveryAt).id;
+    trade.expirationAt = expirationAt;
+    trade.expiration = getOrCreateFuturesExpiration(expirationAt).id;
     trade.tradePrice = BigInt.zero();
     trade.tradeQuantity = 0;
     trade.tradingFee = BigInt.zero();
@@ -443,7 +443,7 @@ function upsertFill(
     fill.user = user.id;
     fill.counterparty = counterpartyId;
     fill.positionSession = sessionId;
-    fill.deliveryAt = deliveryAt;
+    fill.expirationAt = expirationAt;
     fill.fillPrice = BigInt.zero();
     fill.fillQuantity = 0;
     fill.netQuantityAfter = 0;

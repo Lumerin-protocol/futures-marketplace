@@ -4,7 +4,7 @@
  * The order-lifecycle suite covers the common ACTIVE → MATCHED / CANCELLED
  * paths. This file pins down the rarer terminal states the indexer must
  * still map correctly:
- *   - EXPIRED:    after `deliveryAt`, anyone can permissionlessly call
+ *   - EXPIRED:    after `expirationAt`, anyone can permissionlessly call
  *                 `removeOutdatedOrder(orderId)` to close the stale order.
  *   - LIQUIDATED: permissionless `liquidateOrders` force-cancels resting orders before touching
  *                 positions.
@@ -78,7 +78,7 @@ describe("OrderEntryStatus.EXPIRED: removeOutdatedOrder", () => {
 
     const expiredEntry = snap.entity("OrderEntry", restingOrderId);
     assert.ok(expiredEntry);
-    // Handler maps OrderCancelled → EXPIRED when order.deliveryAt < block.timestamp.
+    // Handler maps OrderCancelled → EXPIRED when order.expirationAt < block.timestamp.
     // matchstick-ts does not forward receipt timestamps onto mock events, so the
     // harness always sees the default timestamp and lands on CANCELLED here.
     // Production Graph Node stamps real block.timestamp → EXPIRED. Covered by

@@ -4,7 +4,7 @@
  * `order-lifecycle.test.ts` covers the per-price increment / decrement
  * bookkeeping on the ask side. This file pins down the orthogonal
  * dimension — bid vs ask at the **same** price live as two **separate**
- * `PriceLevel` entities (the id is `{deliveryAt}-{price}-{bid|ask}`).
+ * `PriceLevel` entities (the id is `{expirationAt}-{price}-{bid|ask}`).
  */
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
@@ -70,13 +70,13 @@ describe("PriceLevel: bid and ask at the same price are distinct entities", () =
     assert.equal(ask.isBid, false);
     assert.equal(bid.isBid, true);
 
-    // Field-coverage: `deliveryAt` and `price` are encoded in the composite id
+    // Field-coverage: `expirationAt` and `price` are encoded in the composite id
     // but also persisted as scalar fields by `getOrCreatePriceLevel`; lock
     // both in directly so consumers can query without parsing the id.
     assert.equal(
-      String(ask.deliveryAt),
+      String(ask.expirationAt),
       deliveryDate.toString(),
-      "PriceLevel.deliveryAt mirrors the ask order's deliveryAt",
+      "PriceLevel.expirationAt mirrors the ask order's expirationAt",
     );
     assert.equal(
       String(ask.price),
@@ -84,9 +84,9 @@ describe("PriceLevel: bid and ask at the same price are distinct entities", () =
       "PriceLevel.price mirrors the ask order's price",
     );
     assert.equal(
-      String(bid.deliveryAt),
+      String(bid.expirationAt),
       deliveryDate.toString(),
-      "PriceLevel.deliveryAt mirrors the bid order's deliveryAt",
+      "PriceLevel.expirationAt mirrors the bid order's expirationAt",
     );
     assert.equal(
       String(bid.price),

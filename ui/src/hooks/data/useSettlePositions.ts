@@ -6,15 +6,15 @@ import { waitForBlockNumberPositionBook } from "./getUserFuturesPositions";
 import { FUTURES_POSITION_HISTORY_QK } from "./useFuturesPositionHistory";
 
 interface SettlePositionsProps {
-  /// Expiration (deliveryAt) whose matured aggregate position should be settled.
-  deliveryAt: bigint;
+  /// Expiration (expirationAt) whose matured aggregate position should be settled.
+  expirationAt: bigint;
   /// Participant whose position to settle. Defaults to the connected wallet.
   participant?: `0x${string}`;
 }
 
 /**
- * Cash-settles the participant's aggregate net position at `deliveryAt` via
- * permissionless `settlePosition(user, deliveryAt)`, pinning the settlement
+ * Cash-settles the participant's aggregate net position at `expirationAt` via
+ * permissionless `settlePosition(user, expirationAt)`, pinning the settlement
  * price on first call. Refetches the position book and waits for the indexer.
  */
 export function useSettlePositions() {
@@ -23,7 +23,7 @@ export function useSettlePositions() {
   const { data: walletClient } = useWalletClient();
   const queryClient = useQueryClient();
 
-  const settlePositionsAsync = async ({ deliveryAt, participant }: SettlePositionsProps) => {
+  const settlePositionsAsync = async ({ expirationAt, participant }: SettlePositionsProps) => {
     if (!writeContractAsync || !publicClient || !walletClient) {
       throw new Error("Wallet not ready");
     }
@@ -36,12 +36,12 @@ export function useSettlePositions() {
       client: publicClient,
     });
 
-    const pos = await futuresContract.read.getUserPosition([account, deliveryAt]);
+    const pos = await futuresContract.read.getUserPosition([account, expirationAt]);
     if (pos.netQuantity === 0n) {
       throw new Error("No open position to settle for this expiration");
     }
 
-    const req = await futuresContract.simulate.settlePosition([account, deliveryAt], {
+    const req = await futuresContract.simulate.settlePosition([account, expirationAt], {
       account: walletClient.account.address,
     });
     const hash = await writeContractAsync(req.request);

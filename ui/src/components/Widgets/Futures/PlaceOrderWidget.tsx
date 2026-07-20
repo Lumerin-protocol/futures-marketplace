@@ -61,7 +61,7 @@ interface BalanceQueryResult {
 interface PlaceOrderWidgetProps {
   externalPrice?: string;
   externalAmount?: number;
-  externalDeliveryDate?: number;
+  externalExpirationAt?: number;
   externalIsBuy?: boolean;
   highlightTrigger?: number;
   address?: `0x${string}`;
@@ -102,7 +102,7 @@ function getPerpsLockedBalanceForSide(
 export const PlaceOrderWidget = ({
   externalPrice,
   externalAmount,
-  externalDeliveryDate,
+  externalExpirationAt,
   externalIsBuy,
   highlightTrigger,
   contractSpecsQuery,
@@ -670,8 +670,8 @@ export const PlaceOrderWidget = ({
 
   // Futures mode buy handler - uses quantity directly
   const handleBuyFutures = async () => {
-    if (!externalDeliveryDate && contractMode === "futures") {
-      alert("Please select a price from the order book to set delivery date");
+    if (!externalExpirationAt && contractMode === "futures") {
+      alert("Please select a price from the order book to set expiration date");
       return;
     }
 
@@ -719,15 +719,15 @@ export const PlaceOrderWidget = ({
       return;
     }
 
-    // Check for conflicting orders (opposite action, same price, same delivery date)
-    if (participantData?.orders && externalDeliveryDate !== undefined) {
-      const deliveryDateValue = externalDeliveryDate ? BigInt(externalDeliveryDate) : 0n;
+    // Check for conflicting orders (opposite action, same price, same expiration date)
+    if (participantData?.orders && externalExpirationAt !== undefined) {
+      const expirationAtValue = externalExpirationAt ? BigInt(externalExpirationAt) : 0n;
       const conflictingOrder = participantData.orders.find(
         (order) =>
           order.isActive &&
           !order.isBuy && // Opposite action (Sell)
           order.pricePerDay === priceInWei &&
-          order.deliveryAt === deliveryDateValue,
+          order.expirationAt === expirationAtValue,
       );
 
       if (conflictingOrder) {
@@ -762,8 +762,8 @@ export const PlaceOrderWidget = ({
 
   // Futures mode sell handler - uses quantity directly
   const handleSellFutures = async () => {
-    if (!externalDeliveryDate && contractMode === "futures") {
-      alert("Please select a price from the order book to set delivery date");
+    if (!externalExpirationAt && contractMode === "futures") {
+      alert("Please select a price from the order book to set expiration date");
       return;
     }
 
@@ -811,15 +811,15 @@ export const PlaceOrderWidget = ({
       return;
     }
 
-    // Check for conflicting orders (opposite action, same price, same delivery date)
-    if (participantData?.orders && externalDeliveryDate !== undefined) {
-      const deliveryDateValue = externalDeliveryDate ? BigInt(externalDeliveryDate) : 0n;
+    // Check for conflicting orders (opposite action, same price, same expiration date)
+    if (participantData?.orders && externalExpirationAt !== undefined) {
+      const expirationAtValue = externalExpirationAt ? BigInt(externalExpirationAt) : 0n;
       const conflictingOrder = participantData.orders.find(
         (order) =>
           order.isActive &&
           order.isBuy && // Opposite action (Buy)
           order.pricePerDay === priceInWei &&
-          order.deliveryAt === deliveryDateValue,
+          order.expirationAt === expirationAtValue,
       );
 
       if (conflictingOrder) {
@@ -1104,14 +1104,14 @@ export const PlaceOrderWidget = ({
         <ConflictingOrderModal
           pendingOrder={pendingOrder}
           conflictingOrderQuantity={conflictingOrderQuantity}
-          externalDeliveryDate={externalDeliveryDate}
+          externalExpirationAt={externalExpirationAt}
           onConfirm={handleConfirmConflict}
           onCancel={handleCancelConflict}
           contractMode={contractMode}
         />
       </ModalItem>
 
-      {showOrderForm && pendingOrder && externalDeliveryDate && (
+      {showOrderForm && pendingOrder && externalExpirationAt && (
         <ModalItem
           open={showOrderForm}
           setOpen={(open) => {
@@ -1123,7 +1123,7 @@ export const PlaceOrderWidget = ({
         >
           <PlaceOrderForm
             price={BigInt(Math.round(pendingOrder.price * PAYMENT_TOKEN_SCALE_NUM))}
-            deliveryDate={BigInt(externalDeliveryDate)}
+            expirationAt={BigInt(externalExpirationAt)}
             quantity={pendingOrder.quantity}
             participantData={participantData}
             latestPrice={latestPrice}
@@ -1235,14 +1235,14 @@ const LeverageModal = ({
 const ConflictingOrderModal = ({
   pendingOrder,
   conflictingOrderQuantity,
-  externalDeliveryDate,
+  externalExpirationAt,
   onConfirm,
   onCancel,
   contractMode = "futures",
 }: {
   pendingOrder: { price: number; amount: number; quantity: number } | null;
   conflictingOrderQuantity: number | null;
-  externalDeliveryDate?: number;
+  externalExpirationAt?: number;
   onConfirm: () => void;
   onCancel: () => void;
   contractMode?: ContractMode;
@@ -1251,7 +1251,7 @@ const ConflictingOrderModal = ({
 
   const isBuy = pendingOrder.quantity > 0;
   const oppositeAction = isBuy ? "Ask" : "Bid";
-  const deliveryDateFormatted = externalDeliveryDate ? new Date(externalDeliveryDate * 1000).toLocaleString() : "N/A";
+  const expirationAtFormatted = externalExpirationAt ? new Date(externalExpirationAt * 1000).toLocaleString() : "N/A";
 
   return (
     <div className="space-y-6">
@@ -1260,7 +1260,7 @@ const ConflictingOrderModal = ({
       <div className="bg-orange-900/20 border border-orange-500/30 rounded-lg p-4">
         <p className="text-gray-300 text-sm mb-3">
           You already have an active <strong className="text-white">{oppositeAction}</strong> order at the same price
-          {contractMode === "futures" && " and delivery date"}.
+          {contractMode === "futures" && " and expiration date"}.
         </p>
 
         <div className="space-y-2 text-sm">
@@ -1271,7 +1271,7 @@ const ConflictingOrderModal = ({
           {contractMode === "futures" && (
             <div className="flex justify-between">
               <span className="text-gray-300">Delivery Date:</span>
-              <span className="text-white font-medium">{deliveryDateFormatted}</span>
+              <span className="text-white font-medium">{expirationAtFormatted}</span>
             </div>
           )}
         </div>

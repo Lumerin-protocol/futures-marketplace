@@ -86,7 +86,7 @@ export const HistoricalPositionsListWidget = ({
                   key={position.id}
                   style={wasLiquidated ? { backgroundColor: LIQUIDATION_ROW_BG } : undefined}
                 >
-                  <td><DateTimeCell timestamp={position.deliveryAt} /></td>
+                  <td><DateTimeCell timestamp={position.expirationAt} /></td>
                   <td>
                     <TypeBadge $type={positionType}>{positionType}</TypeBadge>
                   </td>
@@ -130,7 +130,7 @@ export const HistoricalPositionsListWidget = ({
                       onClick={() =>
                         setTradesSelection({
                           pricePerDay: position.pricePerDay,
-                          deliveryAt: position.deliveryAt,
+                          expirationAt: position.expirationAt,
                           positionType,
                         })
                       }

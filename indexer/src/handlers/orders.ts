@@ -45,7 +45,7 @@ export function handleOrderCreated(event: OrderCreated): void {
     event.transaction.hash,
     event.params.participant,
     event.params.price,
-    event.params.deliveryAt,
+    event.params.expirationAt,
     isBuy,
   );
 
@@ -55,8 +55,8 @@ export function handleOrderCreated(event: OrderCreated): void {
     order = new Order(aggId);
     order.user = user.id;
     order.price = event.params.price;
-    order.deliveryAt = event.params.deliveryAt;
-    order.expiration = getOrCreateFuturesExpiration(event.params.deliveryAt).id;
+    order.expirationAt = event.params.expirationAt;
+    order.expiration = getOrCreateFuturesExpiration(event.params.expirationAt).id;
     order.isBuy = isBuy;
     order.quantity = 0;
     order.originalQuantity = 0;
@@ -88,7 +88,7 @@ export function handleOrderCreated(event: OrderCreated): void {
   user.activeOrderCount++;
   user.save();
 
-  const level = getOrCreatePriceLevel(event.params.deliveryAt, event.params.price, isBuy);
+  const level = getOrCreatePriceLevel(event.params.expirationAt, event.params.price, isBuy);
   level.totalQuantity += absQtyI32;
   level.save();
 
@@ -123,7 +123,7 @@ export function handleOrderUpdated(event: OrderUpdated): void {
   if (filledDelta > 0) {
     order.quantity -= filledDelta;
     order.filledQuantity += filledDelta;
-    const level = getOrCreatePriceLevel(order.deliveryAt, order.price, order.isBuy);
+    const level = getOrCreatePriceLevel(order.expirationAt, order.price, order.isBuy);
     level.totalQuantity -= filledDelta;
     level.save();
   }
@@ -165,7 +165,7 @@ export function handleOrderCancelled(event: OrderCancelled): void {
 
   const rem = entry.remainingQuantity;
   // Sweeper path: delivery already passed → EXPIRED; otherwise user cancel.
-  entry.status = order.deliveryAt.lt(event.block.timestamp)
+  entry.status = order.expirationAt.lt(event.block.timestamp)
     ? OrderEntryStatus.EXPIRED
     : OrderEntryStatus.CANCELLED;
   entry.closedAt = event.block.timestamp;
@@ -179,7 +179,7 @@ export function handleOrderCancelled(event: OrderCancelled): void {
   recomputeOrderStatus(order, event.block.timestamp);
   order.save();
 
-  const level = getOrCreatePriceLevel(order.deliveryAt, order.price, order.isBuy);
+  const level = getOrCreatePriceLevel(order.expirationAt, order.price, order.isBuy);
   level.totalQuantity -= rem;
   level.save();
 
@@ -203,7 +203,7 @@ export function handleOrderMatched(event: OrderMatched): void {
   const tradePrice = event.params.tradePrice;
   const takerQty = event.params.takerQuantity.toI32();
   const absQty = absI32(takerQty);
-  const deliveryAt = event.params.deliveryAt;
+  const expirationAt = event.params.expirationAt;
 
   const makerUser = getOrCreateUser(event.params.maker, event.block.timestamp);
   const takerUser = getOrCreateUser(event.params.taker, event.block.timestamp);
@@ -214,7 +214,7 @@ export function handleOrderMatched(event: OrderMatched): void {
     takerQty,
     tradePrice,
     event.params.takerFee,
-    deliveryAt,
+    expirationAt,
     event.transaction.hash,
     event.block.number,
     event.block.timestamp,
@@ -227,7 +227,7 @@ export function handleOrderMatched(event: OrderMatched): void {
     -takerQty,
     tradePrice,
     event.params.makerFee,
-    deliveryAt,
+    expirationAt,
     event.transaction.hash,
     event.block.number,
     event.block.timestamp,
@@ -287,7 +287,7 @@ export function handlePositionLiquidated(event: PositionLiquidated): void {
   // Derive mark from pnl = (mark − entry) × signedClose.
   const pointer = getOrCreatePointer(
     changetype<Address>(event.params.user),
-    event.params.deliveryAt,
+    event.params.expirationAt,
   );
   let exitPrice = pointer.aggregatedEntryPrice;
   if (closedQty != 0) {
@@ -303,7 +303,7 @@ export function handlePositionLiquidated(event: PositionLiquidated): void {
     exitPrice,
     event.params.pnl,
     BigInt.zero(),
-    event.params.deliveryAt,
+    event.params.expirationAt,
     event.transaction.hash,
     event.block.number,
     event.block.timestamp,
@@ -352,7 +352,7 @@ export function handlePositionSettled(event: PositionSettled): void {
     event.params.settlementPrice,
     event.params.pnl,
     BigInt.zero(),
-    event.params.deliveryAt,
+    event.params.expirationAt,
     event.transaction.hash,
     event.block.number,
     event.block.timestamp,

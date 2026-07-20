@@ -21,7 +21,7 @@ export const useUserFuturesTrades = (
       },
       transactionHash: trade.transactionHash,
       blockNumber: Number(trade.blockNumber),
-      deliveryAt: trade.deliveryAt,
+      expirationAt: trade.expirationAt,
       fillCount: trade.fillCount,
       id: trade.id,
       netQuantityAfter: trade.netQuantityAfter,
@@ -50,7 +50,7 @@ export type UserFuturesTrade = {
   };
   transactionHash: string;
   blockNumber: number;
-  deliveryAt: string;
+  expirationAt: string;
   fillCount: number;
   id: string;
   netQuantityAfter: number;
@@ -71,7 +71,7 @@ type UserFuturesTradesResponse = {
     };
     transactionHash: string;
     blockNumber: string;
-    deliveryAt: string;
+    expirationAt: string;
     fillCount: number;
     id: string;
     netQuantityAfter: number;

@@ -8,7 +8,7 @@ import { quantizePrice, refreshHashprice } from "./utils.ts";
 const { networkHelpers } = await network.getOrCreate();
 
 // Regression tests for the portfolio-margin trackers consumed by
-// `getNetPositionDelta` and `getFuturesUnrealizedPnl`.
+// `getNetPositionDelta` and `getUnrealizedPnl`.
 //
 // Both views read from `participantExpirationAtNetDelta` and
 // `participantExpirationAtNetEntryValue`, which are mutated on position
@@ -64,7 +64,7 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
       account: validator.account,
     });
 
-    // Re-open one position at a *different* delivery date. If
+    // Re-open one position at a *different* expiration date. If
     // _settleAtMark had failed to decrement the original tracker
     // for `deliveryDate`, that mapping would still hold ±1 per contract.
     // Reopening at `laterDeliveryDate` adds another ±1. The observable
@@ -139,12 +139,12 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
 
     await futures.write.liquidatePosition([seller.account.address, deliveryDate, 1n]);
 
-    // The position's delivery date is still in the future-iteration window of
+    // The position's expiration date is still in the future-iteration window of
     // `getNetPositionDelta`, so any tracker leak is directly observable.
     const sellerDeltaAfter = await futures.read.getNetPositionDelta([seller.account.address]);
     const buyerDeltaAfter = await futures.read.getNetPositionDelta([buyer.account.address]);
-    const sellerPnlAfter = await futures.read.getFuturesUnrealizedPnl([seller.account.address]);
-    const buyerPnlAfter = await futures.read.getFuturesUnrealizedPnl([buyer.account.address]);
+    const sellerPnlAfter = await futures.read.getUnrealizedPnl([seller.account.address]);
+    const buyerPnlAfter = await futures.read.getUnrealizedPnl([buyer.account.address]);
 
     assert.equal(sellerDeltaAfter, 0n, "seller delta tracker cleared after liquidation");
     assert.equal(sellerPnlAfter, 0n, "seller PnL tracker cleared after liquidation");

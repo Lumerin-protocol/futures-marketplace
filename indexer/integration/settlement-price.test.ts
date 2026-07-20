@@ -17,7 +17,7 @@ import { futuresExpirationId } from "./helpers.ts";
 
 const conn = await network.getOrCreate();
 
-// Opens a matched position (seller short / buyer long) at ~$100 on the first delivery date.
+// Opens a matched position (seller short / buyer long) at ~$100 on the first expiration date.
 async function openMatchedPosition() {
   const data = await conn.networkHelpers.loadFixture(deployFuturesFixture);
   const { contracts, accounts, config } = data;
@@ -65,7 +65,7 @@ describe("FuturesExpiration: settlement price", () => {
     const exp = snap.entity("FuturesExpiration", id);
 
     assert.ok(exp, "FuturesExpiration entity must exist");
-    assert.equal(String(exp.deliveryAt), deliveryDate.toString());
+    assert.equal(String(exp.expirationAt), deliveryDate.toString());
     assert.equal(String(exp.settlementPrice), pinned.toString());
     assert.ok(String(exp.settledAt) !== "" && exp.settledAt != null, "settledAt must be set");
     assert.equal(

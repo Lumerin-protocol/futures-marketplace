@@ -15,7 +15,7 @@ const { viem, networkHelpers } = await network.getOrCreate();
  * Surface under test:
  *   - liquidateOrder(participant, id)
  *   - liquidateOrders(participant)              — FIFO sweep until healthy
- *   - liquidatePosition(participant, deliveryAt, closeQty) — reverts OrdersStillOpen if any orders remain
+ *   - liquidatePosition(participant, expirationAt, closeQty) — reverts OrdersStillOpen if any orders remain
  *   - setLiquidationFee — single flat fee charged per cancelled order and per closed position
  */
 async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
@@ -51,7 +51,7 @@ async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
 
   // Two extra resting BUY orders for buyer at the matched price. Same-side as the
   // position so they aren't auto-offset; once the hashprice drops they go deeply
-  // negative-PnL and blow up `getFuturesOrderMargin`, breaking MM.
+  // negative-PnL and blow up `getOrderMargin`, breaking MM.
   await futures.write.createOrder([entryPricePerDay, deliveryDate, 1], {
     account: buyer.account,
   });
@@ -271,7 +271,7 @@ describe("Futures - permissionless liquidation entry points", function () {
   });
 
   describe("liquidatePosition", function () {
-    it("reverts NotLiquidatable for unknown deliveryAt with zero net", async function () {
+    it("reverts NotLiquidatable for unknown expirationAt with zero net", async function () {
       const data = await networkHelpers.loadFixture(underwaterWithOrdersAndPositionFixture);
       const { contracts, accounts, config } = data;
       const { futures } = contracts;
@@ -290,7 +290,7 @@ describe("Futures - permissionless liquidation entry points", function () {
       );
     });
 
-    it("reverts NotLiquidatable when user has no position at deliveryAt", async function () {
+    it("reverts NotLiquidatable when user has no position at expirationAt", async function () {
       const data = await networkHelpers.loadFixture(underwaterWithOrdersAndPositionFixture);
       const { contracts, accounts, config } = data;
       const { futures } = contracts;
@@ -366,7 +366,7 @@ describe("Futures - permissionless liquidation entry points", function () {
 
       const liqBalBefore = await collateralVault.read.balanceOf([buyer2.account.address]);
 
-      // Step 2: close the buyer's aggregate at deliveryAt.
+      // Step 2: close the buyer's aggregate at expirationAt.
       const tx = await futures.write.liquidatePosition(
         [buyer.account.address, config.deliveryDate, 1n],
         { account: buyer2.account },
@@ -391,7 +391,7 @@ describe("Futures - permissionless liquidation entry points", function () {
         abi: futures.abi,
         eventName: "PositionLiquidated",
       });
-      assert.equal(positionLiquidated.args.deliveryAt, config.deliveryDate);
+      assert.equal(positionLiquidated.args.expirationAt, config.deliveryDate);
       assert.equal(positionLiquidated.args.closedQuantity, 1n);
 
       const liqBalAfter = await collateralVault.read.balanceOf([buyer2.account.address]);

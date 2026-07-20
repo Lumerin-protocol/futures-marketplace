@@ -98,7 +98,7 @@ export const HistoricalOrdersListWidget = ({
                 key={order.id}
                 style={order.wasLiquidated ? { backgroundColor: LIQUIDATION_ROW_BG } : undefined}
               >
-                <td><DateTimeCell timestamp={order.deliveryAt} /></td>
+                <td><DateTimeCell timestamp={order.expirationAt} /></td>
                 <td>
                   <TypeBadge $type={order.isBuy ? "Long" : "Short"}>
                     {order.isBuy ? "Long" : "Short"}

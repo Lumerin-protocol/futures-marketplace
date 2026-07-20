@@ -10,7 +10,7 @@ export function useGetMinMargin(address: `0x${string}` | undefined) {
   return useReadContract({
     address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS,
     abi: FuturesAbi,
-    functionName: "getFuturesOrderMargin",
+    functionName: "getOrderMargin",
     args: [address!],
     query: {
       enabled: !!address,

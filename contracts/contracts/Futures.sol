@@ -35,7 +35,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         participantExpirationAtPriceOrderIdsIndex;
 
     uint256 private _gap5;
-    uint256 public firstFutureDeliveryDate;
+    uint256 public firstFutureExpirationDate;
     /// @dev Reserved — formerly `contractSizeHpsDay` / `speedHps`.
     uint256 private _gapContractSize;
     uint256 public minimumPriceIncrement;
@@ -53,7 +53,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private _gapDeliveryDuration;
     /// @dev Reserved — formerly `expirationIntervalDays` (now `EXPIRATION_INTERVAL_DAYS` constant).
     uint8 public _gap7;
-    uint8 public futureDeliveryDatesCount;
+    uint8 public futureExpirationDatesCount;
     uint8 public liquidationMarginPercent;
     uint8 private _gap3;
     string private _gap8;
@@ -65,9 +65,9 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint256 public hashpriceScalingDivisor;
 
     IPortfolioMarginEngine public marginEngine;
-    /// @notice Canonical net position quantity per (participant, deliveryAt). +long / -short.
+    /// @notice Canonical net position quantity per (participant, expirationAt). +long / -short.
     mapping(address => mapping(uint256 => int256)) private participantExpirationAtNetDelta;
-    /// @notice Canonical Σ qty_i * entryPrice_i per (participant, deliveryAt), token decimals.
+    /// @notice Canonical Σ qty_i * entryPrice_i per (participant, expirationAt), token decimals.
     mapping(address => mapping(uint256 => int256)) private participantExpirationAtNetEntryValue;
 
     mapping(uint256 => EnumerableSet.UintSet) private activeBidPrices;
@@ -83,7 +83,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @notice Pinned cash-settlement price per expiration (`0` = unset).
     mapping(uint256 => uint256) public settlementPrice;
 
-    /// @dev Delivery dates at which a participant holds a non-zero aggregate position.
+    /// @dev Expiration timestamps at which a participant holds a non-zero aggregate position.
     mapping(address => EnumerableSet.UintSet) private participantActiveExpirationAts;
 
     // immutable
@@ -107,7 +107,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         address participant;
         uint256 quantityAbs; // remaining abs qty; 0 = closed/empty
         uint256 price; // was pricePerDay
-        uint256 deliveryAt;
+        uint256 expirationAt;
         uint256 createdAt;
     }
 
@@ -116,17 +116,17 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         address participant;
         uint256 price;
         int256 quantity;
-        uint256 deliveryAt;
+        uint256 expirationAt;
     }
 
     /// @notice One placement in a `createOrders` batch.
     struct OrderIntent {
         uint256 price;
-        uint256 deliveryAt;
+        uint256 expirationAt;
         int256 quantity;
     }
 
-    /// @notice Unilateral aggregate position for a (user, deliveryAt).
+    /// @notice Unilateral aggregate position for a (user, expirationAt).
     /// @dev Prefer `netEntryValue` over an averaged entry price: exact on scale-in
     ///      (no integer-division dust) and matches margin math
     ///      `pnl = mark * netQty - netEntryValue`. UI/MM can derive
@@ -143,7 +143,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         string destURL;
         uint256 sellPricePerDay;
         uint256 buyPricePerDay;
-        uint256 deliveryAt;
+        uint256 expirationAt;
         uint256 createdAt;
         bool paid;
     }
@@ -154,7 +154,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         uint256 liquidationFee;
         uint256 minimumPriceIncrement;
         uint8 liquidationMarginPercent;
-        uint8 futureDeliveryDatesCount;
+        uint8 futureExpirationDatesCount;
         address hashrateOracle;
         address marginEngine;
     }
@@ -162,7 +162,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     // ── Events ────────────────────────────────────────────────────────────────
 
     event OrderCreated(
-        bytes32 indexed orderId, address indexed participant, uint256 price, int256 quantity, uint256 deliveryAt
+        bytes32 indexed orderId, address indexed participant, uint256 price, int256 quantity, uint256 expirationAt
     );
     event OrderUpdated(bytes32 indexed orderId, address indexed participant, int256 newQuantity);
     event OrderCancelled(bytes32 indexed orderId, address indexed participant);
@@ -170,7 +170,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         bytes32 indexed makerOrderId,
         address indexed maker,
         address indexed taker,
-        uint256 deliveryAt,
+        uint256 expirationAt,
         uint256 tradePrice,
         int256 takerQuantity,
         int256 makerFee,
@@ -184,21 +184,21 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     event PositionLiquidated(
         address indexed user,
         address indexed liquidator,
-        uint256 deliveryAt,
+        uint256 expirationAt,
         int256 closedQuantity,
         int256 pnl,
         uint256 liquidatorFee
     );
     event PositionSettled(
         address indexed user,
-        uint256 indexed deliveryAt,
+        uint256 indexed expirationAt,
         int256 closedQuantity,
         int256 pnl,
         uint256 settlementPrice,
         address settledBy
     );
     event BadDebt(address indexed user, uint256 amount);
-    event SettlementPriceRecorded(uint256 indexed deliveryAt, uint256 price, address recordedBy);
+    event SettlementPriceRecorded(uint256 indexed expirationAt, uint256 price, address recordedBy);
     event ConfigUpdated(Config config);
     event HookUpdated(address indexed hook);
 
@@ -206,12 +206,12 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     error InvalidPrice();
     error InvalidQty();
-    error DeliveryDateShouldBeInTheFuture();
-    error DeliveryDateNotAvailable();
+    error ExpirationDateShouldBeInTheFuture();
+    error ExpirationDateNotAvailable();
     error OrderNotBelongToSender();
     error InsufficientMarginBalance();
     error PositionNotExists();
-    error PositionDeliveryNotStartedYet();
+    error PositionExpirationNotStartedYet();
     error MaxOrdersPerParticipantReached();
     error ValueOutOfRange(int256 min, int256 max);
     error ZeroAddress();
@@ -242,19 +242,19 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         uint8 _liquidationMarginPercent,
         uint256 _minimumPriceIncrement,
         uint8, // was expirationIntervalDays — now EXPIRATION_INTERVAL_DAYS
-        uint8 _futureDeliveryDatesCount,
-        uint256 _firstFutureDeliveryDate
+        uint8 _futureExpirationDatesCount,
+        uint256 _firstFutureExpirationDate
     ) public initializer {
         __Ownable_init(_msgSender());
         __UUPSUpgradeable_init();
         _setHashrateOracle(_hashrateOracle);
         liquidationMarginPercent = _liquidationMarginPercent;
         minimumPriceIncrement = _minimumPriceIncrement;
-        if (_futureDeliveryDatesCount < 1) {
+        if (_futureExpirationDatesCount < 1) {
             revert ValueOutOfRange(1, int256(uint256(type(uint8).max)));
         }
-        futureDeliveryDatesCount = _futureDeliveryDatesCount;
-        firstFutureDeliveryDate = _firstFutureDeliveryDate;
+        futureExpirationDatesCount = _futureExpirationDatesCount;
+        firstFutureExpirationDate = _firstFutureExpirationDate;
         _emitConfigUpdated();
     }
 
@@ -263,9 +263,9 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     // ── Order placement ───────────────────────────────────────────────────────
 
     /// @notice Place a single order. `quantity` > 0 = buy/long, < 0 = sell/short (whole contracts).
-    function createOrder(uint256 _price, uint256 _deliveryAt, int256 _quantity) external {
+    function createOrder(uint256 _price, uint256 _expirationAt, int256 _quantity) external {
         address sender = _msgSender();
-        _createOrderInternal(sender, _price, _deliveryAt, _quantity);
+        _createOrderInternal(sender, _price, _expirationAt, _quantity);
         ensureNoCollateralDeficit(sender);
     }
 
@@ -275,28 +275,28 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         uint256 len = _intents.length;
         for (uint256 i = 0; i < len; i++) {
             OrderIntent calldata intent = _intents[i];
-            _createOrderInternal(sender, intent.price, intent.deliveryAt, intent.quantity);
+            _createOrderInternal(sender, intent.price, intent.expirationAt, intent.quantity);
         }
         ensureNoCollateralDeficit(sender);
     }
 
     /// @dev Per-leg body of `createOrder` without the IM-check epilogue.
-    function _createOrderInternal(address _participant, uint256 _price, uint256 _deliveryAt, int256 _quantity)
+    function _createOrderInternal(address _participant, uint256 _price, uint256 _expirationAt, int256 _quantity)
         private
     {
         validatePrice(_price);
-        validateExpirationAt(_deliveryAt);
+        validateExpirationAt(_expirationAt);
         if (_quantity == 0) revert InvalidQty();
 
         bool isBuy = _quantity > 0;
         uint256 remainingAbs = _abs(_quantity);
 
         bytes32 orderId = bytes32(++nonce);
-        emit OrderCreated(orderId, _participant, _price, _quantity, _deliveryAt);
+        emit OrderCreated(orderId, _participant, _price, _quantity, _expirationAt);
 
-        StructuredLinkedList.List storage oppositeQueue = _expirationAtPriceOrderIds(_deliveryAt, _price, !isBuy);
+        StructuredLinkedList.List storage oppositeQueue = _expirationAtPriceOrderIds(_expirationAt, _price, !isBuy);
         EnumerableSet.Bytes32Set storage participantPriceOrderIds =
-            participantExpirationAtPriceOrderIdsIndex[_participant][_deliveryAt][_price];
+            participantExpirationAtPriceOrderIdsIndex[_participant][_expirationAt][_price];
 
         while (remainingAbs > 0 && oppositeQueue.sizeOf() > 0) {
             // Self-trade: cancel own opposite resting order rather than matching self.
@@ -332,8 +332,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             uint256 fill = head.quantityAbs < remainingAbs ? head.quantityAbs : remainingAbs;
             int256 takerFillQty = isBuy ? int256(fill) : -int256(fill);
 
-            _applyFill(head.participant, -takerFillQty, _price, _deliveryAt);
-            _applyFill(_participant, takerFillQty, _price, _deliveryAt);
+            _applyFill(head.participant, -takerFillQty, _price, _expirationAt);
+            _applyFill(_participant, takerFillQty, _price, _expirationAt);
 
             uint256 makerFeeAmt = makerFee * fill;
             uint256 takerFeeAmt = takerFee * fill;
@@ -354,15 +354,15 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
                 headId,
                 head.participant,
                 _participant,
-                _deliveryAt,
+                _expirationAt,
                 _price,
                 takerFillQty,
                 int256(makerFeeAmt),
                 int256(takerFeeAmt),
-                participantExpirationAtNetDelta[head.participant][_deliveryAt],
-                participantExpirationAtNetDelta[_participant][_deliveryAt],
-                _avgEntryPrice(head.participant, _deliveryAt),
-                _avgEntryPrice(_participant, _deliveryAt)
+                participantExpirationAtNetDelta[head.participant][_expirationAt],
+                participantExpirationAtNetDelta[_participant][_expirationAt],
+                _avgEntryPrice(head.participant, _expirationAt),
+                _avgEntryPrice(_participant, _expirationAt)
             );
 
             remainingAbs -= fill;
@@ -383,11 +383,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
                 participant: _participant,
                 quantityAbs: remainingAbs,
                 price: _price,
-                deliveryAt: _deliveryAt,
+                expirationAt: _expirationAt,
                 createdAt: block.timestamp
             });
-            StructuredLinkedList.List storage orderQueue = _expirationAtPriceOrderIds(_deliveryAt, _price, isBuy);
-            _addOrderToQueue(orderQueue, orderId, _deliveryAt, _price, isBuy);
+            StructuredLinkedList.List storage orderQueue = _expirationAtPriceOrderIds(_expirationAt, _price, isBuy);
+            _addOrderToQueue(orderQueue, orderId, _expirationAt, _price, isBuy);
             participantOrders.add(orderId);
             participantPriceOrderIds.add(orderId);
         }
@@ -405,32 +405,32 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     /// @dev Average entry price derived from aggregates; 0 if flat.
-    function _avgEntryPrice(address _user, uint256 _deliveryAt) private view returns (uint256) {
-        int256 netQty = participantExpirationAtNetDelta[_user][_deliveryAt];
+    function _avgEntryPrice(address _user, uint256 _expirationAt) private view returns (uint256) {
+        int256 netQty = participantExpirationAtNetDelta[_user][_expirationAt];
         if (netQty == 0) return 0;
-        return _abs(participantExpirationAtNetEntryValue[_user][_deliveryAt]) / _abs(netQty);
+        return _abs(participantExpirationAtNetEntryValue[_user][_expirationAt]) / _abs(netQty);
     }
 
     // ── Position accounting ───────────────────────────────────────────────────
 
-    /// @notice Apply a signed fill to a user's aggregate at `deliveryAt`.
+    /// @notice Apply a signed fill to a user's aggregate at `expirationAt`.
     /// @dev Scale-in / reduce / flip with exact `netEntryValue` accounting; realizes PnL via insurance fund.
-    function _applyFill(address _user, int256 _signedQty, uint256 _tradePrice, uint256 _deliveryAt) private {
+    function _applyFill(address _user, int256 _signedQty, uint256 _tradePrice, uint256 _expirationAt) private {
         if (_signedQty == 0) return;
 
-        int256 netQty = participantExpirationAtNetDelta[_user][_deliveryAt];
-        int256 netEntry = participantExpirationAtNetEntryValue[_user][_deliveryAt];
+        int256 netQty = participantExpirationAtNetDelta[_user][_expirationAt];
+        int256 netEntry = participantExpirationAtNetEntryValue[_user][_expirationAt];
 
         if (netQty == 0) {
-            participantExpirationAtNetDelta[_user][_deliveryAt] = _signedQty;
-            participantExpirationAtNetEntryValue[_user][_deliveryAt] = _signedQty * int256(_tradePrice);
-            participantActiveExpirationAts[_user].add(_deliveryAt);
+            participantExpirationAtNetDelta[_user][_expirationAt] = _signedQty;
+            participantExpirationAtNetEntryValue[_user][_expirationAt] = _signedQty * int256(_tradePrice);
+            participantActiveExpirationAts[_user].add(_expirationAt);
             return;
         }
 
         if (_isSameSign(netQty, _signedQty)) {
-            participantExpirationAtNetDelta[_user][_deliveryAt] = netQty + _signedQty;
-            participantExpirationAtNetEntryValue[_user][_deliveryAt] = netEntry + _signedQty * int256(_tradePrice);
+            participantExpirationAtNetDelta[_user][_expirationAt] = netQty + _signedQty;
+            participantExpirationAtNetEntryValue[_user][_expirationAt] = netEntry + _signedQty * int256(_tradePrice);
             return;
         }
 
@@ -446,19 +446,19 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
         if (absDq < absNet) {
             // Partial reduce
-            participantExpirationAtNetDelta[_user][_deliveryAt] = netQty + _signedQty;
-            participantExpirationAtNetEntryValue[_user][_deliveryAt] =
+            participantExpirationAtNetDelta[_user][_expirationAt] = netQty + _signedQty;
+            participantExpirationAtNetEntryValue[_user][_expirationAt] =
                 netEntry * int256(absNet - closedAbs) / int256(absNet);
         } else if (absDq == absNet) {
             // Flat
-            participantExpirationAtNetDelta[_user][_deliveryAt] = 0;
-            participantExpirationAtNetEntryValue[_user][_deliveryAt] = 0;
-            participantActiveExpirationAts[_user].remove(_deliveryAt);
+            participantExpirationAtNetDelta[_user][_expirationAt] = 0;
+            participantExpirationAtNetEntryValue[_user][_expirationAt] = 0;
+            participantActiveExpirationAts[_user].remove(_expirationAt);
         } else {
             // Flip: open remainder at trade price
             int256 openQty = _signedQty + netQty; // leftover in dq's direction
-            participantExpirationAtNetDelta[_user][_deliveryAt] = openQty;
-            participantExpirationAtNetEntryValue[_user][_deliveryAt] = openQty * int256(_tradePrice);
+            participantExpirationAtNetDelta[_user][_expirationAt] = openQty;
+            participantExpirationAtNetEntryValue[_user][_expirationAt] = openQty * int256(_tradePrice);
             // still active (non-zero)
         }
     }
@@ -472,21 +472,21 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         emit OrderCancelled(_orderId, order.participant);
     }
 
-    /// @notice Permissionlessly close a resting order whose `deliveryAt` is in the past.
+    /// @notice Permissionlessly close a resting order whose `expirationAt` is in the past.
     function removeOutdatedOrder(bytes32 _orderId) external {
         Order memory order = orders[_orderId];
         if (order.participant == address(0) || order.quantityAbs == 0) revert OrderNotExists();
-        if (order.deliveryAt >= block.timestamp) revert OrderNotExpired();
+        if (order.expirationAt >= block.timestamp) revert OrderNotExpired();
         _removeRestingOrder(_orderId, order);
         emit OrderCancelled(_orderId, order.participant);
     }
 
     function _removeRestingOrder(bytes32 orderId, Order memory order) private {
         StructuredLinkedList.List storage orderIndexId =
-            _expirationAtPriceOrderIds(order.deliveryAt, order.price, order.isBuy);
-        _removeOrderFromQueue(orderIndexId, orderId, order.deliveryAt, order.price, order.isBuy);
+            _expirationAtPriceOrderIds(order.expirationAt, order.price, order.isBuy);
+        _removeOrderFromQueue(orderIndexId, orderId, order.expirationAt, order.price, order.isBuy);
         participantOrderIdsIndex[order.participant].remove(orderId);
-        participantExpirationAtPriceOrderIdsIndex[order.participant][order.deliveryAt][order.price].remove(orderId);
+        participantExpirationAtPriceOrderIdsIndex[order.participant][order.expirationAt][order.price].remove(orderId);
         delete orders[orderId];
     }
 
@@ -524,11 +524,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         _emitConfigUpdated();
     }
 
-    function setFutureDeliveryDatesCount(uint8 _futureDeliveryDatesCount) public onlyOwner {
-        if (_futureDeliveryDatesCount < 1) {
+    function setFutureExpirationDatesCount(uint8 _futureExpirationDatesCount) public onlyOwner {
+        if (_futureExpirationDatesCount < 1) {
             revert ValueOutOfRange(1, int256(uint256(type(uint8).max)));
         }
-        futureDeliveryDatesCount = _futureDeliveryDatesCount;
+        futureExpirationDatesCount = _futureExpirationDatesCount;
         _emitConfigUpdated();
     }
 
@@ -608,7 +608,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
                 liquidationFee: liquidationFee,
                 minimumPriceIncrement: minimumPriceIncrement,
                 liquidationMarginPercent: liquidationMarginPercent,
-                futureDeliveryDatesCount: futureDeliveryDatesCount,
+                futureExpirationDatesCount: futureExpirationDatesCount,
                 hashrateOracle: address(hashrateOracle),
                 marginEngine: address(marginEngine)
             })
@@ -698,14 +698,14 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     // ── Position liquidation ──────────────────────────────────────────────────
 
-    /// @notice Force-close up to `closeQty` contracts of an underwater user's net at `deliveryAt`.
+    /// @notice Force-close up to `closeQty` contracts of an underwater user's net at `expirationAt`.
     /// @dev Orders-first: reverts `OrdersStillOpen` if the user still has resting orders.
     ///      No counterparty order recreation — only this user's aggregate is reduced.
-    function liquidatePosition(address _user, uint256 _deliveryAt, uint256 _closeQty) external {
+    function liquidatePosition(address _user, uint256 _expirationAt, uint256 _closeQty) external {
         if (participantOrderIdsIndex[_user].length() != 0) revert OrdersStillOpen();
         if (!_underwater(_user)) revert NotLiquidatable();
 
-        int256 netQty = participantExpirationAtNetDelta[_user][_deliveryAt];
+        int256 netQty = participantExpirationAtNetDelta[_user][_expirationAt];
         if (netQty == 0) revert NotLiquidatable();
         if (_closeQty == 0) revert InvalidQty();
 
@@ -713,43 +713,43 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         uint256 closeAbs = _closeQty < absNet ? _closeQty : absNet;
 
         if (closeAbs == absNet) {
-            _doLiquidateFullPosition(_user, _deliveryAt, netQty);
+            _doLiquidateFullPosition(_user, _expirationAt, netQty);
             return;
         }
 
-        (int256 pnl, int256 signedClose) = _doPartialLiquidatePosition(_user, _deliveryAt, netQty, closeAbs);
+        (int256 pnl, int256 signedClose) = _doPartialLiquidatePosition(_user, _expirationAt, netQty, closeAbs);
 
         uint256 im = marginEngine.computePortfolioIM(_user);
         uint256 mm = marginEngine.computePortfolioMM(_user);
         if (im > mm && collateralVault.balanceOf(_user) > im) revert OverLiquidation();
 
-        emit PositionLiquidated(_user, _msgSender(), _deliveryAt, signedClose, pnl, 0);
+        emit PositionLiquidated(_user, _msgSender(), _expirationAt, signedClose, pnl, 0);
         _notifyLiquidation(_msgSender(), 0);
     }
 
     /// @notice Batch liquidate across expiries. Keeper sizes worst-first off-chain.
-    function liquidatePositions(address _user, uint256[] calldata _deliveryAts, uint256[] calldata _closeQtys)
+    function liquidatePositions(address _user, uint256[] calldata _expirationAts, uint256[] calldata _closeQtys)
         external
     {
-        if (_deliveryAts.length != _closeQtys.length) revert ArrayLengthMismatch();
+        if (_expirationAts.length != _closeQtys.length) revert ArrayLengthMismatch();
         if (participantOrderIdsIndex[_user].length() != 0) revert OrdersStillOpen();
         if (!_underwater(_user)) revert NotLiquidatable();
 
         uint256 closed = 0;
-        for (uint256 i = 0; i < _deliveryAts.length; i++) {
-            uint256 deliveryAt = _deliveryAts[i];
+        for (uint256 i = 0; i < _expirationAts.length; i++) {
+            uint256 expirationAt = _expirationAts[i];
             uint256 closeQty = _closeQtys[i];
-            int256 netQty = participantExpirationAtNetDelta[_user][deliveryAt];
+            int256 netQty = participantExpirationAtNetDelta[_user][expirationAt];
             if (netQty == 0 || closeQty == 0) continue;
 
             uint256 absNet = _abs(netQty);
             uint256 closeAbs = closeQty < absNet ? closeQty : absNet;
 
             if (closeAbs == absNet) {
-                _doLiquidateFullPosition(_user, deliveryAt, netQty);
+                _doLiquidateFullPosition(_user, expirationAt, netQty);
             } else {
-                (int256 pnl, int256 signedClose) = _doPartialLiquidatePosition(_user, deliveryAt, netQty, closeAbs);
-                emit PositionLiquidated(_user, _msgSender(), deliveryAt, signedClose, pnl, 0);
+                (int256 pnl, int256 signedClose) = _doPartialLiquidatePosition(_user, expirationAt, netQty, closeAbs);
+                emit PositionLiquidated(_user, _msgSender(), expirationAt, signedClose, pnl, 0);
                 _notifyLiquidation(_msgSender(), 0);
             }
             closed++;
@@ -764,27 +764,27 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         }
     }
 
-    function _doLiquidateFullPosition(address _user, uint256 _deliveryAt, int256 _netQty) private {
+    function _doLiquidateFullPosition(address _user, uint256 _expirationAt, int256 _netQty) private {
         uint256 mark = getMarketPrice();
-        int256 netEntry = participantExpirationAtNetEntryValue[_user][_deliveryAt];
+        int256 netEntry = participantExpirationAtNetEntryValue[_user][_expirationAt];
         int256 pnl = int256(mark) * _netQty - netEntry;
 
         _transferPnl(_insuranceFundAccount(), _user, pnl);
 
-        participantExpirationAtNetDelta[_user][_deliveryAt] = 0;
-        participantExpirationAtNetEntryValue[_user][_deliveryAt] = 0;
-        participantActiveExpirationAts[_user].remove(_deliveryAt);
+        participantExpirationAtNetDelta[_user][_expirationAt] = 0;
+        participantExpirationAtNetEntryValue[_user][_expirationAt] = 0;
+        participantActiveExpirationAts[_user].remove(_expirationAt);
 
-        emit PositionLiquidated(_user, _msgSender(), _deliveryAt, _netQty, pnl, 0);
+        emit PositionLiquidated(_user, _msgSender(), _expirationAt, _netQty, pnl, 0);
         _notifyLiquidation(_msgSender(), 0);
     }
 
-    function _doPartialLiquidatePosition(address _user, uint256 _deliveryAt, int256 _netQty, uint256 _closeAbs)
+    function _doPartialLiquidatePosition(address _user, uint256 _expirationAt, int256 _netQty, uint256 _closeAbs)
         private
         returns (int256 pnl, int256 signedClose)
     {
         uint256 mark = getMarketPrice();
-        int256 netEntry = participantExpirationAtNetEntryValue[_user][_deliveryAt];
+        int256 netEntry = participantExpirationAtNetEntryValue[_user][_expirationAt];
         uint256 absNet = _abs(_netQty);
         uint256 avgEntry = _abs(netEntry) / absNet;
 
@@ -793,54 +793,54 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         _transferPnl(_insuranceFundAccount(), _user, pnl);
 
         // Reduce toward zero; scale netEntryValue proportionally.
-        participantExpirationAtNetDelta[_user][_deliveryAt] = _netQty > 0
+        participantExpirationAtNetDelta[_user][_expirationAt] = _netQty > 0
             ? _netQty - int256(_closeAbs)
             : _netQty + int256(_closeAbs);
-        participantExpirationAtNetEntryValue[_user][_deliveryAt] =
+        participantExpirationAtNetEntryValue[_user][_expirationAt] =
             netEntry * int256(absNet - _closeAbs) / int256(absNet);
     }
 
     // ── Settlement ────────────────────────────────────────────────────────────
 
-    function recordSettlementPrice(uint256 deliveryAt) external returns (uint256 price) {
-        if (block.timestamp < deliveryAt) revert SettlementDateNotReached();
-        return _ensureSettlementPrice(deliveryAt);
+    function recordSettlementPrice(uint256 expirationAt) external returns (uint256 price) {
+        if (block.timestamp < expirationAt) revert SettlementDateNotReached();
+        return _ensureSettlementPrice(expirationAt);
     }
 
-    function _ensureSettlementPrice(uint256 deliveryAt) private returns (uint256) {
-        uint256 price = settlementPrice[deliveryAt];
+    function _ensureSettlementPrice(uint256 expirationAt) private returns (uint256) {
+        uint256 price = settlementPrice[expirationAt];
         if (price == 0) {
             price = _getMarketPrice(_getHashpriceUsd());
             if (price == 0) revert InvalidPrice();
-            settlementPrice[deliveryAt] = price;
-            emit SettlementPriceRecorded(deliveryAt, price, _msgSender());
+            settlementPrice[expirationAt] = price;
+            emit SettlementPriceRecorded(expirationAt, price, _msgSender());
         }
         return price;
     }
 
     /// @notice Cash-settle a matured aggregate position at the pinned settlement price.
-    function settlePosition(address _user, uint256 _deliveryAt) public {
-        if (block.timestamp < _deliveryAt) revert PositionDeliveryNotStartedYet();
-        int256 netQty = participantExpirationAtNetDelta[_user][_deliveryAt];
+    function settlePosition(address _user, uint256 _expirationAt) public {
+        if (block.timestamp < _expirationAt) revert PositionExpirationNotStartedYet();
+        int256 netQty = participantExpirationAtNetDelta[_user][_expirationAt];
         if (netQty == 0) revert PositionNotExists();
 
-        uint256 price = _ensureSettlementPrice(_deliveryAt);
-        int256 netEntry = participantExpirationAtNetEntryValue[_user][_deliveryAt];
+        uint256 price = _ensureSettlementPrice(_expirationAt);
+        int256 netEntry = participantExpirationAtNetEntryValue[_user][_expirationAt];
         int256 pnl = int256(price) * netQty - netEntry;
 
         _transferPnl(_insuranceFundAccount(), _user, pnl);
 
-        participantExpirationAtNetDelta[_user][_deliveryAt] = 0;
-        participantExpirationAtNetEntryValue[_user][_deliveryAt] = 0;
-        participantActiveExpirationAts[_user].remove(_deliveryAt);
+        participantExpirationAtNetDelta[_user][_expirationAt] = 0;
+        participantExpirationAtNetEntryValue[_user][_expirationAt] = 0;
+        participantActiveExpirationAts[_user].remove(_expirationAt);
 
-        emit PositionSettled(_user, _deliveryAt, netQty, pnl, price, _msgSender());
+        emit PositionSettled(_user, _expirationAt, netQty, pnl, price, _msgSender());
     }
 
-    function settlePositions(address[] calldata _users, uint256[] calldata _deliveryAts) external {
-        if (_users.length != _deliveryAts.length) revert ArrayLengthMismatch();
+    function settlePositions(address[] calldata _users, uint256[] calldata _expirationAts) external {
+        if (_users.length != _expirationAts.length) revert ArrayLengthMismatch();
         for (uint256 i = 0; i < _users.length; i++) {
-            settlePosition(_users[i], _deliveryAts[i]);
+            settlePosition(_users[i], _expirationAts[i]);
         }
     }
 
@@ -862,21 +862,21 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     function getOrder(bytes32 _orderId) external view returns (OrderView memory) {
         Order memory o = orders[_orderId];
         int256 qty = o.quantityAbs == 0 ? int256(0) : (o.isBuy ? int256(o.quantityAbs) : -int256(o.quantityAbs));
-        return OrderView({ participant: o.participant, price: o.price, quantity: qty, deliveryAt: o.deliveryAt });
+        return OrderView({ participant: o.participant, price: o.price, quantity: qty, expirationAt: o.expirationAt });
     }
 
     function getUserOrders(address _user) external view returns (bytes32[] memory) {
         return participantOrderIdsIndex[_user].values();
     }
 
-    function getUserPosition(address _user, uint256 _deliveryAt) external view returns (Position memory) {
+    function getUserPosition(address _user, uint256 _expirationAt) external view returns (Position memory) {
         return Position({
-            netQuantity: participantExpirationAtNetDelta[_user][_deliveryAt],
-            netEntryValue: participantExpirationAtNetEntryValue[_user][_deliveryAt]
+            netQuantity: participantExpirationAtNetDelta[_user][_expirationAt],
+            netEntryValue: participantExpirationAtNetEntryValue[_user][_expirationAt]
         });
     }
 
-    function getActiveDeliveryDates(address _user) external view returns (uint256[] memory) {
+    function getActiveExpirationDates(address _user) external view returns (uint256[] memory) {
         return participantActiveExpirationAts[_user].values();
     }
 
@@ -894,7 +894,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     /// @notice Minimum margin locked by resting orders (token decimals).
     /// @dev Maintenance × quantityAbs per order, minus mark PnL on the resting qty.
-    function getFuturesOrderMargin(address _participant) public view returns (uint256) {
+    function getOrderMargin(address _participant) public view returns (uint256) {
         EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[_participant];
         uint256 len = _orders.length();
         if (len == 0) return 0;
@@ -903,7 +903,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         uint256 marginPct = liquidationMarginPercent;
         for (uint256 i = 0; i < len; i++) {
             Order memory order = orders[_orders.at(i)];
-            if (order.deliveryAt < block.timestamp || order.quantityAbs == 0) continue;
+            if (order.expirationAt < block.timestamp || order.quantityAbs == 0) continue;
             int256 qty = order.isBuy ? int256(order.quantityAbs) : -int256(order.quantityAbs);
             uint256 maintenanceMargin = order.price * marginPct / 100 * order.quantityAbs;
             int256 pnl = (int256(marketPrice) - int256(order.price)) * qty;
@@ -912,7 +912,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         return total;
     }
 
-    function getFuturesUnrealizedPnl(address _participant) external view returns (int256) {
+    function getUnrealizedPnl(address _participant) external view returns (int256) {
         EnumerableSet.UintSet storage dates = participantActiveExpirationAts[_participant];
         uint256 len = dates.length();
         int256 totalPnl = 0;
@@ -934,14 +934,14 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         return totalPnl;
     }
 
-    function getDeliveryDates() external view returns (uint256[] memory) {
-        uint256 currentDeliveryDateIndex = _getCurrentExpirationAtIndex();
-        uint256[] memory deliveryDatesArray = new uint256[](futureDeliveryDatesCount);
-        for (uint256 i = 0; i < futureDeliveryDatesCount; i++) {
-            deliveryDatesArray[i] =
-                firstFutureDeliveryDate + expirationIntervalSeconds() * (currentDeliveryDateIndex + i);
+    function getExpirationDates() external view returns (uint256[] memory) {
+        uint256 currentExpirationDateIndex = _getCurrentExpirationAtIndex();
+        uint256[] memory expirationDatesArray = new uint256[](futureExpirationDatesCount);
+        for (uint256 i = 0; i < futureExpirationDatesCount; i++) {
+            expirationDatesArray[i] =
+                firstFutureExpirationDate + expirationIntervalSeconds() * (currentExpirationDateIndex + i);
         }
-        return deliveryDatesArray;
+        return expirationDatesArray;
     }
 
     function getBidPrices(uint256 _expirationAt, uint256 _maxLevels) external view returns (uint256[] memory) {
@@ -952,13 +952,13 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         return _activePricesSlice(activeAskPrices[_expirationAt], _maxLevels);
     }
 
-    function getOrderBookPrices(uint256 _deliveryAt, uint256 _maxLevels)
+    function getOrderBookPrices(uint256 _expirationAt, uint256 _maxLevels)
         external
         view
         returns (uint256[] memory bids, uint256[] memory asks)
     {
-        bids = _activePricesSlice(activeBidPrices[_deliveryAt], _maxLevels);
-        asks = _activePricesSlice(activeAskPrices[_deliveryAt], _maxLevels);
+        bids = _activePricesSlice(activeBidPrices[_expirationAt], _maxLevels);
+        asks = _activePricesSlice(activeAskPrices[_expirationAt], _maxLevels);
     }
 
     function _activePricesSlice(EnumerableSet.UintSet storage set, uint256 _maxLevels)
@@ -975,7 +975,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         return out;
     }
 
-    /// @notice Sum of resting `quantityAbs` at one (deliveryAt, price, side).
+    /// @notice Sum of resting `quantityAbs` at one (expirationAt, price, side).
     function getQuantityAtPrice(uint256 _expirationAt, uint256 _price, bool _isBid) external view returns (uint256) {
         StructuredLinkedList.List storage queue = _isBid
             ? expirationAtPriceOrdersLongIdQueue[_expirationAt][_price]
@@ -994,14 +994,10 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     function _getCurrentExpirationAtIndex() private view returns (uint256) {
-        if (block.timestamp > firstFutureDeliveryDate) {
-            return (block.timestamp - firstFutureDeliveryDate) / expirationIntervalSeconds() + 1;
+        if (block.timestamp > firstFutureExpirationDate) {
+            return (block.timestamp - firstFutureExpirationDate) / expirationIntervalSeconds() + 1;
         }
         return 0;
-    }
-
-    function deliveryIntervalDays() external pure returns (uint8) {
-        return EXPIRATION_INTERVAL_DAYS;
     }
 
     function expirationIntervalDays() external pure returns (uint8) {
@@ -1062,18 +1058,18 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     function validateExpirationAt(uint256 _expirationAt) private view {
         if (_expirationAt <= block.timestamp) {
-            revert DeliveryDateShouldBeInTheFuture();
+            revert ExpirationDateShouldBeInTheFuture();
         }
-        if (_expirationAt < firstFutureDeliveryDate) {
-            revert DeliveryDateNotAvailable();
+        if (_expirationAt < firstFutureExpirationDate) {
+            revert ExpirationDateNotAvailable();
         }
-        uint256 elapsedFromFirst = _expirationAt - firstFutureDeliveryDate;
+        uint256 elapsedFromFirst = _expirationAt - firstFutureExpirationDate;
         if (elapsedFromFirst % expirationIntervalSeconds() != 0) {
-            revert DeliveryDateNotAvailable();
+            revert ExpirationDateNotAvailable();
         }
         uint256 currentIndex = _getCurrentExpirationAtIndex();
-        if (elapsedFromFirst > (futureDeliveryDatesCount - 1 + currentIndex) * expirationIntervalSeconds()) {
-            revert DeliveryDateNotAvailable();
+        if (elapsedFromFirst > (futureExpirationDatesCount - 1 + currentIndex) * expirationIntervalSeconds()) {
+            revert ExpirationDateNotAvailable();
         }
     }
 

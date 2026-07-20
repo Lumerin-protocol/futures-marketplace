@@ -27,16 +27,6 @@ export const FuturesAbi = [
     "type": "error"
   },
   {
-    "inputs": [],
-    "name": "DeliveryDateNotAvailable",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "DeliveryDateShouldBeInTheFuture",
-    "type": "error"
-  },
-  {
     "inputs": [
       {
         "internalType": "address",
@@ -50,6 +40,16 @@ export const FuturesAbi = [
   {
     "inputs": [],
     "name": "ERC1967NonPayable",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ExpirationDateNotAvailable",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ExpirationDateShouldBeInTheFuture",
     "type": "error"
   },
   {
@@ -161,7 +161,7 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "PositionDeliveryNotStartedYet",
+    "name": "PositionExpirationNotStartedYet",
     "type": "error"
   },
   {
@@ -267,7 +267,7 @@ export const FuturesAbi = [
           },
           {
             "internalType": "uint8",
-            "name": "futureDeliveryDatesCount",
+            "name": "futureExpirationDatesCount",
             "type": "uint8"
           },
           {
@@ -365,7 +365,7 @@ export const FuturesAbi = [
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "deliveryAt",
+        "name": "expirationAt",
         "type": "uint256"
       }
     ],
@@ -427,7 +427,7 @@ export const FuturesAbi = [
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "deliveryAt",
+        "name": "expirationAt",
         "type": "uint256"
       },
       {
@@ -544,7 +544,7 @@ export const FuturesAbi = [
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "deliveryAt",
+        "name": "expirationAt",
         "type": "uint256"
       },
       {
@@ -581,7 +581,7 @@ export const FuturesAbi = [
       {
         "indexed": true,
         "internalType": "uint256",
-        "name": "deliveryAt",
+        "name": "expirationAt",
         "type": "uint256"
       },
       {
@@ -618,7 +618,7 @@ export const FuturesAbi = [
       {
         "indexed": true,
         "internalType": "uint256",
-        "name": "deliveryAt",
+        "name": "expirationAt",
         "type": "uint256"
       },
       {
@@ -802,7 +802,7 @@ export const FuturesAbi = [
       },
       {
         "internalType": "uint256",
-        "name": "_deliveryAt",
+        "name": "_expirationAt",
         "type": "uint256"
       },
       {
@@ -827,7 +827,7 @@ export const FuturesAbi = [
           },
           {
             "internalType": "uint256",
-            "name": "deliveryAt",
+            "name": "expirationAt",
             "type": "uint256"
           },
           {
@@ -861,19 +861,6 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "deliveryIntervalDays",
-    "outputs": [
-      {
-        "internalType": "uint8",
-        "name": "",
-        "type": "uint8"
-      }
-    ],
-    "stateMutability": "pure",
-    "type": "function"
-  },
-  {
-    "inputs": [],
     "name": "expirationIntervalDays",
     "outputs": [
       {
@@ -887,7 +874,7 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "firstFutureDeliveryDate",
+    "name": "firstFutureExpirationDate",
     "outputs": [
       {
         "internalType": "uint256",
@@ -900,7 +887,7 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "futureDeliveryDatesCount",
+    "name": "futureExpirationDatesCount",
     "outputs": [
       {
         "internalType": "uint8",
@@ -919,7 +906,7 @@ export const FuturesAbi = [
         "type": "address"
       }
     ],
-    "name": "getActiveDeliveryDates",
+    "name": "getActiveExpirationDates",
     "outputs": [
       {
         "internalType": "uint256[]",
@@ -980,50 +967,12 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "getDeliveryDates",
+    "name": "getExpirationDates",
     "outputs": [
       {
         "internalType": "uint256[]",
         "name": "",
         "type": "uint256[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_participant",
-        "type": "address"
-      }
-    ],
-    "name": "getFuturesOrderMargin",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_participant",
-        "type": "address"
-      }
-    ],
-    "name": "getFuturesUnrealizedPnl",
-    "outputs": [
-      {
-        "internalType": "int256",
-        "name": "",
-        "type": "int256"
       }
     ],
     "stateMutability": "view",
@@ -1090,7 +1039,7 @@ export const FuturesAbi = [
           },
           {
             "internalType": "uint256",
-            "name": "deliveryAt",
+            "name": "expirationAt",
             "type": "uint256"
           }
         ],
@@ -1106,7 +1055,7 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "_deliveryAt",
+        "name": "_expirationAt",
         "type": "uint256"
       },
       {
@@ -1126,6 +1075,25 @@ export const FuturesAbi = [
         "internalType": "uint256[]",
         "name": "asks",
         "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      }
+    ],
+    "name": "getOrderMargin",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -1164,6 +1132,25 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      }
+    ],
+    "name": "getUnrealizedPnl",
+    "outputs": [
+      {
+        "internalType": "int256",
+        "name": "",
+        "type": "int256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
         "name": "_user",
         "type": "address"
       }
@@ -1188,7 +1175,7 @@ export const FuturesAbi = [
       },
       {
         "internalType": "uint256",
-        "name": "_deliveryAt",
+        "name": "_expirationAt",
         "type": "uint256"
       }
     ],
@@ -1278,12 +1265,12 @@ export const FuturesAbi = [
       },
       {
         "internalType": "uint8",
-        "name": "_futureDeliveryDatesCount",
+        "name": "_futureExpirationDatesCount",
         "type": "uint8"
       },
       {
         "internalType": "uint256",
-        "name": "_firstFutureDeliveryDate",
+        "name": "_firstFutureExpirationDate",
         "type": "uint256"
       }
     ],
@@ -1351,7 +1338,7 @@ export const FuturesAbi = [
       },
       {
         "internalType": "uint256",
-        "name": "_deliveryAt",
+        "name": "_expirationAt",
         "type": "uint256"
       },
       {
@@ -1374,7 +1361,7 @@ export const FuturesAbi = [
       },
       {
         "internalType": "uint256[]",
-        "name": "_deliveryAts",
+        "name": "_expirationAts",
         "type": "uint256[]"
       },
       {
@@ -1502,7 +1489,7 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "deliveryAt",
+        "name": "expirationAt",
         "type": "uint256"
       }
     ],
@@ -1554,11 +1541,11 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "uint8",
-        "name": "_futureDeliveryDatesCount",
+        "name": "_futureExpirationDatesCount",
         "type": "uint8"
       }
     ],
-    "name": "setFutureDeliveryDatesCount",
+    "name": "setFutureExpirationDatesCount",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1663,7 +1650,7 @@ export const FuturesAbi = [
       },
       {
         "internalType": "uint256",
-        "name": "_deliveryAt",
+        "name": "_expirationAt",
         "type": "uint256"
       }
     ],
@@ -1681,7 +1668,7 @@ export const FuturesAbi = [
       },
       {
         "internalType": "uint256[]",
-        "name": "_deliveryAts",
+        "name": "_expirationAts",
         "type": "uint256[]"
       }
     ],

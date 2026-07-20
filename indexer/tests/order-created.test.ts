@@ -30,14 +30,14 @@ function createOrderCreatedEvent(
   participant: Address,
   price: BigInt,
   quantity: BigInt,
-  deliveryAt: BigInt,
+  expirationAt: BigInt,
 ): OrderCreated {
   return newTypedMockEventWithParams<OrderCreated>([
     paramBytes("orderId", orderId),
     paramAddr("participant", participant),
     paramUint("price", price),
     paramInt("quantity", quantity),
-    paramUint("deliveryAt", deliveryAt),
+    paramUint("expirationAt", expirationAt),
   ]);
 }
 
@@ -63,7 +63,7 @@ describe("handleOrderCreated", () => {
     assert.fieldEquals("Order", aggId, "user", user.toHexString());
     assert.fieldEquals("Order", aggId, "isBuy", "true");
     assert.fieldEquals("Order", aggId, "price", PRICE.toString());
-    assert.fieldEquals("Order", aggId, "deliveryAt", DELIVERY.toString());
+    assert.fieldEquals("Order", aggId, "expirationAt", DELIVERY.toString());
     assert.fieldEquals("Order", aggId, "quantity", "1");
     assert.fieldEquals("Order", aggId, "originalQuantity", "1");
     assert.fieldEquals("Order", aggId, "filledQuantity", "0");
@@ -116,7 +116,7 @@ describe("handleOrderCreated", () => {
     assert.fieldEquals("PriceLevel", priceLevelKey(DELIVERY, PRICE, false), "totalQuantity", "2");
   });
 
-  test("different (price, side, deliveryAt) tuples create separate Order aggregates", () => {
+  test("different (price, side, expirationAt) tuples create separate Order aggregates", () => {
     const user = userAddress(1);
     handleOrderCreated(createOrderCreatedEvent(bytes32Id(1), user, PRICE, BigInt.fromI32(1), DELIVERY));
     handleOrderCreated(createOrderCreatedEvent(bytes32Id(2), user, PRICE.plus(BigInt.fromI32(1)), BigInt.fromI32(1), DELIVERY));

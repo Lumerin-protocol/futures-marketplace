@@ -35,8 +35,8 @@ importers:
         specifier: ^2.0.1
         version: 2.0.1(typescript@5.9.3)(zod@3.25.76)
       collateral-margin:
-        specifier: github:Lumerin-protocol/collateral-margin#feat/points
-        version: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/bf1f6cd1f315f477e296ef57bac4e8f4a8358d59
+        specifier: github:Lumerin-protocol/collateral-margin#feat/futures-3-keeper-mm
+        version: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/f952ac6a4d4b765e17f11d25f000f82a8d2db456
       hashprice-oracle:
         specifier: github:Lumerin-protocol/hashprice-oracle.git#dev
         version: https://codeload.github.com/Lumerin-protocol/hashprice-oracle/tar.gz/55776ca92c86c69e38e5210e9b63d77d9e4218d8
@@ -1091,8 +1091,8 @@ packages:
   ci-info@2.0.0:
     resolution: {integrity: sha512-5tK7EtrZ0N+OLFMthtqOj4fI2Jeb88C4CAZPu25LDVUgXJ0A3Js4PMGqrn0JU1W0Mh1/Z8wZzYPxqUrXeBboCQ==}
 
-  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/bf1f6cd1f315f477e296ef57bac4e8f4a8358d59:
-    resolution: {tarball: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/bf1f6cd1f315f477e296ef57bac4e8f4a8358d59}
+  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/f952ac6a4d4b765e17f11d25f000f82a8d2db456:
+    resolution: {tarball: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/f952ac6a4d4b765e17f11d25f000f82a8d2db456}
     version: 1.0.0
 
   color-convert@2.0.1:
@@ -3050,7 +3050,7 @@ snapshots:
 
   ci-info@2.0.0: {}
 
-  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/bf1f6cd1f315f477e296ef57bac4e8f4a8358d59: {}
+  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/f952ac6a4d4b765e17f11d25f000f82a8d2db456: {}
 
   color-convert@2.0.1:
     dependencies:

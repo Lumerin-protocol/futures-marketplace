@@ -8,7 +8,7 @@ import { warpPastDeliveryWithFreshOracle } from "./utils.ts";
 const { viem, networkHelpers } = await network.getOrCreate();
 
 describe("Order Creation", () => {
-  it("should validate delivery date is in the future", async () => {
+  it("should validate expiration date is in the future", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, pc } = accounts;
@@ -20,66 +20,66 @@ describe("Order Creation", () => {
     await viem.assertions.revertWithCustomError(
       futures.write.createOrder([price, pastDate, 1], { account: seller.account }),
       futures,
-      "DeliveryDateShouldBeInTheFuture",
+      "ExpirationDateShouldBeInTheFuture",
     );
   });
 
-  it("should validate delivery date is not before first future delivery date", async () => {
+  it("should validate expiration date is not before first future expiration date", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;
 
     const price = parseUnits("100", 6);
-    const firstFutureDeliveryDate = await futures.read.firstFutureDeliveryDate();
-    const dateBeforeFirst = firstFutureDeliveryDate - 86400n;
+    const firstFutureExpirationDate = await futures.read.firstFutureExpirationDate();
+    const dateBeforeFirst = firstFutureExpirationDate - 86400n;
 
     await viem.assertions.revertWithCustomError(
       futures.write.createOrder([price, dateBeforeFirst, 1], { account: seller.account }),
       futures,
-      "DeliveryDateNotAvailable",
+      "ExpirationDateNotAvailable",
     );
   });
 
-  it("should validate delivery date is aligned with delivery interval", async () => {
+  it("should validate expiration date is aligned with delivery interval", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;
 
     const price = parseUnits("100", 6);
-    const firstFutureDeliveryDate = await futures.read.firstFutureDeliveryDate();
-    const deliveryIntervalDays = await futures.read.deliveryIntervalDays();
-    const deliveryIntervalSeconds = BigInt(deliveryIntervalDays) * 86400n;
+    const firstFutureExpirationDate = await futures.read.firstFutureExpirationDate();
+    const expirationIntervalDays = await futures.read.expirationIntervalDays();
+    const expirationIntervalSeconds = BigInt(expirationIntervalDays) * 86400n;
 
-    const misalignedDate = firstFutureDeliveryDate + deliveryIntervalSeconds / 2n;
+    const misalignedDate = firstFutureExpirationDate + expirationIntervalSeconds / 2n;
 
     await viem.assertions.revertWithCustomError(
       futures.write.createOrder([price, misalignedDate, 1], { account: seller.account }),
       futures,
-      "DeliveryDateNotAvailable",
+      "ExpirationDateNotAvailable",
     );
   });
 
-  it("should validate delivery date is within available range", async () => {
+  it("should validate expiration date is within available range", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;
 
     const price = parseUnits("100", 6);
-    const deliveryDates = await futures.read.getDeliveryDates();
+    const deliveryDates = await futures.read.getExpirationDates();
     const lastAvailableDate = deliveryDates[deliveryDates.length - 1];
-    const deliveryIntervalDays = await futures.read.deliveryIntervalDays();
-    const deliveryIntervalSeconds = BigInt(deliveryIntervalDays) * 86400n;
+    const expirationIntervalDays = await futures.read.expirationIntervalDays();
+    const expirationIntervalSeconds = BigInt(expirationIntervalDays) * 86400n;
 
-    const dateBeyondRange = lastAvailableDate + deliveryIntervalSeconds;
+    const dateBeyondRange = lastAvailableDate + expirationIntervalSeconds;
 
     await viem.assertions.revertWithCustomError(
       futures.write.createOrder([price, dateBeyondRange, 1], { account: seller.account }),
       futures,
-      "DeliveryDateNotAvailable",
+      "ExpirationDateNotAvailable",
     );
   });
 
-  it("should accept valid delivery dates from getDeliveryDates", async () => {
+  it("should accept valid expiration dates from getExpirationDates", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, pc } = accounts;
@@ -104,7 +104,7 @@ describe("Order Creation", () => {
       });
 
       assert.ok(events.length > 0);
-      assert.equal(events[0].args.deliveryAt, deliveryDate);
+      assert.equal(events[0].args.expirationAt, deliveryDate);
     }
   });
 
@@ -136,7 +136,7 @@ describe("Order Creation", () => {
     assert.notEqual(event.args.orderId, undefined);
     assert.equal(getAddress(event.args.participant), getAddress(seller.account.address));
     assert.equal(event.args.price, price);
-    assert.equal(event.args.deliveryAt, deliveryDate);
+    assert.equal(event.args.expirationAt, deliveryDate);
     assert.equal(event.args.quantity, BigInt(qty));
 
     const order = await futures.read.getOrder([event.args.orderId]);
@@ -171,7 +171,7 @@ describe("Order Creation", () => {
     assert.notEqual(event.args.orderId, undefined);
     assert.equal(getAddress(event.args.participant), getAddress(seller.account.address));
     assert.equal(event.args.price, price);
-    assert.equal(event.args.deliveryAt, BigInt(deliveryDate));
+    assert.equal(event.args.expirationAt, BigInt(deliveryDate));
     assert.equal(event.args.quantity, BigInt(qty));
 
     const order = await futures.read.getOrder([event.args.orderId]);
@@ -247,7 +247,7 @@ describe("Order Creation", () => {
     );
   });
 
-  it("should reject order creation with past delivery date", async () => {
+  it("should reject order creation with past expiration date", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller, pc } = accounts;
@@ -259,7 +259,7 @@ describe("Order Creation", () => {
     await viem.assertions.revertWithCustomError(
       futures.write.createOrder([price, pastDate, 1], { account: seller.account }),
       futures,
-      "DeliveryDateShouldBeInTheFuture",
+      "ExpirationDateShouldBeInTheFuture",
     );
   });
 
@@ -290,7 +290,7 @@ describe("Order Creation", () => {
     assert.notEqual(event.args.orderId, undefined);
     assert.equal(getAddress(event.args.participant), getAddress(seller.account.address));
     assert.equal(event.args.price, price);
-    assert.equal(event.args.deliveryAt, deliveryDate);
+    assert.equal(event.args.expirationAt, deliveryDate);
     assert.equal(event.args.quantity, 1n);
   });
 
@@ -323,7 +323,7 @@ describe("Order Creation", () => {
     assert.notEqual(event.args.orderId, undefined);
     assert.equal(getAddress(event.args.participant), getAddress(seller.account.address));
     assert.equal(event.args.price, price);
-    assert.equal(event.args.deliveryAt, deliveryDate);
+    assert.equal(event.args.expirationAt, deliveryDate);
     assert.equal(event.args.quantity, -1n);
   });
 
@@ -450,7 +450,7 @@ describe("Order Creation", () => {
     assert.equal(getAddress(remainingOrder.participant), getAddress(seller.account.address));
     assert.equal(remainingOrder.quantity, 2n);
     assert.equal(remainingOrder.price, price);
-    assert.equal(remainingOrder.deliveryAt, deliveryDate);
+    assert.equal(remainingOrder.expirationAt, deliveryDate);
   });
 
   it("should remove existing orders when creating an opposite order even if margin balance is insufficient", async () => {
@@ -500,7 +500,7 @@ describe("Order Creation", () => {
 
     let oldOrder = await futures.read.getOrder([oldOrderId]);
     assert.equal(getAddress(oldOrder.participant), getAddress(seller.account.address));
-    assert.equal(oldOrder.deliveryAt, oldDeliveryDate);
+    assert.equal(oldOrder.expirationAt, oldDeliveryDate);
 
     await warpPastDeliveryWithFreshOracle(
       tc,
@@ -508,7 +508,7 @@ describe("Order Creation", () => {
       oldDeliveryDate,
       BigInt(config.expirationIntervalSeconds),
     );
-    const futureDates = await futures.read.getDeliveryDates();
+    const futureDates = await futures.read.getExpirationDates();
     const newDeliveryDate = futureDates[futureDates.length - 1];
 
     const newOrderTxHash = await futures.write.createOrder([price, newDeliveryDate, 1], {
@@ -533,7 +533,7 @@ describe("Order Creation", () => {
       eventName: "OrderCreated",
     });
     assert.equal(newOrderEvents.length, 1);
-    assert.equal(newOrderEvents[0].args.deliveryAt, newDeliveryDate);
+    assert.equal(newOrderEvents[0].args.expirationAt, newDeliveryDate);
 
     const sellerOrders = await futures.read.getUserOrders([seller.account.address]);
     assert.equal(sellerOrders.length, 2, "stale order is still resting next to the new one");

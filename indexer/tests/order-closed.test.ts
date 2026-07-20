@@ -35,7 +35,7 @@ function createOrderCreatedEvent(
     paramAddr("participant", participant),
     paramUint("price", PRICE),
     paramInt("quantity", quantity),
-    paramUint("deliveryAt", DELIVERY),
+    paramUint("expirationAt", DELIVERY),
   ]);
 }
 
@@ -96,7 +96,7 @@ describe("handleOrderCancelled", () => {
     assert.entityCount("Order", 0);
   });
 
-  test("OrderCancelled after deliveryAt marks OrderEntry EXPIRED", () => {
+  test("OrderCancelled after expirationAt marks OrderEntry EXPIRED", () => {
     const user = userAddress(1);
     const oid = bytes32Id(1);
     handleOrderCreated(createOrderCreatedEvent(oid, user, BigInt.fromI32(1)));

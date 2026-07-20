@@ -164,8 +164,8 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const { notifications: liquidationNotifications, dismiss: dismissLiquidation } =
     useLiquidationNotifications(address);
 
-  // Active delivery date selected in the order book (used for futures entry price line)
-  const [selectedDeliveryDate, setSelectedDeliveryDate] = useState<number | undefined>();
+  // Active expiration date selected in the order book (used for futures entry price line)
+  const [selectedExpirationAt, setSelectedExpirationAt] = useState<number | undefined>();
 
   // Resolve the points hook address and its weighting params (WEIGHT_SCALE,
   // wTaker, wMaker) on initial load so they're warm in cache for the place-order
@@ -195,9 +195,9 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       if (!openSession) return null;
       return Number(openSession.entryPrice) / PAYMENT_TOKEN_SCALE_NUM;
     } else {
-      if (!address || !positionBookData?.data?.positions || !selectedDeliveryDate) return null;
+      if (!address || !positionBookData?.data?.positions || !selectedExpirationAt) return null;
       const activePositions = positionBookData.data.positions
-        .filter((p) => p.isActive && !p.closedAt && p.deliveryAt === String(selectedDeliveryDate))
+        .filter((p) => p.isActive && !p.closedAt && p.expirationAt === String(selectedExpirationAt))
         .sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
       if (activePositions.length === 0) return null;
       const position = activePositions[0];
@@ -205,7 +205,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       const entryPrice = isLong ? position.buyPricePerDay : position.sellPricePerDay;
       return Number(entryPrice) / PAYMENT_TOKEN_SCALE_NUM;
     }
-  }, [contractMode, positionSessionsQuery.data?.positionSessions, positionBookData?.data?.positions, address, selectedDeliveryDate]);
+  }, [contractMode, positionSessionsQuery.data?.positionSessions, positionBookData?.data?.positions, address, selectedExpirationAt]);
 
   const openPositionLiquidationPrice = useMemo(() => {
     if (contractMode !== "perpetual") return null;
@@ -313,14 +313,14 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   );
 
   const proceedWithClosePosition = useCallback(
-    (price: string, amount: number, isBuy: boolean, deliveryAt?: number) => {
+    (price: string, amount: number, isBuy: boolean, expirationAt?: number) => {
       setSelectedPrice(price);
       setSelectedAmount(amount);
       setSelectedIsBuy(isBuy);
-      // Snap the order book (and PlaceOrderWidget's externalDeliveryDate) to the
+      // Snap the order book (and PlaceOrderWidget's externalExpirationAt) to the
       // closing position's expiry so the prefilled order targets the correct book.
-      if (deliveryAt && contractMode === "futures") {
-        setSelectedDeliveryDate(deliveryAt);
+      if (expirationAt && contractMode === "futures") {
+        setSelectedExpirationAt(expirationAt);
       }
       setHighlightMode("buttons");
       setHighlightTrigger((prev) => prev + 1);
@@ -337,8 +337,8 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     setHighlightTrigger((prev) => prev + 1);
   };
 
-  const handleDeliveryDateChange = (deliveryDate: number | undefined) => {
-    setSelectedDeliveryDate(deliveryDate);
+  const handleExpirationAtChange = (expirationAt: number | undefined) => {
+    setSelectedExpirationAt(expirationAt);
   };
 
   const currentPriceFormatted = marketPrice ? (Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2) : null;
@@ -355,7 +355,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
           currentPrice={currentPriceFormatted}
           fundingRate={fundingRateQuery.data?.formattedRate ?? "0%"}
           totalVolume={perpsCollectionQuery.data?.data?.totalVolume}
-          selectedDeliveryDate={selectedDeliveryDate}
+          selectedExpirationAt={selectedExpirationAt}
         />
       </TradingHeaderArea>
 
@@ -394,11 +394,11 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       <OrderBookArea>
         <OrderBookTable
           onRowClick={handleOrderBookClick}
-          onDeliveryDateChange={handleDeliveryDateChange}
+          onExpirationAtChange={handleExpirationAtChange}
           contractSpecsQuery={contractSpecsQuery}
           previousOrderBookStateRef={previousOrderBookStateRef}
           contractMode={contractMode}
-          targetDeliveryDate={selectedDeliveryDate}
+          targetExpirationAt={selectedExpirationAt}
         />
       </OrderBookArea>
 
@@ -416,7 +416,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
         <PlaceOrderWidget
           externalPrice={selectedPrice}
           externalAmount={selectedAmount}
-          externalDeliveryDate={selectedDeliveryDate}
+          externalExpirationAt={selectedExpirationAt}
           externalIsBuy={selectedIsBuy}
           highlightTrigger={highlightTrigger}
           contractSpecsQuery={contractSpecsQuery}

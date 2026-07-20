@@ -23,7 +23,7 @@ This subgraph indexes the Futures contract and HashrateOracle contract to track 
   - `id`: Position ID (bytes32)
   - `participant`: Participant who created the position
   - `price`: Position price
-  - `deliveryDate`: Delivery date for the position
+  - `deliveryDate`: Expiration date for the position
   - `isBuy`: Whether this is a buy (long) or sell (short) position
   - `timestamp`: When the position was created
   - `isActive`: Whether the position is still active

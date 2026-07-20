@@ -19,11 +19,11 @@ async function totalContractBalance(contracts: FuturesFixture["contracts"]) {
 async function reachMaturityWithMovedMark(
   contracts: FuturesFixture["contracts"],
   tc: FuturesFixture["accounts"]["tc"],
-  deliveryAt: bigint,
+  expirationAt: bigint,
 ) {
   await scaleHashprice(contracts.hashrateOracle, 12n, 10n);
-  await refreshHashprice(contracts.hashrateOracle, deliveryAt);
-  await tc.setNextBlockTimestamp({ timestamp: deliveryAt });
+  await refreshHashprice(contracts.hashrateOracle, expirationAt);
+  await tc.setNextBlockTimestamp({ timestamp: expirationAt });
 }
 
 describe("Futures - Offset & Cash Settlement", () => {

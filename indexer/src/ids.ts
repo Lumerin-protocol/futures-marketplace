@@ -26,14 +26,14 @@ export function createEventId(txHash: Bytes, logIndex: BigInt): Bytes {
   return txHash.concatI32(logIndex.toI32());
 }
 
-/// PriceLevel id: "{deliveryAt}-{price}-{bid|ask}".
+/// PriceLevel id: "{expirationAt}-{price}-{bid|ask}".
 export function priceLevelId(
-  deliveryAt: BigInt,
+  expirationAt: BigInt,
   price: BigInt,
   isBid: boolean
 ): string {
   return (
-    deliveryAt.toString() +
+    expirationAt.toString() +
     "-" +
     price.toString() +
     "-" +
@@ -49,33 +49,33 @@ function bigIntToFixed32(value: BigInt): Bytes {
 }
 
 /// FuturesExpiration id: 32-byte big-endian encoding of the expiration timestamp
-/// (`deliveryAt`). One entity per expiration, keyed solely by the timestamp so that
-/// any entity carrying a `deliveryAt` can resolve its expiration via the same key.
-export function futuresExpirationId(deliveryAt: BigInt): Bytes {
-  return bigIntToFixed32(deliveryAt);
+/// (`expirationAt`). One entity per expiration, keyed solely by the timestamp so that
+/// any entity carrying a `expirationAt` can resolve its expiration via the same key.
+export function futuresExpirationId(expirationAt: BigInt): Bytes {
+  return bigIntToFixed32(expirationAt);
 }
 
-/// (user, deliveryAt) pointer key: 20-byte address ++ 32-byte deliveryAt (full BigInt range).
+/// (user, expirationAt) pointer key: 20-byte address ++ 32-byte expirationAt (full BigInt range).
 export function userDeliveryPointerId(
   user: Address,
-  deliveryAt: BigInt
+  expirationAt: BigInt
 ): Bytes {
-  return changetype<Bytes>(user).concat(bigIntToFixed32(deliveryAt));
+  return changetype<Bytes>(user).concat(bigIntToFixed32(expirationAt));
 }
 
-/// Order aggregate id: tx hash ++ user ++ price (32B) ++ deliveryAt (32B) ++ side (1B).
+/// Order aggregate id: tx hash ++ user ++ price (32B) ++ expirationAt (32B) ++ side (1B).
 export function orderAggregateId(
   txHash: Bytes,
   user: Address,
   price: BigInt,
-  deliveryAt: BigInt,
+  expirationAt: BigInt,
   isBuy: boolean
 ): Bytes {
   const sideByte = Bytes.fromHexString(isBuy ? "0x01" : "0x00") as Bytes;
   return txHash
     .concat(changetype<Bytes>(user))
     .concat(bigIntToFixed32(price))
-    .concat(bigIntToFixed32(deliveryAt))
+    .concat(bigIntToFixed32(expirationAt))
     .concat(sideByte);
 }
 

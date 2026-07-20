@@ -9,7 +9,7 @@ import { scaleHashprice } from "./utils.ts";
 const { viem, networkHelpers } = await network.getOrCreate();
 
 /**
- * `liquidatePositions(user, deliveryAts[], closeQtys[])` — batched close-to-IM liquidation.
+ * `liquidatePositions(user, expirationAts[], closeQtys[])` — batched close-to-IM liquidation.
  *
  * The contract does NOT recompute margin per lot: it closes the keeper-supplied
  * quantities at each expiry (skipping zero-net / zero-qty entries), then reads
@@ -92,7 +92,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
     const { futures } = contracts;
     const { buyer, buyer2 } = accounts;
 
-    const dates = await futures.read.getActiveDeliveryDates([buyer.account.address]);
+    const dates = await futures.read.getActiveExpirationDates([buyer.account.address]);
     assert.ok(dates.length > 0);
 
     // No crash — buyer remains healthy, so the batch entry point rejects.
@@ -168,7 +168,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
     await data.makeUnderwater();
 
     // Interleave an expiry where buyer has no position with a valid close at
-    // their active delivery date. The batch must skip the first and close 2.
+    // their active expiration date. The batch must skip the first and close 2.
     const unknownDate = config.deliveryDates[1];
     const closeQty = 2n;
 
@@ -248,7 +248,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
       { account: buyer2.account },
     );
 
-    const after = await futures.read.getActiveDeliveryDates([buyer.account.address]);
+    const after = await futures.read.getActiveExpirationDates([buyer.account.address]);
     assert.equal(after.length, 0, "buyer's aggregate at deliveryDate should be fully closed");
   });
 
@@ -283,7 +283,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
     );
     const receipt = await pc.waitForTransactionReceipt({ hash: tx });
 
-    const idsAfter = await futures.read.getActiveDeliveryDates([buyer.account.address]);
+    const idsAfter = await futures.read.getActiveExpirationDates([buyer.account.address]);
     assert.equal(idsAfter.length, 0, "buyer fully closed");
 
     const badDebt = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "BadDebt" });

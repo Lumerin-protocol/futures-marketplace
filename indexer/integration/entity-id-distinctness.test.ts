@@ -10,10 +10,10 @@
  *
  * Coverage:
  *   - `PositionSession.id` rotates across open → close → re-open on the same
- *     `(user, deliveryAt)` pair (ID format: blockNumber + logIndex + side).
+ *     `(user, expirationAt)` pair (ID format: blockNumber + logIndex + side).
  *   - `Trade.id` is per-tx (`tx hash + user + sessionId`): two separate trade
  *     txs by one user → two distinct `Trade` entities.
- *   - `Order.id` is per-tx (`tx hash + user + price + deliveryAt + side`):
+ *   - `Order.id` is per-tx (`tx hash + user + price + expirationAt + side`):
  *     identical-shape orders in two different txs → two distinct `Order`
  *     aggregates.
  */
@@ -28,7 +28,7 @@ import { assertBlockNumberMonotonic, pointerId } from "./helpers.ts";
 
 const conn = await network.getOrCreate();
 
-describe("PositionSession ID rotation: close → re-open on same (user, deliveryAt)", () => {
+describe("PositionSession ID rotation: close → re-open on same (user, expirationAt)", () => {
   after(() => conn.matchstick.reset());
 
   it("creates two distinct PositionSession entities, one CLOSE then one OPEN", async () => {
@@ -59,7 +59,7 @@ describe("PositionSession ID rotation: close → re-open on same (user, delivery
     await futures.write.createOrder([price, deliveryDate, 1n], { account: seller.account });
     await futures.write.createOrder([price, deliveryDate, -1n], { account: buyer.account });
 
-    // 3. Re-open on the same (user, deliveryAt) — must produce a NEW
+    // 3. Re-open on the same (user, expirationAt) — must produce a NEW
     // PositionSession with a distinct ID (different blockNumber + logIndex).
     await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
     const openTx2 = await futures.write.createOrder([price, deliveryDate, 1n], {
@@ -200,7 +200,7 @@ describe("Trade.id is per-tx: two trade txs by one user", () => {
 describe("Order.id is per-tx: identical-shape orders in different txs", () => {
   after(() => conn.matchstick.reset());
 
-  it("creates two distinct Order aggregates even with identical (user, price, deliveryAt, side)", async () => {
+  it("creates two distinct Order aggregates even with identical (user, price, expirationAt, side)", async () => {
     const { contracts, accounts, config } =
       await conn.networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;

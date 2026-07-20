@@ -102,12 +102,12 @@ describe("Futures: full config + address surface populated by loadFuturesFromCon
     assert.equal(String(entity.contractSizeHpsDay), "1000000000000000");
     assert.equal(String(entity.expirationIntervalDays), config.expirationIntervalDays.toString());
     assert.equal(
-      String(entity.futureDeliveryDatesCount),
-      config.futureDeliveryDatesCount.toString(),
+      String(entity.futureExpirationDatesCount),
+      config.futureExpirationDatesCount.toString(),
     );
     assert.equal(
-      String(entity.firstFutureDeliveryDate),
-      config.firstFutureDeliveryDate.toString(),
+      String(entity.firstFutureExpirationDate),
+      config.firstFutureExpirationDate.toString(),
     );
     assert.equal(
       String(entity.collectedFeesBalance),

@@ -10,7 +10,7 @@ interface ClosePositionData {
   price: string;
   amount: number;
   isBuy: boolean;
-  deliveryAt?: number;
+  expirationAt?: number;
 }
 
 interface ClosePositionModalProps {
@@ -24,23 +24,23 @@ interface ClosePositionModalProps {
 
 // Hook to manage close position modal state and localStorage
 export const useClosePositionModal = (
-  onProceedWithClose: (price: string, amount: number, isBuy: boolean, deliveryAt?: number) => void,
+  onProceedWithClose: (price: string, amount: number, isBuy: boolean, expirationAt?: number) => void,
 ) => {
   const [showModal, setShowModal] = useState(false);
   const [doNotShowAgain, setDoNotShowAgain] = useState(false);
   const [pendingClosePosition, setPendingClosePosition] = useState<ClosePositionData | null>(null);
 
   const handleClosePosition = useCallback(
-    (price: string, amount: number, isBuy: boolean, deliveryAt?: number) => {
+    (price: string, amount: number, isBuy: boolean, expirationAt?: number) => {
       // Check if user has dismissed the modal before
       const isDismissed = localStorage.getItem(CLOSE_POSITION_MODAL_KEY) === "true";
 
       if (isDismissed) {
         // Skip modal, proceed directly with highlighting
-        onProceedWithClose(price, amount, isBuy, deliveryAt);
+        onProceedWithClose(price, amount, isBuy, expirationAt);
       } else {
         // Store pending data and show modal
-        setPendingClosePosition({ price, amount, isBuy, deliveryAt });
+        setPendingClosePosition({ price, amount, isBuy, expirationAt });
         setShowModal(true);
       }
     },
@@ -62,7 +62,7 @@ export const useClosePositionModal = (
         pendingClosePosition.price,
         pendingClosePosition.amount,
         pendingClosePosition.isBuy,
-        pendingClosePosition.deliveryAt,
+        pendingClosePosition.expirationAt,
       );
       setPendingClosePosition(null);
     }

@@ -7,7 +7,7 @@ import { quantizePrice, refreshHashprice, scaleHashprice } from "./utils.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
-/** Open a matched long for buyer / short for seller at ~$100 on the first delivery date. */
+/** Open a matched long for buyer / short for seller at ~$100 on the first expiration date. */
 async function openPosition() {
   const data = await networkHelpers.loadFixture(deployFuturesFixture);
   const { contracts, accounts, config } = data;
@@ -38,11 +38,11 @@ async function openPosition() {
 async function reachMaturityWithMovedMark(
   contracts: FuturesFixture["contracts"],
   tc: FuturesFixture["accounts"]["tc"],
-  deliveryAt: bigint,
+  expirationAt: bigint,
 ) {
   await scaleHashprice(contracts.hashrateOracle, 12n, 10n);
-  await refreshHashprice(contracts.hashrateOracle, deliveryAt);
-  await tc.setNextBlockTimestamp({ timestamp: deliveryAt });
+  await refreshHashprice(contracts.hashrateOracle, expirationAt);
+  await tc.setNextBlockTimestamp({ timestamp: expirationAt });
 }
 
 describe("Futures settlePosition", () => {
@@ -68,7 +68,7 @@ describe("Futures settlePosition", () => {
     });
 
     assert.equal(getAddress(buyerSettled.args.user), getAddress(buyer.account.address));
-    assert.equal(buyerSettled.args.deliveryAt, deliveryDate);
+    assert.equal(buyerSettled.args.expirationAt, deliveryDate);
     assert.equal(buyerSettled.args.closedQuantity, 1n);
     assert.equal(getAddress(buyerSettled.args.settledBy), getAddress(buyer2.account.address));
     assert.notEqual(buyerSettled.args.pnl, 0n);
@@ -96,21 +96,21 @@ describe("Futures settlePosition", () => {
     await viem.assertions.revertWithCustomError(
       futures.write.settlePosition([buyer.account.address, deliveryDate], { account: buyer.account }),
       futures,
-      "PositionDeliveryNotStartedYet",
+      "PositionExpirationNotStartedYet",
     );
   });
 
-  it("reverts when user has no position at deliveryAt", async () => {
+  it("reverts when user has no position at expirationAt", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { buyer, tc } = accounts;
-    const deliveryAt = config.deliveryDates[0];
+    const expirationAt = config.deliveryDates[0];
 
-    await refreshHashprice(contracts.hashrateOracle, deliveryAt);
-    await tc.setNextBlockTimestamp({ timestamp: deliveryAt });
+    await refreshHashprice(contracts.hashrateOracle, expirationAt);
+    await tc.setNextBlockTimestamp({ timestamp: expirationAt });
 
     await viem.assertions.revertWithCustomError(
-      futures.write.settlePosition([buyer.account.address, deliveryAt], {
+      futures.write.settlePosition([buyer.account.address, expirationAt], {
         account: buyer.account,
       }),
       futures,

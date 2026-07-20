@@ -41,7 +41,7 @@ import {
 
 interface Props {
   price: bigint;
-  deliveryDate: bigint;
+  expirationAt: bigint;
   quantity: number; // Positive for Buy, Negative for Sell
   participantData?: Participant | null;
   latestPrice: bigint | null;
@@ -56,7 +56,7 @@ interface Props {
 
 export const PlaceOrderForm: FC<Props> = ({
   price,
-  deliveryDate,
+  expirationAt,
   quantity,
   participantData,
   latestPrice,
@@ -145,12 +145,12 @@ export const PlaceOrderForm: FC<Props> = ({
     leverage,
   ]);
 
-  // Check for conflicting orders (opposite action, same price, same delivery date)
+  // Check for conflicting orders (opposite action, same price, same expiration date)
   const hasConflictingOrder = () => {
     if (!participantData?.orders) return false;
 
     const priceInWei = price;
-    const deliveryDateValue = deliveryDate;
+    const expirationAtValue = expirationAt;
     const oppositeIsBuy = !isBuy;
 
     return participantData.orders.some(
@@ -158,7 +158,7 @@ export const PlaceOrderForm: FC<Props> = ({
         order.isActive &&
         order.isBuy === oppositeIsBuy &&
         order.pricePerDay === priceInWei &&
-        order.deliveryAt === deliveryDateValue,
+        order.expirationAt === expirationAtValue,
     );
   };
 
@@ -191,7 +191,7 @@ export const PlaceOrderForm: FC<Props> = ({
                 <div className="flex justify-between">
                   <span className="text-gray-300">Delivery Date:</span>
                   <span className="text-white">
-                    {new Date(Number(deliveryDate) * 1000).toLocaleString()}
+                    {new Date(Number(expirationAt) * 1000).toLocaleString()}
                   </span>
                 </div>
               )}
@@ -285,7 +285,7 @@ export const PlaceOrderForm: FC<Props> = ({
               throw new Error(
                 `Cannot create ${
                   isBuy ? "Bid" : "Ask"
-                } order at price ${priceInUSDC} USDC. You already have an active ${oppositeAction} order at the same price and delivery date. Please close or modify the existing order first.`,
+                } order at price ${priceInUSDC} USDC. You already have an active ${oppositeAction} order at the same price and expiration date. Please close or modify the existing order first.`,
               );
             }
 
@@ -299,7 +299,7 @@ export const PlaceOrderForm: FC<Props> = ({
             } else {
               txhash = await (createOrderAsync as any)({
                 price,
-                deliveryDate,
+                expirationAt,
                 quantity,
               });
             }
@@ -314,7 +314,7 @@ export const PlaceOrderForm: FC<Props> = ({
               receipt.blockNumber,
               qc,
               contractMode,
-              Number(deliveryDate),
+              Number(expirationAt),
             );
 
             // Invalidate queries based on contract mode

@@ -6,13 +6,13 @@ import { AggregateOrderBookQuery } from "./graphql-queries";
 export const AGGREGATE_ORDER_BOOK_QK = "AggregateOrderBook";
 
 export const useAggregateOrderBook = (
-  deliveryDate: number | undefined,
+  expirationAt: number | undefined,
   props?: { refetch?: boolean; interval?: number },
 ) => {
   const query = useQuery({
-    queryKey: [AGGREGATE_ORDER_BOOK_QK, deliveryDate],
-    queryFn: () => fetchAggregateOrderBookAsync(deliveryDate),
-    enabled: !!deliveryDate,
+    queryKey: [AGGREGATE_ORDER_BOOK_QK, expirationAt],
+    queryFn: () => fetchAggregateOrderBookAsync(expirationAt),
+    enabled: !!expirationAt,
     refetchInterval: props?.interval ?? 10000,
     refetchIntervalInBackground: true,
   });
@@ -24,14 +24,14 @@ const PAGE_SIZE = 100;
 
 const EMPTY_RESULT = { data: { priceLevels: [] } as AggregateOrderBook, blockNumber: 0 };
 
-const fetchAggregateOrderBookAsync = async (deliveryDate: number | undefined) => {
+const fetchAggregateOrderBookAsync = async (expirationAt: number | undefined) => {
   // Defensive guard: TanStack Query's `invalidateQueries({ queryKey: [AGGREGATE_ORDER_BOOK_QK] })`
   // (used in PlaceOrderForm / CloseOrderForm / ModifyOrderForm post-confirmation hooks)
   // refetches active observers even when `enabled: false`, so we may be entered with no
-  // delivery date selected (e.g. before `useGetDeliveryDates()` resolves). The indexer's
-  // `priceLevels` collection is keyed by `(deliveryAt, price, side)` and `$deliveryAt`
+  // expiration date selected (e.g. before `useGetExpirationDates()` resolves). The indexer's
+  // `priceLevels` collection is keyed by `(expirationAt, price, side)` and `$expirationAt`
   // is non-nullable, so sending `undefined` produces a hard GraphQL error.
-  if (deliveryDate === undefined) return EMPTY_RESULT;
+  if (expirationAt === undefined) return EMPTY_RESULT;
 
   const priceLevels: AggregatePriceLevel[] = [];
   let lastId = "";
@@ -39,7 +39,7 @@ const fetchAggregateOrderBookAsync = async (deliveryDate: number | undefined) =>
 
   while (true) {
     const response = await graphqlRequest<AggregateOrderBookResponse>(AggregateOrderBookQuery, {
-      deliveryAt: deliveryDate,
+      expirationAt: expirationAt,
       first: PAGE_SIZE,
       lastId,
     });
@@ -51,7 +51,7 @@ const fetchAggregateOrderBookAsync = async (deliveryDate: number | undefined) =>
         id: level.id,
         price: BigInt(level.price),
         isBid: level.isBid,
-        deliveryAt: BigInt(level.deliveryAt),
+        expirationAt: BigInt(level.expirationAt),
         totalQuantity: level.totalQuantity,
       });
     }
@@ -68,11 +68,11 @@ const fetchAggregateOrderBookAsync = async (deliveryDate: number | undefined) =>
   };
 };
 
-export const waitForAggregateBlockNumber = async (blockNumber: bigint, qc: QueryClient, deliveryDate?: number) => {
-  // Without a delivery date there's no specific aggregate cache slot to poll; the
+export const waitForAggregateBlockNumber = async (blockNumber: bigint, qc: QueryClient, expirationAt?: number) => {
+  // Without a expiration date there's no specific aggregate cache slot to poll; the
   // caller is post-tx but the form never resolved a delivery context (e.g. cancel
   // path on perps). Skip the wait — the matching tx-side invalidator still runs.
-  if (deliveryDate === undefined) return;
+  if (expirationAt === undefined) return;
 
   const delay = 1000;
   const maxAttempts = 30; // 30 attempts with 1s delay = max 30 seconds wait
@@ -81,9 +81,9 @@ export const waitForAggregateBlockNumber = async (blockNumber: bigint, qc: Query
   while (attempts < maxAttempts) {
     await new Promise((resolve) => setTimeout(resolve, delay));
     // Force a fresh fetch of the data
-    await qc.refetchQueries({ queryKey: [AGGREGATE_ORDER_BOOK_QK, deliveryDate] });
+    await qc.refetchQueries({ queryKey: [AGGREGATE_ORDER_BOOK_QK, expirationAt] });
 
-    const data = qc.getQueryData<GetResponse<AggregateOrderBook>>([AGGREGATE_ORDER_BOOK_QK, deliveryDate]);
+    const data = qc.getQueryData<GetResponse<AggregateOrderBook>>([AGGREGATE_ORDER_BOOK_QK, expirationAt]);
     const currentBlock = data?.blockNumber;
 
     if (currentBlock !== undefined && currentBlock >= Number(blockNumber)) {
@@ -103,7 +103,7 @@ export type AggregatePriceLevel = {
   id: string;
   price: bigint;
   isBid: boolean;
-  deliveryAt: bigint;
+  expirationAt: bigint;
   totalQuantity: number;
 };
 
@@ -118,7 +118,7 @@ type AggregateOrderBookResponse = {
     id: string;
     price: string;
     isBid: boolean;
-    deliveryAt: string;
+    expirationAt: string;
     totalQuantity: number;
   }[];
 };
