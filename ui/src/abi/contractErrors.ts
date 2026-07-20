@@ -47,6 +47,11 @@ export const contractErrors = [
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "InvalidTimeInForce",
+    "type": "error"
+  },
+  {
     "inputs": [
       {
         "internalType": "address",
@@ -60,6 +65,11 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "ZeroAmount",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "MaxPriceLevelsReached",
     "type": "error"
   },
   {
@@ -278,6 +288,11 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "NotLiquidatable",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TimeInForceNotFilled",
     "type": "error"
   },
   {

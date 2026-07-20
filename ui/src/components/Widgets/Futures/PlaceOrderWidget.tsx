@@ -56,7 +56,7 @@ import { TimeInForce, type TimeInForceValue } from "../../../types/timeInForce";
 
 const TIF_TOOLTIPS = {
   GTC: "Good Till Cancel — fill what you can now; any remainder rests on the book until filled or cancelled.",
-  IOC: "Immediate or Cancel — fill what you can right now; cancel anything left. Nothing rests on the book.",
+  IOC: "Immediate or Cancel — fill what you can right now; cancel anything left. Reverts if nothing fills.",
   FOK: "Fill or Kill — fill the entire size immediately, or cancel the whole order. No partial fills.",
 } as const;
 
@@ -394,7 +394,7 @@ export const PlaceOrderWidget = ({
     return isNaN(parsed) || parsed <= 0 ? 0 : parsed;
   })();
   const simNeedsLiquidityCheck =
-    orderType === "market" || timeInForce === TimeInForce.FOK;
+    orderType === "market" || timeInForce === TimeInForce.FOK || timeInForce === TimeInForce.IOC;
   const simPerpsQuantity =
     simNeedsLiquidityCheck &&
     contractMode === "perpetual" &&
@@ -494,7 +494,7 @@ export const PlaceOrderWidget = ({
 
   /** Pre-flight liquidity check for market / FOK. Returns false if the user should abort. */
   const checkLiquidity = async (side: "buy" | "sell"): Promise<boolean> => {
-    const needsCheck = orderType === "market" || timeInForce === TimeInForce.FOK;
+    const needsCheck = orderType === "market" || timeInForce === TimeInForce.FOK || timeInForce === TimeInForce.IOC;
     if (!needsCheck) return true;
 
     try {

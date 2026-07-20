@@ -262,11 +262,6 @@ export const contractErrors = [
   },
   {
     "inputs": [],
-    "name": "FillOrKillNotFilled",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "NotImplemented",
     "type": "error"
   },
@@ -293,6 +288,11 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "NotLiquidatable",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TimeInForceNotFilled",
     "type": "error"
   },
   {

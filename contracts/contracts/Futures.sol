@@ -93,7 +93,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private immutable _decimals;
 
     // constants
-    string public constant VERSION = "3.3.0";
+    string public constant VERSION = "3.3.1";
     uint256 public constant ORACLE_UNIT_HPS_DAY = 100 * 1e12;
     uint256 public constant CONTRACT_SIZE_HPS_DAY = 1e15;
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
@@ -130,7 +130,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @notice Order lifetime / fill policy. GTD is not supported.
     enum TimeInForce {
         GTC, // rest unfilled size on the book
-        IOC, // fill what is available now; cancel remainder
+        IOC, // fill what is available now; cancel remainder; revert if nothing fills
         FOK // fill entire size now or revert
     }
 
@@ -236,7 +236,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     error OrderNotExpired();
     error ArrayLengthMismatch();
     error MaxPriceLevelsReached();
-    error FillOrKillNotFilled();
+    /// @notice FOK could not fill entirely, or IOC matched nothing.
+    error TimeInForceNotFilled();
     error InvalidTimeInForce();
 
     /// @param _collateralVault Must use the same underlying ERC20 as initialized against.
@@ -330,7 +331,9 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         uint256 remainingAbs = _abs(remainingQty);
         bool partiallyOrFullyFilled = remainingAbs != _abs(_quantity);
 
-        if (_tif == TimeInForce.FOK && remainingAbs > 0) revert FillOrKillNotFilled();
+        if (_tif == TimeInForce.FOK && remainingAbs > 0) revert TimeInForceNotFilled();
+        // IOC with zero fill is a noop — revert rather than emit a closed empty order.
+        if (_tif == TimeInForce.IOC && !partiallyOrFullyFilled) revert TimeInForceNotFilled();
 
         if (_tif == TimeInForce.GTC) {
             if (partiallyOrFullyFilled) {

@@ -50,31 +50,20 @@ describe("Futures - createOrderV2 time-in-force", () => {
     assert.equal((await futures.read.getUserOrders([buyer.account.address])).length, 0);
   });
 
-  it("IOC with no liquidity emits OrderUpdated(0) and rests nothing", async () => {
+  it("IOC with no liquidity reverts TimeInForceNotFilled", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
-    const { buyer, pc } = accounts;
+    const { buyer } = accounts;
     const dd = config.deliveryDates[0];
     const price = parseUnits("100", 6);
 
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
 
-    const tx = await futures.write.createOrderV2([price, dd, 1, TimeInForce.IOC], {
-      account: buyer.account,
-    });
-    const receipt = await pc.waitForTransactionReceipt({ hash: tx });
-
-    assert.equal(
-      parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "OrderMatched" }).length,
-      0,
+    await viem.assertions.revertWithCustomError(
+      futures.write.createOrderV2([price, dd, 1, TimeInForce.IOC], { account: buyer.account }),
+      futures,
+      "TimeInForceNotFilled",
     );
-    const updated = parseEventLogs({
-      logs: receipt.logs,
-      abi: futures.abi,
-      eventName: "OrderUpdated",
-    });
-    assert.equal(updated.length, 1);
-    assert.equal(updated[0].args.newQuantity, 0n);
     assert.equal((await futures.read.getUserOrders([buyer.account.address])).length, 0);
   });
 
@@ -93,7 +82,7 @@ describe("Futures - createOrderV2 time-in-force", () => {
     await viem.assertions.revertWithCustomError(
       futures.write.createOrderV2([price, dd, 2, TimeInForce.FOK], { account: buyer.account }),
       futures,
-      "FillOrKillNotFilled",
+      "TimeInForceNotFilled",
     );
 
     // Maker ask still resting — FOK reverted with no fills.

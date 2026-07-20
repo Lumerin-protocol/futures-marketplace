@@ -226,8 +226,8 @@ describe("Futures - limit order book", () => {
     assert.equal(avg, (askLo + askHi) / 2n);
   });
 
-  it("VERSION is 3.3.0", async () => {
+  it("VERSION is 3.3.1", async () => {
     const { contracts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    assert.equal(await contracts.futures.read.VERSION(), "3.3.0");
+    assert.equal(await contracts.futures.read.VERSION(), "3.3.1");
   });
 });
