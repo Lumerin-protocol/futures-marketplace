@@ -12,7 +12,7 @@ const { viem, networkHelpers } = await network.getOrCreate();
  *   - getUserOrders(participant)
  *   - getActiveExpirationDates(participant)
  *   - MAX_ORDERS_PER_PARTICIPANT constant
- *   - getBidPrices / getAskPrices / getQuantityAtPrice (per-delivery-date depth)
+ *   - getOrderBookPrices / getQuantityAtPrice (per-expiration depth)
  *
  * Active-price-set maintenance is verified end-to-end by creating, partially
  * cancelling, and fully cancelling orders and asserting the depth views drop
@@ -69,7 +69,7 @@ describe("MM views", () => {
     assert.equal(sellerIds[0], buyerIds[0]);
   });
 
-  it("getBidPrices/getAskPrices include each active price exactly once", async () => {
+  it("getOrderBookPrices includes each active price exactly once", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, buyer } = accounts;
@@ -90,15 +90,21 @@ describe("MM views", () => {
     await refreshHashprice(contracts.hashrateOracle);
     await futures.write.createOrder([bid1, dd, 1], { account: buyer.account });
 
-    const asks = [...(await futures.read.getAskPrices([dd, 50n]))].sort((a, b) => Number(a - b));
-    const bids = [...(await futures.read.getBidPrices([dd, 50n]))].sort((a, b) => Number(a - b));
+    const [bookBids, bookAsks] = await futures.read.getOrderBookPrices([dd, 50n]);
+    const asks = [...bookAsks].sort((a, b) => Number(a - b));
+    const bids = [...bookBids].sort((a, b) => Number(a - b));
     assert.deepEqual(asks, [ask1, ask2]);
     assert.deepEqual(bids, [bid1]);
 
-    // getOrderBookPrices must match the split getters (same expirationAt + depth).
-    const [bookBids, bookAsks] = await futures.read.getOrderBookPrices([dd, 50n]);
-    assert.deepEqual([...bookAsks].sort((a, b) => Number(a - b)), asks);
-    assert.deepEqual([...bookBids].sort((a, b) => Number(a - b)), bids);
+    // Deprecated split getters still mirror getOrderBookPrices.
+    assert.deepEqual(
+      [...(await futures.read.getAskPrices([dd, 50n]))].sort((a, b) => Number(a - b)),
+      asks,
+    );
+    assert.deepEqual(
+      [...(await futures.read.getBidPrices([dd, 50n]))].sort((a, b) => Number(a - b)),
+      bids,
+    );
 
     assert.equal(await futures.read.getQuantityAtPrice([dd, ask1, false]), 2n);
     assert.equal(await futures.read.getQuantityAtPrice([dd, ask2, false]), 1n);
@@ -118,7 +124,7 @@ describe("MM views", () => {
     await refreshHashprice(contracts.hashrateOracle);
     await futures.write.createOrder([price, dd, -1], { account: seller.account });
 
-    let asks = await futures.read.getAskPrices([dd, 50n]);
+    let [, asks] = await futures.read.getOrderBookPrices([dd, 50n]);
     assert.equal(asks.length, 1);
     assert.equal(await futures.read.getQuantityAtPrice([dd, price, false]), 2n);
 
@@ -126,12 +132,12 @@ describe("MM views", () => {
     assert.equal(ids.length, 2);
 
     await futures.write.cancelOrder([ids[0]], { account: seller.account });
-    asks = await futures.read.getAskPrices([dd, 50n]);
+    [, asks] = await futures.read.getOrderBookPrices([dd, 50n]);
     assert.equal(asks.length, 1, "still one level — second order remains");
     assert.equal(await futures.read.getQuantityAtPrice([dd, price, false]), 1n);
 
     await futures.write.cancelOrder([ids[1]], { account: seller.account });
-    asks = await futures.read.getAskPrices([dd, 50n]);
+    [, asks] = await futures.read.getOrderBookPrices([dd, 50n]);
     assert.equal(asks.length, 0, "level removed once queue empties");
     assert.equal(await futures.read.getQuantityAtPrice([dd, price, false]), 0n);
   });
