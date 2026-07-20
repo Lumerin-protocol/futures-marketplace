@@ -48,7 +48,7 @@ describe("Futures singleton counters: stepwise consistency through a trade flow"
     await conn.matchstick.anchor();
 
     // --- Step 1: seller rests an ask (no match). ---
-    const askTx = await futures.write.createOrder([askPrice, deliveryDate, "", -1], {
+    const askTx = await futures.write.createOrder([askPrice, deliveryDate, -1n], {
       account: seller.account,
     });
     const askReceipt = await pc.waitForTransactionReceipt({ hash: askTx });
@@ -67,10 +67,10 @@ describe("Futures singleton counters: stepwise consistency through a trade flow"
     assert.equal(String(f.activeOrders), "1");
     assert.equal(String(f.totalTrades), "0", "no fills yet");
     assert.equal(String(f.totalFills), "0");
-    assert.equal(String(f.totalVolume), "0", "volume only ticks when lots are created");
+    assert.equal(String(f.totalVolume), "0", "volume only ticks when orders are matched");
 
     // --- Step 2: seller cancels — activeOrders back to 0, totalOrders sticky. ---
-    await futures.write.closeOrder([askOrderId], { account: seller.account });
+    await futures.write.cancelOrder([askOrderId], { account: seller.account });
 
     snap = await conn.matchstick.indexSnapshot([read("Futures", "0")]);
     f = snap.entity("Futures", "0");
@@ -79,8 +79,8 @@ describe("Futures singleton counters: stepwise consistency through a trade flow"
     assert.equal(String(f.totalOrders), "1", "totalOrders is monotonic across cancels");
 
     // --- Step 3: matched trade — buyer takes seller's order. ---
-    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
-    await futures.write.createOrder([price, deliveryDate, "dst", 1], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account });
 
     snap = await conn.matchstick.indexSnapshot([read("Futures", "0")]);
     f = snap.entity("Futures", "0");
@@ -95,13 +95,11 @@ describe("Futures singleton counters: stepwise consistency through a trade flow"
     assert.equal(String(f.totalTrades), "2", "one Trade per side");
     assert.equal(String(f.totalFills), "2", "one Fill per side");
 
-    // `Futures.totalVolume` = sum over fills of `pricePerDay * qty`. One matched unit settles
-    // `pricePerDay` of notional (no duration multiplier), so per fill the volume is just the price.
     const expectedVolume = price;
     assert.equal(
       String(f.totalVolume),
       String(expectedVolume),
-      "totalVolume = pricePerDay per matched unit",
+      "totalVolume = price per matched unit",
     );
   });
 });
@@ -129,33 +127,27 @@ describe("User.tradeCount vs User.fillCount: per-tx aggregation semantics", () =
     await conn.matchstick.anchor();
 
     // Two MAKERS rest sell orders at the same price.
-    await futures.write.createOrder([price, deliveryDate, "", -1], { account: buyer.account });
-    await futures.write.createOrder([price, deliveryDate, "", -1], { account: buyer2.account });
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: buyer2.account });
 
     // ONE taker buys qty=2 → matches both makers in a single tx.
-    const takeTx = await futures.write.createOrder([price, deliveryDate, "dst", 2], {
+    const takeTx = await futures.write.createOrder([price, deliveryDate, 2n], {
       account: seller.account,
     });
     const takeReceipt = await pc.waitForTransactionReceipt({ hash: takeTx });
-    const lotCreatedEvents = parseEventLogs({
+    const matchedEvents = parseEventLogs({
       logs: takeReceipt.logs,
       abi: futures.abi,
-      eventName: "LotCreated",
+      eventName: "OrderMatched",
     });
-    assert.equal(lotCreatedEvents.length, 2, "taker must match both makers in one tx");
+    assert.equal(matchedEvents.length, 2, "taker must match both makers in one tx");
 
-    // NOTE: in this fixture `seller` is the account taking the long side
-    // (buyer-style createOrder with qty=+2). The makers `buyer` and `buyer2`
-    // sat on the short side — so the "taker" here ends up as the buyer of
-    // each Lot.
     const takerAddr = seller.account.address.toLowerCase() as `0x${string}`;
 
     const snap = await conn.matchstick.indexSnapshot([read("User", takerAddr)]);
     const takerUser = snap.entity("User", takerAddr);
     assert.ok(takerUser);
 
-    // The taker had no prior activity, so these are the new entries from
-    // this tx alone.
     assert.equal(
       String(takerUser.tradeCount),
       "1",
@@ -167,7 +159,6 @@ describe("User.tradeCount vs User.fillCount: per-tx aggregation semantics", () =
       "taker has one Fill row per distinct counterparty in the same tx",
     );
 
-    // Cross-check by inspecting Fill rows for the taker directly.
     const takerFills = snap
       .saved("Fill")
       .filter((f: EntityFields) => String(f.user).toLowerCase() === takerAddr);
@@ -181,7 +172,6 @@ describe("User.tradeCount vs User.fillCount: per-tx aggregation semantics", () =
       "taker's two Fills must be against distinct counterparties",
     );
 
-    // And exactly one Trade for the taker.
     const takerTrades = snap
       .saved("Trade")
       .filter((t: EntityFields) => String(t.user).toLowerCase() === takerAddr);

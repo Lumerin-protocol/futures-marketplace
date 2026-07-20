@@ -20,10 +20,10 @@ async function positionWithMarginFixture() {
   await collateralVault.write.deposit([margin], { account: seller.account });
   await collateralVault.write.deposit([margin], { account: buyer.account });
 
-  await futures.write.createOrder([entryPricePerDay, deliveryDate, "", -1], {
+  await futures.write.createOrder([entryPricePerDay, deliveryDate, -1], {
     account: seller.account,
   });
-  await futures.write.createOrder([entryPricePerDay, deliveryDate, "", 1], {
+  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1], {
     account: buyer.account,
   });
 
@@ -96,7 +96,7 @@ describe("Futures - portfolio margin (PME)", () => {
     await collateralVault.write.deposit([marketPricePerDay * 10n], { account: buyer.account });
 
     const imBefore = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
-    await futures.write.createOrder([marketPricePerDay, deliveryDate, "", -1], {
+    await futures.write.createOrder([marketPricePerDay, deliveryDate, -1], {
       account: buyer.account,
     });
     const imAfter = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
@@ -112,7 +112,7 @@ describe("Futures - portfolio margin (PME)", () => {
     const futureDeliveryDate = config.deliveryDates[1];
     await collateralVault.write.deposit([marketPricePerDay * 10n], { account: buyer.account });
 
-    const txHash = await futures.write.createOrder([marketPricePerDay, futureDeliveryDate, "", 1], {
+    const txHash = await futures.write.createOrder([marketPricePerDay, futureDeliveryDate, 1], {
       account: buyer.account,
     });
     const receipt = await pc.waitForTransactionReceipt({ hash: txHash });

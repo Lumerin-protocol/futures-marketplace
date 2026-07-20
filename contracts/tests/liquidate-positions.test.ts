@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
-import { getAddress, parseEventLogs, parseUnits, zeroHash } from "viem";
+import { getAddress, parseEventLogs, parseUnits } from "viem";
 import type { NetworkConnection } from "hardhat/types/network";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { scaleHashprice } from "./utils.ts";
@@ -9,22 +9,23 @@ import { scaleHashprice } from "./utils.ts";
 const { viem, networkHelpers } = await network.getOrCreate();
 
 /**
- * `liquidatePositions(participant, ids[])` — batched close-to-IM liquidation.
+ * `liquidatePositions(user, deliveryAts[], closeQtys[])` — batched close-to-IM liquidation.
  *
  * The contract does NOT recompute margin per lot: it closes the keeper-supplied
- * set (skipping stale/foreign ids), then reads margin ONCE at the end and
- * reverts `OverLiquidation` if positions remain AND `balance > IM` (with a real
- * IM > MM buffer). Fully-closed accounts skip that guard (bad-debt path). The
- * keeper is responsible for choosing the worst-first subset off-chain.
+ * quantities at each expiry (skipping zero-net / zero-qty entries), then reads
+ * margin ONCE at the end and reverts `OverLiquidation` if positions remain AND
+ * `balance > IM` (with a real IM > MM buffer). Fully-closed accounts skip that
+ * guard (bad-debt path). The keeper is responsible for choosing the worst-first
+ * subset off-chain.
  *
  * Fixture shape (chosen so behaviour is robust to PME rounding):
  *   - PME shocks IM 20% / MM 10% → a genuine buffer (IM > MM).
- *   - 10 long lots for `buyer`, matched by `seller`.
+ *   - 10 long contracts for `buyer`, matched by `seller`.
  *   - Deposit ≈ 2.2·(entry·10)/10 — clears entry IM (2.0·u) so the
  *     position opens, but a 15% hashprice crash breaks MM (MM_req₀ ≈ 2.35·u).
- *   - After the crash: closing a FEW lots stays at/under IM (no revert),
- *     closing almost ALL lots overshoots IM (OverLiquidation), closing EVERY
- *     lot skips the guard.
+ *   - After the crash: closing a FEW contracts stays at/under IM (no revert),
+ *     closing almost ALL contracts overshoots IM (OverLiquidation), closing EVERY
+ *     contract skips the guard.
  */
 async function partialLiquidationFixture(conn: NetworkConnection) {
   const data = await networkHelpers.loadFixture(deployFuturesFixture);
@@ -47,8 +48,8 @@ async function partialLiquidationFixture(conn: NetworkConnection) {
   const deliveryDate = config.deliveryDates[0];
   const lotCount = 10;
 
-  // u = entry (per-lot notional; one contract settles pricePerDay, no duration
-  // multiplier). Deposit 2.2·u·(lotCount/10) = 2.2·u for 10 lots. See header for
+  // u = entry (per-contract notional; one contract settles pricePerDay, no duration
+  // multiplier). Deposit 2.2·u·(lotCount/10) = 2.2·u for 10 contracts. See header for
   // why this lands underwater-but-partially-recoverable.
   const u = entry;
   const buyerDeposit = (u * 22n) / 10n;
@@ -58,33 +59,25 @@ async function partialLiquidationFixture(conn: NetworkConnection) {
   await collateralVault.write.deposit([bigDeposit], { account: seller.account });
   await collateralVault.write.deposit([bigDeposit], { account: buyer2.account });
 
-  // Open 10 matched long lots for buyer (seller short).
-  await futures.write.createOrder([entry, deliveryDate, "", -lotCount], {
+  // Open 10 matched long contracts for buyer (seller short).
+  await futures.write.createOrder([entry, deliveryDate, -lotCount], {
     account: seller.account,
   });
-  const matchTx = await futures.write.createOrder([entry, deliveryDate, "", lotCount], {
+  const matchTx = await futures.write.createOrder([entry, deliveryDate, lotCount], {
     account: buyer.account,
   });
   await pc.waitForTransactionReceipt({ hash: matchTx });
 
-  // A foreign position (buyer2 long vs seller) — used to prove `liquidatePositions`
-  // skips ids the target participant doesn't own.
-  await futures.write.createOrder([entry, deliveryDate, "", -1], { account: seller.account });
-  const foreignTx = await futures.write.createOrder([entry, deliveryDate, "", 1], {
+  // A foreign position (buyer2 long vs seller) — used to prove partial liquidation
+  // only reduces the target user's aggregate.
+  await futures.write.createOrder([entry, deliveryDate, -1], { account: seller.account });
+  await futures.write.createOrder([entry, deliveryDate, 1], {
     account: buyer2.account,
   });
-  const foreignReceipt = await pc.waitForTransactionReceipt({ hash: foreignTx });
-  const [foreignEvt] = parseEventLogs({
-    logs: foreignReceipt.logs,
-    abi: futures.abi,
-    eventName: "LotCreated",
-  });
-  const foreignPositionId = foreignEvt.args.lotId;
 
   return {
     ...data,
     config: { ...config, entry, deliveryDate, lotCount },
-    foreignPositionId,
     /** 15% hashprice crash — moderate: breaks MM but keeps a recoverable band. */
     async makeUnderwater() {
       await scaleHashprice(contracts.hashrateOracle, 85n, 100n);
@@ -95,18 +88,19 @@ async function partialLiquidationFixture(conn: NetworkConnection) {
 describe("Futures - liquidatePositions (batched close-to-IM)", function () {
   it("reverts NotLiquidatable when the participant is healthy", async function () {
     const data = await networkHelpers.loadFixture(partialLiquidationFixture);
-    const { contracts, accounts } = data;
+    const { contracts, accounts, config } = data;
     const { futures } = contracts;
     const { buyer, buyer2 } = accounts;
 
-    const ids = await futures.read.getPositionIds([buyer.account.address]);
-    assert.ok(ids.length > 0);
+    const dates = await futures.read.getActiveDeliveryDates([buyer.account.address]);
+    assert.ok(dates.length > 0);
 
     // No crash — buyer remains healthy, so the batch entry point rejects.
     await viem.assertions.revertWithCustomError(
-      futures.write.liquidatePositions([buyer.account.address, ids], {
-        account: buyer2.account,
-      }),
+      futures.write.liquidatePositions(
+        [buyer.account.address, [config.deliveryDate], [BigInt(config.lotCount)]],
+        { account: buyer2.account },
+      ),
       futures,
       "NotLiquidatable",
     );
@@ -119,17 +113,17 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
     const { buyer, buyer2 } = accounts;
 
     // A stale far-out-of-market resting buy order that never matches.
-    await futures.write.createOrder([config.entry / 2n, config.deliveryDate, "", 1], {
+    await futures.write.createOrder([config.entry / 2n, config.deliveryDate, 1], {
       account: buyer.account,
     });
 
     await data.makeUnderwater();
 
-    const ids = await futures.read.getPositionIds([buyer.account.address]);
     await viem.assertions.revertWithCustomError(
-      futures.write.liquidatePositions([buyer.account.address, ids], {
-        account: buyer2.account,
-      }),
+      futures.write.liquidatePositions(
+        [buyer.account.address, [config.deliveryDate], [BigInt(config.lotCount)]],
+        { account: buyer2.account },
+      ),
       futures,
       "OrdersStillOpen",
     );
@@ -137,75 +131,79 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
 
   it("closes the supplied subset in one call and pays no over-liquidation", async function () {
     const data = await networkHelpers.loadFixture(partialLiquidationFixture);
-    const { contracts, accounts } = data;
+    const { contracts, accounts, config } = data;
     const { futures } = contracts;
     const { buyer, buyer2, pc } = accounts;
 
     await data.makeUnderwater();
 
-    const idsBefore = await futures.read.getPositionIds([buyer.account.address]);
-    // Close a small subset (2 lots) — stays at/under IM, so no OverLiquidation.
-    const subset = idsBefore.slice(0, 2);
-
-    const tx = await futures.write.liquidatePositions([buyer.account.address, subset], {
-      account: buyer2.account,
-    });
+    const closeQty = 2n;
+    const tx = await futures.write.liquidatePositions(
+      [buyer.account.address, [config.deliveryDate], [closeQty]],
+      { account: buyer2.account },
+    );
     const receipt = await pc.waitForTransactionReceipt({ hash: tx });
 
-    // Exactly the supplied lots closed; the rest stay open.
-    const idsAfter = await futures.read.getPositionIds([buyer.account.address]);
-    assert.equal(idsAfter.length, idsBefore.length - subset.length);
-    for (const id of subset) {
-      assert.ok(!idsAfter.includes(id), `lot ${id} should be closed`);
-    }
+    const posAfter = await futures.read.getUserPosition([
+      buyer.account.address,
+      config.deliveryDate,
+    ]);
+    assert.equal(posAfter.netQuantity, BigInt(config.lotCount) - closeQty);
 
-    // One LotLiquidated per closed lot, all in this single tx.
     const liquidated = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "LotLiquidated",
+      eventName: "PositionLiquidated",
     });
-    assert.equal(liquidated.length, subset.length);
+    assert.equal(liquidated.length, 1);
+    assert.equal(liquidated[0].args.closedQuantity, closeQty);
   });
 
-  it("skips stale (unknown) and foreign ids but still closes the owned ones", async function () {
+  it("skips zero-net expiries but still closes the owned quantity", async function () {
     const data = await networkHelpers.loadFixture(partialLiquidationFixture);
-    const { contracts, accounts, foreignPositionId } = data;
+    const { contracts, accounts, config } = data;
     const { futures } = contracts;
     const { buyer, buyer2 } = accounts;
 
     await data.makeUnderwater();
 
-    const owned = await futures.read.getPositionIds([buyer.account.address]);
-    // Interleave a non-existent id and a foreign (buyer2-owned) id with two
-    // owned ids. The batch must skip the first two and close the owned pair.
-    const supplied = [owned[0], zeroHash, foreignPositionId, owned[1]] as const;
+    // Interleave an expiry where buyer has no position with a valid close at
+    // their active delivery date. The batch must skip the first and close 2.
+    const unknownDate = config.deliveryDates[1];
+    const closeQty = 2n;
 
-    await futures.write.liquidatePositions([buyer.account.address, supplied], {
-      account: buyer2.account,
-    });
+    await futures.write.liquidatePositions(
+      [buyer.account.address, [unknownDate, config.deliveryDate], [5n, closeQty]],
+      { account: buyer2.account },
+    );
 
-    const after = await futures.read.getPositionIds([buyer.account.address]);
-    assert.equal(after.length, owned.length - 2, "only the two owned ids should close");
-    assert.ok(!after.includes(owned[0]));
-    assert.ok(!after.includes(owned[1]));
-    // The foreign position is untouched.
-    const foreign = await futures.read.getPositionById([foreignPositionId]);
-    assert.notEqual(foreign.seller, "0x0000000000000000000000000000000000000000");
+    const buyerPos = await futures.read.getUserPosition([
+      buyer.account.address,
+      config.deliveryDate,
+    ]);
+    assert.equal(buyerPos.netQuantity, BigInt(config.lotCount) - closeQty);
+
+    // The foreign position (buyer2) is untouched — unilateral liquidation.
+    const foreignPos = await futures.read.getUserPosition([
+      buyer2.account.address,
+      config.deliveryDate,
+    ]);
+    assert.equal(foreignPos.netQuantity, 1n);
   });
 
   it("reverts NotLiquidatable when nothing in the supplied set could be closed", async function () {
     const data = await networkHelpers.loadFixture(partialLiquidationFixture);
-    const { contracts, accounts, foreignPositionId } = data;
+    const { contracts, accounts, config } = data;
     const { futures } = contracts;
     const { buyer, buyer2 } = accounts;
 
     await data.makeUnderwater();
 
-    // Underwater, but every supplied id is stale/foreign → closed == 0.
+    // Underwater, but every supplied expiry has zero net or zero close qty.
+    const unknownDate = config.deliveryDates[1];
     await viem.assertions.revertWithCustomError(
       futures.write.liquidatePositions(
-        [buyer.account.address, [zeroHash, foreignPositionId]],
+        [buyer.account.address, [unknownDate, config.deliveryDates[2]], [1n, 0n]],
         { account: buyer2.account },
       ),
       futures,
@@ -215,125 +213,123 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
 
   it("reverts OverLiquidation when the supplied set closes past the IM buffer", async function () {
     const data = await networkHelpers.loadFixture(partialLiquidationFixture);
-    const { contracts, accounts } = data;
+    const { contracts, accounts, config } = data;
     const { futures } = contracts;
     const { buyer, buyer2 } = accounts;
 
     await data.makeUnderwater();
 
-    const ids = await futures.read.getPositionIds([buyer.account.address]);
     // Close all-but-one — that overshoots IM (balance of the single remaining
-    // lot far exceeds its IM requirement), so the end-of-batch guard reverts.
-    const tooMany = ids.slice(0, ids.length - 1);
+    // contract far exceeds its IM requirement), so the end-of-batch guard reverts.
+    const tooMany = BigInt(config.lotCount) - 1n;
 
     await viem.assertions.revertWithCustomError(
-      futures.write.liquidatePositions([buyer.account.address, tooMany], {
-        account: buyer2.account,
-      }),
+      futures.write.liquidatePositions(
+        [buyer.account.address, [config.deliveryDate], [tooMany]],
+        { account: buyer2.account },
+      ),
       futures,
       "OverLiquidation",
     );
   });
 
-  it("skips the over-liquidation guard on a full close (all lots gone)", async function () {
+  it("skips the over-liquidation guard on a full close (all contracts gone)", async function () {
     const data = await networkHelpers.loadFixture(partialLiquidationFixture);
-    const { contracts, accounts } = data;
+    const { contracts, accounts, config } = data;
     const { futures } = contracts;
     const { buyer, buyer2 } = accounts;
 
     await data.makeUnderwater();
 
-    const ids = await futures.read.getPositionIds([buyer.account.address]);
-    // Closing EVERY lot leaves no positions, so the guard is skipped even
+    // Closing EVERY contract leaves no positions, so the guard is skipped even
     // though the residual balance sits above (a now-zero) IM.
-    await futures.write.liquidatePositions([buyer.account.address, ids], {
-      account: buyer2.account,
-    });
+    await futures.write.liquidatePositions(
+      [buyer.account.address, [config.deliveryDate], [BigInt(config.lotCount)]],
+      { account: buyer2.account },
+    );
 
-    const after = await futures.read.getPositionIds([buyer.account.address]);
-    assert.equal(after.length, 0, "all supplied lots should be closed");
+    const after = await futures.read.getActiveDeliveryDates([buyer.account.address]);
+    assert.equal(after.length, 0, "buyer's aggregate at deliveryDate should be fully closed");
   });
 
-  it("records BadDebt when the loser can't cover; insurance fund makes the winner whole", async function () {
+  it("records BadDebt when the loser can't cover on a full close", async function () {
     const data = await networkHelpers.loadFixture(partialLiquidationFixture);
     const { contracts, accounts, config } = data;
     const { futures, collateralVault, hashrateOracle } = contracts;
     const { seller, buyer, buyer2, pc } = accounts;
 
-    // Deep 99% hashprice crash (vs the fixture's moderate 15%): the long buyer's
-    // realized loss on a full close dwarfs their ~$53 deposit, so their
-    // collateral cannot cover it and the uncovered remainder is absorbed by the
-    // protocol's insurance fund (NOT taken from other users' balances). The
-    // $10,000 insurance fund still comfortably covers the winning seller's
-    // profit (~$238), so every BadDebt event is attributable to the buyer.
+    // Deep 99% hashprice crash: the long buyer's realized loss on a full close
+    // dwarfs their deposit. Uncovered loss is recorded as BadDebt; the buyer's
+    // available collateral is swept to the insurance fund. The seller's short
+    // aggregate stays open — unilateral liquidation does not pay the counterparty.
     await scaleHashprice(hashrateOracle, 1n, 100n);
 
-    // Both legs matched at `config.entry`, so each closed lot's seller PnL is
-    // (entry − mark); the buyer's loss is the exact negative of that.
     const marketAfter = await futures.read.getMarketPrice();
-    const totalSellerPnl = (config.entry - marketAfter) * BigInt(config.lotCount);
+    const buyerPosBefore = await futures.read.getUserPosition([
+      buyer.account.address,
+      config.deliveryDate,
+    ]);
+    const absQty =
+      buyerPosBefore.netQuantity > 0n ? buyerPosBefore.netQuantity : -buyerPosBefore.netQuantity;
 
-    const ids = await futures.read.getPositionIds([buyer.account.address]);
     const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
     const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
     const insuranceAddr = await collateralVault.read.INSURANCE_FUND_ADDR();
     const insuranceBefore = await collateralVault.read.balanceOf([insuranceAddr]);
 
-    // Full close (all lots) → the over-liquidation guard is skipped (bad-debt path).
-    const tx = await futures.write.liquidatePositions([buyer.account.address, ids], {
-      account: buyer2.account,
-    });
+    const tx = await futures.write.liquidatePositions(
+      [buyer.account.address, [config.deliveryDate], [absQty]],
+      { account: buyer2.account },
+    );
     const receipt = await pc.waitForTransactionReceipt({ hash: tx });
 
-    // Buyer is fully flattened.
-    const idsAfter = await futures.read.getPositionIds([buyer.account.address]);
+    const idsAfter = await futures.read.getActiveDeliveryDates([buyer.account.address]);
     assert.equal(idsAfter.length, 0, "buyer fully closed");
 
-    // BadDebt fired, attributed to the insolvent buyer, and the recorded total
-    // equals exactly the loss beyond the buyer's collateral.
     const badDebt = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "BadDebt" });
     assert.ok(badDebt.length >= 1, "expected at least one BadDebt event on the uncovered loss");
     let uncovered = 0n;
     for (const evt of badDebt) {
       assert.equal(
-        getAddress(evt.args.account),
+        getAddress(evt.args.user),
         getAddress(buyer.account.address),
         "BadDebt should be attributed to the insolvent buyer",
       );
       uncovered += evt.args.amount;
     }
-    const expectedShortfall = totalSellerPnl - buyerBalanceBefore;
+    const expectedLoss = buyerPosBefore.netEntryValue - marketAfter * absQty;
+    const expectedShortfall = expectedLoss - buyerBalanceBefore;
     assert.equal(
       uncovered,
       expectedShortfall,
       "BadDebt amount == the portion of the loss the buyer's collateral couldn't cover",
     );
 
-    // The buyer's collateral is drained to zero (never negative).
     const buyerBalanceAfter = await collateralVault.read.balanceOf([buyer.account.address]);
     assert.equal(buyerBalanceAfter, 0n, "buyer collateral fully drained");
 
-    // The winning seller is made whole from the insurance fund.
+    // Seller is not paid until they close their own aggregate.
     const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
-    assert.equal(
-      sellerBalanceAfter - sellerBalanceBefore,
-      totalSellerPnl,
-      "winning seller paid the full profit",
-    );
+    assert.equal(sellerBalanceAfter, sellerBalanceBefore, "seller balance unchanged on buyer liquidation");
 
-    // Net effect on the fund: it received the buyer's available collateral and
-    // paid the seller's full profit → down by exactly the uncovered shortfall.
+    const sellerPos = await futures.read.getUserPosition([
+      seller.account.address,
+      config.deliveryDate,
+    ]);
+    assert.equal(sellerPos.netQuantity, -BigInt(config.lotCount) - 1n, "seller short remains open");
+
+    // Insurance fund absorbs the buyer's available collateral.
     const insuranceAfter = await collateralVault.read.balanceOf([insuranceAddr]);
     assert.equal(
-      insuranceBefore - insuranceAfter,
-      expectedShortfall,
-      "insurance fund absorbed exactly the uncovered shortfall",
+      insuranceAfter - insuranceBefore,
+      buyerBalanceBefore,
+      "insurance fund received the buyer's available collateral",
     );
   });
 
   it("degenerate IM <= MM: no upper-bound revert even when over-closing", async function () {
     const data = await networkHelpers.loadFixture(partialLiquidationFixture);
-    const { contracts, accounts } = data;
+    const { contracts, accounts, config } = data;
     const { futures, portfolioMarginEngine } = contracts;
     const { buyer, buyer2, owner } = accounts;
 
@@ -346,15 +342,18 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
 
     await data.makeUnderwater();
 
-    const ids = await futures.read.getPositionIds([buyer.account.address]);
-    const tooMany = ids.slice(0, ids.length - 1);
+    const tooMany = BigInt(config.lotCount) - 1n;
 
     // Same "close all-but-one" that reverted under IM>MM now succeeds.
-    await futures.write.liquidatePositions([buyer.account.address, tooMany], {
-      account: buyer2.account,
-    });
+    await futures.write.liquidatePositions(
+      [buyer.account.address, [config.deliveryDate], [tooMany]],
+      { account: buyer2.account },
+    );
 
-    const after = await futures.read.getPositionIds([buyer.account.address]);
-    assert.equal(after.length, 1, "one lot remains, no OverLiquidation revert");
+    const posAfter = await futures.read.getUserPosition([
+      buyer.account.address,
+      config.deliveryDate,
+    ]);
+    assert.equal(posAfter.netQuantity, 1n, "one contract remains, no OverLiquidation revert");
   });
 });

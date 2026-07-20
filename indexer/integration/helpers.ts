@@ -55,45 +55,6 @@ export function assertBlockNumberMonotonic(
 }
 
 /**
- * Assert that `Lot` lifecycle timestamps form a non-decreasing chain:
- *   createdAt <= updatedAt
- *   createdAt <= paidAt (if paid)
- *   paidAt <= withdrawnAt (if withdrawn)
- *   createdAt <= closedAt (if closed)
- */
-export function assertLotTimestampInvariants(lot: EntityFields): void {
-  const createdAt = BigInt(String(lot.createdAt));
-  const updatedAt = BigInt(String(lot.updatedAt));
-  assert.ok(
-    updatedAt >= createdAt,
-    `Lot.updatedAt (${updatedAt}) must be >= Lot.createdAt (${createdAt})`,
-  );
-
-  if (lot.paidAt != null && String(lot.paidAt) !== "") {
-    const paidAt = BigInt(String(lot.paidAt));
-    assert.ok(
-      paidAt >= createdAt,
-      `Lot.paidAt (${paidAt}) must be >= Lot.createdAt (${createdAt})`,
-    );
-    if (lot.withdrawnAt != null && String(lot.withdrawnAt) !== "") {
-      const withdrawnAt = BigInt(String(lot.withdrawnAt));
-      assert.ok(
-        withdrawnAt >= paidAt,
-        `Lot.withdrawnAt (${withdrawnAt}) must be >= Lot.paidAt (${paidAt})`,
-      );
-    }
-  }
-
-  if (lot.closedAt != null && String(lot.closedAt) !== "") {
-    const closedAt = BigInt(String(lot.closedAt));
-    assert.ok(
-      closedAt >= createdAt,
-      `Lot.closedAt (${closedAt}) must be >= Lot.createdAt (${createdAt})`,
-    );
-  }
-}
-
-/**
  * Assert that a hex-string field is non-empty and starts with `0x`. Stops
  * tests from accidentally accepting `undefined` or empty strings as a tx
  * hash.

@@ -23,7 +23,7 @@ describe("Fees (maker/taker)", () => {
     const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
     const feesBefore = await futures.read.collectedFeesBalance();
 
-    await futures.write.createOrder([price, deliveryDate, "", 1], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, 1], { account: seller.account });
 
     const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
     const feesAfter = await futures.read.collectedFeesBalance();
@@ -44,13 +44,13 @@ describe("Fees (maker/taker)", () => {
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, -1], { account: seller.account });
 
     const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
     const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
     const feesBefore = await futures.read.collectedFeesBalance();
 
-    await futures.write.createOrder([price, deliveryDate, "", 1], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, 1], { account: buyer.account });
 
     const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
     const buyerBalanceAfter = await collateralVault.read.balanceOf([buyer.account.address]);
@@ -76,13 +76,13 @@ describe("Fees (maker/taker)", () => {
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, -1], { account: seller.account });
 
     const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
     const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
     const feesBefore = await futures.read.collectedFeesBalance();
 
-    await futures.write.createOrder([price, deliveryDate, "", 1], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, 1], { account: buyer.account });
 
     const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
     const buyerBalanceAfter = await collateralVault.read.balanceOf([buyer.account.address]);
@@ -104,12 +104,12 @@ describe("Fees (maker/taker)", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    await futures.write.createOrder([price, deliveryDate, "", 1], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, 1], { account: seller.account });
 
     const sellerBalanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
     const feesBefore = await futures.read.collectedFeesBalance();
 
-    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, -1], { account: seller.account });
 
     const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
     const feesAfter = await futures.read.collectedFeesBalance();
@@ -191,8 +191,8 @@ describe("Fees (maker/taker)", () => {
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
-    await futures.write.createOrder([price, deliveryDate, "", 1], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, -1], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, 1], { account: buyer.account });
 
     const feesAccrued = await futures.read.collectedFeesBalance();
     assert.equal(feesAccrued, config.takerFee); // makerFee=0, takerFee charged once

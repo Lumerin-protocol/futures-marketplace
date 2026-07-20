@@ -3,11 +3,10 @@ import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture, type FuturesFixture } from "./fixtures.ts";
-import { quantizePrice } from "./utils.ts";
-import { refreshHashprice } from "./utils.ts";
+import { quantizePrice, refreshHashprice, scaleHashprice } from "./utils.ts";
+
 const { networkHelpers } = await network.getOrCreate();
 
-// Combined balance: PnL flows through INSURANCE_FUND_ADDR, fees accumulate at futures.address.
 async function totalContractBalance(contracts: FuturesFixture["contracts"]) {
   const { futures, collateralVault } = contracts;
   const insuranceFundAddr = await collateralVault.read.INSURANCE_FUND_ADDR();
@@ -15,6 +14,16 @@ async function totalContractBalance(contracts: FuturesFixture["contracts"]) {
     (await collateralVault.read.balanceOf([futures.address])) +
     (await collateralVault.read.balanceOf([insuranceFundAddr]))
   );
+}
+
+async function reachMaturityWithMovedMark(
+  contracts: FuturesFixture["contracts"],
+  tc: FuturesFixture["accounts"]["tc"],
+  deliveryAt: bigint,
+) {
+  await scaleHashprice(contracts.hashrateOracle, 12n, 10n);
+  await refreshHashprice(contracts.hashrateOracle, deliveryAt);
+  await tc.setNextBlockTimestamp({ timestamp: deliveryAt });
 }
 
 describe("Futures - Offset & Cash Settlement", () => {
@@ -26,7 +35,6 @@ describe("Futures - Offset & Cash Settlement", () => {
 
     const marginAmount = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
-    const dst = "https://destination-url.com";
 
     await collateralVault.write.deposit([marginAmount], { account: seller.account });
     await collateralVault.write.deposit([marginAmount], { account: buyer.account });
@@ -36,63 +44,70 @@ describe("Futures - Offset & Cash Settlement", () => {
     const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
 
     const initialPrice = quantizePrice(parseUnits("100", 6), config.priceLadderStep);
-
-    await futures.write.createOrder([initialPrice, deliveryDate, "", -1], {
-      account: seller.account,
-    });
-
-    await futures.write.createOrder([initialPrice, deliveryDate, dst, 1], {
-      account: buyer.account,
-    });
-
-    // Price changes — Party A (buyer) exits at higher price (120) for profit
     const exitPrice = quantizePrice(parseUnits("120", 6), config.priceLadderStep);
 
-    await futures.write.createOrder([exitPrice, deliveryDate, "", -1], {
-      account: buyer.account,
-    });
+    await futures.write.createOrder([initialPrice, deliveryDate, -1], { account: seller.account });
+    await futures.write.createOrder([initialPrice, deliveryDate, 1], { account: buyer.account });
 
-    // Party C (buyer2) creates buy order at exit price, offsetting buyer and creating
-    // a new position between seller and buyer2.
-    const offsetTxHash = await futures.write.createOrder([exitPrice, deliveryDate, dst, 1], {
+    await futures.write.createOrder([exitPrice, deliveryDate, -1], { account: buyer.account });
+
+    const offsetTxHash = await futures.write.createOrder([exitPrice, deliveryDate, 1], {
       account: buyer2.account,
     });
-
     const offsetReceipt = await pc.waitForTransactionReceipt({ hash: offsetTxHash });
 
-    const positionCreatedEvents = parseEventLogs({
+    const matches = parseEventLogs({
       logs: offsetReceipt.logs,
       abi: futures.abi,
-      eventName: "LotTransferred",
+      eventName: "OrderMatched",
     });
+    assert.equal(matches.length, 1);
 
-    assert.ok(positionCreatedEvents.length > 0);
-    const newPositionId = positionCreatedEvents[0].args.newLotId;
+    assert.equal(
+      (await futures.read.getUserPosition([buyer.account.address, deliveryDate])).netQuantity,
+      0n,
+    );
+    assert.equal(
+      (await futures.read.getUserPosition([seller.account.address, deliveryDate])).netQuantity,
+      -1n,
+    );
+    assert.equal(
+      (await futures.read.getUserPosition([buyer2.account.address, deliveryDate])).netQuantity,
+      1n,
+    );
 
-    // Buyer profits — contract pays out from balance.
     const buyerBalanceAfterOffset = await collateralVault.read.balanceOf([buyer.account.address]);
     const contractBalanceAfterOffset = await totalContractBalance(contracts);
 
     const expectedPnL = exitPrice - initialPrice;
     const takerFee = await futures.read.takerFee();
-    // Under the post-2.9 model only takers pay (makerFee defaults to 0): buyer was taker on
-    // step 2 (entry) and maker on step 4 (exit, via LotTransferred), so only 1× takerFee deducted.
     const expectedBuyerBalanceChange = expectedPnL - takerFee;
     assert.equal(buyerBalanceAfterOffset - buyerBalanceBefore, expectedBuyerBalanceChange);
 
-    // Total fees collected: 2 taker fills (buyer entry, buyer2 entry).
     const totalFees = takerFee * 2n;
     const expectedContractBalanceChange = expectedPnL - totalFees;
     assert.equal(contractBalanceBefore - contractBalanceAfterOffset, expectedContractBalanceChange);
 
-    await refreshHashprice(contracts.hashrateOracle, deliveryDate);
-    await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
+    await reachMaturityWithMovedMark(contracts, tc, deliveryDate);
 
-    // Cash settlement at maturity is permissionless; any address may trigger it.
-    await futures.write.settlePosition([newPositionId], { account: validator.account });
+    await futures.write.settlePosition([seller.account.address, deliveryDate], {
+      account: validator.account,
+    });
+    await futures.write.settlePosition([buyer2.account.address, deliveryDate], {
+      account: validator.account,
+    });
 
     const contractBalanceAfterSettlement = await totalContractBalance(contracts);
     assert.equal(contractBalanceBefore + totalFees, contractBalanceAfterSettlement);
+
+    assert.equal(
+      (await futures.read.getUserPosition([seller.account.address, deliveryDate])).netQuantity,
+      0n,
+    );
+    assert.equal(
+      (await futures.read.getUserPosition([buyer2.account.address, deliveryDate])).netQuantity,
+      0n,
+    );
   });
 
   it("should handle position offset and settlement with contract balance correctly when buyer exits at loss", async () => {
@@ -103,7 +118,6 @@ describe("Futures - Offset & Cash Settlement", () => {
 
     const marginAmount = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
-    const dst = "https://destination-url.com";
 
     await collateralVault.write.deposit([marginAmount], { account: seller.account });
     await collateralVault.write.deposit([marginAmount], { account: buyer.account });
@@ -113,43 +127,43 @@ describe("Futures - Offset & Cash Settlement", () => {
     const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
 
     const initialPrice = quantizePrice(parseUnits("100", 6), config.priceLadderStep);
-
-    await futures.write.createOrder([initialPrice, deliveryDate, "", -1], {
-      account: seller.account,
-    });
-
-    await futures.write.createOrder([initialPrice, deliveryDate, dst, 1], {
-      account: buyer.account,
-    });
-
-    // Buyer exits at a lower price for a loss.
     const exitPrice = quantizePrice(parseUnits("90", 6), config.priceLadderStep);
 
-    await futures.write.createOrder([exitPrice, deliveryDate, "", -1], {
-      account: buyer.account,
-    });
+    await futures.write.createOrder([initialPrice, deliveryDate, -1], { account: seller.account });
+    await futures.write.createOrder([initialPrice, deliveryDate, 1], { account: buyer.account });
 
-    const offsetTxHash = await futures.write.createOrder([exitPrice, deliveryDate, dst, 1], {
+    await futures.write.createOrder([exitPrice, deliveryDate, -1], { account: buyer.account });
+
+    const offsetTxHash = await futures.write.createOrder([exitPrice, deliveryDate, 1], {
       account: buyer2.account,
     });
-
     const offsetReceipt = await pc.waitForTransactionReceipt({ hash: offsetTxHash });
 
-    const positionCreatedEvents = parseEventLogs({
+    const matches = parseEventLogs({
       logs: offsetReceipt.logs,
       abi: futures.abi,
-      eventName: "LotTransferred",
+      eventName: "OrderMatched",
     });
+    assert.equal(matches.length, 1);
 
-    assert.ok(positionCreatedEvents.length > 0);
-    const newPositionId = positionCreatedEvents[0].args.newLotId;
+    assert.equal(
+      (await futures.read.getUserPosition([buyer.account.address, deliveryDate])).netQuantity,
+      0n,
+    );
+    assert.equal(
+      (await futures.read.getUserPosition([seller.account.address, deliveryDate])).netQuantity,
+      -1n,
+    );
+    assert.equal(
+      (await futures.read.getUserPosition([buyer2.account.address, deliveryDate])).netQuantity,
+      1n,
+    );
 
     const buyerBalanceAfterOffset = await collateralVault.read.balanceOf([buyer.account.address]);
     const contractBalanceAfterOffset = await totalContractBalance(contracts);
 
     const expectedPnL = exitPrice - initialPrice;
     const takerFee = await futures.read.takerFee();
-    // Only takers pay (makerFee=0 by default): buyer was taker on step 2 and maker on step 4.
     const expectedBuyerBalanceChange = expectedPnL - takerFee;
     assert.equal(buyerBalanceAfterOffset - buyerBalanceBefore, expectedBuyerBalanceChange);
 
@@ -157,9 +171,7 @@ describe("Futures - Offset & Cash Settlement", () => {
     const expectedContractBalanceChange = expectedPnL - totalFees;
     assert.equal(contractBalanceBefore - contractBalanceAfterOffset, expectedContractBalanceChange);
 
-    // Step 6: Move time forward to delivery date and settle the new position
-    await refreshHashprice(contracts.hashrateOracle, deliveryDate);
-    await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
+    await reachMaturityWithMovedMark(contracts, tc, deliveryDate);
 
     const sellerBalanceBeforeSettlement = await collateralVault.read.balanceOf([
       seller.account.address,
@@ -168,10 +180,16 @@ describe("Futures - Offset & Cash Settlement", () => {
       buyer2.account.address,
     ]);
 
-    await futures.write.settlePosition([newPositionId], { account: validator.account });
+    await futures.write.settlePosition([seller.account.address, deliveryDate], {
+      account: validator.account,
+    });
+    await futures.write.settlePosition([buyer2.account.address, deliveryDate], {
+      account: validator.account,
+    });
 
     const contractBalanceAfterSettlement = await totalContractBalance(contracts);
     assert.equal(contractBalanceBefore + totalFees, contractBalanceAfterSettlement);
+
     const marketPrice = await futures.read.getMarketPrice();
 
     const sellerBalance = await collateralVault.read.balanceOf([seller.account.address]);

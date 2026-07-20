@@ -1,21 +1,20 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
-import { encodeFunctionData, parseEventLogs, parseUnits, zeroHash } from "viem";
+import { encodeFunctionData, getAddress, parseEventLogs, parseUnits, zeroHash } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { warpPastDeliveryWithFreshOracle } from "./utils.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
 type OrderIntent = {
-  pricePerDay: bigint;
-  deliveryDate: bigint;
-  destURL: string;
-  qty: number;
+  price: bigint;
+  deliveryAt: bigint;
+  quantity: number;
 };
 
 describe("Futures.removeOutdatedOrder", () => {
-  it("closes a single expired order and emits OrderClosed(EXPIRED)", async () => {
+  it("closes a single expired order and emits OrderCancelled", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, pc, tc } = accounts;
@@ -25,7 +24,7 @@ describe("Futures.removeOutdatedOrder", () => {
     const mp = await futures.read.getMarketPrice();
     const dd = config.deliveryDates[0];
 
-    const restTx = await futures.write.createOrder([mp, dd, "", -1], { account: seller.account });
+    const restTx = await futures.write.createOrder([mp, dd, -1], { account: seller.account });
     const [created] = parseEventLogs({
       logs: (await pc.waitForTransactionReceipt({ hash: restTx })).logs,
       abi: futures.abi,
@@ -42,14 +41,13 @@ describe("Futures.removeOutdatedOrder", () => {
     const closed = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "OrderClosed",
+      eventName: "OrderCancelled",
     });
     assert.equal(closed.length, 1);
     assert.equal(closed[0].args.orderId, orderId);
-    // OrderCloseReason.EXPIRED == 2
-    assert.equal(closed[0].args.reason, 2);
+    assert.equal(getAddress(closed[0].args.participant), getAddress(seller.account.address));
 
-    const orders = await futures.read.getOrderIds([seller.account.address]);
+    const orders = await futures.read.getUserOrders([seller.account.address]);
     assert.equal(orders.length, 0);
   });
 
@@ -75,7 +73,7 @@ describe("Futures.removeOutdatedOrder", () => {
     const mp = await futures.read.getMarketPrice();
     const dd = config.deliveryDates[0];
 
-    const restTx = await futures.write.createOrder([mp, dd, "", -1], { account: seller.account });
+    const restTx = await futures.write.createOrder([mp, dd, -1], { account: seller.account });
     const [created] = parseEventLogs({
       logs: (await pc.waitForTransactionReceipt({ hash: restTx })).logs,
       abi: futures.abi,
@@ -99,7 +97,7 @@ describe("Futures.removeOutdatedOrder", () => {
     const mp = await futures.read.getMarketPrice();
     const dd = config.deliveryDates[0];
 
-    const restTx = await futures.write.createOrder([mp, dd, "", -1], { account: seller.account });
+    const restTx = await futures.write.createOrder([mp, dd, -1], { account: seller.account });
     const [created] = parseEventLogs({
       logs: (await pc.waitForTransactionReceipt({ hash: restTx })).logs,
       abi: futures.abi,
@@ -117,7 +115,7 @@ describe("Futures.removeOutdatedOrder", () => {
     const receipt = await pc.waitForTransactionReceipt({ hash: tx });
     assert.equal(receipt.status, "success");
 
-    const orders = await futures.read.getOrderIds([seller.account.address]);
+    const orders = await futures.read.getUserOrders([seller.account.address]);
     assert.equal(orders.length, 0);
   });
 
@@ -136,10 +134,9 @@ describe("Futures.removeOutdatedOrder", () => {
     // Rest N orders at the soon-to-expire date.
     const restingIds: `0x${string}`[] = [];
     for (let i = 0; i < N; i++) {
-      const tx = await futures.write.createOrder(
-        [mp + BigInt(i) * step, expiringDd, "", -1],
-        { account: seller.account },
-      );
+      const tx = await futures.write.createOrder([mp + BigInt(i) * step, expiringDd, -1], {
+        account: seller.account,
+      });
       const [ev] = parseEventLogs({
         logs: (await pc.waitForTransactionReceipt({ hash: tx })).logs,
         abi: futures.abi,
@@ -175,10 +172,9 @@ describe("Futures.removeOutdatedOrder", () => {
         args: [
           [
             {
-              pricePerDay: mp,
-              deliveryDate: freshDd,
-              destURL: "",
-              qty: -1,
+              price: mp,
+              deliveryAt: freshDd,
+              quantity: -1,
             } satisfies OrderIntent,
           ],
         ],
@@ -191,12 +187,9 @@ describe("Futures.removeOutdatedOrder", () => {
     const closed = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "OrderClosed",
+      eventName: "OrderCancelled",
     });
     assert.equal(closed.length, N);
-    for (const ev of closed) {
-      assert.equal(ev.args.reason, 2);
-    }
 
     const created = parseEventLogs({
       logs: receipt.logs,
@@ -206,7 +199,7 @@ describe("Futures.removeOutdatedOrder", () => {
     assert.equal(created.length, 1);
     assert.equal(created[0].args.deliveryAt, freshDd);
 
-    const finalOrders = await futures.read.getOrderIds([seller.account.address]);
+    const finalOrders = await futures.read.getUserOrders([seller.account.address]);
     assert.equal(finalOrders.length, 1, "only the freshly placed order remains");
   });
 });

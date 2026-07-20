@@ -39,10 +39,10 @@ export const PositionsListWidget = ({
   onClosePosition,
   contractMode = "futures",
 }: PositionsListWidgetProps) => {
-  // Conditionally use futures or perps create order hook
   const futuresCreateOrder = useCreateOrder();
   const perpsCreateOrder = useCreatePerpsOrder();
-  const { createOrderAsync, isPending } = contractMode === "perpetual" ? perpsCreateOrder : futuresCreateOrder;
+  const isPending =
+    contractMode === "perpetual" ? perpsCreateOrder.isPending : futuresCreateOrder.isPending;
   const { data: marketPrice } = useGetMarketPrice();
   const contractSpecsQuery = useFuturesContractSpecs();
   const [tradesSelection, setTradesSelection] = useState<FuturesTradesModalSelection | null>(null);
@@ -192,18 +192,15 @@ export const PositionsListWidget = ({
       const closePrice = latestPriceBigInt ?? groupedPosition.pricePerDay;
 
       if (contractMode === "perpetual") {
-        // Perps only needs price and quantity
-        await createOrderAsync({
+        await perpsCreateOrder.createOrderAsync({
           price: closePrice,
           quantity: quantity,
         });
       } else {
-        // Futures needs price, deliveryDate, quantity, and destUrl
-        await createOrderAsync({
+        await futuresCreateOrder.createOrderAsync({
           price: closePrice,
           deliveryDate: deliveryDate,
           quantity: quantity,
-          destUrl: "",
         });
       }
 

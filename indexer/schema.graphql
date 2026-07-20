@@ -61,7 +61,6 @@ type FuturesExpiration @entity(immutable: false) {
   recordBlockNumber: BigInt
 
   # Back-links (backward-compatible: existing entities keep their `deliveryAt` scalar)
-  lots: [Lot!]! @derivedFrom(field: "expiration")
   orders: [Order!]! @derivedFrom(field: "expiration")
   positionSessions: [PositionSession!]! @derivedFrom(field: "expiration")
   trades: [Trade!]! @derivedFrom(field: "expiration")
@@ -80,12 +79,13 @@ type User @entity(immutable: false) {
   fillCount: Int!
   realizedPnl: BigInt!
 
+  "Transient: orderId of the user's most recent OrderCreated. Used to attribute taker fills on OrderMatched."
+  lastCreatedOrderId: Bytes!
+
   # Relations
   orders: [Order!]! @derivedFrom(field: "user")
   trades: [Trade!]! @derivedFrom(field: "user")
   fills: [Fill!]! @derivedFrom(field: "user")
-  "Historical lot ids where this user participated as buyer or seller."
-  lots: [Lot!]!
   positionSessions: [PositionSession!]! @derivedFrom(field: "user")
   "Per-(user, deliveryAt) running net qty + open-session pointers, one entry per delivery date the user has touched."
   deliveryPointers: [UserDeliverySessionPointer!]! @derivedFrom(field: "user")
@@ -97,22 +97,22 @@ type User @entity(immutable: false) {
 }
 
 # Aggregate of OrderCreated events for one (user, price, deliveryAt, side) within a single tx.
-# A `createOrder(price, deliveryAt, dest, qty=N)` call emits N qty=1 OrderCreated events,
-# all collapsed here into a single Order with `quantity = N`.
+# In 3.0 one createOrder emits one OrderCreated with abs qty; same-price placements in one tx
+# still collapse into a single Order aggregate when they share the aggregate key.
 type Order @entity(immutable: false) {
   id: Bytes! # tx hash + user + price + deliveryAt + side
   user: User!
-  price: BigInt! # pricePerDay
+  price: BigInt!
   deliveryAt: BigInt!
   "Expiration metadata for `deliveryAt` (settlement price, etc.). Nullable, backward-compatible add-on."
   expiration: FuturesExpiration
   isBuy: Boolean!
 
-  # Counts (each unit = one on-chain orderId)
-  quantity: Int! # ACTIVE entries (open units)
+  # Counts (contracts)
+  quantity: Int! # ACTIVE remaining contracts
   originalQuantity: Int! # initial qty across all entries
-  filledQuantity: Int! # entries that became Fills
-  cancelledQuantity: Int! # entries closed without matching
+  filledQuantity: Int! # contracts that became fills
+  cancelledQuantity: Int! # contracts closed without matching
   status: OrderStatus!
   entries: [OrderEntry!]! @derivedFrom(field: "order")
 
@@ -137,14 +137,15 @@ enum OrderStatus {
   CANCELLED
 }
 
-# One per on-chain orderId. Mutable: status flips when OrderClosed fires.
+# One per on-chain orderId (qty-bearing resting placement).
 type OrderEntry @entity(immutable: false) {
   id: Bytes! # on-chain orderId
   order: Order!
-  destURL: String!
+  "Remaining open contracts on this resting order."
+  remainingQuantity: Int!
   status: OrderEntryStatus!
   closedAt: BigInt
-  "EOA that sent the tx where this entry closed (tx.from). NOT necessarily the participant — for liquidations it's the keeper, for expiry it's whoever placed the next order. Use `liquidator` / Lot.closedBy for semantic close attribution."
+  "EOA that sent the tx where this entry closed (tx.from). NOT necessarily the participant — for liquidations it's the keeper, for expiry it's whoever called removeOutdatedOrder. Use `liquidator` for semantic close attribution."
   closedByTx: Bytes
   "Keeper that triggered the close, populated only when status = LIQUIDATED (from the paired OrderLiquidated event)."
   liquidator: Bytes
@@ -193,7 +194,7 @@ type Trade @entity(immutable: false) {
   transactionHash: Bytes!
 }
 
-# Aggregate of Lot open/close legs with the same (tx, user, counterparty, session).
+# Aggregate of OrderMatched (or exit) legs with the same (tx, user, counterparty, session).
 type Fill @entity(immutable: false) {
   id: Bytes! # tx hash + user + counterparty + sessionId
   trade: Trade!
@@ -210,54 +211,6 @@ type Fill @entity(immutable: false) {
   timestamp: BigInt!
   blockNumber: BigInt!
   transactionHash: Bytes!
-}
-
-# Canonical mirror of on-chain lot state keyed by lotId.
-type Lot @entity(immutable: false) {
-  id: Bytes! # on-chain lotId
-  seller: User!
-  buyer: User!
-  destURL: String!
-  sellPricePerDay: BigInt!
-  buyPricePerDay: BigInt!
-  deliveryAt: BigInt!
-  "Expiration metadata for `deliveryAt` (settlement price, etc.). Nullable, backward-compatible add-on."
-  expiration: FuturesExpiration
-  makerOrderId: Bytes!
-  takerOrderId: Bytes!
-
-  status: LotStatus!
-  isClosed: Boolean!
-  closeReason: LotCloseReason
-
-  sellerPnl: BigInt
-  buyerPnl: BigInt
-  closedBy: Bytes
-  liquidatedParticipant: Bytes
-  liquidator: Bytes
-  liquidationFee: BigInt
-
-  createdAt: BigInt!
-  updatedAt: BigInt!
-  closedAt: BigInt
-  blockNumber: BigInt!
-  transactionHash: Bytes!
-  closeTransactionHash: Bytes
-}
-
-enum LotStatus {
-  OPEN
-  REPLACED
-  CLOSED
-}
-
-enum LotCloseReason {
-  MUTUAL_EXIT
-  LIQUIDATION
-  BREACH
-  SETTLED
-  RESET
-  EXPIRED
 }
 
 # Open→close cycle for a (user, deliveryAt) pair.
@@ -293,7 +246,7 @@ enum PositionSessionStatus {
   CLOSE
 }
 
-# Per-tx sentinel used by handleOrderLiquidated / handleLotLiquidated to bump
+# Per-tx sentinel used by handleOrderLiquidated / handlePositionLiquidated to bump
 # `Futures.totalLiquidations` exactly once regardless of how many legs the
 # keeper liquidation tx contained. The entity itself carries no data — its
 # existence is the dedup signal.
@@ -320,7 +273,7 @@ type PriceLevel @entity(immutable: false) {
   expiration: FuturesExpiration
   price: BigInt!
   isBid: Boolean!
-  totalQuantity: Int! # sum of ACTIVE OrderEntry units at this level
+  totalQuantity: Int! # sum of ACTIVE OrderEntry remaining contracts at this level
 }
 
 # Internal indexer lookup: tracks the open PositionSession + running net qty / entry price
@@ -333,6 +286,6 @@ type UserDeliverySessionPointer @entity(immutable: false) {
   aggregatedEntryPrice: BigInt!
   "ID of the currently-OPEN PositionSession for this (user, deliveryAt). Empty string when flat."
   currentSessionId: String!
-  "ID of the most recently CLOSED PositionSession for this (user, deliveryAt). Empty string until the first close. Lets the same-tx `LotLiquidated` handler re-derive the (session-keyed) closing Trade id after the pointer has gone flat, without a transient lookup entity."
+  "ID of the most recently CLOSED PositionSession for this (user, deliveryAt). Empty string until the first close. Lets same-tx PositionLiquidated re-derive the closing Trade id after the pointer has gone flat."
   lastClosedSessionId: String!
 }

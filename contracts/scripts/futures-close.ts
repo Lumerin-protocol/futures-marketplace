@@ -1,16 +1,18 @@
 import hre from "hardhat";
+import { getAddress, type Address } from "viem";
 import { requireAddress, requireEnvsSet } from "../lib/env.ts";
 import { addrUrl, txUrl } from "../lib/explorer.ts";
 import { logInfo, logStep, logSuccess, logTitle } from "../lib/log.ts";
 
 async function main() {
-  logTitle("Futures Settle Position");
+  logTitle("Futures Settle Position (3.0)");
 
   const { viem } = await hre.network.getOrCreate();
 
   const futuresAddress = requireAddress("FUTURES_ADDRESS");
-  const env = requireEnvsSet("POSITION_ID");
-  const positionId = env.POSITION_ID as `0x${string}`;
+  const env = requireEnvsSet("USER_ADDRESS", "DELIVERY_AT");
+  const user = getAddress(env.USER_ADDRESS) as Address;
+  const deliveryAt = BigInt(env.DELIVERY_AT);
 
   // Cash settlement is permissionless — any funded signer can call settlePosition.
   const [keeper] = await viem.getWalletClients();
@@ -18,29 +20,31 @@ async function main() {
 
   logInfo("inputs", {
     Futures: addrUrl(pc, futuresAddress),
-    PositionId: positionId,
+    User: user,
+    DeliveryAt: new Date(Number(deliveryAt) * 1000).toISOString(),
     Caller: keeper.account.address,
   });
 
   const futures = await viem.getContractAt("Futures", futuresAddress);
 
-  const position = await futures.read.getPositionById([positionId]);
+  const position = await futures.read.getUserPosition([user, deliveryAt]);
   logInfo("position", {
-    Seller: position.seller,
-    Buyer: position.buyer,
-    DeliveryAt: new Date(Number(position.deliveryAt) * 1000).toISOString(),
-    SellPricePerDay: position.sellPricePerDay.toString(),
-    BuyPricePerDay: position.buyPricePerDay.toString(),
+    NetQuantity: position.netQuantity.toString(),
+    NetEntryValue: position.netEntryValue.toString(),
   });
 
-  const tx = await futures.write.settlePosition([positionId], {
+  if (position.netQuantity === 0n) {
+    throw new Error(`User ${user} has no position at deliveryAt ${deliveryAt}`);
+  }
+
+  const tx = await futures.write.settlePosition([user, deliveryAt], {
     account: keeper.account,
   });
 
   const receipt = await pc.waitForTransactionReceipt({ hash: tx });
   logStep("Settled", txUrl(pc, receipt.transactionHash));
   logStep("Gas used", receipt.gasUsed.toString());
-  logSuccess(`Position ${positionId} settled`);
+  logSuccess(`Settled ${user} @ ${deliveryAt}`);
 }
 
 main().catch((error) => {

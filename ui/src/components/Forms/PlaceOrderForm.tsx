@@ -23,7 +23,6 @@ import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import type { Participant } from "../../hooks/data/getUserFuturesOrders";
 import type { ContractMode } from "../../types/types";
 import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpecs";
-import { calculateMinMargin } from "../../hooks/data/useGetMinMarginForPosition";
 import { getMinMarginForPositionManual } from "../../hooks/data/getMinMarginForPositionManual";
 import { predefinedPools } from "./BuyerForms/predefinedPools";
 import MenuItem from "@mui/material/MenuItem";
@@ -298,13 +297,10 @@ export const PlaceOrderForm: FC<Props> = ({
                 quantity,
               });
             } else {
-              // Futures cash-settle now; createOrder still takes a destURL arg
-              // in the ABI, so pass an empty string to keep the call valid.
               txhash = await (createOrderAsync as any)({
                 price,
                 deliveryDate,
                 quantity,
-                destUrl: "",
               });
             }
             return {

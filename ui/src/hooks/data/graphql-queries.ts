@@ -95,27 +95,6 @@ export const PositionsBookQuery = gql`
   }
 `;
 
-export const OrderBookQuery = gql`
-  query OrderBook($deliveryAt: BigInt!) {
-    orders(where: { deliveryAt: $deliveryAt, isActive: true }) {
-      id
-      pricePerDay
-      deliveryAt
-      participant {
-        address
-      }
-      isBuy,
-      isActive
-    },
-    _meta {
-      block {
-        number
-        timestamp
-      }
-    }
-  }
-`;
-
 export const AggregateOrderBookQuery = gql`
   query AggregateOrderBookQuery($deliveryAt: BigInt!, $first: Int!, $lastId: ID!) {
     priceLevels(

@@ -17,7 +17,7 @@ import { getOrCreateFuturesExpiration, getOrCreatePointer } from "./store";
 // ----------------------------------------------------------------------------
 // `upsertFill` used to read + write the `Futures` singleton for every Fill leg
 // it processed, which produced multiple redundant store writes per handler
-// invocation (each LotCreated/LotClosed processes two legs). Similarly,
+// invocation (each OrderMatched processes two legs). Similarly,
 // `getOrCreateUser` used to `Futures.save()` whenever a brand-new user was
 // minted. Both paths now defer the write: they accumulate deltas into these
 // module-level counters and callers flush them via `flushFuturesCounters`
@@ -57,10 +57,8 @@ export function flushFuturesCounters(futures: Futures): void {
 // Public entry points
 // ============================================================================
 
-/// LotCreated leg: user is opening or scaling into a lot at `tradePrice`.
-/// `tradingFee` is the flat per-unit fee this user pays on this leg (maker or
-/// taker depending on which side of the match they sat on); callers compute it
-/// from `Futures.makerFee` / `Futures.takerFee`.
+/// Open / scale-in fill at `tradePrice`.
+/// `tradingFee` is the flat per-unit fee this user pays on this leg.
 export function applyOpenFill(
   user: User,
   counterpartyId: Bytes,
@@ -90,10 +88,8 @@ export function applyOpenFill(
   );
 }
 
-/// LotClosed/LotTransferred leg: user is closing one unit of an existing lot.
-/// `tradingFee` is the flat per-unit fee this user pays on this leg (see
-/// `applyOpenFill`); pass `BigInt.zero()` on fee-exempt legs (e.g. liquidation
-/// or settlement paths the contract does not charge).
+/// Reduce / close fill at `exitPrice` with pre-computed `exitPnl`.
+/// `tradingFee` is the flat per-unit fee (usually zero on liquidation/settlement).
 export function applyExitFill(
   user: User,
   counterpartyId: Bytes,
@@ -124,11 +120,53 @@ export function applyExitFill(
   );
 }
 
-/// pnl_event = side_sign * (trigger_price - entry_price)
-/// where side_sign = +1 for buyer-exit, -1 for seller-exit. One unit settles `pricePerDay` of
-/// notional (no duration multiplier), so the price delta equals the realized PnL directly.
-export function derivePriceFromExit(wasBuyer: boolean, pnl: BigInt, entryPrice: BigInt): BigInt {
-  return wasBuyer ? entryPrice.plus(pnl) : entryPrice.minus(pnl);
+/// Apply a signed match fill: open, scale-in, reduce, or flip. Computes realized
+/// PnL for the reducing portion. `tradingFeeTotal` is the flat fee for the whole
+/// fill (already × |qty|); converted to per-unit for session/trade accumulators.
+export function applyMatchFill(
+  user: User,
+  counterpartyId: Bytes,
+  signedQty: i32,
+  tradePrice: BigInt,
+  tradingFeeTotal: BigInt,
+  deliveryAt: BigInt,
+  txHash: Bytes,
+  blockNumber: BigInt,
+  timestamp: BigInt,
+  logIndex: BigInt,
+  sideIndex: i32,
+): Bytes {
+  const absQty = absI32(signedQty);
+  const feePerUnit =
+    absQty > 0 ? tradingFeeTotal.div(BigInt.fromI32(absQty)) : BigInt.zero();
+
+  const userAddr = changetype<Address>(user.id);
+  const pointer = getOrCreatePointer(userAddr, deliveryAt);
+  const oldNet = pointer.netQuantity;
+
+  let pnl = BigInt.zero();
+  if (oldNet != 0 && !isSameSignI32(oldNet, signedQty)) {
+    const settledAbs = minI32(absI32(oldNet), absQty);
+    const signedClosed = oldNet > 0 ? settledAbs : -settledAbs;
+    pnl = tradePrice
+      .minus(pointer.aggregatedEntryPrice)
+      .times(BigInt.fromI32(signedClosed));
+  }
+
+  return processUserMatch(
+    user,
+    counterpartyId,
+    signedQty,
+    tradePrice,
+    pnl,
+    feePerUnit,
+    deliveryAt,
+    txHash,
+    blockNumber,
+    timestamp,
+    logIndex,
+    sideIndex,
+  );
 }
 
 // ============================================================================
@@ -220,6 +258,8 @@ function computeNewEntryPrice(
       .plus(tradePrice.times(BigInt.fromI32(addAbs)))
       .div(BigInt.fromI32(newAbs));
   }
+  // Pure reduce keeps prior entry; a flip (newNet opposite oldNet) re-enters at tradePrice.
+  if (!isSameSignI32(oldNet, newNet)) return tradePrice;
   return oldEntry;
 }
 
@@ -279,10 +319,8 @@ function handleFill(
   if (isNowFlat) {
     session.status = PositionSessionStatus.CLOSE;
     pointer.currentSessionId = "";
-    // Breadcrumb for the same-tx `LotLiquidated` handler: once the position
-    // goes flat the pointer no longer references the just-closed session, so
-    // record its id here to let `handleLotLiquidated` re-derive the
-    // (session-keyed) closing Trade id without a transient lookup entity.
+    // Breadcrumb for same-tx PositionLiquidated: once flat, the pointer no
+    // longer references the just-closed session.
     pointer.lastClosedSessionId = session.id;
   }
 
@@ -452,7 +490,7 @@ function upsertFill(
   trade.save();
 
   // Deferred Futures-singleton write: caller calls `flushFuturesCounters` once
-  // per handler invocation (see handlers/lots.ts).
+  // per handler invocation.
   if (isNewFill) pendingNewFills += 1;
   if (isNewTrade) pendingNewTrades += 1;
 

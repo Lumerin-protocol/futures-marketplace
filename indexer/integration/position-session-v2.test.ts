@@ -12,7 +12,7 @@ const conn = await network.getOrCreate();
 describe("single match session state", () => {
   after(() => conn.matchstick.reset());
 
-  it("creates one open lot, two per-user fills, and +/-1 netQty pointers", async () => {
+  it("creates two per-user fills and +/-1 netQty pointers", async () => {
     const { contracts, accounts, config } = await conn.networkHelpers.loadFixture(
       deployFuturesFixture,
     );
@@ -30,7 +30,7 @@ describe("single match session state", () => {
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
-    const sellTx = await futures.write.createOrder([price, deliveryDate, "", -1], {
+    const sellTx = await futures.write.createOrder([price, deliveryDate, -1n], {
       account: seller.account,
     });
     const sellReceipt = await pc.waitForTransactionReceipt({ hash: sellTx });
@@ -39,23 +39,21 @@ describe("single match session state", () => {
       abi: futures.abi,
       eventName: "OrderCreated",
     });
-    const buyTx = await futures.write.createOrder([price, deliveryDate, "dst", 1], {
+    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n], {
       account: buyer.account,
     });
     const buyReceipt = await pc.waitForTransactionReceipt({ hash: buyTx });
-    const [lotCreated] = parseEventLogs({
+    const [orderMatched] = parseEventLogs({
       logs: buyReceipt.logs,
       abi: futures.abi,
-      eventName: "LotCreated",
+      eventName: "OrderMatched",
     });
-    assert.ok(lotCreated, "LotCreated must fire");
-    const lotId = lotCreated.args.lotId.toLowerCase() as `0x${string}`;
-    const makerOrderId = lotCreated.args.makerOrderId.toLowerCase() as `0x${string}`;
-    const takerOrderId = lotCreated.args.takerOrderId.toLowerCase() as `0x${string}`;
+    assert.ok(orderMatched, "OrderMatched must fire");
+    const makerOrderId = orderMatched.args.makerOrderId.toLowerCase() as `0x${string}`;
     assert.equal(
       makerOrderId,
       makerOrderCreated.args.orderId.toLowerCase(),
-      "LotCreated.makerOrderId must match seller's resting OrderCreated.orderId",
+      "OrderMatched.makerOrderId must match seller's resting OrderCreated.orderId",
     );
 
     const sellerAddr = seller.account.address.toLowerCase() as `0x${string}`;
@@ -63,7 +61,6 @@ describe("single match session state", () => {
     const sellerPtrId = pointerId(seller.account.address, deliveryDate);
     const buyerPtrId = pointerId(buyer.account.address, deliveryDate);
     const snap = await conn.matchstick.indexSnapshot([
-      read("Lot", lotId),
       read("UserDeliverySessionPointer", sellerPtrId),
       read("UserDeliverySessionPointer", buyerPtrId),
       read("User", sellerAddr),
@@ -71,18 +68,17 @@ describe("single match session state", () => {
       read("Futures", "0"),
     ]);
 
-    const lot = snap.entity("Lot", lotId);
-    assert.ok(lot);
-    assert.equal(lot.status, "OPEN");
-    assert.equal(lot.isClosed, false);
-    assert.equal(lot.sellPricePerDay, price.toString());
-    assert.equal(lot.buyPricePerDay, price.toString());
-    assert.equal(lot.destURL, "dst", "Lot.destURL must prefer the taker's OrderEntry.destURL");
-    assert.equal(lot.makerOrderId, makerOrderId, "Lot.makerOrderId must mirror the event");
-    assert.equal(lot.takerOrderId, takerOrderId, "Lot.takerOrderId must mirror the event");
-
     assert.equal(String(snap.entity("UserDeliverySessionPointer", sellerPtrId)?.netQuantity), "-1");
     assert.equal(String(snap.entity("UserDeliverySessionPointer", buyerPtrId)?.netQuantity), "1");
+
+    const sessions = snap.saved("PositionSession");
+    assert.equal(sessions.length, 2, "one OPEN session per side after a match");
+    const sellerSession = sessions.find((s) => String(s.user).toLowerCase() === sellerAddr);
+    const buyerSession = sessions.find((s) => String(s.user).toLowerCase() === buyerAddr);
+    assert.ok(sellerSession);
+    assert.ok(buyerSession);
+    assert.equal(sellerSession.status, "OPEN");
+    assert.equal(buyerSession.status, "OPEN");
 
     const fills = snap.saved("Fill");
     assert.equal(fills.length, 2, "per-user model: one fill for seller and one for buyer");
@@ -105,12 +101,6 @@ describe("single match session state", () => {
     const buyerUser = snap.entity("User", buyerAddr);
     assert.ok(sellerUser);
     assert.ok(buyerUser);
-    assert.deepEqual(
-      sellerUser.lots,
-      [lotId],
-      "seller's User.lots must contain the newly opened lot",
-    );
-    assert.deepEqual(buyerUser.lots, [lotId], "buyer's User.lots must contain the newly opened lot");
     assert.equal(String(sellerUser.fillCount), "1", "seller has one aggregated fill row");
     assert.equal(String(sellerUser.tradeCount), "1", "seller has one aggregated trade row");
     assert.equal(String(buyerUser.fillCount), "1");
@@ -139,18 +129,17 @@ describe("same tx qty=3 aggregation", () => {
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
-    await futures.write.createOrder([price, deliveryDate, "", -3], { account: seller.account });
-    const buyTx = await futures.write.createOrder([price, deliveryDate, "dst", 3], {
+    await futures.write.createOrder([price, deliveryDate, -3n], { account: seller.account });
+    const buyTx = await futures.write.createOrder([price, deliveryDate, 3n], {
       account: buyer.account,
     });
     const buyReceipt = await pc.waitForTransactionReceipt({ hash: buyTx });
-    const lots = parseEventLogs({
+    const matched = parseEventLogs({
       logs: buyReceipt.logs,
       abi: futures.abi,
-      eventName: "LotCreated",
+      eventName: "OrderMatched",
     });
-    assert.equal(lots.length, 3);
-    const lotIds = lots.map((e) => e.args.lotId.toLowerCase() as `0x${string}`);
+    assert.equal(matched.length, 1, "qty=3 match emits one OrderMatched");
 
     const sellerAddr = seller.account.address.toLowerCase() as `0x${string}`;
     const buyerAddr = buyer.account.address.toLowerCase() as `0x${string}`;
@@ -161,7 +150,6 @@ describe("same tx qty=3 aggregation", () => {
       read("UserDeliverySessionPointer", buyerPtrId),
       read("User", sellerAddr),
       read("User", buyerAddr),
-      ...lotIds.map((id) => read("Lot", id)),
       read("Futures", "0"),
     ]);
 
@@ -177,24 +165,17 @@ describe("same tx qty=3 aggregation", () => {
     assert.equal(sellerFill.fillPrice, price.toString());
     assert.equal(buyerFill.fillPrice, price.toString());
 
-    for (const id of lotIds) {
-      assert.equal(snap.entity("Lot", id)?.destURL, "dst", `Lot ${id} must take buyer destURL`);
+    const sessions = snap.saved("PositionSession");
+    assert.equal(sessions.length, 2, "one session per side after aggregated match");
+    for (const s of sessions) {
+      assert.equal(s.status, "OPEN");
+      assert.equal(String(s.maxQuantity), "3");
     }
 
     const sellerUser = snap.entity("User", sellerAddr);
     const buyerUser = snap.entity("User", buyerAddr);
     assert.ok(sellerUser);
     assert.ok(buyerUser);
-    assert.deepEqual(
-      [...(sellerUser.lots as string[])].sort(),
-      [...lotIds].sort(),
-      "seller's User.lots must include every lot opened in the aggregated tx",
-    );
-    assert.deepEqual(
-      [...(buyerUser.lots as string[])].sort(),
-      [...lotIds].sort(),
-      "buyer's User.lots must include every lot opened in the aggregated tx",
-    );
     assert.equal(
       String(sellerUser.fillCount),
       "1",
@@ -242,15 +223,15 @@ describe("scaling into a position at two different prices: qty-weighted entry pr
     await conn.matchstick.anchor();
 
     // tx1: A sells 1 at p1, B buys 1 at p1.
-    await futures.write.createOrder([p1, deliveryDate, "", -1], { account: seller.account });
-    const buy1 = await futures.write.createOrder([p1, deliveryDate, "dst", 1], {
+    await futures.write.createOrder([p1, deliveryDate, -1n], { account: seller.account });
+    const buy1 = await futures.write.createOrder([p1, deliveryDate, 1n], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buy1 });
 
     // tx2: A sells another 1 at p2, B buys another 1 at p2.
-    await futures.write.createOrder([p2, deliveryDate, "", -1], { account: seller.account });
-    const buy2 = await futures.write.createOrder([p2, deliveryDate, "dst", 1], {
+    await futures.write.createOrder([p2, deliveryDate, -1n], { account: seller.account });
+    const buy2 = await futures.write.createOrder([p2, deliveryDate, 1n], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buy2 });
@@ -291,8 +272,8 @@ describe("scaling into a position at two different prices: qty-weighted entry pr
     const buyerSession = sessions.find(
       (s) => String(s.user).toLowerCase() === buyerAddr,
     );
-    assert.ok(sellerSession, "seller has exactly one open session spanning both lots");
-    assert.ok(buyerSession, "buyer has exactly one open session spanning both lots");
+    assert.ok(sellerSession, "seller has exactly one open session spanning both fills");
+    assert.ok(buyerSession, "buyer has exactly one open session spanning both fills");
 
     assert.equal(sellerSession.status, "OPEN");
     assert.equal(buyerSession.status, "OPEN");
@@ -329,7 +310,7 @@ describe("scaling into a position at two different prices: qty-weighted entry pr
     assert.equal(String(sellerSession.realizedPnl), "0");
     assert.equal(String(buyerSession.realizedPnl), "0");
 
-    // Exactly one session per user, even though two lots opened across two txs.
+    // Exactly one session per user, even though two matches opened across two txs.
     const sellerSessions = sessions.filter(
       (s) => String(s.user).toLowerCase() === sellerAddr,
     );

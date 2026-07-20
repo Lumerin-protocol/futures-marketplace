@@ -169,8 +169,8 @@ describe("Trade.tradingFee and PositionSession.tradingFees reflect makerFee/take
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
-    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
-    const buyTx = await futures.write.createOrder([price, deliveryDate, "dst", 1], {
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
+    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buyTx });
@@ -225,8 +225,8 @@ describe("Trade.tradingFee and PositionSession.tradingFees reflect makerFee/take
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
-    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
-    const buyTx = await futures.write.createOrder([price, deliveryDate, "dst", 1], {
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
+    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buyTx });

@@ -28,7 +28,6 @@ dataSources:
         - OrderEntry
         - Trade
         - Fill
-        - Lot
         - PositionSession
         - PriceLevel
         - Liquidation
@@ -42,20 +41,20 @@ dataSources:
           handler: handleInitialized
         - event: Upgraded(indexed address)
           handler: handleUpgraded
-        - event: OrderCreated(indexed bytes32,indexed address,string,uint256,uint256,bool)
+        - event: OrderCreated(indexed bytes32,indexed address,uint256,int256,uint256)
           handler: handleOrderCreated
-        - event: OrderClosed(indexed bytes32,uint8)
-          handler: handleOrderClosed
-        - event: LotCreated(indexed bytes32,indexed address,indexed address,uint256,uint256,bytes32,bytes32)
-          handler: handleLotCreated
-        - event: LotTransferred(indexed bytes32,indexed bytes32,address,address,int256,uint256,uint256,bytes32,bytes32)
-          handler: handleLotTransferred
-        - event: LotClosed(indexed bytes32,indexed address,indexed address,int256,int256,address,uint8)
-          handler: handleLotClosed
-        - event: LotLiquidated(indexed bytes32,indexed address,indexed address,uint256)
-          handler: handleLotLiquidated
+        - event: OrderUpdated(indexed bytes32,indexed address,int256)
+          handler: handleOrderUpdated
+        - event: OrderCancelled(indexed bytes32,indexed address)
+          handler: handleOrderCancelled
+        - event: OrderMatched(indexed bytes32,indexed address,indexed address,uint256,uint256,int256,int256,int256,int256,int256,uint256,uint256)
+          handler: handleOrderMatched
         - event: OrderLiquidated(indexed bytes32,indexed address,indexed address,uint256)
           handler: handleOrderLiquidated
+        - event: PositionLiquidated(indexed address,indexed address,uint256,int256,int256,uint256)
+          handler: handlePositionLiquidated
+        - event: PositionSettled(indexed address,indexed uint256,int256,int256,uint256,address)
+          handler: handlePositionSettled
         - event: ConfigUpdated((uint256,uint256,uint256,uint256,uint8,uint8,address,address))
           handler: handleConfigUpdated
         - event: BadDebt(indexed address,uint256)
@@ -63,6 +62,5 @@ dataSources:
         - event: SettlementPriceRecorded(indexed uint256,uint256,address)
           handler: handleSettlementPriceRecorded
       file: ./src/futures.ts
-# Required when deploying with `goldsky subgraph deploy ... --graft-from <name>/<version>`
 features:
   - grafting

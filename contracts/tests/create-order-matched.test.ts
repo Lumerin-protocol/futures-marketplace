@@ -28,9 +28,9 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    await futures.write.createOrder([price, deliveryDate, "", -2], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, -2], { account: seller.account });
 
-    const txHash = await futures.write.createOrder([price, deliveryDate, "", 2], {
+    const txHash = await futures.write.createOrder([price, deliveryDate, 2], {
       account: buyer.account,
     });
 
@@ -38,19 +38,26 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     const events = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "LotCreated",
+      eventName: "OrderMatched",
     });
 
-    assert.equal(events.length, 2);
-    for (const orderEvent of events) {
-      assert.equal(getAddress(orderEvent.args.seller), getAddress(seller.account.address));
-      assert.equal(getAddress(orderEvent.args.buyer), getAddress(buyer.account.address));
-      assert.equal(orderEvent.args.pricePerDay, price);
-      assert.equal(orderEvent.args.deliveryAt, BigInt(deliveryDate));
-    }
+    assert.equal(events.length, 1);
+    const match = events[0];
+    assert.equal(getAddress(match.args.maker), getAddress(seller.account.address));
+    assert.equal(getAddress(match.args.taker), getAddress(buyer.account.address));
+    assert.equal(match.args.tradePrice, price);
+    assert.equal(match.args.deliveryAt, BigInt(deliveryDate));
+    assert.equal(match.args.takerQuantity, 2n);
+    assert.equal(match.args.makerNetQtyAfter, -2n);
+    assert.equal(match.args.takerNetQtyAfter, 2n);
+
+    const buyerPos = await futures.read.getUserPosition([buyer.account.address, deliveryDate]);
+    const sellerPos = await futures.read.getUserPosition([seller.account.address, deliveryDate]);
+    assert.equal(buyerPos.netQuantity, 2n);
+    assert.equal(sellerPos.netQuantity, -2n);
   });
 
-  it("should match sell and buy orders and create an position", async () => {
+  it("should match buy and sell orders and create a position", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, buyer, pc } = accounts;
@@ -62,9 +69,9 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     await collateralVault.write.deposit([margin], { account: buyer.account });
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    await futures.write.createOrder([price, deliveryDate, "", 2], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, 2], { account: buyer.account });
 
-    const txHash = await futures.write.createOrder([price, deliveryDate, "", -2], {
+    const txHash = await futures.write.createOrder([price, deliveryDate, -2], {
       account: seller.account,
     });
 
@@ -72,16 +79,21 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     const events = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "LotCreated",
+      eventName: "OrderMatched",
     });
 
-    assert.equal(events.length, 2);
-    for (const event of events) {
-      assert.equal(getAddress(event.args.seller), getAddress(seller.account.address));
-      assert.equal(getAddress(event.args.buyer), getAddress(buyer.account.address));
-      assert.equal(event.args.pricePerDay, price);
-      assert.equal(event.args.deliveryAt, BigInt(deliveryDate));
-    }
+    assert.equal(events.length, 1);
+    const match = events[0];
+    assert.equal(getAddress(match.args.maker), getAddress(buyer.account.address));
+    assert.equal(getAddress(match.args.taker), getAddress(seller.account.address));
+    assert.equal(match.args.tradePrice, price);
+    assert.equal(match.args.deliveryAt, BigInt(deliveryDate));
+    assert.equal(match.args.takerQuantity, -2n);
+
+    const buyerPos = await futures.read.getUserPosition([buyer.account.address, deliveryDate]);
+    const sellerPos = await futures.read.getUserPosition([seller.account.address, deliveryDate]);
+    assert.equal(buyerPos.netQuantity, 2n);
+    assert.equal(sellerPos.netQuantity, -2n);
   });
 
   it("should exit position when matching order with opposite direction", async () => {
@@ -98,68 +110,40 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     await collateralVault.write.deposit([margin], { account: account2.account });
     await collateralVault.write.deposit([margin], { account: account3.account });
 
-    await futures.write.createOrder([price, deliveryDate, "", -1], { account: account1.account });
-    const initialTxHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
-      account: account2.account,
-    });
-
-    const initialReceipt = await pc.waitForTransactionReceipt({ hash: initialTxHash });
-    const [initialPositionCreatedEvent] = parseEventLogs({
-      logs: initialReceipt.logs,
-      abi: futures.abi,
-      eventName: "LotCreated",
-    });
-
-    const initialPositionId = initialPositionCreatedEvent.args.lotId;
-    assert.equal(
-      getAddress(initialPositionCreatedEvent.args.seller),
-      getAddress(account1.account.address),
-    );
-    assert.equal(
-      getAddress(initialPositionCreatedEvent.args.buyer),
-      getAddress(account2.account.address),
-    );
+    await futures.write.createOrder([price, deliveryDate, -1], { account: account1.account });
+    await futures.write.createOrder([price, deliveryDate, 1], { account: account2.account });
 
     const account2BalanceBefore = await collateralVault.read.balanceOf([account2.account.address]);
 
-    await futures.write.createOrder([exitPrice, deliveryDate, "", -1], {
-      account: account2.account,
-    });
+    await futures.write.createOrder([exitPrice, deliveryDate, -1], { account: account2.account });
 
-    const exitTxHash = await futures.write.createOrder([exitPrice, deliveryDate, "", 1], {
+    const exitTxHash = await futures.write.createOrder([exitPrice, deliveryDate, 1], {
       account: account3.account,
     });
 
     const exitReceipt = await pc.waitForTransactionReceipt({ hash: exitTxHash });
-
-    const account2BalanceAfter = await collateralVault.read.balanceOf([account2.account.address]);
-
-    const [lotTransferredEvent] = parseEventLogs({
+    const matches = parseEventLogs({
       logs: exitReceipt.logs,
       abi: futures.abi,
-      eventName: "LotTransferred",
+      eventName: "OrderMatched",
     });
+    assert.equal(matches.length, 1);
+    assert.equal(getAddress(matches[0].args.maker), getAddress(account2.account.address));
+    assert.equal(getAddress(matches[0].args.taker), getAddress(account3.account.address));
+    assert.equal(matches[0].args.tradePrice, exitPrice);
 
-    assert.equal(lotTransferredEvent.args.oldLotId, initialPositionId);
-    assert.equal(
-      getAddress(lotTransferredEvent.args.exitingParticipant),
-      getAddress(account2.account.address),
-    );
-    assert.equal(
-      getAddress(lotTransferredEvent.args.newParticipant),
-      getAddress(account3.account.address),
-    );
-    // Exiting party was the buyer, so the remaining seller's price is carried over
-    // and only the buyer leg gets the new match price.
-    assert.equal(lotTransferredEvent.args.newSellPricePerDay, price);
-    assert.equal(lotTransferredEvent.args.newBuyPricePerDay, exitPrice);
+    const account2BalanceAfter = await collateralVault.read.balanceOf([account2.account.address]);
+    const account2Pos = await futures.read.getUserPosition([account2.account.address, deliveryDate]);
+    const account3Pos = await futures.read.getUserPosition([account3.account.address, deliveryDate]);
+    const account1Pos = await futures.read.getUserPosition([account1.account.address, deliveryDate]);
+
+    assert.equal(account2Pos.netQuantity, 0n);
+    assert.equal(account3Pos.netQuantity, 1n);
+    assert.equal(account1Pos.netQuantity, -1n);
 
     const expectedProfit = exitPrice - price;
     const account2Profit = account2BalanceAfter - account2BalanceBefore;
-
-    // account2 placed a resting -1 at exitPrice (no fee) and was the maker on account3's
-    // taker fill. With the default makerFee=0 the only fee on this flow is account3's
-    // takerFee — account2's balance change equals the realized profit exactly.
+    // account2 was maker on the exit fill (makerFee defaults to 0).
     assert.equal(account2Profit, expectedProfit);
   });
 
@@ -177,37 +161,16 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     await collateralVault.write.deposit([margin], { account: account2.account });
     await collateralVault.write.deposit([margin], { account: account3.account });
 
-    await futures.write.createOrder([price, deliveryDate, "", -1], { account: account1.account });
-    const initialTxHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
-      account: account2.account,
-    });
-
-    const initialReceipt = await pc.waitForTransactionReceipt({ hash: initialTxHash });
-    const [initialPositionCreatedEvent] = parseEventLogs({
-      logs: initialReceipt.logs,
-      abi: futures.abi,
-      eventName: "LotCreated",
-    });
-
-    const initialPositionId = initialPositionCreatedEvent.args.lotId;
-    assert.equal(
-      getAddress(initialPositionCreatedEvent.args.seller),
-      getAddress(account1.account.address),
-    );
-    assert.equal(
-      getAddress(initialPositionCreatedEvent.args.buyer),
-      getAddress(account2.account.address),
-    );
+    await futures.write.createOrder([price, deliveryDate, -1], { account: account1.account });
+    await futures.write.createOrder([price, deliveryDate, 1], { account: account2.account });
 
     const account2BalanceBefore = await collateralVault.read.balanceOf([account2.account.address]);
 
-    await futures.write.createOrder([exitPrice, deliveryDate, "", -1], {
-      account: account2.account,
-    });
+    await futures.write.createOrder([exitPrice, deliveryDate, -1], { account: account2.account });
 
     const contractBalanceBefore = await totalContractBalance(contracts);
 
-    const exitTxHash = await futures.write.createOrder([exitPrice, deliveryDate, "", 1], {
+    const exitTxHash = await futures.write.createOrder([exitPrice, deliveryDate, 1], {
       account: account3.account,
     });
 
@@ -216,33 +179,22 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     const account2BalanceAfter = await collateralVault.read.balanceOf([account2.account.address]);
     const contractBalanceAfter = await totalContractBalance(contracts);
 
-    const [lotTransferredEvent] = parseEventLogs({
+    const matches = parseEventLogs({
       logs: exitReceipt.logs,
       abi: futures.abi,
-      eventName: "LotTransferred",
+      eventName: "OrderMatched",
     });
+    assert.equal(matches.length, 1);
 
-    assert.equal(lotTransferredEvent.args.oldLotId, initialPositionId);
     assert.equal(
-      getAddress(lotTransferredEvent.args.exitingParticipant),
-      getAddress(account2.account.address),
+      (await futures.read.getUserPosition([account2.account.address, deliveryDate])).netQuantity,
+      0n,
     );
-    assert.equal(
-      getAddress(lotTransferredEvent.args.newParticipant),
-      getAddress(account3.account.address),
-    );
-    assert.equal(lotTransferredEvent.args.newSellPricePerDay, price);
-    assert.equal(lotTransferredEvent.args.newBuyPricePerDay, exitPrice);
 
     const expectedLoss = price - exitPrice;
     const account2BalanceChange = account2BalanceAfter - account2BalanceBefore;
-
-    // account2 placed a resting -1 (no fee) and was the maker (makerFee=0) on account3's
-    // taker fill, so its balance change equals the realized loss exactly.
     assert.equal(account2BalanceChange, -expectedLoss);
 
-    // account3 paid takerFee on the matching fill; the loss flows from account2 into the
-    // insurance fund. `totalContractBalance` sums futures + insurance fund.
     const takerFee = await futures.read.takerFee();
     assert.equal(contractBalanceAfter - contractBalanceBefore, expectedLoss + takerFee);
   });
@@ -260,57 +212,60 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     await collateralVault.write.deposit([margin], { account: buyer.account });
     await collateralVault.write.deposit([margin], { account: buyer2.account });
 
-    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
-    const txHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
-      account: buyer.account,
-    });
-
-    const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
-    const [createdEvent] = parseEventLogs({
-      logs: receipt.logs,
-      abi: futures.abi,
-      eventName: "LotCreated",
-    });
+    await futures.write.createOrder([price, deliveryDate, -1], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, 1], { account: buyer.account });
 
     const newPrice = price * 2n;
-    const createOrderTxHash = await futures.write.createOrder([newPrice, deliveryDate, "", -1], {
+    const createOrderTxHash = await futures.write.createOrder([newPrice, deliveryDate, -1], {
       account: buyer.account,
     });
     const createOrderReceipt = await pc.waitForTransactionReceipt({ hash: createOrderTxHash });
-    const [order2CreatedEvent] = parseEventLogs({
+    const [exitOrderCreated] = parseEventLogs({
       logs: createOrderReceipt.logs,
       abi: futures.abi,
       eventName: "OrderCreated",
     });
-    const txHash2 = await futures.write.createOrder([newPrice, deliveryDate, "", 1], {
+
+    const txHash2 = await futures.write.createOrder([newPrice, deliveryDate, 1], {
       account: buyer2.account,
     });
 
     const receipt2 = await pc.waitForTransactionReceipt({ hash: txHash2 });
-
-    const [lotTransferredEvent] = parseEventLogs({
+    const [match] = parseEventLogs({
       logs: receipt2.logs,
       abi: futures.abi,
-      eventName: "LotTransferred",
+      eventName: "OrderMatched",
     });
-    assert.equal(lotTransferredEvent.args.oldLotId, createdEvent.args.lotId);
+
+    assert.equal(match.args.makerOrderId, exitOrderCreated.args.orderId);
+    assert.equal(getAddress(match.args.maker), getAddress(buyer.account.address));
+    assert.equal(getAddress(match.args.taker), getAddress(buyer2.account.address));
+    assert.equal(match.args.tradePrice, newPrice);
+    assert.equal(match.args.makerNetQtyAfter, 0n);
+    assert.equal(match.args.takerNetQtyAfter, 1n);
+
     assert.equal(
-      getAddress(lotTransferredEvent.args.exitingParticipant),
-      getAddress(buyer.account.address),
+      (await futures.read.getUserPosition([buyer.account.address, deliveryDate])).netQuantity,
+      0n,
     );
     assert.equal(
-      getAddress(lotTransferredEvent.args.newParticipant),
-      getAddress(buyer2.account.address),
+      (await futures.read.getUserPosition([buyer2.account.address, deliveryDate])).netQuantity,
+      1n,
     );
-    assert.equal(lotTransferredEvent.args.newSellPricePerDay, price);
-    assert.equal(lotTransferredEvent.args.newBuyPricePerDay, newPrice);
-    assert.equal(lotTransferredEvent.args.makerOrderId, order2CreatedEvent.args.orderId);
+    assert.equal(
+      (await futures.read.getUserPosition([seller.account.address, deliveryDate])).netQuantity,
+      -1n,
+    );
 
     const pnl = newPrice - price;
-    assert.equal(lotTransferredEvent.args.exitPnl, pnl);
+    const takerFee = await futures.read.takerFee();
+    const buyerBalanceDelta =
+      (await collateralVault.read.balanceOf([buyer.account.address])) - margin;
+    // Buyer paid takerFee on the initial entry fill; exit was maker-side (no fee).
+    assert.equal(buyerBalanceDelta, pnl - takerFee);
   });
 
-  it("emits a paired OrderCreated+OrderClosed for the taker on an immediate fill", async () => {
+  it("emits OrderCreated and OrderUpdated(qty=0) for the taker on an immediate fill", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, buyer, pc } = accounts;
@@ -322,8 +277,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    // Maker rests a sell order — emits a single OrderCreated for the maker.
-    const restTxHash = await futures.write.createOrder([price, deliveryDate, "u-maker", -1], {
+    const restTxHash = await futures.write.createOrder([price, deliveryDate, -1], {
       account: seller.account,
     });
     const restReceipt = await pc.waitForTransactionReceipt({ hash: restTxHash });
@@ -334,48 +288,52 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     });
     assert.equal(getAddress(makerCreated.args.participant), getAddress(seller.account.address));
 
-    // Taker places the opposing buy order — fills immediately.
-    const takeTxHash = await futures.write.createOrder([price, deliveryDate, "u-taker", 1], {
+    const takeTxHash = await futures.write.createOrder([price, deliveryDate, 1], {
       account: buyer.account,
     });
     const takeReceipt = await pc.waitForTransactionReceipt({ hash: takeTxHash });
 
-    // The taker tx emits exactly one OrderCreated (for the taker), and two OrderCloseds
-    // (one for the taker, one for the maker that just got matched).
     const ordersCreated = parseEventLogs({
       logs: takeReceipt.logs,
       abi: futures.abi,
       eventName: "OrderCreated",
     });
-    const ordersClosed = parseEventLogs({
+    const ordersUpdated = parseEventLogs({
       logs: takeReceipt.logs,
       abi: futures.abi,
-      eventName: "OrderClosed",
+      eventName: "OrderUpdated",
     });
-    const [positionCreated] = parseEventLogs({
+    const [match] = parseEventLogs({
       logs: takeReceipt.logs,
       abi: futures.abi,
-      eventName: "LotCreated",
+      eventName: "OrderMatched",
     });
 
     assert.equal(ordersCreated.length, 1);
-    assert.equal(ordersClosed.length, 2);
+    assert.equal(ordersUpdated.length, 2);
 
     const takerOrderCreated = ordersCreated[0];
     assert.equal(getAddress(takerOrderCreated.args.participant), getAddress(buyer.account.address));
-    assert.equal(takerOrderCreated.args.destURL, "u-taker");
-    assert.equal(takerOrderCreated.args.pricePerDay, price);
+    assert.equal(takerOrderCreated.args.price, price);
     assert.equal(takerOrderCreated.args.deliveryAt, BigInt(deliveryDate));
-    assert.equal(takerOrderCreated.args.isBuy, true);
+    assert.equal(takerOrderCreated.args.quantity, 1n);
 
-    // Both OrderCloseds should reference the taker (its own match-cancel) and the maker.
-    const closedIds = new Set(ordersClosed.map((e) => e.args.orderId));
-    assert.equal(closedIds.has(takerOrderCreated.args.orderId), true);
-    assert.equal(closedIds.has(makerCreated.args.orderId), true);
+    const updatedByOrderId = new Map(ordersUpdated.map((e) => [e.args.orderId, e.args.newQuantity]));
+    assert.equal(updatedByOrderId.get(takerOrderCreated.args.orderId), 0n);
+    assert.equal(updatedByOrderId.get(makerCreated.args.orderId), 0n);
 
-    // LotCreated wires both order ids together.
-    assert.equal(positionCreated.args.makerOrderId, makerCreated.args.orderId);
-    assert.equal(positionCreated.args.takerOrderId, takerOrderCreated.args.orderId);
-    assert.notEqual(positionCreated.args.makerOrderId, positionCreated.args.takerOrderId);
+    assert.equal(match.args.makerOrderId, makerCreated.args.orderId);
+    assert.equal(getAddress(match.args.maker), getAddress(seller.account.address));
+    assert.equal(getAddress(match.args.taker), getAddress(buyer.account.address));
+    assert.notEqual(match.args.makerOrderId, takerOrderCreated.args.orderId);
+
+    assert.equal(
+      (await futures.read.getUserPosition([buyer.account.address, deliveryDate])).netQuantity,
+      1n,
+    );
+    assert.equal(
+      (await futures.read.getUserPosition([seller.account.address, deliveryDate])).netQuantity,
+      -1n,
+    );
   });
 });

@@ -111,7 +111,7 @@ export function getOrCreateUser(address: Address, timestamp: BigInt): User {
     user.tradeCount = 0;
     user.fillCount = 0;
     user.realizedPnl = BigInt.zero();
-    user.lots = [];
+    user.lastCreatedOrderId = Bytes.empty();
     user.createdAt = timestamp;
     user.lastActivityAt = timestamp;
 
@@ -156,7 +156,7 @@ export function getOrCreatePriceLevel(
   return level;
 }
 
-/// Idempotent per-tx marker used by `handleOrderLiquidated` / `handleLotLiquidated`
+/// Idempotent per-tx marker used by `handleOrderLiquidated` / `handlePositionLiquidated`
 /// to bump `Futures.totalLiquidations` exactly once per tx. Returns true iff this
 /// invocation created the marker (i.e. it's the first leg seen in this tx); subsequent
 /// legs in the same tx return false and the caller skips the counter increment.

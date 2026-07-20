@@ -17,7 +17,7 @@ import { assertHexHash, priceLevelId } from "./helpers.ts";
 const conn = await network.getOrCreate();
 
 // ---------------------------------------------------------------------------
-// Test 1: qty=3 sell order — aggregate Order, 3 OrderEntries, PriceLevel
+// Test 1: qty=3 sell order — aggregate Order, 1 OrderEntry, PriceLevel
 // ---------------------------------------------------------------------------
 describe("qty=3 single sell order: Order aggregate and OrderEntry promotion", () => {
   after(() => conn.matchstick.reset());
@@ -40,8 +40,8 @@ describe("qty=3 single sell order: Order aggregate and OrderEntry promotion", ()
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
-    // Seller places qty=-3 in one call → 3 OrderCreated events, 1 Order aggregate
-    const sellerTx = await futures.write.createOrder([price, deliveryDate, "", -3], {
+    // Seller places qty=-3 in one call → 1 OrderCreated event, 1 OrderEntry with remainingQuantity=3
+    const sellerTx = await futures.write.createOrder([price, deliveryDate, -3n], {
       account: seller.account,
     });
     const sellerReceipt = await pc.waitForTransactionReceipt({ hash: sellerTx });
@@ -50,16 +50,14 @@ describe("qty=3 single sell order: Order aggregate and OrderEntry promotion", ()
       abi: futures.abi,
       eventName: "OrderCreated",
     });
-    assert.equal(sellerOrderEvents.length, 3, "qty=3 must produce 3 OrderCreated events");
-    const makerOrderIds = sellerOrderEvents.map(
-      (e) => e.args.orderId.toLowerCase() as `0x${string}`,
-    );
+    assert.equal(sellerOrderEvents.length, 1, "qty=-3 must produce 1 OrderCreated event");
+    const makerOrderId = sellerOrderEvents[0].args.orderId.toLowerCase() as `0x${string}`;
 
     const levelId = priceLevelId(deliveryDate, price, false); // seller = ask side
 
-    // --- ACTIVE state: all 3 entries active, PriceLevel at 3 ---
+    // --- ACTIVE state: entry active with remainingQuantity=3, PriceLevel at 3 ---
     const snap1 = await conn.matchstick.indexSnapshot([
-      ...makerOrderIds.map((id) => read("OrderEntry", id)),
+      read("OrderEntry", makerOrderId),
       read("PriceLevel", levelId),
       read("Futures", "0"),
     ]);
@@ -85,7 +83,6 @@ describe("qty=3 single sell order: Order aggregate and OrderEntry promotion", ()
     );
     assert.ok(BigInt(String(order1.createdAt)) > 0n, "Order.createdAt set from event.block.timestamp");
     assert.ok(BigInt(String(order1.updatedAt)) > 0n, "Order.updatedAt set on every save");
-    // matchstick-ts returns `undefined` for null nullable fields — accept either.
     assert.ok(order1.closedAt == null, "Order.closedAt stays unset while ACTIVE");
     assert.ok(BigInt(String(order1.blockNumber)) > 0n, "Order.blockNumber set from event.block.number");
     assert.equal(
@@ -94,44 +91,41 @@ describe("qty=3 single sell order: Order aggregate and OrderEntry promotion", ()
       "Order.transactionHash mirrors the createOrder tx hash",
     );
 
-    for (const id of makerOrderIds) {
-      const entry = snap1.entity("OrderEntry", id);
-      assert.ok(entry, `OrderEntry ${id} must exist`);
-      assert.equal(entry.status, "ACTIVE");
-      // Field-coverage: id (= on-chain orderId), order relation, destURL.
-      assert.equal(String(entry.id).toLowerCase(), id, "OrderEntry.id = on-chain orderId");
-      assert.equal(
-        String(entry.order).toLowerCase(),
-        String(order1.id).toLowerCase(),
-        "OrderEntry.order points back at the Order aggregate",
-      );
-      assert.equal(entry.destURL, "", "seller passed empty destURL");
-      assert.ok(entry.closedAt == null, "OrderEntry.closedAt stays unset while ACTIVE");
-      assert.ok(entry.closedByTx == null, "OrderEntry.closedByTx stays unset while ACTIVE");
-    }
+    const entry = snap1.entity("OrderEntry", makerOrderId);
+    assert.ok(entry, `OrderEntry ${makerOrderId} must exist`);
+    assert.equal(entry.status, "ACTIVE");
+    assert.equal(String(entry.remainingQuantity), "3");
+    assert.equal(String(entry.id).toLowerCase(), makerOrderId, "OrderEntry.id = on-chain orderId");
+    assert.equal(
+      String(entry.order).toLowerCase(),
+      String(order1.id).toLowerCase(),
+      "OrderEntry.order points back at the Order aggregate",
+    );
+    assert.ok(entry.closedAt == null, "OrderEntry.closedAt stays unset while ACTIVE");
+    assert.ok(entry.closedByTx == null, "OrderEntry.closedByTx stays unset while ACTIVE");
 
     const level1 = snap1.entity("PriceLevel", levelId);
     assert.ok(level1, "PriceLevel must exist");
     assert.equal(String(level1.totalQuantity), "3");
 
-    assert.equal(String(snap1.entity("Futures", "0")?.activeOrders), "3");
+    assert.equal(String(snap1.entity("Futures", "0")?.activeOrders), "1");
     assert.equal(String(snap1.entity("Futures", "0")?.totalOrders), "1");
 
     // --- Buyer matches all 3 in one call ---
-    const buyTx = await futures.write.createOrder([price, deliveryDate, "dst", 3], {
+    const buyTx = await futures.write.createOrder([price, deliveryDate, 3n], {
       account: buyer.account,
     });
     const buyReceipt = await pc.waitForTransactionReceipt({ hash: buyTx });
-    const lotEvents = parseEventLogs({
+    const matchEvents = parseEventLogs({
       logs: buyReceipt.logs,
       abi: futures.abi,
-      eventName: "LotCreated",
+      eventName: "OrderMatched",
     });
-    assert.equal(lotEvents.length, 3, "buyer matching all 3 must produce 3 LotCreated");
+    assert.equal(matchEvents.length, 1, "buyer matching all 3 must produce 1 OrderMatched");
 
     // --- FILLED state ---
     const snap2 = await conn.matchstick.indexSnapshot([
-      ...makerOrderIds.map((id) => read("OrderEntry", id)),
+      read("OrderEntry", makerOrderId),
       read("PriceLevel", levelId),
       read("Futures", "0"),
     ]);
@@ -152,20 +146,15 @@ describe("qty=3 single sell order: Order aggregate and OrderEntry promotion", ()
       "Order.updatedAt is monotonically non-decreasing",
     );
 
-    for (const id of makerOrderIds) {
-      const entry = snap2.entity("OrderEntry", id);
-      assert.ok(entry);
-      assert.equal(entry.status, "MATCHED", `OrderEntry ${id} must be MATCHED after fill`);
-      // Field-coverage: OrderEntry close metadata after MATCHED.
-      assert.ok(
-        entry.closedAt != null && BigInt(String(entry.closedAt)) > 0n,
-        "OrderEntry.closedAt is set on the OrderClosed event",
-      );
-      // OrderEntry.closedByTx = `event.transaction.from`. In matchstick-ts that
-      // gets stamped with a default mock 20-byte value (not the real EOA), so
-      // we only verify the field is populated as a hex address.
-      assertHexHash(entry.closedByTx, "OrderEntry.closedByTx after MATCHED");
-    }
+    const filledEntry = snap2.entity("OrderEntry", makerOrderId);
+    assert.ok(filledEntry);
+    assert.equal(filledEntry.status, "MATCHED", "OrderEntry must be MATCHED after fill");
+    assert.equal(String(filledEntry.remainingQuantity), "0");
+    assert.ok(
+      filledEntry.closedAt != null && BigInt(String(filledEntry.closedAt)) > 0n,
+      "OrderEntry.closedAt is set on the OrderUpdated(0) fill",
+    );
+    assertHexHash(filledEntry.closedByTx, "OrderEntry.closedByTx after MATCHED");
 
     const level2 = snap2.entity("PriceLevel", levelId);
     assert.ok(level2);
@@ -189,7 +178,7 @@ describe("qty=3 single sell order: Order aggregate and OrderEntry promotion", ()
 describe("order cancellation: OrderEntry CANCELLED, PriceLevel and Futures decremented", () => {
   after(() => conn.matchstick.reset());
 
-  it("cancelling all entries flips Order.status to CANCELLED and decrements activeOrders", async () => {
+  it("cancelling a qty=2 order flips Order.status to CANCELLED and decrements activeOrders", async () => {
     const { contracts, accounts, config } = await conn.networkHelpers.loadFixture(
       deployFuturesFixture,
     );
@@ -206,8 +195,8 @@ describe("order cancellation: OrderEntry CANCELLED, PriceLevel and Futures decre
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
-    // Seller places qty=-2 → 2 OrderCreated events
-    const sellerTx = await futures.write.createOrder([price, deliveryDate, "", -2], {
+    // Seller places qty=-2 → 1 OrderCreated event, 1 OrderEntry with remainingQuantity=2
+    const sellerTx = await futures.write.createOrder([price, deliveryDate, -2n], {
       account: seller.account,
     });
     const sellerReceipt = await pc.waitForTransactionReceipt({ hash: sellerTx });
@@ -216,52 +205,29 @@ describe("order cancellation: OrderEntry CANCELLED, PriceLevel and Futures decre
       abi: futures.abi,
       eventName: "OrderCreated",
     });
-    assert.equal(orderEvents.length, 2);
-    const [orderId1, orderId2] = orderEvents.map(
-      (e) => e.args.orderId.toLowerCase() as `0x${string}`,
-    );
+    assert.equal(orderEvents.length, 1);
+    const orderId = orderEvents[0].args.orderId.toLowerCase() as `0x${string}`;
     const levelId = priceLevelId(deliveryDate, price, false);
 
-    // Cancel first entry
-    await futures.write.closeOrder([orderId1], { account: seller.account });
-
     const snap1 = await conn.matchstick.indexSnapshot([
-      read("OrderEntry", orderId1),
-      read("OrderEntry", orderId2),
+      read("OrderEntry", orderId),
       read("PriceLevel", levelId),
       read("Futures", "0"),
     ]);
+    assert.equal(String(snap1.entity("OrderEntry", orderId)?.remainingQuantity), "2");
+    assert.equal(String(snap1.entity("Futures", "0")?.activeOrders), "1");
 
-    assert.equal(snap1.entity("OrderEntry", orderId1)?.status, "CANCELLED");
-    assert.equal(snap1.entity("OrderEntry", orderId2)?.status, "ACTIVE");
-
-    const [order1] = snap1.saved("Order");
-    assert.ok(order1);
-    assert.equal(String(order1.cancelledQuantity), "1");
-    assert.equal(String(order1.quantity), "1", "1 active unit remaining");
-    assert.equal(order1.status, "PARTIAL", "partially cancelled → PARTIAL");
-
-    assert.equal(
-      String(snap1.entity("PriceLevel", levelId)?.totalQuantity),
-      "1",
-      "PriceLevel must be 1 after cancelling 1 entry",
-    );
-    assert.equal(
-      String(snap1.entity("Futures", "0")?.activeOrders),
-      "1",
-      "still 1 active order aggregate",
-    );
-
-    // Cancel second entry — order becomes fully CANCELLED
-    await futures.write.closeOrder([orderId2], { account: seller.account });
+    // Cancel the entire resting order
+    await futures.write.cancelOrder([orderId], { account: seller.account });
 
     const snap2 = await conn.matchstick.indexSnapshot([
-      read("OrderEntry", orderId2),
+      read("OrderEntry", orderId),
       read("PriceLevel", levelId),
       read("Futures", "0"),
     ]);
 
-    assert.equal(snap2.entity("OrderEntry", orderId2)?.status, "CANCELLED");
+    assert.equal(snap2.entity("OrderEntry", orderId)?.status, "CANCELLED");
+    assert.equal(String(snap2.entity("OrderEntry", orderId)?.remainingQuantity), "0");
 
     const [order2] = snap2.saved("Order");
     assert.ok(order2);
@@ -282,9 +248,9 @@ describe("order cancellation: OrderEntry CANCELLED, PriceLevel and Futures decre
 });
 
 // ---------------------------------------------------------------------------
-// Test 3: partial fill — Order.status=PARTIAL, remaining entries ACTIVE
+// Test 3: partial fill — Order.status=PARTIAL, remaining entry stays ACTIVE
 // ---------------------------------------------------------------------------
-describe("partial fill: Order PARTIAL, unfilled entries stay ACTIVE", () => {
+describe("partial fill: Order PARTIAL, unfilled quantity stays ACTIVE", () => {
   after(() => conn.matchstick.reset());
 
   it("buyer fills 1 of 3 → Order.filledQty=1, quantity=2, status=PARTIAL", async () => {
@@ -305,8 +271,8 @@ describe("partial fill: Order PARTIAL, unfilled entries stay ACTIVE", () => {
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
-    // Seller rests 3 units
-    const sellerTx = await futures.write.createOrder([price, deliveryDate, "", -3], {
+    // Seller rests 3 units in one order
+    const sellerTx = await futures.write.createOrder([price, deliveryDate, -3n], {
       account: seller.account,
     });
     const sellerReceipt = await pc.waitForTransactionReceipt({ hash: sellerTx });
@@ -315,15 +281,15 @@ describe("partial fill: Order PARTIAL, unfilled entries stay ACTIVE", () => {
       abi: futures.abi,
       eventName: "OrderCreated",
     });
-    const makerOrderIds = orderEvents.map((e) => e.args.orderId.toLowerCase() as `0x${string}`);
+    const makerOrderId = orderEvents[0].args.orderId.toLowerCase() as `0x${string}`;
 
     // Buyer takes only 1
-    await futures.write.createOrder([price, deliveryDate, "dst", 1], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account });
 
     const levelId = priceLevelId(deliveryDate, price, false);
 
     const snap = await conn.matchstick.indexSnapshot([
-      ...makerOrderIds.map((id) => read("OrderEntry", id)),
+      read("OrderEntry", makerOrderId),
       read("PriceLevel", levelId),
       read("Futures", "0"),
     ]);
@@ -335,12 +301,10 @@ describe("partial fill: Order PARTIAL, unfilled entries stay ACTIVE", () => {
     assert.equal(String(order.cancelledQuantity), "0");
     assert.equal(order.status, "PARTIAL");
 
-    // The filled entry is MATCHED; the other two remain ACTIVE
-    const entries = makerOrderIds.map((id) => snap.entity("OrderEntry", id));
-    const matchedEntries = entries.filter((e) => e?.status === "MATCHED");
-    const activeEntries = entries.filter((e) => e?.status === "ACTIVE");
-    assert.equal(matchedEntries.length, 1, "1 entry MATCHED");
-    assert.equal(activeEntries.length, 2, "2 entries still ACTIVE");
+    const entry = snap.entity("OrderEntry", makerOrderId);
+    assert.ok(entry);
+    assert.equal(entry.status, "ACTIVE", "partially filled entry stays ACTIVE");
+    assert.equal(String(entry.remainingQuantity), "2");
 
     assert.equal(
       String(snap.entity("PriceLevel", levelId)?.totalQuantity),
@@ -349,8 +313,8 @@ describe("partial fill: Order PARTIAL, unfilled entries stay ACTIVE", () => {
     );
     assert.equal(
       String(snap.entity("Futures", "0")?.activeOrders),
-      "2",
-      "2 active OrderEntry units (partial: 1 matched, 2 still resting)",
+      "1",
+      "1 active OrderEntry (partial: 1 matched, 2 still resting on same orderId)",
     );
   });
 });

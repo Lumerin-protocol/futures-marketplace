@@ -103,12 +103,10 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, de
                 quantity: oppositeQuantity,
               });
             } else {
-              // Futures needs price, deliveryDate, quantity, and destUrl
               txhash = await createOrderAsync({
                 price: pricePerDay,
                 deliveryDate: deliveryAt,
                 quantity: oppositeQuantity,
-                destUrl: "",
               });
             }
             return { txhash, isSkipped: false };

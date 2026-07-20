@@ -1,26 +1,20 @@
-import { QUANTITY_SCALE, QUANTITY_SCALE_NUM } from "../../lib/units";
-
+/**
+ * Approximate per-order maintenance for UI display (Futures 3.0).
+ * Mirrors on-chain order margin: maintenance = price × |qty| × marginPct / 100,
+ * then subtract mark PnL on that resting qty. Quantity is whole contracts (no
+ * QUANTITY_DECIMALS scale).
+ */
 export function getMinMarginForPositionManual(
-  entryPricePerDay: bigint,
+  entryPrice: bigint,
   qty: number,
-  marketPricePerDay: bigint,
+  marketPrice: bigint,
   marginPercent: number,
 ) {
-  // Convert quantity to integer with QUANTITY_DECIMALS precision for calculations
-  // This ensures decimal quantities (e.g., 0.000001) are handled correctly
-  const qtyWithDecimals = Math.round(qty * QUANTITY_SCALE_NUM);
-  const qtyBigInt = BigInt(qtyWithDecimals);
-  const absQtyBigInt = qtyBigInt < 0n ? -qtyBigInt : qtyBigInt;
+  const qtyBigInt = BigInt(Math.trunc(qty));
+  const absQty = qtyBigInt < 0n ? -qtyBigInt : qtyBigInt;
 
-  // Calculate PnL: (marketPrice - entryPrice) * qty
-  // Divide by QUANTITY_SCALE to adjust for the quantity scaling
-  const pnl = ((marketPricePerDay - entryPricePerDay) * qtyBigInt) / QUANTITY_SCALE;
+  const pnl = (marketPrice - entryPrice) * qtyBigInt;
+  const maintenanceMargin = (entryPrice * absQty * BigInt(marginPercent)) / 100n;
 
-  // Calculate maintenance margin: entryPrice * |qty| * marginPercent / 100
-  // Divide by QUANTITY_SCALE to adjust for the quantity scaling
-  const maintenanceMargin =
-    (entryPricePerDay * absQtyBigInt * BigInt(marginPercent)) / 100n / QUANTITY_SCALE;
-  const effectiveMargin = maintenanceMargin - pnl;
-
-  return effectiveMargin;
+  return maintenanceMargin - pnl;
 }

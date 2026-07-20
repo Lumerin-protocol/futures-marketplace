@@ -41,12 +41,12 @@ describe("PriceLevel: bid and ask at the same price are distinct entities", () =
     await conn.matchstick.anchor();
 
     // Seller rests an ask, buyer rests a bid — they don't cross.
-    const askTx = await futures.write.createOrder([askPrice, deliveryDate, "", -2], {
+    const askTx = await futures.write.createOrder([askPrice, deliveryDate, -2n], {
       account: seller.account,
     });
     await pc.waitForTransactionReceipt({ hash: askTx });
 
-    const bidTx = await futures.write.createOrder([bidPrice, deliveryDate, "dst", 3], {
+    const bidTx = await futures.write.createOrder([bidPrice, deliveryDate, 3n], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: bidTx });

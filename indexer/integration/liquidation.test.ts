@@ -2,12 +2,11 @@
  * Integration tests: liquidation + bad-debt events under the permissionless
  * keeper flow.
  *
- * Verifies that `LotLiquidated` + `LotClosed(LIQUIDATION)` populate the Lot
- * entity (liquidator / liquidationFee / liquidatedParticipant), that
- * `BadDebtEvent` is created when losses exceed coverage, and that
- * `Futures.totalLiquidations` is incremented once per tx via the
- * `LiquidationTx` dedup sentinel (regardless of how many legs the tx
- * contained).
+ * Verifies that `PositionLiquidated` + `OrderLiquidated` populate the
+ * PositionSession / OrderEntry entities, that `BadDebtEvent` is created when
+ * losses exceed coverage, and that `Futures.totalLiquidations` is incremented
+ * once per tx via the `LiquidationTx` dedup sentinel (regardless of how many
+ * legs the tx contained).
  */
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
@@ -16,17 +15,18 @@ import { encodeFunctionData, parseEventLogs, parseUnits } from "viem";
 import { EntityFields, read } from "matchstick-ts";
 import { deployFuturesFixture } from "../../contracts/tests/fixtures.ts";
 import { quantizePrice, scaleHashprice } from "../../contracts/tests/utils.ts";
+import { pointerId } from "./helpers.ts";
 
 const conn = await network.create({ override: { loggingEnabled: true } });
 const { matchstick } = conn;
 
 // ---------------------------------------------------------------------------
-// Test 1: permissionless liquidatePosition — Lot closed, seller netQty=0
+// Test 1: permissionless liquidatePosition — seller closed, seller netQty=0
 // ---------------------------------------------------------------------------
-describe("liquidatePosition: Lot closed with LIQUIDATION, seller netQty=0", () => {
+describe("liquidatePosition: PositionLiquidated, seller netQty=0", () => {
   after(() => matchstick.reset());
 
-  it("populates Lot liquidator/fee + bumps Futures.totalLiquidations once per tx", async () => {
+  it("populates Trade liquidation fields + bumps Futures.totalLiquidations once per tx", async () => {
     const { contracts, accounts, config } =
       await conn.networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault, hashrateOracle } = contracts;
@@ -42,77 +42,54 @@ describe("liquidatePosition: Lot closed with LIQUIDATION, seller netQty=0", () =
     matchstick.bind("Futures", futures.address, futures.abi);
     await matchstick.captureViewMocks();
 
-    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
-    const buyTx = await futures.write.createOrder([price, deliveryDate, "dst", 1], {
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
+    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n], {
       account: buyer.account,
     });
-    const buyReceipt = await pc.waitForTransactionReceipt({ hash: buyTx });
-    const [lotCreated] = parseEventLogs({
-      logs: buyReceipt.logs,
-      abi: futures.abi,
-      eventName: "LotCreated",
-    });
-    const lotId = lotCreated.args.lotId.toLowerCase() as `0x${string}`;
+    await pc.waitForTransactionReceipt({ hash: buyTx });
 
     // Crash hashprice 40x so seller is deeply underwater (PME-MM breached)
     await scaleHashprice(hashrateOracle, 40n, 1n);
 
-    const liqTx = await futures.write.liquidatePosition([seller.account.address, lotId], {
-      account: validator.account,
-    });
+    const liqTx = await futures.write.liquidatePosition(
+      [seller.account.address, deliveryDate, 1n],
+      { account: validator.account },
+    );
     const liqReceipt = await pc.waitForTransactionReceipt({ hash: liqTx });
 
-    const lotLiquidatedEvents = parseEventLogs({
+    const positionLiquidatedEvents = parseEventLogs({
       logs: liqReceipt.logs,
       abi: futures.abi,
-      eventName: "LotLiquidated",
+      eventName: "PositionLiquidated",
     });
-    assert.equal(lotLiquidatedEvents.length, 1, "must emit exactly 1 LotLiquidated");
-    const lotLiquidated = lotLiquidatedEvents[0];
-    assert.equal(lotLiquidated.args.lotId.toLowerCase(), lotId);
+    assert.equal(positionLiquidatedEvents.length, 1, "must emit exactly 1 PositionLiquidated");
+    const positionLiquidated = positionLiquidatedEvents[0];
+    assert.equal(positionLiquidated.args.deliveryAt, deliveryDate);
 
     const sellerAddr = seller.account.address.toLowerCase() as `0x${string}`;
+    const buyerAddr = buyer.account.address.toLowerCase() as `0x${string}`;
     const validatorAddr = validator.account.address.toLowerCase() as `0x${string}`;
 
-    const snap = await matchstick.indexSnapshot([]);
+    const snap = await matchstick.indexSnapshot([
+      read("UserDeliverySessionPointer", pointerId(seller.account.address, deliveryDate)),
+      read("UserDeliverySessionPointer", pointerId(buyer.account.address, deliveryDate)),
+    ]);
 
-    const lot = snap.entity("Lot", lotId);
-    assert.ok(lot);
-    assert.equal(lot.status, "CLOSED", "Lot must be closed after liquidation");
-    assert.equal(lot.closeReason, "LIQUIDATION");
-    assert.equal(lot.isClosed, true);
-    assert.equal(
-      String(lot.liquidatedParticipant).toLowerCase(),
-      sellerAddr,
-      "Lot.liquidatedParticipant must match the LotLiquidated event participant",
+    const sellerPtr = snap.entity(
+      "UserDeliverySessionPointer",
+      pointerId(seller.account.address, deliveryDate),
     );
-    assert.equal(
-      String(lot.liquidator).toLowerCase(),
-      validatorAddr,
-      "Lot.liquidator must match the LotLiquidated event liquidator (msg.sender)",
+    const buyerPtr = snap.entity(
+      "UserDeliverySessionPointer",
+      pointerId(buyer.account.address, deliveryDate),
     );
-    assert.equal(
-      String(lot.liquidationFee),
-      String(lotLiquidated.args.fee),
-      "Lot.liquidationFee must mirror the on-chain LotLiquidated.fee",
-    );
-
-    let sellerPtr: EntityFields | undefined;
-    let buyerPtr: EntityFields | undefined;
-    for (const ptr of snap.saved("UserDeliverySessionPointer")) {
-      if (ptr.user === sellerAddr) {
-        sellerPtr = ptr;
-      } else {
-        buyerPtr = ptr;
-      }
-    }
     assert.ok(sellerPtr);
     assert.equal(String(sellerPtr.netQuantity), "0", "seller netQty must be 0 after liquidation");
     assert.ok(buyerPtr);
     assert.equal(
       String(buyerPtr.netQuantity),
-      "0",
-      "buyer netQty must be 0 (cash-settled both sides)",
+      "1",
+      "buyer netQty stays open (unilateral liquidation)",
     );
 
     const futuresEntity = snap.entity("Futures", "0");
@@ -140,9 +117,6 @@ describe("liquidatePosition: Lot closed with LIQUIDATION, seller netQty=0", () =
     );
 
     // The forced close is modeled as a flagged Trade (single source of truth):
-    // the closing Trade for the liquidated seller in the liquidation tx must
-    // carry isLiquidation + liquidator + liquidationFee, mirroring the on-chain
-    // LotLiquidated event.
     let sellerTrade: EntityFields | undefined;
     for (const t of snap.saved("Trade")) {
       if (
@@ -164,21 +138,20 @@ describe("liquidatePosition: Lot closed with LIQUIDATION, seller netQty=0", () =
     assert.equal(
       String(sellerTrade.liquidator).toLowerCase(),
       validatorAddr,
-      "Trade.liquidator must be the keeper/validator from LotLiquidated",
+      "Trade.liquidator must be the keeper/validator from PositionLiquidated",
     );
     assert.equal(
       String(sellerTrade.liquidationFee),
-      String(lotLiquidated.args.fee),
-      "Trade.liquidationFee must mirror the on-chain LotLiquidated.fee",
+      String(positionLiquidated.args.liquidatorFee),
+      "Trade.liquidationFee must mirror the on-chain PositionLiquidated.liquidatorFee",
     );
 
-    // Denormalized liquidation qty on the closing PositionSession (what the
-    // Positions / Position History views read; no nested trade fetch needed).
     const sellerSession = snap.entity(
       "PositionSession",
       String(sellerTrade.positionSession),
     );
     assert.ok(sellerSession, "the closing PositionSession must exist");
+    assert.equal(sellerSession.status, "CLOSE");
     assert.equal(
       String(sellerSession.liquidatedQuantity),
       "1",
@@ -209,24 +182,19 @@ describe("BadDebt: BadDebtEvent when losses exceed participant balance + insuran
     await matchstick.captureViewMocks();
     await matchstick.anchor();
 
-    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
-    const buyTx = await futures.write.createOrder([price, deliveryDate, "dst", 1], {
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
+    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n], {
       account: buyer.account,
     });
-    const buyReceipt = await pc.waitForTransactionReceipt({ hash: buyTx });
-    const [lotCreated] = parseEventLogs({
-      logs: buyReceipt.logs,
-      abi: futures.abi,
-      eventName: "LotCreated",
-    });
-    const lotId = lotCreated.args.lotId.toLowerCase() as `0x${string}`;
+    await pc.waitForTransactionReceipt({ hash: buyTx });
 
-    // Spike price 500x — loss (~12 015 USDC) exceeds seller (1 000) + insurance fund (10 000)
+    // Spike price 500x — loss exceeds seller (1 000) + insurance fund (10 000)
     await scaleHashprice(hashrateOracle, 500n, 1n);
 
-    const liqTx = await futures.write.liquidatePosition([seller.account.address, lotId], {
-      account: validator.account,
-    });
+    const liqTx = await futures.write.liquidatePosition(
+      [seller.account.address, deliveryDate, 1n],
+      { account: validator.account },
+    );
     const liqReceipt = await pc.waitForTransactionReceipt({ hash: liqTx });
 
     const badDebtEvents = parseEventLogs({
@@ -287,41 +255,35 @@ describe("BadDebt: BadDebtEvent when losses exceed participant balance + insuran
       "totalLiquidations still bumps once for the same tx",
     );
 
-    const lotLiquidatedEvents = parseEventLogs({
+    const positionLiquidatedEvents = parseEventLogs({
       logs: liqReceipt.logs,
       abi: futures.abi,
-      eventName: "LotLiquidated",
+      eventName: "PositionLiquidated",
     });
-    assert.equal(lotLiquidatedEvents.length, 1, "must emit exactly 1 LotLiquidated");
-    const lotLiquidated = lotLiquidatedEvents[0];
+    assert.equal(positionLiquidatedEvents.length, 1, "must emit exactly 1 PositionLiquidated");
+    const positionLiquidated = positionLiquidatedEvents[0];
     const validatorAddr = validator.account.address.toLowerCase() as `0x${string}`;
 
-    const lot = snap.entity("Lot", lotId);
-    assert.ok(lot);
-    assert.equal(lot.status, "CLOSED");
-    assert.equal(
-      lot.closeReason,
-      "LIQUIDATION",
-      "bad-debt path must still surface closeReason=LIQUIDATION",
+    const sellerPtr = snap.entity(
+      "UserDeliverySessionPointer",
+      pointerId(seller.account.address, deliveryDate),
     );
-    assert.equal(lot.isClosed, true);
-    assert.equal(String(lot.liquidatedParticipant).toLowerCase(), sellerAddr);
-    assert.equal(String(lot.liquidator).toLowerCase(), validatorAddr);
-    assert.equal(String(lot.liquidationFee), String(lotLiquidated.args.fee));
+    assert.ok(sellerPtr);
+    assert.equal(String(sellerPtr.netQuantity), "0");
+    assert.equal(
+      String(positionLiquidated.args.liquidator).toLowerCase(),
+      validatorAddr,
+    );
   });
 });
 
 // ---------------------------------------------------------------------------
 // Test 3: multi-position liquidation across two txs — Futures.totalLiquidations counts txs
 // ---------------------------------------------------------------------------
-//
-// Each `liquidatePosition` call is its own tx, so two underwater positions
-// liquidate in two txs. The `LiquidationTx` dedup sentinel keeps the counter
-// in lockstep with tx count (not leg count).
 describe("multi-position permissionless liquidation: per-tx dedup", () => {
   after(() => matchstick.reset());
 
-  it("two liquidatePosition txs → 2 LotLiquidated, totalLiquidations=2", async () => {
+  it("two liquidatePosition txs → 2 PositionLiquidated, totalLiquidations=2", async () => {
     const { contracts, accounts, config } =
       await conn.networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault, hashrateOracle } = contracts;
@@ -338,46 +300,50 @@ describe("multi-position permissionless liquidation: per-tx dedup", () => {
     matchstick.bind("Futures", futures.address, futures.abi);
     await matchstick.captureViewMocks();
 
-    await futures.write.createOrder([price1, deliveryDate, "", -1], { account: seller.account });
-    const buy1 = await futures.write.createOrder([price1, deliveryDate, "dst", 1], {
+    await futures.write.createOrder([price1, deliveryDate, -1n], { account: seller.account });
+    const buy1 = await futures.write.createOrder([price1, deliveryDate, 1n], {
       account: buyer.account,
     });
-    const r1 = await pc.waitForTransactionReceipt({ hash: buy1 });
-    const [created1] = parseEventLogs({ logs: r1.logs, abi: futures.abi, eventName: "LotCreated" });
+    await pc.waitForTransactionReceipt({ hash: buy1 });
 
-    await futures.write.createOrder([price2, deliveryDate, "", -1], { account: seller.account });
-    const buy2 = await futures.write.createOrder([price2, deliveryDate, "dst", 1], {
+    await futures.write.createOrder([price2, deliveryDate, -1n], { account: seller.account });
+    const buy2 = await futures.write.createOrder([price2, deliveryDate, 1n], {
       account: buyer.account,
     });
-    const r2 = await pc.waitForTransactionReceipt({ hash: buy2 });
-    const [created2] = parseEventLogs({ logs: r2.logs, abi: futures.abi, eventName: "LotCreated" });
-
-    const lot1Id = created1.args.lotId.toLowerCase() as `0x${string}`;
-    const lot2Id = created2.args.lotId.toLowerCase() as `0x${string}`;
-    assert.notEqual(lot1Id, lot2Id, "two open lots must have distinct ids");
+    await pc.waitForTransactionReceipt({ hash: buy2 });
 
     await scaleHashprice(hashrateOracle, 40n, 1n);
 
-    const liqTx1 = await futures.write.liquidatePosition([seller.account.address, lot1Id], {
-      account: validator.account,
-    });
+    const liqTx1 = await futures.write.liquidatePosition(
+      [seller.account.address, deliveryDate, 1n],
+      { account: validator.account },
+    );
     await pc.waitForTransactionReceipt({ hash: liqTx1 });
 
-    const liqTx2 = await futures.write.liquidatePosition([seller.account.address, lot2Id], {
-      account: validator.account,
-    });
+    const liqTx2 = await futures.write.liquidatePosition(
+      [seller.account.address, deliveryDate, 1n],
+      { account: validator.account },
+    );
     await pc.waitForTransactionReceipt({ hash: liqTx2 });
 
     const sellerAddr = seller.account.address.toLowerCase() as `0x${string}`;
-    const snap = await matchstick.indexSnapshot([read("Lot", lot1Id), read("Lot", lot2Id)]);
+    const snap = await matchstick.indexSnapshot([
+      read("UserDeliverySessionPointer", pointerId(seller.account.address, deliveryDate)),
+    ]);
 
-    for (const id of [lot1Id, lot2Id]) {
-      const lot = snap.entity("Lot", id);
-      assert.ok(lot, `Lot ${id} must exist`);
-      assert.equal(lot.status, "CLOSED");
-      assert.equal(lot.closeReason, "LIQUIDATION");
-      assert.equal(String(lot.liquidatedParticipant).toLowerCase(), sellerAddr);
-    }
+    const sellerPtr = snap.entity(
+      "UserDeliverySessionPointer",
+      pointerId(seller.account.address, deliveryDate),
+    );
+    assert.ok(sellerPtr);
+    assert.equal(String(sellerPtr.netQuantity), "0", "seller fully liquidated after two partial txs");
+
+    const sellerSessions = snap
+      .saved("PositionSession")
+      .filter((s) => String(s.user).toLowerCase() === sellerAddr);
+    assert.equal(sellerSessions.length, 1);
+    assert.equal(sellerSessions[0].status, "CLOSE");
+    assert.equal(String(sellerSessions[0].liquidatedQuantity), "2");
 
     const liquidationTxs = snap.saved("LiquidationTx");
     assert.equal(
@@ -399,14 +365,6 @@ describe("multi-position permissionless liquidation: per-tx dedup", () => {
 // ---------------------------------------------------------------------------
 // Test 4: multi-leg liquidation in ONE tx — liquidatedQuantity counts units
 // ---------------------------------------------------------------------------
-//
-// A keeper can batch several `liquidatePosition` calls into a single tx via the
-// embedded multicall. When two same-session positions are liquidated in one tx,
-// the two `LotClosed(LIQUIDATION)` legs aggregate into ONE Trade whose
-// `tradeQuantity` grows to 2, and two `LotLiquidated` legs fire. The
-// denormalized `PositionSession.liquidatedQuantity` must count the liquidated
-// UNITS (2), not accumulate the running aggregate trade qty per leg (which would
-// give 1 + 2 = 3).
 describe("multi-leg liquidation in one tx: liquidatedQuantity counts units", () => {
   after(() => matchstick.reset());
 
@@ -427,61 +385,54 @@ describe("multi-leg liquidation in one tx: liquidatedQuantity counts units", () 
     matchstick.bind("Futures", futures.address, futures.abi);
     await matchstick.captureViewMocks();
 
-    // Seller shorts two lots at distinct prices on the SAME deliveryDate → one
-    // PositionSession with netQuantity -2 (both lots scale into one session).
-    await futures.write.createOrder([price1, deliveryDate, "", -1], { account: seller.account });
-    const buy1 = await futures.write.createOrder([price1, deliveryDate, "dst", 1], {
+    // Seller shorts two units at distinct prices on the SAME deliveryDate → one
+    // PositionSession with netQuantity -2 (both fills scale into one session).
+    await futures.write.createOrder([price1, deliveryDate, -1n], { account: seller.account });
+    const buy1 = await futures.write.createOrder([price1, deliveryDate, 1n], {
       account: buyer.account,
     });
-    const r1 = await pc.waitForTransactionReceipt({ hash: buy1 });
-    const [created1] = parseEventLogs({ logs: r1.logs, abi: futures.abi, eventName: "LotCreated" });
+    await pc.waitForTransactionReceipt({ hash: buy1 });
 
-    await futures.write.createOrder([price2, deliveryDate, "", -1], { account: seller.account });
-    const buy2 = await futures.write.createOrder([price2, deliveryDate, "dst", 1], {
+    await futures.write.createOrder([price2, deliveryDate, -1n], { account: seller.account });
+    const buy2 = await futures.write.createOrder([price2, deliveryDate, 1n], {
       account: buyer.account,
     });
-    const r2 = await pc.waitForTransactionReceipt({ hash: buy2 });
-    const [created2] = parseEventLogs({ logs: r2.logs, abi: futures.abi, eventName: "LotCreated" });
-
-    const lot1Id = created1.args.lotId.toLowerCase() as `0x${string}`;
-    const lot2Id = created2.args.lotId.toLowerCase() as `0x${string}`;
-    assert.notEqual(lot1Id, lot2Id, "two open lots must have distinct ids");
+    await pc.waitForTransactionReceipt({ hash: buy2 });
 
     await scaleHashprice(hashrateOracle, 40n, 1n);
 
-    // Liquidate BOTH positions in a SINGLE tx via the embedded multicall so the
-    // tx carries two LotLiquidated legs for the same (participant, session).
+    // Liquidate BOTH units in a SINGLE tx via the embedded multicall so the
+    // tx carries two PositionLiquidated legs for the same (participant, session).
     const calldata = [
       encodeFunctionData({
         abi: futures.abi,
         functionName: "liquidatePosition",
-        args: [seller.account.address, lot1Id],
+        args: [seller.account.address, deliveryDate, 1n],
       }),
       encodeFunctionData({
         abi: futures.abi,
         functionName: "liquidatePosition",
-        args: [seller.account.address, lot2Id],
+        args: [seller.account.address, deliveryDate, 1n],
       }),
     ];
     const liqTx = await futures.write.multicall([calldata], { account: validator.account });
     const liqReceipt = await pc.waitForTransactionReceipt({ hash: liqTx });
 
-    const lotLiquidatedEvents = parseEventLogs({
+    const positionLiquidatedEvents = parseEventLogs({
       logs: liqReceipt.logs,
       abi: futures.abi,
-      eventName: "LotLiquidated",
+      eventName: "PositionLiquidated",
     });
     assert.equal(
-      lotLiquidatedEvents.length,
+      positionLiquidatedEvents.length,
       2,
-      "a single multicall tx must carry two LotLiquidated legs",
+      "a single multicall tx must carry two PositionLiquidated legs",
     );
 
     const sellerAddr = seller.account.address.toLowerCase() as `0x${string}`;
 
     const snap = await matchstick.indexSnapshot([]);
 
-    // Both close legs aggregate into one Trade for the seller in this tx.
     let sellerTrade: EntityFields | undefined;
     for (const t of snap.saved("Trade")) {
       if (
@@ -503,7 +454,7 @@ describe("multi-leg liquidation in one tx: liquidatedQuantity counts units", () 
     assert.equal(
       String(sellerSession.liquidatedQuantity),
       "2",
-      "liquidatedQuantity must equal the number of liquidated units (2), not the summed running aggregate trade qty (1 + 2 = 3)",
+      "liquidatedQuantity must equal the number of liquidated units (2)",
     );
   });
 });

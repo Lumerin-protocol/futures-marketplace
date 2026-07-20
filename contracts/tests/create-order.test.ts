@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
-import { getAddress, parseEventLogs, parseUnits, zeroAddress } from "viem";
+import { getAddress, parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { warpPastDeliveryWithFreshOracle } from "./utils.ts";
 
@@ -18,7 +18,7 @@ describe("Order Creation", () => {
     const pastDate = block.timestamp - 86400n;
 
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price, pastDate, "", 1], { account: seller.account }),
+      futures.write.createOrder([price, pastDate, 1], { account: seller.account }),
       futures,
       "DeliveryDateShouldBeInTheFuture",
     );
@@ -34,7 +34,7 @@ describe("Order Creation", () => {
     const dateBeforeFirst = firstFutureDeliveryDate - 86400n;
 
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price, dateBeforeFirst, "", 1], { account: seller.account }),
+      futures.write.createOrder([price, dateBeforeFirst, 1], { account: seller.account }),
       futures,
       "DeliveryDateNotAvailable",
     );
@@ -53,7 +53,7 @@ describe("Order Creation", () => {
     const misalignedDate = firstFutureDeliveryDate + deliveryIntervalSeconds / 2n;
 
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price, misalignedDate, "", 1], { account: seller.account }),
+      futures.write.createOrder([price, misalignedDate, 1], { account: seller.account }),
       futures,
       "DeliveryDateNotAvailable",
     );
@@ -73,7 +73,7 @@ describe("Order Creation", () => {
     const dateBeyondRange = lastAvailableDate + deliveryIntervalSeconds;
 
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price, dateBeyondRange, "", 1], { account: seller.account }),
+      futures.write.createOrder([price, dateBeyondRange, 1], { account: seller.account }),
       futures,
       "DeliveryDateNotAvailable",
     );
@@ -90,7 +90,7 @@ describe("Order Creation", () => {
     await collateralVault.write.deposit([margin], { account: seller.account });
 
     for (const deliveryDate of config.deliveryDates) {
-      const txHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
+      const txHash = await futures.write.createOrder([price, deliveryDate, 1], {
         account: seller.account,
       });
 
@@ -115,15 +115,12 @@ describe("Order Creation", () => {
 
     const qty = 5;
     const price = await futures.read.getMarketPrice();
-    // Generous deposit: |qty| × entry price covers any PME stress +
-    // unrealized-loss requirement at entry (one contract settles pricePerDay).
     const margin = price * BigInt(qty);
     const deliveryDate = BigInt(config.deliveryDates[0]);
 
-    // Resting orders carry no maker/taker fee under the post-2.9 model.
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    const txHash = await futures.write.createOrder([price, deliveryDate, "", qty], {
+    const txHash = await futures.write.createOrder([price, deliveryDate, qty], {
       account: seller.account,
     });
 
@@ -134,15 +131,16 @@ describe("Order Creation", () => {
       eventName: "OrderCreated",
     });
 
-    assert.equal(events.length, 5);
+    assert.equal(events.length, 1);
+    const event = events[0];
+    assert.notEqual(event.args.orderId, undefined);
+    assert.equal(getAddress(event.args.participant), getAddress(seller.account.address));
+    assert.equal(event.args.price, price);
+    assert.equal(event.args.deliveryAt, deliveryDate);
+    assert.equal(event.args.quantity, BigInt(qty));
 
-    for (const event of events) {
-      assert.notEqual(event.args.orderId, undefined);
-      assert.equal(getAddress(event.args.participant), getAddress(seller.account.address));
-      assert.equal(event.args.pricePerDay, price);
-      assert.equal(event.args.deliveryAt, deliveryDate);
-      assert.equal(event.args.isBuy, true);
-    }
+    const order = await futures.read.getOrder([event.args.orderId]);
+    assert.equal(order.quantity, BigInt(qty));
   });
 
   it("should create a sell order when no matching buy order exists", async () => {
@@ -157,7 +155,7 @@ describe("Order Creation", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    const txHash = await futures.write.createOrder([price, deliveryDate, "", qty], {
+    const txHash = await futures.write.createOrder([price, deliveryDate, qty], {
       account: seller.account,
     });
 
@@ -168,15 +166,16 @@ describe("Order Creation", () => {
       eventName: "OrderCreated",
     });
 
-    assert.equal(events.length, 5);
+    assert.equal(events.length, 1);
+    const event = events[0];
+    assert.notEqual(event.args.orderId, undefined);
+    assert.equal(getAddress(event.args.participant), getAddress(seller.account.address));
+    assert.equal(event.args.price, price);
+    assert.equal(event.args.deliveryAt, BigInt(deliveryDate));
+    assert.equal(event.args.quantity, BigInt(qty));
 
-    for (const event of events) {
-      assert.notEqual(event.args.orderId, undefined);
-      assert.equal(getAddress(event.args.participant), getAddress(seller.account.address));
-      assert.equal(event.args.pricePerDay, price);
-      assert.equal(event.args.deliveryAt, BigInt(deliveryDate));
-      assert.equal(event.args.isBuy, false);
-    }
+    const order = await futures.read.getOrder([event.args.orderId]);
+    assert.equal(order.quantity, BigInt(qty));
   });
 
   it("should not collect maker/taker fees on plain resting orders or on own opposite-side cancels", async () => {
@@ -193,8 +192,7 @@ describe("Order Creation", () => {
     const initialSellerBalance = await collateralVault.read.balanceOf([seller.account.address]);
     const initialContractBalance = await collateralVault.read.balanceOf([futures.address]);
 
-    // 5 fresh resting buys — no opposites on the book → no fee charged.
-    const txHash = await futures.write.createOrder([price, deliveryDate, "", 5], {
+    const txHash = await futures.write.createOrder([price, deliveryDate, 5], {
       account: seller.account,
     });
     assert.equal((await pc.waitForTransactionReceipt({ hash: txHash })).status, "success");
@@ -205,8 +203,7 @@ describe("Order Creation", () => {
     );
     assert.equal(await collateralVault.read.balanceOf([futures.address]), initialContractBalance);
 
-    // 5 opposite-side qty by the same participant → all 5 self-cancel, no fee charged.
-    const sellOrderTxHash = await futures.write.createOrder([price, deliveryDate, "", -5], {
+    const sellOrderTxHash = await futures.write.createOrder([price, deliveryDate, -5], {
       account: seller.account,
     });
     assert.equal(
@@ -229,7 +226,7 @@ describe("Order Creation", () => {
     const deliveryDate = config.deliveryDates[0];
 
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([0n, deliveryDate, "", 1], { account: seller.account }),
+      futures.write.createOrder([0n, deliveryDate, 1], { account: seller.account }),
       futures,
       "InvalidPrice",
     );
@@ -244,7 +241,7 @@ describe("Order Creation", () => {
     const deliveryDate = config.deliveryDates[0];
 
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price, deliveryDate, "", 1], { account: seller.account }),
+      futures.write.createOrder([price, deliveryDate, 1], { account: seller.account }),
       futures,
       "InvalidPrice",
     );
@@ -260,7 +257,7 @@ describe("Order Creation", () => {
     const pastDate = block.timestamp - 86400n;
 
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price, pastDate, "", 1], { account: seller.account }),
+      futures.write.createOrder([price, pastDate, 1], { account: seller.account }),
       futures,
       "DeliveryDateShouldBeInTheFuture",
     );
@@ -277,7 +274,7 @@ describe("Order Creation", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    const txHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
+    const txHash = await futures.write.createOrder([price, deliveryDate, 1], {
       account: seller.account,
     });
 
@@ -292,9 +289,9 @@ describe("Order Creation", () => {
 
     assert.notEqual(event.args.orderId, undefined);
     assert.equal(getAddress(event.args.participant), getAddress(seller.account.address));
-    assert.equal(event.args.pricePerDay, price);
+    assert.equal(event.args.price, price);
     assert.equal(event.args.deliveryAt, deliveryDate);
-    assert.equal(event.args.isBuy, true);
+    assert.equal(event.args.quantity, 1n);
   });
 
   it("should allow position creation when margin balance equals exactly required margin", async () => {});
@@ -307,11 +304,10 @@ describe("Order Creation", () => {
     const price = parseUnits("100", 6);
     const margin = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
-    const isBuy = false;
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    const txHash = await futures.write.createOrder([price, deliveryDate, "", -1], {
+    const txHash = await futures.write.createOrder([price, deliveryDate, -1], {
       account: seller.account,
     });
 
@@ -326,9 +322,9 @@ describe("Order Creation", () => {
 
     assert.notEqual(event.args.orderId, undefined);
     assert.equal(getAddress(event.args.participant), getAddress(seller.account.address));
-    assert.equal(event.args.pricePerDay, price);
+    assert.equal(event.args.price, price);
     assert.equal(event.args.deliveryAt, deliveryDate);
-    assert.equal(event.args.isBuy, isBuy);
+    assert.equal(event.args.quantity, -1n);
   });
 
   it("should remove existing order when creating one with opposite direction", async () => {
@@ -342,7 +338,7 @@ describe("Order Creation", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    const buyOrderTxHash = await futures.write.createOrder([price, deliveryDate, "", 1], {
+    const buyOrderTxHash = await futures.write.createOrder([price, deliveryDate, 1], {
       account: seller.account,
     });
 
@@ -357,33 +353,41 @@ describe("Order Creation", () => {
 
     const buyOrderId = buyOrderCreatedEvent.args.orderId;
 
-    const sellOrderTxHash = await futures.write.createOrder([price, deliveryDate, "", -1], {
+    const sellOrderTxHash = await futures.write.createOrder([price, deliveryDate, -1], {
       account: seller.account,
     });
 
     const sellOrderReceipt = await pc.waitForTransactionReceipt({ hash: sellOrderTxHash });
     assert.equal(sellOrderReceipt.status, "success");
 
-    const [orderClosedEvent] = parseEventLogs({
+    const [orderCancelledEvent] = parseEventLogs({
       logs: sellOrderReceipt.logs,
       abi: futures.abi,
-      eventName: "OrderClosed",
+      eventName: "OrderCancelled",
     });
 
-    assert.equal(orderClosedEvent.args.orderId, buyOrderId);
+    assert.equal(orderCancelledEvent.args.orderId, buyOrderId);
 
     const newOrderCreatedEvents = parseEventLogs({
       logs: sellOrderReceipt.logs,
       abi: futures.abi,
       eventName: "OrderCreated",
     });
-    assert.equal(newOrderCreatedEvents.length, 0);
+    assert.equal(newOrderCreatedEvents.length, 1);
 
-    const closedOrder = await futures.read.getOrderById([buyOrderId]);
-    assert.equal(closedOrder.participant, zeroAddress);
+    const takerUpdated = parseEventLogs({
+      logs: sellOrderReceipt.logs,
+      abi: futures.abi,
+      eventName: "OrderUpdated",
+    });
+    assert.equal(takerUpdated.length, 1);
+    assert.equal(takerUpdated[0].args.newQuantity, 0n);
+
+    const closedOrder = await futures.read.getOrder([buyOrderId]);
+    assert.equal(closedOrder.quantity, 0n);
   });
 
-  it("should partially remove existing orders when creating opposite direction orders", async () => {
+  it("should self-cancel a resting order and leave remainder on the book when opposite qty exceeds it", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, pc } = accounts;
@@ -394,60 +398,58 @@ describe("Order Creation", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    const sellOrderTxHash = await futures.write.createOrder([price, deliveryDate, "", -3], {
+    const sellOrderTxHash = await futures.write.createOrder([price, deliveryDate, -3], {
       account: seller.account,
     });
 
     const sellOrderReceipt = await pc.waitForTransactionReceipt({ hash: sellOrderTxHash });
     assert.equal(sellOrderReceipt.status, "success");
 
-    const sellOrderCreatedEvents = parseEventLogs({
+    const [sellOrderCreated] = parseEventLogs({
       logs: sellOrderReceipt.logs,
       abi: futures.abi,
       eventName: "OrderCreated",
     });
+    const sellOrderId = sellOrderCreated.args.orderId;
 
-    assert.equal(sellOrderCreatedEvents.length, 3);
-    const sellOrderIds = sellOrderCreatedEvents.map((event) => event.args.orderId);
-
-    const buyOrderTxHash = await futures.write.createOrder([price, deliveryDate, "", 2], {
+    const buyOrderTxHash = await futures.write.createOrder([price, deliveryDate, 5], {
       account: seller.account,
     });
 
     const buyOrderReceipt = await pc.waitForTransactionReceipt({ hash: buyOrderTxHash });
     assert.equal(buyOrderReceipt.status, "success");
 
-    const orderClosedEvents = parseEventLogs({
+    const orderCancelledEvents = parseEventLogs({
       logs: buyOrderReceipt.logs,
       abi: futures.abi,
-      eventName: "OrderClosed",
+      eventName: "OrderCancelled",
     });
+    assert.equal(orderCancelledEvents.length, 1);
+    assert.equal(orderCancelledEvents[0].args.orderId, sellOrderId);
 
-    assert.equal(orderClosedEvents.length, 2);
+    const cancelledOrder = await futures.read.getOrder([sellOrderId]);
+    assert.equal(cancelledOrder.quantity, 0n);
 
-    const closedOrderIds = orderClosedEvents.map((event) => event.args.orderId);
-    for (const closedOrderId of closedOrderIds) {
-      assert.ok(sellOrderIds.includes(closedOrderId));
-    }
-
-    const newOrderCreatedEvents = parseEventLogs({
+    const buyOrderCreatedEvents = parseEventLogs({
       logs: buyOrderReceipt.logs,
       abi: futures.abi,
       eventName: "OrderCreated",
     });
-    assert.equal(newOrderCreatedEvents.length, 0);
+    assert.equal(buyOrderCreatedEvents.length, 1);
+    assert.equal(buyOrderCreatedEvents[0].args.quantity, 5n);
 
-    for (const closedOrderId of closedOrderIds) {
-      const closedOrder = await futures.read.getOrderById([closedOrderId]);
-      assert.equal(closedOrder.participant, zeroAddress);
-    }
+    const buyOrderUpdated = parseEventLogs({
+      logs: buyOrderReceipt.logs,
+      abi: futures.abi,
+      eventName: "OrderUpdated",
+    });
+    assert.equal(buyOrderUpdated.length, 1);
+    assert.equal(buyOrderUpdated[0].args.newQuantity, 2n);
 
-    const remainingSellOrderId = sellOrderIds.find((id) => !closedOrderIds.includes(id));
-    assert.ok(remainingSellOrderId);
-    const remainingOrder = await futures.read.getOrderById([remainingSellOrderId]);
+    const remainingOrder = await futures.read.getOrder([buyOrderCreatedEvents[0].args.orderId]);
     assert.equal(getAddress(remainingOrder.participant), getAddress(seller.account.address));
-    assert.equal(remainingOrder.isBuy, false);
-    assert.equal(remainingOrder.pricePerDay, price);
+    assert.equal(remainingOrder.quantity, 2n);
+    assert.equal(remainingOrder.price, price);
     assert.equal(remainingOrder.deliveryAt, deliveryDate);
   });
 
@@ -459,22 +461,18 @@ describe("Order Creation", () => {
     const price = await futures.read.getMarketPrice();
     const deliveryDate = config.deliveryDates[0];
 
-    // Single-contract IM is bounded above by entryPrice.
-    // Resting + self-cancel paths charge no maker/taker fee, so only the IM matters.
     const margin = price;
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    await futures.write.createOrder([price, deliveryDate, "", 1], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, 1], { account: seller.account });
 
-    // Balance must already exceed the PME-driven IM (no deficit) so the
-    // opposite-side order below isn't refused on insufficient-margin grounds.
     const sellerAddr = seller.account.address;
     const im = await contracts.portfolioMarginEngine.read.computePortfolioIM([sellerAddr]);
     const balance = await collateralVault.read.balanceOf([sellerAddr]);
     assert.ok(balance > im, "seller has surplus collateral above portfolio IM");
 
-    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, -1], { account: seller.account });
   });
 
   it("does not auto-sweep expired orders when creating a new order", async () => {
@@ -488,7 +486,7 @@ describe("Order Creation", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    const oldOrderTxHash = await futures.write.createOrder([price, oldDeliveryDate, "", 1], {
+    const oldOrderTxHash = await futures.write.createOrder([price, oldDeliveryDate, 1], {
       account: seller.account,
     });
 
@@ -500,7 +498,7 @@ describe("Order Creation", () => {
     });
     const oldOrderId = oldOrderEvents[0].args.orderId;
 
-    let oldOrder = await futures.read.getOrderById([oldOrderId]);
+    let oldOrder = await futures.read.getOrder([oldOrderId]);
     assert.equal(getAddress(oldOrder.participant), getAddress(seller.account.address));
     assert.equal(oldOrder.deliveryAt, oldDeliveryDate);
 
@@ -513,7 +511,7 @@ describe("Order Creation", () => {
     const futureDates = await futures.read.getDeliveryDates();
     const newDeliveryDate = futureDates[futureDates.length - 1];
 
-    const newOrderTxHash = await futures.write.createOrder([price, newDeliveryDate, "", 1], {
+    const newOrderTxHash = await futures.write.createOrder([price, newDeliveryDate, 1], {
       account: seller.account,
     });
 
@@ -522,11 +520,11 @@ describe("Order Creation", () => {
     const orderClosedEvents = parseEventLogs({
       logs: newOrderReceipt.logs,
       abi: futures.abi,
-      eventName: "OrderClosed",
+      eventName: "OrderCancelled",
     });
     assert.equal(orderClosedEvents.length, 0, "createOrder must not implicitly close expired orders");
 
-    oldOrder = await futures.read.getOrderById([oldOrderId]);
+    oldOrder = await futures.read.getOrder([oldOrderId]);
     assert.equal(getAddress(oldOrder.participant), getAddress(seller.account.address));
 
     const newOrderEvents = parseEventLogs({
@@ -537,7 +535,7 @@ describe("Order Creation", () => {
     assert.equal(newOrderEvents.length, 1);
     assert.equal(newOrderEvents[0].args.deliveryAt, newDeliveryDate);
 
-    const sellerOrders = await futures.read.getOrderIds([seller.account.address]);
+    const sellerOrders = await futures.read.getUserOrders([seller.account.address]);
     assert.equal(sellerOrders.length, 2, "stale order is still resting next to the new one");
   });
 
@@ -555,13 +553,13 @@ describe("Order Creation", () => {
 
     for (let i = 0; i < numOrders; i++) {
       await futures.write.createOrder(
-        [price + BigInt(i) * config.priceLadderStep, deliveryDate, "", 1],
+        [price + BigInt(i) * config.priceLadderStep, deliveryDate, 1],
         { account: seller.account },
       );
     }
 
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price + 50n * config.priceLadderStep, deliveryDate, "", 1], {
+      futures.write.createOrder([price + 50n * config.priceLadderStep, deliveryDate, 1], {
         account: seller.account,
       }),
       futures,

@@ -68,27 +68,6 @@ export const contractErrors = [
     "type": "error"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "reserve",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "required",
-        "type": "uint256"
-      }
-    ],
-    "name": "InsufficientContractReserve",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "DeliveryDateExpired",
-    "type": "error"
-  },
-  {
     "inputs": [],
     "name": "UnsupportedTokenDecimals",
     "type": "error"
@@ -96,11 +75,6 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "PositionNotExists",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "PositionDestURLNotSet",
     "type": "error"
   },
   {
@@ -138,17 +112,7 @@ export const contractErrors = [
   },
   {
     "inputs": [],
-    "name": "PositionDeliveryExpired",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "StaleData",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "OnlyValidatorOrPositionParticipant",
     "type": "error"
   },
   {
@@ -163,12 +127,12 @@ export const contractErrors = [
   },
   {
     "inputs": [],
-    "name": "MarginBreach",
+    "name": "OrderNotBelongToUser",
     "type": "error"
   },
   {
     "inputs": [],
-    "name": "DeliveryNotFinishedYet",
+    "name": "MarginBreach",
     "type": "error"
   },
   {
@@ -195,11 +159,6 @@ export const contractErrors = [
       }
     ],
     "name": "ERC20InvalidSpender",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "CollateralTokenMismatch",
     "type": "error"
   },
   {
@@ -231,7 +190,7 @@ export const contractErrors = [
   },
   {
     "inputs": [],
-    "name": "TransferDisabled",
+    "name": "ArrayLengthMismatch",
     "type": "error"
   },
   {
@@ -288,11 +247,6 @@ export const contractErrors = [
   },
   {
     "inputs": [],
-    "name": "NothingToWithdraw",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "NotImplemented",
     "type": "error"
   },
@@ -323,17 +277,7 @@ export const contractErrors = [
   },
   {
     "inputs": [],
-    "name": "PositionDeliveryNotExpired",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "UUPSUnauthorizedCallContext",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "OrderNotBelongToParticipant",
     "type": "error"
   },
   {
@@ -391,17 +335,7 @@ export const contractErrors = [
   },
   {
     "inputs": [],
-    "name": "PositionNotBelongToParticipant",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "InvalidInitialization",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "PositionAlreadyPaid",
     "type": "error"
   },
   {
@@ -428,11 +362,6 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "PositionDeliveryNotStartedYet",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "OnlyPositionBuyer",
     "type": "error"
   }
 ] as const;
