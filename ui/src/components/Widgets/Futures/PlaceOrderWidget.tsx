@@ -959,11 +959,6 @@ export const PlaceOrderWidget = ({
                     +
                   </PriceButton>
                 </PriceInputContainer>
-                {contractMode !== "perpetual" && (
-                  <PriceHint>
-                    <span>ⓘ</span> Orders are matched only at the exact same price. Unmatched orders remain open in the order book.
-                  </PriceHint>
-                )}
               </InputGroup>
             )}
 
@@ -1479,20 +1474,6 @@ const MinMarginLabel = styled("div")`
   color: ${tokens.text.secondary};
   margin-top: 0.25rem;
   text-align: center;
-`;
-
-const PriceHint = styled("div")`
-  display: flex;
-  align-items: flex-start;
-  gap: 0.35rem;
-  font-size: 0.75rem;
-  line-height: 1.3;
-  color: ${tokens.text.secondary};
-  margin-top: 0.375rem;
-
-  span {
-    flex-shrink: 0;
-  }
 `;
 
 const ExpectedQuantityLabel = styled("div")`
