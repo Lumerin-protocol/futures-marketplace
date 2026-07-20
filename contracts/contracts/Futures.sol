@@ -93,7 +93,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private immutable _decimals;
 
     // constants
-    string public constant VERSION = "3.2.0";
+    string public constant VERSION = "3.3.0";
     uint256 public constant ORACLE_UNIT_HPS_DAY = 100 * 1e12;
     uint256 public constant CONTRACT_SIZE_HPS_DAY = 1e15;
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
@@ -112,11 +112,26 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         uint256 expirationAt;
     }
 
-    /// @notice One placement in a `createOrders` batch.
+    /// @notice One placement in a `createOrders` batch (GTC).
     struct OrderIntent {
         uint256 price;
         uint256 expirationAt;
         int256 quantity;
+    }
+
+    /// @notice One placement in a `createOrdersV2` batch.
+    struct OrderIntentV2 {
+        uint256 price;
+        uint256 expirationAt;
+        int256 quantity;
+        TimeInForce timeInForce;
+    }
+
+    /// @notice Order lifetime / fill policy. GTD is not supported.
+    enum TimeInForce {
+        GTC, // rest unfilled size on the book
+        IOC, // fill what is available now; cancel remainder
+        FOK // fill entire size now or revert
     }
 
     /// @notice Unilateral aggregate position for a (user, expirationAt).
@@ -221,6 +236,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     error OrderNotExpired();
     error ArrayLengthMismatch();
     error MaxPriceLevelsReached();
+    error FillOrKillNotFilled();
+    error InvalidTimeInForce();
 
     /// @param _collateralVault Must use the same underlying ERC20 as initialized against.
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -256,28 +273,51 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     // ── Order placement ───────────────────────────────────────────────────────
 
-    /// @notice Place a single order. `quantity` > 0 = buy/long, < 0 = sell/short (whole contracts).
+    /// @notice Place a GTC limit order. `quantity` > 0 = buy/long, < 0 = sell/short.
     function createOrder(uint256 _price, uint256 _expirationAt, int256 _quantity) external {
         address sender = _msgSender();
-        _createOrderInternal(sender, _price, _expirationAt, _quantity);
+        _createOrderInternal(sender, _price, _expirationAt, _quantity, TimeInForce.GTC);
         ensureNoCollateralDeficit(sender);
     }
 
-    /// @notice Batched placement — IM check once at the end.
+    /// @notice Place a limit order with explicit time-in-force (GTC / IOC / FOK).
+    function createOrderV2(uint256 _price, uint256 _expirationAt, int256 _quantity, TimeInForce _tif) external {
+        address sender = _msgSender();
+        _createOrderInternal(sender, _price, _expirationAt, _quantity, _tif);
+        ensureNoCollateralDeficit(sender);
+    }
+
+    /// @notice Batched GTC placement — IM check once at the end.
     function createOrders(OrderIntent[] calldata _intents) external {
         address sender = _msgSender();
         uint256 len = _intents.length;
         for (uint256 i = 0; i < len; i++) {
             OrderIntent calldata intent = _intents[i];
-            _createOrderInternal(sender, intent.price, intent.expirationAt, intent.quantity);
+            _createOrderInternal(sender, intent.price, intent.expirationAt, intent.quantity, TimeInForce.GTC);
         }
         ensureNoCollateralDeficit(sender);
     }
 
-    /// @dev Per-leg body of `createOrder` without the IM-check epilogue.
-    function _createOrderInternal(address _participant, uint256 _price, uint256 _expirationAt, int256 _quantity)
-        private
-    {
+    /// @notice Batched placement with per-leg time-in-force — IM check once at the end.
+    function createOrdersV2(OrderIntentV2[] calldata _intents) external {
+        address sender = _msgSender();
+        uint256 len = _intents.length;
+        for (uint256 i = 0; i < len; i++) {
+            OrderIntentV2 calldata intent = _intents[i];
+            _createOrderInternal(sender, intent.price, intent.expirationAt, intent.quantity, intent.timeInForce);
+        }
+        ensureNoCollateralDeficit(sender);
+    }
+
+    /// @dev Per-leg body of `createOrder` / `createOrderV2` without the IM-check epilogue.
+    function _createOrderInternal(
+        address _participant,
+        uint256 _price,
+        uint256 _expirationAt,
+        int256 _quantity,
+        TimeInForce _tif
+    ) private {
+        if (uint8(_tif) > uint8(TimeInForce.FOK)) revert InvalidTimeInForce();
         validatePrice(_price);
         validateExpirationAt(_expirationAt);
         if (_quantity == 0) revert InvalidQty();
@@ -288,26 +328,35 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
         int256 remainingQty = _matchWithOppositeOrders(_participant, _price, _expirationAt, _quantity);
         uint256 remainingAbs = _abs(remainingQty);
+        bool partiallyOrFullyFilled = remainingAbs != _abs(_quantity);
 
-        if (remainingAbs != _abs(_quantity)) {
-            emit OrderUpdated(orderId, _participant, remainingQty);
-        }
+        if (_tif == TimeInForce.FOK && remainingAbs > 0) revert FillOrKillNotFilled();
 
-        if (remainingAbs > 0) {
-            EnumerableSet.Bytes32Set storage participantOrders = participantOrderIdsIndex[_participant];
-            if (participantOrders.length() >= MAX_ORDERS_PER_PARTICIPANT) {
-                revert MaxOrdersPerParticipantReached();
+        if (_tif == TimeInForce.GTC) {
+            if (partiallyOrFullyFilled) {
+                emit OrderUpdated(orderId, _participant, remainingQty);
             }
-            orders[orderId] = Order({
-                participant: _participant,
-                price: _price,
-                quantity: remainingQty,
-                expirationAt: _expirationAt
-            });
-            StructuredLinkedList.List storage orderQueue = _expirationAtPriceOrderIds(_expirationAt, _price, isBuy);
-            _addOrderToQueue(orderQueue, orderId, _expirationAt, _price, isBuy);
-            participantOrders.add(orderId);
-            participantExpirationAtPriceOrderIdsIndex[_participant][_expirationAt][_price].add(orderId);
+            if (remainingAbs > 0) {
+                EnumerableSet.Bytes32Set storage participantOrders = participantOrderIdsIndex[_participant];
+                if (participantOrders.length() >= MAX_ORDERS_PER_PARTICIPANT) {
+                    revert MaxOrdersPerParticipantReached();
+                }
+                orders[orderId] = Order({
+                    participant: _participant,
+                    price: _price,
+                    quantity: remainingQty,
+                    expirationAt: _expirationAt
+                });
+                StructuredLinkedList.List storage orderQueue = _expirationAtPriceOrderIds(_expirationAt, _price, isBuy);
+                _addOrderToQueue(orderQueue, orderId, _expirationAt, _price, isBuy);
+                participantOrders.add(orderId);
+                participantExpirationAtPriceOrderIdsIndex[_participant][_expirationAt][_price].add(orderId);
+            }
+        } else {
+            // IOC (or FOK after a full fill): never rest; close the taker order id at 0.
+            if (partiallyOrFullyFilled || _tif == TimeInForce.IOC) {
+                emit OrderUpdated(orderId, _participant, 0);
+            }
         }
     }
 

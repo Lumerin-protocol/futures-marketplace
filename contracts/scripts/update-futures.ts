@@ -55,7 +55,9 @@ async function main() {
   });
 
   logStep("Deployed", addrUrl(pc, futuresImpl.address));
-  await verifyContract(futuresImpl.address, [vaultAddress]);
+  await verifyContract(futuresImpl.address, [vaultAddress], undefined, {
+    contract: "contracts/Futures.sol:Futures",
+  });
   logStep("Verified", addrUrl(pc, futuresImpl.address));
 
   const newVersion = await futuresImpl.read.VERSION();
@@ -129,17 +131,30 @@ async function main() {
     await logPrompt("Proceed?");
     const tx = await futuresProxy.write.upgradeToAndCall([futuresImpl.address, "0x"]);
     const receipt = await pc.waitForTransactionReceipt({ hash: tx });
-    logStep("Upgraded", txUrl(pc, receipt.transactionHash));
+    if (receipt.status !== "success") {
+      throw new Error(`Upgrade tx reverted: ${txUrl(pc, receipt.transactionHash)}`);
+    }
+    logStep("Upgraded", `${txUrl(pc, receipt.transactionHash)}  block ${receipt.blockNumber}`);
 
+    // Read post-upgrade state at the receipt block — "latest" can still be the
+    // pre-upgrade tip on some RPCs right after waitForTransactionReceipt.
+    const atUpgradeBlock = { blockNumber: receipt.blockNumber } as const;
     const upgraded = await viem.getContractAt("Futures", futuresAddress);
+    const upgradedVersion = await upgraded.read.VERSION(atUpgradeBlock);
     logInfo("upgraded futures", {
-      Vault: await upgraded.read.collateralVault(),
-      MarginEngine: await upgraded.read.marginEngine(),
-      HashrateOracle: await upgraded.read.hashrateOracle(),
-      Hook: await upgraded.read.hook(),
-      Owner: await upgraded.read.owner(),
-      Version: await upgraded.read.VERSION(),
+      Vault: await upgraded.read.collateralVault(atUpgradeBlock),
+      MarginEngine: await upgraded.read.marginEngine(atUpgradeBlock),
+      HashrateOracle: await upgraded.read.hashrateOracle(atUpgradeBlock),
+      Hook: await upgraded.read.hook(atUpgradeBlock),
+      Owner: await upgraded.read.owner(atUpgradeBlock),
+      Version: upgradedVersion,
+      Block: receipt.blockNumber.toString(),
     });
+    if (upgradedVersion !== newVersion) {
+      throw new Error(
+        `Proxy VERSION at block ${receipt.blockNumber} is ${upgradedVersion}, expected ${newVersion}`,
+      );
+    }
 
     // ── 3. Post-upgrade config ──────────────────────────────────────────
     if (marginEngineAddress) {

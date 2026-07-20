@@ -42,6 +42,7 @@ import {
 import { useMakerTakerFees } from "../../../hooks/data/useMakerTakerFees";
 import { ModeToggle, ModeButton, type AmountMode } from "./PerpsOrderFormFields";
 import { useSimulatePerpsOrder } from "../../../hooks/data/perps/useSimulatePerpsOrder";
+import { useSimulateFuturesOrder } from "../../../hooks/data/useSimulateFuturesOrder";
 import { useGetPerpsInitialMargin } from "../../../hooks/data/perps/useGetPerpsInitialMargin";
 import {
   formatHashratePHPS,
@@ -50,6 +51,7 @@ import {
   QUANTITY_SCALE,
   QUANTITY_SCALE_NUM,
 } from "../../../lib/units";
+import { TimeInForce, type TimeInForceValue } from "../../../types/timeInForce";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -80,7 +82,7 @@ interface PlaceOrderWidgetProps {
   quantityUnit?: string;
 }
 
-// Slippage applied to market orders in perpetual mode so the order crosses the spread.
+// Slippage applied to market orders so the order crosses the spread.
 // Buy orders are priced this much above market; sell orders this much below.
 const MARKET_SLIPPAGE = 0.05;
 
@@ -142,6 +144,7 @@ export const PlaceOrderWidget = ({
   const newestItemPrice = marketPrice ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
 
   const [orderType, setOrderType] = useState<"limit" | "market">("limit");
+  const [timeInForce, setTimeInForce] = useState<TimeInForceValue>(TimeInForce.GTC);
   const [price, setPrice] = useState("5.00"); // Will be updated when hashrate data loads
   const [priceInitialized, setPriceInitialized] = useState(false); // Track if price has been initialized from hashrate
   const [amount, setAmount] = useState<number | string>(5); // Can be number or string to support decimals in perpetuals
@@ -197,12 +200,11 @@ export const PlaceOrderWidget = ({
     else if (openPositionNetQuantity < 0n) setPerpsMarginSide("sell");
   }, [contractMode, openPositionNetQuantity]);
 
-  // Limit/market selection is perps-only; futures orders are always limit.
-  useEffect(() => {
-    if (contractMode === "futures") {
-      setOrderType("limit");
-    }
-  }, [contractMode]);
+  const handleOrderTypeChange = (type: "limit" | "market") => {
+    setOrderType(type);
+    // Market orders should not rest: default IOC. Limit defaults to GTC.
+    setTimeInForce(type === "market" ? TimeInForce.IOC : TimeInForce.GTC);
+  };
 
   // Update slider when price or balance changes
   useEffect(() => {
@@ -377,16 +379,27 @@ export const PlaceOrderWidget = ({
     }
   }, [highlightMode, externalIsBuy, externalPrice, externalAmount, highlightTrigger]);
 
-  // Simulation hooks for market orders in perps mode.
+  // Simulation hooks for market / FOK orders.
   // Must be called unconditionally here, before the early loading return below.
   const simMarketPriceDecimal = marketPrice ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : 0;
   const simNumericAmount = (() => {
     const parsed = typeof amount === "string" ? parseFloat(amount) : amount;
     return isNaN(parsed) || parsed <= 0 ? 0 : parsed;
   })();
-  const simQuantity =
-    orderType === "market" && contractMode === "perpetual" && simMarketPriceDecimal > 0 && simNumericAmount > 0
-      ? (amountMode === "quantity" ? simNumericAmount : simNumericAmount / simMarketPriceDecimal)
+  const simNeedsLiquidityCheck =
+    orderType === "market" || timeInForce === TimeInForce.FOK;
+  const simPerpsQuantity =
+    simNeedsLiquidityCheck &&
+    contractMode === "perpetual" &&
+    simMarketPriceDecimal > 0 &&
+    simNumericAmount > 0
+      ? amountMode === "quantity"
+        ? simNumericAmount
+        : simNumericAmount / simMarketPriceDecimal
+      : 0;
+  const simFuturesQuantity =
+    simNeedsLiquidityCheck && contractMode === "futures" && simNumericAmount > 0
+      ? Math.round(simNumericAmount)
       : 0;
   // Slippage-adjusted sim prices mirror what getEffectivePrice() produces for each side.
   // Snap a bigint price (PAYMENT_TOKEN_SCALE units) to the nearest price-step boundary.
@@ -394,24 +407,48 @@ export const PlaceOrderWidget = ({
   const stepUnits = priceStep ? Math.round(priceStep * PAYMENT_TOKEN_SCALE_NUM) : 1;
   const snapBigInt = (raw: number) => BigInt(Math.round(raw / stepUnits) * stepUnits);
 
-  const simBuyPriceArg =
-    orderType === "market" && contractMode === "perpetual" && marketPrice
-      ? snapBigInt(Number(marketPrice) * (1 + MARKET_SLIPPAGE))
-      : undefined;
-  const simSellPriceArg =
-    orderType === "market" && contractMode === "perpetual" && marketPrice
-      ? snapBigInt(Number(marketPrice) * (1 - MARKET_SLIPPAGE))
-      : undefined;
+  const simBuyPriceArg = (() => {
+    if (!simNeedsLiquidityCheck) return undefined;
+    if (orderType === "market") {
+      if (!marketPrice) return undefined;
+      return snapBigInt(Number(marketPrice) * (1 + MARKET_SLIPPAGE));
+    }
+    const limitPx = parseFloat(price) || 0;
+    return limitPx > 0 ? snapBigInt(limitPx * PAYMENT_TOKEN_SCALE_NUM) : undefined;
+  })();
+  const simSellPriceArg = (() => {
+    if (!simNeedsLiquidityCheck) return undefined;
+    if (orderType === "market") {
+      if (!marketPrice) return undefined;
+      return snapBigInt(Number(marketPrice) * (1 - MARKET_SLIPPAGE));
+    }
+    const limitPx = parseFloat(price) || 0;
+    return limitPx > 0 ? snapBigInt(limitPx * PAYMENT_TOKEN_SCALE_NUM) : undefined;
+  })();
 
   // Auto-fetch disabled — refetch() is called manually on Bid/Ask click only.
-  const { refetch: refetchSimBuy } = useSimulatePerpsOrder({
+  const { refetch: refetchSimBuyPerps } = useSimulatePerpsOrder({
     price: simBuyPriceArg,
-    quantity: simQuantity > 0 ? simQuantity : undefined,
+    quantity: simPerpsQuantity > 0 ? simPerpsQuantity : undefined,
     enabled: false,
   });
-  const { refetch: refetchSimSell } = useSimulatePerpsOrder({
+  const { refetch: refetchSimSellPerps } = useSimulatePerpsOrder({
     price: simSellPriceArg,
-    quantity: simQuantity > 0 ? -simQuantity : undefined,
+    quantity: simPerpsQuantity > 0 ? -simPerpsQuantity : undefined,
+    enabled: false,
+  });
+  const futuresExpirationAt =
+    externalExpirationAt !== undefined ? BigInt(externalExpirationAt) : undefined;
+  const { refetch: refetchSimBuyFutures } = useSimulateFuturesOrder({
+    expirationAt: futuresExpirationAt,
+    price: simBuyPriceArg,
+    quantity: simFuturesQuantity > 0 ? simFuturesQuantity : undefined,
+    enabled: false,
+  });
+  const { refetch: refetchSimSellFutures } = useSimulateFuturesOrder({
+    expirationAt: futuresExpirationAt,
+    price: simSellPriceArg,
+    quantity: simFuturesQuantity > 0 ? -simFuturesQuantity : undefined,
     enabled: false,
   });
 
@@ -434,18 +471,71 @@ export const PlaceOrderWidget = ({
   };
 
   // Returns the effective order price: market price (snapped) for market orders, input price for limit orders.
-  // For market orders in perpetual mode, a 5% slippage buffer is applied so the order is
+  // For market orders, a 5% slippage buffer is applied so the order is
   // guaranteed to cross the spread: buys are priced 5% above market, sells 5% below.
   const getEffectivePrice = (side?: "buy" | "sell"): number => {
     if (orderType === "market" && newestItemPrice) {
       const base = newestItemPrice;
-      if (contractMode === "perpetual" && side) {
+      if (side) {
         const slipped = side === "buy" ? base * (1 + MARKET_SLIPPAGE) : base * (1 - MARKET_SLIPPAGE);
         return snapToStep(slipped);
       }
       return snapToStep(base);
     }
     return parseFloat(price) || 0;
+  };
+
+  /** Pre-flight liquidity check for market / FOK. Returns false if the user should abort. */
+  const checkLiquidity = async (side: "buy" | "sell"): Promise<boolean> => {
+    const needsCheck = orderType === "market" || timeInForce === TimeInForce.FOK;
+    if (!needsCheck) return true;
+
+    try {
+      const refetch =
+        contractMode === "perpetual"
+          ? side === "buy"
+            ? refetchSimBuyPerps
+            : refetchSimSellPerps
+          : side === "buy"
+            ? refetchSimBuyFutures
+            : refetchSimSellFutures;
+
+      const simResult = await refetch();
+      const filledQty = simResult.data?.[0];
+      const remainingQty = simResult.data?.[2];
+
+      if (filledQty === undefined || remainingQty === undefined) {
+        alert("Failed to check order book liquidity");
+        return false;
+      }
+
+      const remainingAbs = remainingQty < 0n ? -remainingQty : remainingQty;
+      const filledAbs = filledQty < 0n ? -filledQty : filledQty;
+
+      if (filledAbs === 0n) {
+        alert("There is no liquidity in order book");
+        return false;
+      }
+
+      // FOK (and market+FOK): require full fill. IOC may partially fill.
+      if (timeInForce === TimeInForce.FOK && remainingAbs > 0n) {
+        const scale = contractMode === "perpetual" ? QUANTITY_SCALE_NUM : 1;
+        const filled = (Number(filledAbs) / scale).toFixed(contractMode === "perpetual" ? 6 : 0);
+        const remaining = (Number(remainingAbs) / scale).toFixed(contractMode === "perpetual" ? 6 : 0);
+        const total = ((Number(filledAbs) + Number(remainingAbs)) / scale).toFixed(
+          contractMode === "perpetual" ? 6 : 0,
+        );
+        alert(
+          `Order would only be partially filled.\n\nRequested: ${total}\nWill be filled: ${filled}\nUnfilled: ${remaining}\n\nNot enough liquidity to fill the full order (FOK).`,
+        );
+        return false;
+      }
+
+      return true;
+    } catch {
+      alert("Failed to check order book liquidity");
+      return false;
+    }
   };
 
   const incrementPrice = () => {
@@ -498,29 +588,7 @@ export const PlaceOrderWidget = ({
       return;
     }
 
-    if (orderType === "market") {
-      try {
-        const simResult = await refetchSimBuy();
-        const filledQty = simResult.data?.[0];
-        const remainingQty = simResult.data?.[2];
-        if (remainingQty !== undefined && remainingQty > 0n) {
-          if (!filledQty || filledQty === 0n) {
-            alert("There is no liquidity in order book");
-          } else {
-            const filled = (Number(filledQty) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
-            const remaining = (Number(remainingQty) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
-            const total = ((Number(filledQty) + Number(remainingQty)) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
-            alert(
-              `Order would only be partially filled.\n\nRequested: ${total}\nWill be filled: ${filled}\nUnfilled: ${remaining}\n\nNot enough liquidity to fill the full order.`,
-            );
-          }
-          return;
-        }
-      } catch {
-        alert("Failed to check order book liquidity");
-        return;
-      }
-    }
+    if (!(await checkLiquidity("buy"))) return;
 
     // Validate minimum margin
     const currentPrice = getEffectivePrice("buy");
@@ -588,29 +656,7 @@ export const PlaceOrderWidget = ({
       return;
     }
 
-    if (orderType === "market") {
-      try {
-        const simResult = await refetchSimSell();
-        const filledQty = simResult.data?.[0];
-        const remainingQty = simResult.data?.[2];
-        if (remainingQty !== undefined && remainingQty > 0n) {
-          if (!filledQty || filledQty === 0n) {
-            alert("There is no liquidity in order book");
-          } else {
-            const filled = (Number(filledQty) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
-            const remaining = (Number(remainingQty) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
-            const total = ((Number(filledQty) + Number(remainingQty)) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
-            alert(
-              `Order would only be partially filled.\n\nRequested: ${total}\nWill be filled: ${filled}\nUnfilled: ${remaining}\n\nNot enough liquidity to fill the full order.`,
-            );
-          }
-          return;
-        }
-      } catch {
-        alert("Failed to check order book liquidity");
-        return;
-      }
-    }
+    if (!(await checkLiquidity("sell"))) return;
 
     const currentPrice = getEffectivePrice("sell");
     const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
@@ -680,6 +726,8 @@ export const PlaceOrderWidget = ({
       alert("Quantity must be greater than 0");
       return;
     }
+
+    if (!(await checkLiquidity("buy"))) return;
 
     // Validate balance for buy orders using getMinMarginForPositionManual
     const currentPrice = getEffectivePrice("buy");
@@ -772,6 +820,8 @@ export const PlaceOrderWidget = ({
       alert("Quantity must be greater than 0");
       return;
     }
+
+    if (!(await checkLiquidity("sell"))) return;
 
     // Validate balance for sell orders using getMinMarginForPositionManual
     const currentPrice = getEffectivePrice("sell");
@@ -897,25 +947,51 @@ export const PlaceOrderWidget = ({
 
         <MainSection>
           <InputSection>
-            {contractMode === "perpetual" && (
-              <OrderTypeRow>
-                <ModeToggle>
-                  <ModeButton
-                    $active={orderType === "limit"}
-                    onClick={() => setOrderType("limit")}
-                    disabled={showOrderForm}
-                  >
-                    Limit
-                  </ModeButton>
-                  <ModeButton
-                    $active={orderType === "market"}
-                    onClick={() => setOrderType("market")}
-                    disabled={showOrderForm}
-                  >
-                    Market
-                  </ModeButton>
-                </ModeToggle>
+            <OrderTypeRow>
+              <ModeToggle>
+                <ModeButton
+                  $active={orderType === "limit"}
+                  onClick={() => handleOrderTypeChange("limit")}
+                  disabled={showOrderForm}
+                >
+                  Limit
+                </ModeButton>
+                <ModeButton
+                  $active={orderType === "market"}
+                  onClick={() => handleOrderTypeChange("market")}
+                  disabled={showOrderForm}
+                >
+                  Market
+                </ModeButton>
+              </ModeToggle>
 
+              <ModeToggle>
+                {orderType === "limit" && (
+                  <ModeButton
+                    $active={timeInForce === TimeInForce.GTC}
+                    onClick={() => setTimeInForce(TimeInForce.GTC)}
+                    disabled={showOrderForm}
+                  >
+                    GTC
+                  </ModeButton>
+                )}
+                <ModeButton
+                  $active={timeInForce === TimeInForce.IOC}
+                  onClick={() => setTimeInForce(TimeInForce.IOC)}
+                  disabled={showOrderForm}
+                >
+                  IOC
+                </ModeButton>
+                <ModeButton
+                  $active={timeInForce === TimeInForce.FOK}
+                  onClick={() => setTimeInForce(TimeInForce.FOK)}
+                  disabled={showOrderForm}
+                >
+                  FOK
+                </ModeButton>
+              </ModeToggle>
+
+              {contractMode === "perpetual" && (
                 <ModeToggle>
                   <ModeButton
                     $active
@@ -925,8 +1001,8 @@ export const PlaceOrderWidget = ({
                     {leverage}x
                   </ModeButton>
                 </ModeToggle>
-              </OrderTypeRow>
-            )}
+              )}
+            </OrderTypeRow>
 
             {orderType === "limit" && (
               <InputGroup $isHighlighted={highlightedButton !== null}>
@@ -1133,6 +1209,7 @@ export const PlaceOrderWidget = ({
             perpsCollection={perpsCollection}
             leverage={leverage}
             isMarketOrder={orderType === "market"}
+            timeInForce={timeInForce}
             closeForm={() => {
               setShowOrderForm(false);
               setPendingOrder(null);
@@ -1748,6 +1825,8 @@ const OrderTypeRow = styled("div")`
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   padding-top: 0.25rem;
 `;
 

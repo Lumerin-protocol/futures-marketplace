@@ -2,12 +2,15 @@ import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { getContract } from "viem";
 import { FuturesAbi } from "../../abi/Futures";
 import { contractErrors } from "../../abi/contractErrors";
+import { TimeInForce, type TimeInForceValue } from "../../types/timeInForce";
 
 interface CreateOrderProps {
   price: bigint;
   /** Signed whole-contract quantity: positive = buy/long, negative = sell/short. */
   quantity: number | bigint;
   expirationAt: bigint;
+  /** Defaults to GTC. */
+  timeInForce?: TimeInForceValue;
 }
 
 export function useCreateOrder() {
@@ -29,8 +32,10 @@ export function useCreateOrder() {
       throw new Error("quantity must be non-zero");
     }
 
-    const req = await futuresContract.simulate.createOrder(
-      [props.price, props.expirationAt, quantity],
+    const tif = props.timeInForce ?? TimeInForce.GTC;
+
+    const req = await futuresContract.simulate.createOrderV2(
+      [props.price, props.expirationAt, quantity, tif],
       { account: walletClient.account.address },
     );
 

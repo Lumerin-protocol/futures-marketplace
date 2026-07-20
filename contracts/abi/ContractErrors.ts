@@ -47,6 +47,11 @@ export const contractErrors = [
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "InvalidTimeInForce",
+    "type": "error"
+  },
+  {
     "inputs": [
       {
         "internalType": "address",
@@ -253,6 +258,11 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "ValueCannotBeZero",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "FillOrKillNotFilled",
     "type": "error"
   },
   {

@@ -98,12 +98,12 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, ex
             let txhash;
             if (contractMode === "perpetual") {
               // Perps only needs price and quantity
-              txhash = await createOrderAsync({
+              txhash = await (createOrderAsync as any)({
                 price: pricePerDay,
                 quantity: oppositeQuantity,
               });
             } else {
-              txhash = await createOrderAsync({
+              txhash = await (createOrderAsync as any)({
                 price: pricePerDay,
                 expirationAt: expirationAt,
                 quantity: oppositeQuantity,
