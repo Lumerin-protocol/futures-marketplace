@@ -66,11 +66,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     ///      cash-settles. Delivery *duration* is not a factor (hashpower is settled per day); this only
     ///      controls how far apart successive expiries are scheduled. A legacy `deliveryIntervalDays()`
     ///      getter is retained for backwards compatibility.
-    uint8 public expirationIntervalDays;
+    uint8 public _gap7; // was expirationIntervalDays now it is a constant
     uint8 public futureDeliveryDatesCount; // number of future delivery dates to be available for orders
     uint8 public liquidationMarginPercent;
     uint8 private _gap3;
-    string private _gap7;
+    string private _gap8;
     uint256 public collectedFeesBalance;
     uint256 private _gap2;
     /// @dev Reserved slot — previously `mapping(address => uint8) addressFeeDiscountPercent`. Kept to preserve
@@ -129,7 +129,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private immutable _decimals; // decimals of the wrapped token
 
     // constants
-    string public constant VERSION = "2.17.0";
+    string public constant VERSION = "2.18.0";
     /// @notice The hashprice oracle's quote basis, in hashes/s·day (hashrate sustained over one day). It
     ///         answers the price of 100 TH/s per day, so its basis is 100 TH/s = 100 * 1e12 (hashes/s·day).
     ///         `CONTRACT_SIZE_HPS_DAY` is rebased against this to convert an oracle answer into the value of
@@ -153,6 +153,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     ///      exceeds this value. Sized generously above the upstream feed's heartbeat so brief delays
     ///      don't halt trading, while still preventing trades on multi-hour-old data.
     uint256 public constant MAX_ORACLE_STALENESS = 3600; // 1 hour
+    uint8 public constant EXPIRATION_INTERVAL_DAYS = 30;
 
     /// @notice Represents an order to buy or sell a futures contract
     /// @dev Created when a participant places an order
@@ -213,6 +214,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         SETTLED, // cash-settled at maturity via settlePosition / settlePositions
         RESET, // admin resetState
         EXPIRED // DEPRECATED (legacy physical delivery): no longer emitted
+
     }
 
     // events
@@ -370,7 +372,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         AggregatorV3Interface _hashrateOracle,
         uint8 _liquidationMarginPercent,
         uint256 _minimumPriceIncrement,
-        uint8 _expirationIntervalDays,
+        uint8, // was expirationIntervalDays now it is a constant
         uint8 _futureDeliveryDatesCount,
         uint256 _firstFutureDeliveryDate
     ) public initializer {
@@ -379,7 +381,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         _setHashrateOracle(_hashrateOracle);
         liquidationMarginPercent = _liquidationMarginPercent;
         minimumPriceIncrement = _minimumPriceIncrement;
-        expirationIntervalDays = _expirationIntervalDays;
         if (_futureDeliveryDatesCount < 1) {
             revert ValueOutOfRange(1, int256(uint256(type(uint8).max)));
         }
@@ -1151,9 +1152,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     ///      cash-settle via `_forceLiquidatePosition`, pay `min(fee, balance)`, emit `LotLiquidated`,
     ///      and notify the points hook. Callers MUST have already checked the orders-first /
     ///      underwater / ownership invariants.
-    function _liquidateOnePosition(bytes32 _positionId, Position storage position, address _participant)
-        private
-    {
+    function _liquidateOnePosition(bytes32 _positionId, Position storage position, address _participant) private {
         // Cash-settle through `_forceLiquidatePosition`: it builds an offsetting taker
         // order from the counterparty side and routes PnL through the insurance fund.
         _forceLiquidatePosition(_positionId, position, _participant);
@@ -1287,7 +1286,9 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
         // Liquidation happens before maturity, so there is no pinned settlement price: mark to the
         // current oracle price.
-        _settleAtMark(_positionId, position, address(0), LotCloseReason.LIQUIDATION, _getMarketPrice(_getHashpriceUsd()));
+        _settleAtMark(
+            _positionId, position, address(0), LotCloseReason.LIQUIDATION, _getMarketPrice(_getHashpriceUsd())
+        );
     }
 
     function _removePosition(bytes32 _positionId, Position memory position) private {
@@ -1434,7 +1435,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
         uint256[] memory deliveryDatesArray = new uint256[](futureDeliveryDatesCount);
         for (uint256 i = 0; i < futureDeliveryDatesCount; i++) {
-            deliveryDatesArray[i] = firstFutureDeliveryDate + expirationIntervalSeconds() * (currentDeliveryDateIndex + i);
+            deliveryDatesArray[i] =
+                firstFutureDeliveryDate + expirationIntervalSeconds() * (currentDeliveryDateIndex + i);
         }
 
         return deliveryDatesArray;
@@ -1504,12 +1506,16 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @dev Deprecated: the field was renamed to `expirationIntervalDays` because it schedules the spacing
     ///      between expiration dates and has nothing to do with a (now-removed) delivery-duration multiplier.
     ///      Prefer `expirationIntervalDays`.
-    function deliveryIntervalDays() external view returns (uint8) {
-        return expirationIntervalDays;
+    function deliveryIntervalDays() external pure returns (uint8) {
+        return EXPIRATION_INTERVAL_DAYS;
     }
 
-    function expirationIntervalSeconds() private view returns (uint256) {
-        return expirationIntervalDays * SECONDS_PER_DAY;
+    function expirationIntervalDays() external pure returns (uint8) {
+        return EXPIRATION_INTERVAL_DAYS;
+    }
+
+    function expirationIntervalSeconds() private pure returns (uint256) {
+        return EXPIRATION_INTERVAL_DAYS * SECONDS_PER_DAY;
     }
 
     /// @dev Convenience function to get the order index by delivery date and price
