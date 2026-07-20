@@ -91,10 +91,9 @@ describe("MM views", () => {
     await futures.write.createOrder([bid1, dd, 1], { account: buyer.account });
 
     const [bookBids, bookAsks] = await futures.read.getOrderBookPrices([dd, 50n]);
-    const asks = [...bookAsks].sort((a, b) => Number(a - b));
-    const bids = [...bookBids].sort((a, b) => Number(a - b));
-    assert.deepEqual(asks, [ask1, ask2]);
-    assert.deepEqual(bids, [bid1]);
+    // Asks low→high, bids high→low (sorted ladder).
+    assert.deepEqual([...bookAsks], [ask1, ask2]);
+    assert.deepEqual([...bookBids], [bid1]);
 
     assert.equal(await futures.read.getQuantityAtPrice([dd, ask1, false]), 2n);
     assert.equal(await futures.read.getQuantityAtPrice([dd, ask2, false]), 1n);

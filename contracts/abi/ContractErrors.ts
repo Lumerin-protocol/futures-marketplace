@@ -64,6 +64,11 @@ export const contractErrors = [
   },
   {
     "inputs": [],
+    "name": "MaxPriceLevelsReached",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "UnsupportedTokenDecimals",
     "type": "error"
   },

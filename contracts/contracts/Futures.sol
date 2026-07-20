@@ -70,8 +70,10 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @notice Canonical Σ qty_i * entryPrice_i per (participant, expirationAt), token decimals.
     mapping(address => mapping(uint256 => int256)) private participantExpirationAtNetEntryValue;
 
-    mapping(uint256 => EnumerableSet.UintSet) private activeBidPrices;
-    mapping(uint256 => EnumerableSet.UintSet) private activeAskPrices;
+    /// @dev Sorted bid prices per expiration (highest first).
+    mapping(uint256 => StructuredLinkedList.List) private activeBidPrices;
+    /// @dev Sorted ask prices per expiration (lowest first).
+    mapping(uint256 => StructuredLinkedList.List) private activeAskPrices;
 
     uint256 public liquidationFee;
 
@@ -91,10 +93,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private immutable _decimals;
 
     // constants
-    string public constant VERSION = "3.1.0";
+    string public constant VERSION = "3.2.0";
     uint256 public constant ORACLE_UNIT_HPS_DAY = 100 * 1e12;
     uint256 public constant CONTRACT_SIZE_HPS_DAY = 1e15;
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
+    uint256 public constant MAX_PRICE_LEVELS_PER_SIDE = 200;
     uint32 private constant SECONDS_PER_DAY = 3600 * 24;
     uint256 public constant MAX_ORACLE_STALENESS = 3600; // 1 hour
     uint8 public constant EXPIRATION_INTERVAL_DAYS = 30;
@@ -217,6 +220,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     error OrderNotExists();
     error OrderNotExpired();
     error ArrayLengthMismatch();
+    error MaxPriceLevelsReached();
 
     /// @param _collateralVault Must use the same underlying ERC20 as initialized against.
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -279,87 +283,12 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         if (_quantity == 0) revert InvalidQty();
 
         bool isBuy = _quantity > 0;
-        uint256 remainingAbs = _abs(_quantity);
-
         bytes32 orderId = bytes32(++nonce);
         emit OrderCreated(orderId, _participant, _price, _quantity, _expirationAt);
 
-        StructuredLinkedList.List storage oppositeQueue = _expirationAtPriceOrderIds(_expirationAt, _price, !isBuy);
-        EnumerableSet.Bytes32Set storage participantPriceOrderIds =
-            participantExpirationAtPriceOrderIdsIndex[_participant][_expirationAt][_price];
+        int256 remainingQty = _matchWithOppositeOrders(_participant, _price, _expirationAt, _quantity);
+        uint256 remainingAbs = _abs(remainingQty);
 
-        while (remainingAbs > 0 && oppositeQueue.sizeOf() > 0) {
-            // Self-trade: cancel own opposite resting order rather than matching self.
-            if (participantPriceOrderIds.length() > 0) {
-                bytes32 ownId = participantPriceOrderIds.at(0);
-                Order memory ownOrder = orders[ownId];
-                if (ownOrder.participant == _participant && (ownOrder.quantity > 0) != isBuy && ownOrder.quantity != 0) {
-                    uint256 cancelledAbs = _abs(ownOrder.quantity);
-                    _removeRestingOrder(ownId, ownOrder);
-                    emit OrderCancelled(ownId, _participant);
-                    remainingAbs -= cancelledAbs < remainingAbs ? cancelledAbs : remainingAbs;
-                    continue;
-                }
-            }
-
-            (, uint256 headIdUint) = oppositeQueue.getNextNode(0);
-            bytes32 headId = bytes32(headIdUint);
-            Order memory head = orders[headId];
-            if (head.participant == address(0) || head.quantity == 0) {
-                // Defensive: drop corrupt/empty head
-                oppositeQueue.remove(headIdUint);
-                continue;
-            }
-
-            // Guard: never match against self (also covered by self-trade cancel above).
-            if (head.participant == _participant) {
-                _removeRestingOrder(headId, head);
-                emit OrderCancelled(headId, _participant);
-                remainingAbs -= _abs(head.quantity) < remainingAbs ? _abs(head.quantity) : remainingAbs;
-                continue;
-            }
-
-            uint256 headAbs = _abs(head.quantity);
-            uint256 fill = headAbs < remainingAbs ? headAbs : remainingAbs;
-            int256 takerFillQty = isBuy ? int256(fill) : -int256(fill);
-
-            _applyFill(head.participant, -takerFillQty, _price, _expirationAt);
-            _applyFill(_participant, takerFillQty, _price, _expirationAt);
-
-            uint256 makerFeeAmt = makerFee * fill;
-            uint256 takerFeeAmt = takerFee * fill;
-            _chargeMatchFees(head.participant, _participant, makerFeeAmt, takerFeeAmt);
-            _notifyFill(head.participant, _participant, _price * fill, int256(makerFeeAmt), takerFeeAmt, _price);
-
-            uint256 newHeadAbs = headAbs - fill;
-            if (newHeadAbs == 0) {
-                _removeRestingOrder(headId, head);
-                emit OrderUpdated(headId, head.participant, 0);
-            } else {
-                int256 newMakerQty = head.quantity > 0 ? int256(newHeadAbs) : -int256(newHeadAbs);
-                orders[headId].quantity = newMakerQty;
-                emit OrderUpdated(headId, head.participant, newMakerQty);
-            }
-
-            emit OrderMatched(
-                headId,
-                head.participant,
-                _participant,
-                _expirationAt,
-                _price,
-                takerFillQty,
-                int256(makerFeeAmt),
-                int256(takerFeeAmt),
-                participantExpirationAtNetDelta[head.participant][_expirationAt],
-                participantExpirationAtNetDelta[_participant][_expirationAt],
-                _avgEntryPrice(head.participant, _expirationAt),
-                _avgEntryPrice(_participant, _expirationAt)
-            );
-
-            remainingAbs -= fill;
-        }
-
-        int256 remainingQty = isBuy ? int256(remainingAbs) : -int256(remainingAbs);
         if (remainingAbs != _abs(_quantity)) {
             emit OrderUpdated(orderId, _participant, remainingQty);
         }
@@ -378,8 +307,118 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             StructuredLinkedList.List storage orderQueue = _expirationAtPriceOrderIds(_expirationAt, _price, isBuy);
             _addOrderToQueue(orderQueue, orderId, _expirationAt, _price, isBuy);
             participantOrders.add(orderId);
-            participantPriceOrderIds.add(orderId);
+            participantExpirationAtPriceOrderIdsIndex[_participant][_expirationAt][_price].add(orderId);
         }
+    }
+
+    /// @notice Walk opposite sorted book from best price toward the taker limit; fill at maker price.
+    function _matchWithOppositeOrders(
+        address _taker,
+        uint256 _limitPrice,
+        uint256 _expirationAt,
+        int256 _quantity
+    ) private returns (int256 remainingQuantity) {
+        remainingQuantity = _quantity;
+        bool isBuy = _quantity > 0;
+        StructuredLinkedList.List storage oppositePrices = isBuy ? activeAskPrices[_expirationAt] : activeBidPrices[_expirationAt];
+
+        if (oppositePrices.sizeOf() == 0) return remainingQuantity;
+
+        (, uint256 currentPrice) = oppositePrices.getNextNode(0);
+
+        while (currentPrice != 0 && remainingQuantity != 0) {
+            if (isBuy && currentPrice > _limitPrice) break;
+            if (!isBuy && currentPrice < _limitPrice) break;
+
+            (, uint256 nextPrice) = oppositePrices.getNextNode(currentPrice);
+            remainingQuantity = _matchOrdersAtPrice(_taker, currentPrice, _expirationAt, remainingQuantity, isBuy);
+            currentPrice = nextPrice;
+        }
+    }
+
+    /// @notice FIFO-match at one maker price level. Self-cross nets out (no fill/fees).
+    function _matchOrdersAtPrice(
+        address _taker,
+        uint256 _price,
+        uint256 _expirationAt,
+        int256 _remainingQty,
+        bool _isBuy
+    ) private returns (int256) {
+        StructuredLinkedList.List storage makerOrderQueue = _expirationAtPriceOrderIds(_expirationAt, _price, !_isBuy);
+
+        (, uint256 orderIdUint) = makerOrderQueue.getNextNode(0);
+        while (_remainingQty != 0 && orderIdUint != 0) {
+            bytes32 makerOrderId = bytes32(orderIdUint);
+            Order memory maker = orders[makerOrderId];
+
+            if (maker.participant == address(0) || maker.quantity == 0) {
+                makerOrderQueue.remove(orderIdUint);
+                (, orderIdUint) = makerOrderQueue.getNextNode(0);
+                continue;
+            }
+
+            uint256 makerAbs = _abs(maker.quantity);
+            uint256 remainingAbs = _abs(_remainingQty);
+
+            // Self-cross: net quantities; no trade, no fees.
+            if (maker.participant == _taker) {
+                uint256 cancelAmt = makerAbs < remainingAbs ? makerAbs : remainingAbs;
+                if (cancelAmt == makerAbs) {
+                    _removeRestingOrder(makerOrderId, maker);
+                    emit OrderCancelled(makerOrderId, _taker);
+                } else {
+                    uint256 reducedMakerAbs = makerAbs - cancelAmt;
+                    int256 newMakerQty = maker.quantity > 0 ? int256(reducedMakerAbs) : -int256(reducedMakerAbs);
+                    orders[makerOrderId].quantity = newMakerQty;
+                    emit OrderUpdated(makerOrderId, _taker, newMakerQty);
+                }
+                _remainingQty = _isBuy ? int256(remainingAbs - cancelAmt) : -int256(remainingAbs - cancelAmt);
+                (, orderIdUint) = makerOrderQueue.getNextNode(0);
+                continue;
+            }
+
+            uint256 fill = makerAbs < remainingAbs ? makerAbs : remainingAbs;
+            int256 takerFillQty = _isBuy ? int256(fill) : -int256(fill);
+
+            _applyFill(maker.participant, -takerFillQty, _price, _expirationAt);
+            _applyFill(_taker, takerFillQty, _price, _expirationAt);
+
+            uint256 makerFeeAmt = makerFee * fill;
+            uint256 takerFeeAmt = takerFee * fill;
+            _chargeMatchFees(maker.participant, _taker, makerFeeAmt, takerFeeAmt);
+            _notifyFill(maker.participant, _taker, _price * fill, int256(makerFeeAmt), takerFeeAmt, _price);
+
+            uint256 leftoverMakerAbs = makerAbs - fill;
+            if (leftoverMakerAbs == 0) {
+                _removeRestingOrder(makerOrderId, maker);
+                emit OrderUpdated(makerOrderId, maker.participant, 0);
+            } else {
+                int256 newMakerQty = maker.quantity > 0 ? int256(leftoverMakerAbs) : -int256(leftoverMakerAbs);
+                orders[makerOrderId].quantity = newMakerQty;
+                emit OrderUpdated(makerOrderId, maker.participant, newMakerQty);
+            }
+
+            emit OrderMatched(
+                makerOrderId,
+                maker.participant,
+                _taker,
+                _expirationAt,
+                _price,
+                takerFillQty,
+                int256(makerFeeAmt),
+                int256(takerFeeAmt),
+                participantExpirationAtNetDelta[maker.participant][_expirationAt],
+                participantExpirationAtNetDelta[_taker][_expirationAt],
+                _avgEntryPrice(maker.participant, _expirationAt),
+                _avgEntryPrice(_taker, _expirationAt)
+            );
+
+            _remainingQty = _isBuy ? int256(remainingAbs - fill) : -int256(remainingAbs - fill);
+            (, orderIdUint) = makerOrderQueue.getNextNode(0);
+        }
+
+        _removePriceLevelIfEmpty(_expirationAt, _price, !_isBuy);
+        return _remainingQty;
     }
 
     function _chargeMatchFees(address _maker, address _taker, uint256 makerAmt, uint256 takerAmt) private {
@@ -486,11 +525,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         uint256 _price,
         bool _isBuy
     ) private {
-        bool wasEmpty = orderIndexId.sizeOf() == 0;
         orderIndexId.pushBack(uint256(_orderId));
-        if (wasEmpty) {
-            (_isBuy ? activeBidPrices : activeAskPrices)[_expirationAt].add(_price);
-        }
+        _addPriceLevel(_expirationAt, _price, _isBuy);
     }
 
     function _removeOrderFromQueue(
@@ -501,8 +537,53 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         bool _isBuy
     ) private {
         orderIndexId.remove(uint256(_orderId));
-        if (orderIndexId.sizeOf() == 0) {
-            (_isBuy ? activeBidPrices : activeAskPrices)[_expirationAt].remove(_price);
+        _removePriceLevelIfEmpty(_expirationAt, _price, _isBuy);
+    }
+
+    /// @notice Insert `_price` into the sorted ladder for `_expirationAt` if absent.
+    function _addPriceLevel(uint256 _expirationAt, uint256 _price, bool _isBid) private {
+        StructuredLinkedList.List storage priceList = _isBid ? activeBidPrices[_expirationAt] : activeAskPrices[_expirationAt];
+
+        if (priceList.nodeExists(_price)) return;
+
+        uint256 size = priceList.sizeOf();
+        if (size >= MAX_PRICE_LEVELS_PER_SIDE) revert MaxPriceLevelsReached();
+
+        if (size == 0) {
+            priceList.pushFront(_price);
+            return;
+        }
+
+        (, uint256 current) = priceList.getNextNode(0);
+        uint256 prev = 0;
+
+        while (current != 0) {
+            if (_isBid) {
+                if (current < _price) {
+                    priceList.insertBefore(current, _price);
+                    return;
+                }
+            } else {
+                if (current > _price) {
+                    priceList.insertBefore(current, _price);
+                    return;
+                }
+            }
+            prev = current;
+            (, current) = priceList.getNextNode(current);
+        }
+
+        priceList.insertAfter(prev, _price);
+    }
+
+    /// @notice Remove price level when its order queue is empty.
+    function _removePriceLevelIfEmpty(uint256 _expirationAt, uint256 _price, bool _isBid) private {
+        StructuredLinkedList.List storage orderQueue = _expirationAtPriceOrderIds(_expirationAt, _price, _isBid);
+        if (orderQueue.sizeOf() == 0) {
+            StructuredLinkedList.List storage priceList = _isBid ? activeBidPrices[_expirationAt] : activeAskPrices[_expirationAt];
+            if (priceList.nodeExists(_price)) {
+                priceList.remove(_price);
+            }
         }
     }
 
@@ -931,7 +1012,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         return expirationDatesArray;
     }
 
-    /// @notice Active bid/ask price levels for one expiration (unordered beyond set iteration).
+    /// @notice Active bid/ask price levels for one expiration (bids high→low, asks low→high).
     function getOrderBookPrices(uint256 _expirationAt, uint256 _maxLevels)
         external
         view
@@ -941,18 +1022,92 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         asks = _activePricesSlice(activeAskPrices[_expirationAt], _maxLevels);
     }
 
-    function _activePricesSlice(EnumerableSet.UintSet storage set, uint256 _maxLevels)
+    function _activePricesSlice(StructuredLinkedList.List storage priceList, uint256 _maxLevels)
         private
         view
         returns (uint256[] memory)
     {
-        uint256 total = set.length();
+        uint256 total = priceList.sizeOf();
         uint256 count = total < _maxLevels ? total : _maxLevels;
         uint256[] memory out = new uint256[](count);
-        for (uint256 i = 0; i < count; i++) {
-            out[i] = set.at(i);
+        (, uint256 current) = priceList.getNextNode(0);
+        for (uint256 i = 0; i < count && current != 0; i++) {
+            out[i] = current;
+            (, current) = priceList.getNextNode(current);
         }
         return out;
+    }
+
+    /// @notice Best (highest) bid for `expirationAt`, or 0 if empty.
+    function getBestBidPrice(uint256 _expirationAt) public view returns (uint256) {
+        StructuredLinkedList.List storage bids = activeBidPrices[_expirationAt];
+        if (bids.sizeOf() == 0) return 0;
+        (, uint256 bestBid) = bids.getNextNode(0);
+        return bestBid;
+    }
+
+    /// @notice Best (lowest) ask for `expirationAt`, or 0 if empty.
+    function getBestAskPrice(uint256 _expirationAt) public view returns (uint256) {
+        StructuredLinkedList.List storage asks = activeAskPrices[_expirationAt];
+        if (asks.sizeOf() == 0) return 0;
+        (, uint256 bestAsk) = asks.getNextNode(0);
+        return bestAsk;
+    }
+
+    /// @notice Simulate a limit order: filled qty, VWAP, and remainder (view, no state change).
+    /// @dev Skips own resting liquidity (matches on-match STP net-out).
+    function simulateOrder(uint256 _expirationAt, uint256 _price, int256 _quantity)
+        external
+        view
+        returns (int256 filledQuantity, uint256 averageFillPrice, int256 remainingQuantity)
+    {
+        if (_quantity == 0) return (0, 0, 0);
+
+        bool isBuy = _quantity > 0;
+        int256 remaining = _quantity;
+        uint256 totalNotional = 0;
+        uint256 totalFilledAbs = 0;
+        StructuredLinkedList.List storage oppositePrices =
+            isBuy ? activeAskPrices[_expirationAt] : activeBidPrices[_expirationAt];
+        (, uint256 currentPrice) = oppositePrices.getNextNode(0);
+
+        while (currentPrice != 0 && remaining != 0) {
+            if (isBuy && currentPrice > _price) break;
+            if (!isBuy && currentPrice < _price) break;
+
+            StructuredLinkedList.List storage orderQueue =
+                _expirationAtPriceOrderIds(_expirationAt, currentPrice, !isBuy);
+            (, uint256 orderIdUint) = orderQueue.getNextNode(0);
+
+            while (orderIdUint != 0 && remaining != 0) {
+                Order storage makerOrder = orders[bytes32(orderIdUint)];
+                // STP: own resting size would net out, not fill.
+                if (makerOrder.participant != msg.sender && makerOrder.quantity != 0) {
+                    uint256 matchAmt = _abs(makerOrder.quantity) < _abs(remaining)
+                        ? _abs(makerOrder.quantity)
+                        : _abs(remaining);
+                    if (matchAmt > 0) {
+                        totalNotional += currentPrice * matchAmt;
+                        totalFilledAbs += matchAmt;
+                        remaining = isBuy ? remaining - int256(matchAmt) : remaining + int256(matchAmt);
+                    }
+                } else if (makerOrder.participant == msg.sender && makerOrder.quantity != 0) {
+                    uint256 cancelAmt = _abs(makerOrder.quantity) < _abs(remaining)
+                        ? _abs(makerOrder.quantity)
+                        : _abs(remaining);
+                    remaining = isBuy ? remaining - int256(cancelAmt) : remaining + int256(cancelAmt);
+                }
+                (, orderIdUint) = orderQueue.getNextNode(orderIdUint);
+            }
+
+            (, currentPrice) = oppositePrices.getNextNode(currentPrice);
+        }
+
+        remainingQuantity = remaining;
+        filledQuantity = _quantity - remainingQuantity;
+        if (totalFilledAbs > 0) {
+            averageFillPrice = totalNotional / totalFilledAbs;
+        }
     }
 
     /// @notice Sum of resting abs quantity at one (expirationAt, price, side).

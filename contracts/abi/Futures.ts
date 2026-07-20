@@ -94,6 +94,11 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "MaxPriceLevelsReached",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "NotInitializing",
     "type": "error"
   },
@@ -704,6 +709,19 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "MAX_PRICE_LEVELS_PER_SIDE",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "ORACLE_UNIT_HPS_DAY",
     "outputs": [
       {
@@ -912,6 +930,44 @@ export const FuturesAbi = [
         "internalType": "uint256[]",
         "name": "",
         "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_expirationAt",
+        "type": "uint256"
+      }
+    ],
+    "name": "getBestAskPrice",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_expirationAt",
+        "type": "uint256"
+      }
+    ],
+    "name": "getBestBidPrice",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -1643,6 +1699,45 @@ export const FuturesAbi = [
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_expirationAt",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_price",
+        "type": "uint256"
+      },
+      {
+        "internalType": "int256",
+        "name": "_quantity",
+        "type": "int256"
+      }
+    ],
+    "name": "simulateOrder",
+    "outputs": [
+      {
+        "internalType": "int256",
+        "name": "filledQuantity",
+        "type": "int256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "averageFillPrice",
+        "type": "uint256"
+      },
+      {
+        "internalType": "int256",
+        "name": "remainingQuantity",
+        "type": "int256"
       }
     ],
     "stateMutability": "view",
