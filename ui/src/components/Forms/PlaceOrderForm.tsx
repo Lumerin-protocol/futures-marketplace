@@ -38,6 +38,7 @@ import {
   QUANTITY_SCALE,
   QUANTITY_SCALE_NUM,
 } from "../../lib/units";
+import { TimeInForce, type TimeInForceValue } from "../../types/timeInForce";
 
 interface Props {
   price: bigint;
@@ -52,6 +53,7 @@ interface Props {
   perpsCollection?: PerpsCollection;
   leverage?: number; // Leverage value for perps mode (e.g., 10 for 10x)
   isMarketOrder?: boolean;
+  timeInForce?: TimeInForceValue;
 }
 
 export const PlaceOrderForm: FC<Props> = ({
@@ -67,6 +69,7 @@ export const PlaceOrderForm: FC<Props> = ({
   perpsCollection,
   leverage = 10,
   isMarketOrder = false,
+  timeInForce = TimeInForce.GTC,
 }) => {
   // Conditionally use futures or perps create order hook
   const futuresCreateOrder = useCreateOrder();
@@ -184,6 +187,16 @@ export const PlaceOrderForm: FC<Props> = ({
                 <span className="text-white">{absoluteQuantity.toFixed(6)}</span>
               </div>
               <div className="flex justify-between">
+                <span className="text-gray-300">Time in Force:</span>
+                <span className="text-white">
+                  {timeInForce === TimeInForce.IOC
+                    ? "IOC"
+                    : timeInForce === TimeInForce.FOK
+                      ? "FOK"
+                      : "GTC"}
+                </span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-gray-300">Size:</span>
                 <span className="text-white">{sizeUSDC.toFixed(2)} USDC</span>
               </div>
@@ -226,12 +239,6 @@ export const PlaceOrderForm: FC<Props> = ({
                         : "N/A"}
                     </span>
                   </div>
-                  {isMarketOrder && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-300">Slippage:</span>
-                      <span className="text-white">5%</span>
-                    </div>
-                  )}
                 </>
               ) : (
                 <div className="flex justify-between">
@@ -243,6 +250,12 @@ export const PlaceOrderForm: FC<Props> = ({
                       ? "Loading..."
                       : "N/A"}
                   </span>
+                </div>
+              )}
+              {isMarketOrder && (
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Slippage:</span>
+                  <span className="text-white">5%</span>
                 </div>
               )}
               <div className="flex justify-between">
@@ -295,12 +308,14 @@ export const PlaceOrderForm: FC<Props> = ({
               txhash = await (createOrderAsync as any)({
                 price,
                 quantity,
+                timeInForce,
               });
             } else {
               txhash = await (createOrderAsync as any)({
                 price,
                 expirationAt,
                 quantity,
+                timeInForce,
               });
             }
             return {

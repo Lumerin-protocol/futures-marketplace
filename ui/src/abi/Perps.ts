@@ -1,1120 +1,1678 @@
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// PerpsSimple
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-export const PerpsABI = [
+export const HashPowerPerpsDEXAbi = [
   {
-    type: 'constructor',
-    inputs: [
+    "inputs": [
       {
-        name: '_minimumPriceIncrement',
-        internalType: 'uint256',
-        type: 'uint256',
-      },
+        "internalType": "uint256",
+        "name": "_minimumPriceIncrement",
+        "type": "uint256"
+      }
     ],
-    stateMutability: 'nonpayable',
+    "stateMutability": "nonpayable",
+    "type": "constructor"
   },
   {
-    type: 'error',
-    inputs: [{ name: 'target', internalType: 'address', type: 'address' }],
-    name: 'AddressEmptyCode',
-  },
-  {
-    type: 'error',
-    inputs: [
-      { name: 'implementation', internalType: 'address', type: 'address' },
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "target",
+        "type": "address"
+      }
     ],
-    name: 'ERC1967InvalidImplementation',
+    "name": "AddressEmptyCode",
+    "type": "error"
   },
-  { type: 'error', inputs: [], name: 'ERC1967NonPayable' },
   {
-    type: 'error',
-    inputs: [
-      { name: 'spender', internalType: 'address', type: 'address' },
-      { name: 'allowance', internalType: 'uint256', type: 'uint256' },
-      { name: 'needed', internalType: 'uint256', type: 'uint256' },
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "implementation",
+        "type": "address"
+      }
     ],
-    name: 'ERC20InsufficientAllowance',
+    "name": "ERC1967InvalidImplementation",
+    "type": "error"
   },
   {
-    type: 'error',
-    inputs: [
-      { name: 'sender', internalType: 'address', type: 'address' },
-      { name: 'balance', internalType: 'uint256', type: 'uint256' },
-      { name: 'needed', internalType: 'uint256', type: 'uint256' },
+    "inputs": [],
+    "name": "ERC1967NonPayable",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "FailedCall",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "FillOrKillNotFilled",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InsufficientCollateral",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InsufficientMargin",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InsufficientReservePool",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InsuranceFundNotConfigured",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidFundingParameters",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidInitialization",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidMarginPercent",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidOracle",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidPrice",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidSize",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidTimeInForce",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "MaxOrdersPerParticipantReached",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "MaxPriceLevelsReached",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "index",
+        "type": "uint256"
+      }
     ],
-    name: 'ERC20InsufficientBalance',
+    "name": "MulticallSubCallOutOfGas",
+    "type": "error"
   },
   {
-    type: 'error',
-    inputs: [{ name: 'approver', internalType: 'address', type: 'address' }],
-    name: 'ERC20InvalidApprover',
+    "inputs": [],
+    "name": "NotInitializing",
+    "type": "error"
   },
   {
-    type: 'error',
-    inputs: [{ name: 'receiver', internalType: 'address', type: 'address' }],
-    name: 'ERC20InvalidReceiver',
+    "inputs": [],
+    "name": "NotLiquidatable",
+    "type": "error"
   },
   {
-    type: 'error',
-    inputs: [{ name: 'sender', internalType: 'address', type: 'address' }],
-    name: 'ERC20InvalidSender',
+    "inputs": [],
+    "name": "OracleStale",
+    "type": "error"
   },
   {
-    type: 'error',
-    inputs: [{ name: 'spender', internalType: 'address', type: 'address' }],
-    name: 'ERC20InvalidSpender',
-  },
-  { type: 'error', inputs: [], name: 'FailedCall' },
-  { type: 'error', inputs: [], name: 'InsufficientCollateral' },
-  { type: 'error', inputs: [], name: 'InsufficientMargin' },
-  { type: 'error', inputs: [], name: 'InsufficientReservePool' },
-  { type: 'error', inputs: [], name: 'InvalidFundingParameters' },
-  { type: 'error', inputs: [], name: 'InvalidInitialization' },
-  { type: 'error', inputs: [], name: 'InvalidMarginPercent' },
-  { type: 'error', inputs: [], name: 'InvalidOracle' },
-  { type: 'error', inputs: [], name: 'InvalidPrice' },
-  { type: 'error', inputs: [], name: 'InvalidSize' },
-  { type: 'error', inputs: [], name: 'MaxOrdersPerParticipantReached' },
-  { type: 'error', inputs: [], name: 'MaxPriceLevelsReached' },
-  { type: 'error', inputs: [], name: 'NotInitializing' },
-  { type: 'error', inputs: [], name: 'NotLiquidatable' },
-  { type: 'error', inputs: [], name: 'OracleStale' },
-  { type: 'error', inputs: [], name: 'OrderMarginTooLow' },
-  { type: 'error', inputs: [], name: 'OrderNotBelongToSender' },
-  {
-    type: 'error',
-    inputs: [{ name: 'owner', internalType: 'address', type: 'address' }],
-    name: 'OwnableInvalidOwner',
+    "inputs": [],
+    "name": "OrderMarginTooLow",
+    "type": "error"
   },
   {
-    type: 'error',
-    inputs: [{ name: 'account', internalType: 'address', type: 'address' }],
-    name: 'OwnableUnauthorizedAccount',
+    "inputs": [],
+    "name": "OrderNotBelongToSender",
+    "type": "error"
   },
   {
-    type: 'error',
-    inputs: [{ name: 'token', internalType: 'address', type: 'address' }],
-    name: 'SafeERC20FailedOperation',
-  },
-  { type: 'error', inputs: [], name: 'UUPSUnauthorizedCallContext' },
-  {
-    type: 'error',
-    inputs: [{ name: 'slot', internalType: 'bytes32', type: 'bytes32' }],
-    name: 'UUPSUnsupportedProxiableUUID',
+    "inputs": [],
+    "name": "OrderNotBelongToUser",
+    "type": "error"
   },
   {
-    type: 'event',
-    anonymous: false,
-    inputs: [
+    "inputs": [],
+    "name": "OrdersStillOpen",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OverLiquidation",
+    "type": "error"
+  },
+  {
+    "inputs": [
       {
-        name: 'owner',
-        internalType: 'address',
-        type: 'address',
-        indexed: true,
-      },
-      {
-        name: 'spender',
-        internalType: 'address',
-        type: 'address',
-        indexed: true,
-      },
-      {
-        name: 'value',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: false,
-      },
+        "internalType": "address",
+        "name": "owner",
+        "type": "address"
+      }
     ],
-    name: 'Approval',
+    "name": "OwnableInvalidOwner",
+    "type": "error"
   },
   {
-    type: 'event',
-    anonymous: false,
-    inputs: [
-      { name: 'user', internalType: 'address', type: 'address', indexed: true },
+    "inputs": [
       {
-        name: 'amount',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: false,
-      },
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
     ],
-    name: 'BadDebt',
+    "name": "OwnableUnauthorizedAccount",
+    "type": "error"
   },
   {
-    type: 'event',
-    anonymous: false,
-    inputs: [
-      { name: 'user', internalType: 'address', type: 'address', indexed: true },
+    "inputs": [],
+    "name": "UUPSUnauthorizedCallContext",
+    "type": "error"
+  },
+  {
+    "inputs": [
       {
-        name: 'amount',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: false,
-      },
+        "internalType": "bytes32",
+        "name": "slot",
+        "type": "bytes32"
+      }
     ],
-    name: 'CollateralAdded',
+    "name": "UUPSUnsupportedProxiableUUID",
+    "type": "error"
   },
   {
-    type: 'event',
-    anonymous: false,
-    inputs: [
-      { name: 'user', internalType: 'address', type: 'address', indexed: true },
+    "anonymous": false,
+    "inputs": [
       {
-        name: 'amount',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: false,
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
       },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
     ],
-    name: 'CollateralRemoved',
+    "name": "BadDebt",
+    "type": "event"
   },
   {
-    type: 'event',
-    anonymous: false,
-    inputs: [
+    "anonymous": false,
+    "inputs": [
       {
-        name: 'maxBps',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: false,
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "maxBps",
+        "type": "uint256"
       },
       {
-        name: 'period',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: false,
-      },
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "period",
+        "type": "uint256"
+      }
     ],
-    name: 'FundingParametersUpdated',
+    "name": "FundingParametersUpdated",
+    "type": "event"
   },
   {
-    type: 'event',
-    anonymous: false,
-    inputs: [
-      { name: 'user', internalType: 'address', type: 'address', indexed: true },
+    "anonymous": false,
+    "inputs": [
       {
-        name: 'amount',
-        internalType: 'int256',
-        type: 'int256',
-        indexed: false,
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
       },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "amount",
+        "type": "int256"
+      }
     ],
-    name: 'FundingSettled',
+    "name": "FundingSettled",
+    "type": "event"
   },
   {
-    type: 'event',
-    anonymous: false,
-    inputs: [
+    "anonymous": false,
+    "inputs": [
       {
-        name: 'fundingRate',
-        internalType: 'int256',
-        type: 'int256',
-        indexed: false,
+        "indexed": false,
+        "internalType": "int256",
+        "name": "fundingRate",
+        "type": "int256"
       },
       {
-        name: 'cumulativeFundingPerUnit',
-        internalType: 'int256',
-        type: 'int256',
-        indexed: false,
+        "indexed": false,
+        "internalType": "int256",
+        "name": "cumulativeFundingPerUnit",
+        "type": "int256"
       },
       {
-        name: 'timestamp',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: false,
-      },
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
     ],
-    name: 'FundingUpdated',
+    "name": "FundingUpdated",
+    "type": "event"
   },
   {
-    type: 'event',
-    anonymous: false,
-    inputs: [
+    "anonymous": false,
+    "inputs": [
       {
-        name: 'version',
-        internalType: 'uint64',
-        type: 'uint64',
-        indexed: false,
-      },
+        "indexed": true,
+        "internalType": "address",
+        "name": "hook",
+        "type": "address"
+      }
     ],
-    name: 'Initialized',
+    "name": "HookUpdated",
+    "type": "event"
   },
   {
-    type: 'event',
-    anonymous: false,
-    inputs: [
+    "anonymous": false,
+    "inputs": [
       {
-        name: 'newLiquidationFee',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: false,
-      },
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "version",
+        "type": "uint64"
+      }
     ],
-    name: 'LiquidationFeeUpdated',
+    "name": "Initialized",
+    "type": "event"
   },
   {
-    type: 'event',
-    anonymous: false,
-    inputs: [
+    "anonymous": false,
+    "inputs": [
       {
-        name: 'newMaintenanceMarginPercent',
-        internalType: 'uint8',
-        type: 'uint8',
-        indexed: false,
-      },
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newLiquidationFee",
+        "type": "uint256"
+      }
     ],
-    name: 'MaintenanceMarginPercentUpdated',
+    "name": "LiquidationFeeUpdated",
+    "type": "event"
   },
   {
-    type: 'event',
-    anonymous: false,
-    inputs: [
+    "anonymous": false,
+    "inputs": [
       {
-        name: 'newMarginPercent',
-        internalType: 'uint8',
-        type: 'uint8',
-        indexed: false,
-      },
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "newMaintenanceMarginPercent",
+        "type": "uint8"
+      }
     ],
-    name: 'MarginPercentUpdated',
+    "name": "MaintenanceMarginPercentUpdated",
+    "type": "event"
   },
   {
-    type: 'event',
-    anonymous: false,
-    inputs: [
+    "anonymous": false,
+    "inputs": [
       {
-        name: 'newTakerFeeBps',
-        internalType: 'int16',
-        type: 'int16',
-        indexed: false,
-      },
-      {
-        name: 'newMakerFeeBps',
-        internalType: 'int16',
-        type: 'int16',
-        indexed: false,
-      },
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "newMarginPercent",
+        "type": "uint8"
+      }
     ],
-    name: 'MatchFeeUpdated',
+    "name": "MarginPercentUpdated",
+    "type": "event"
   },
   {
-    type: 'event',
-    anonymous: false,
-    inputs: [
+    "anonymous": false,
+    "inputs": [
       {
-        name: 'newMinimumMarginPerOrder',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: false,
+        "indexed": false,
+        "internalType": "int16",
+        "name": "newTakerFeeBps",
+        "type": "int16"
       },
+      {
+        "indexed": false,
+        "internalType": "int16",
+        "name": "newMakerFeeBps",
+        "type": "int16"
+      }
     ],
-    name: 'MinimumMarginPerOrderUpdated',
+    "name": "MatchFeeUpdated",
+    "type": "event"
   },
   {
-    type: 'event',
-    anonymous: false,
-    inputs: [
+    "anonymous": false,
+    "inputs": [
       {
-        name: 'orderId',
-        internalType: 'bytes32',
-        type: 'bytes32',
-        indexed: true,
-      },
-      {
-        name: 'participant',
-        internalType: 'address',
-        type: 'address',
-        indexed: true,
-      },
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newMinimumMarginPerOrder",
+        "type": "uint256"
+      }
     ],
-    name: 'OrderCancelled',
+    "name": "MinimumMarginPerOrderUpdated",
+    "type": "event"
   },
   {
-    type: 'event',
-    anonymous: false,
-    inputs: [
+    "anonymous": false,
+    "inputs": [
       {
-        name: 'orderId',
-        internalType: 'bytes32',
-        type: 'bytes32',
-        indexed: true,
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "orderId",
+        "type": "bytes32"
       },
       {
-        name: 'participant',
-        internalType: 'address',
-        type: 'address',
-        indexed: true,
-      },
-      {
-        name: 'price',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: false,
-      },
-      {
-        name: 'quantity',
-        internalType: 'int256',
-        type: 'int256',
-        indexed: false,
-      },
+        "indexed": true,
+        "internalType": "address",
+        "name": "participant",
+        "type": "address"
+      }
     ],
-    name: 'OrderCreated',
+    "name": "OrderCancelled",
+    "type": "event"
   },
   {
-    type: 'event',
-    anonymous: false,
-    inputs: [
+    "anonymous": false,
+    "inputs": [
       {
-        name: 'makerOrderId',
-        internalType: 'bytes32',
-        type: 'bytes32',
-        indexed: true,
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "orderId",
+        "type": "bytes32"
       },
       {
-        name: 'maker',
-        internalType: 'address',
-        type: 'address',
-        indexed: true,
+        "indexed": true,
+        "internalType": "address",
+        "name": "participant",
+        "type": "address"
       },
       {
-        name: 'taker',
-        internalType: 'address',
-        type: 'address',
-        indexed: true,
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "price",
+        "type": "uint256"
       },
       {
-        name: 'tradePrice',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: false,
-      },
-      {
-        name: 'takerQuantity',
-        internalType: 'int256',
-        type: 'int256',
-        indexed: false,
-      },
-      {
-        name: 'makerFee',
-        internalType: 'int256',
-        type: 'int256',
-        indexed: false,
-      },
-      {
-        name: 'takerFee',
-        internalType: 'int256',
-        type: 'int256',
-        indexed: false,
-      },
-      {
-        name: 'makerNetQtyAfter',
-        internalType: 'int256',
-        type: 'int256',
-        indexed: false,
-      },
-      {
-        name: 'takerNetQtyAfter',
-        internalType: 'int256',
-        type: 'int256',
-        indexed: false,
-      },
-      {
-        name: 'makerEntryPriceAfter',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: false,
-      },
-      {
-        name: 'takerEntryPriceAfter',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: false,
-      },
+        "indexed": false,
+        "internalType": "int256",
+        "name": "quantity",
+        "type": "int256"
+      }
     ],
-    name: 'OrderMatched',
+    "name": "OrderCreated",
+    "type": "event"
   },
   {
-    type: 'event',
-    anonymous: false,
-    inputs: [
+    "anonymous": false,
+    "inputs": [
       {
-        name: 'orderId',
-        internalType: 'bytes32',
-        type: 'bytes32',
-        indexed: true,
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "orderId",
+        "type": "bytes32"
       },
       {
-        name: 'participant',
-        internalType: 'address',
-        type: 'address',
-        indexed: true,
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
       },
       {
-        name: 'newQuantity',
-        internalType: 'int256',
-        type: 'int256',
-        indexed: false,
-      },
-    ],
-    name: 'OrderUpdated',
-  },
-  {
-    type: 'event',
-    anonymous: false,
-    inputs: [
-      {
-        name: 'previousOwner',
-        internalType: 'address',
-        type: 'address',
-        indexed: true,
+        "indexed": true,
+        "internalType": "address",
+        "name": "liquidator",
+        "type": "address"
       },
       {
-        name: 'newOwner',
-        internalType: 'address',
-        type: 'address',
-        indexed: true,
-      },
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "fee",
+        "type": "uint256"
+      }
     ],
-    name: 'OwnershipTransferred',
+    "name": "OrderLiquidated",
+    "type": "event"
   },
   {
-    type: 'event',
-    anonymous: false,
-    inputs: [
-      { name: 'user', internalType: 'address', type: 'address', indexed: true },
+    "anonymous": false,
+    "inputs": [
       {
-        name: 'liquidator',
-        internalType: 'address',
-        type: 'address',
-        indexed: true,
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "makerOrderId",
+        "type": "bytes32"
       },
       {
-        name: 'positionSize',
-        internalType: 'int256',
-        type: 'int256',
-        indexed: false,
+        "indexed": true,
+        "internalType": "address",
+        "name": "maker",
+        "type": "address"
       },
-      { name: 'pnl', internalType: 'int256', type: 'int256', indexed: false },
       {
-        name: 'liquidatorFee',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: false,
+        "indexed": true,
+        "internalType": "address",
+        "name": "taker",
+        "type": "address"
       },
-    ],
-    name: 'PositionLiquidated',
-  },
-  {
-    type: 'event',
-    anonymous: false,
-    inputs: [
-      { name: 'from', internalType: 'address', type: 'address', indexed: true },
-      { name: 'to', internalType: 'address', type: 'address', indexed: true },
       {
-        name: 'value',
-        internalType: 'uint256',
-        type: 'uint256',
-        indexed: false,
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "tradePrice",
+        "type": "uint256"
       },
-    ],
-    name: 'Transfer',
-  },
-  {
-    type: 'event',
-    anonymous: false,
-    inputs: [
       {
-        name: 'implementation',
-        internalType: 'address',
-        type: 'address',
-        indexed: true,
+        "indexed": false,
+        "internalType": "int256",
+        "name": "takerQuantity",
+        "type": "int256"
       },
-    ],
-    name: 'Upgraded',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'FUNDING_DECIMALS',
-    outputs: [{ name: '', internalType: 'uint8', type: 'uint8' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'MAX_ORDERS_PER_PARTICIPANT',
-    outputs: [{ name: '', internalType: 'uint8', type: 'uint8' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'MAX_PRICE_LEVELS_PER_SIDE',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'QUANTITY_DECIMALS',
-    outputs: [{ name: '', internalType: 'uint8', type: 'uint8' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'UPGRADE_INTERFACE_VERSION',
-    outputs: [{ name: '', internalType: 'string', type: 'string' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '_amount', internalType: 'uint256', type: 'uint256' }],
-    name: 'addCollateral',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [
-      { name: '_amount', internalType: 'uint256', type: 'uint256' },
-      { name: '_deadline', internalType: 'uint256', type: 'uint256' },
-      { name: '_v', internalType: 'uint8', type: 'uint8' },
-      { name: '_r', internalType: 'bytes32', type: 'bytes32' },
-      { name: '_s', internalType: 'bytes32', type: 'bytes32' },
-    ],
-    name: 'addCollateralWithPermit',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [
-      { name: 'owner', internalType: 'address', type: 'address' },
-      { name: 'spender', internalType: 'address', type: 'address' },
-    ],
-    name: 'allowance',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [
-      { name: 'spender', internalType: 'address', type: 'address' },
-      { name: 'value', internalType: 'uint256', type: 'uint256' },
-    ],
-    name: 'approve',
-    outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: 'account', internalType: 'address', type: 'address' }],
-    name: 'balanceOf',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '_orderId', internalType: 'bytes32', type: 'bytes32' }],
-    name: 'cancelOrder',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'collateralToken',
-    outputs: [{ name: '', internalType: 'contract IERC20', type: 'address' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [
-      { name: '_price', internalType: 'uint256', type: 'uint256' },
-      { name: '_quantity', internalType: 'int256', type: 'int256' },
-    ],
-    name: 'createOrder',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'cumulativeFundingPerUnit',
-    outputs: [{ name: '', internalType: 'int256', type: 'int256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'decimals',
-    outputs: [{ name: '', internalType: 'uint8', type: 'uint8' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '_amount', internalType: 'uint256', type: 'uint256' }],
-    name: 'depositReservePool',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'fundingPeriod',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'fundingRateMaxBps',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'getBestAskPrice',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'getBestBidPrice',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '_user', internalType: 'address', type: 'address' }],
-    name: 'getInitialMargin',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '_user', internalType: 'address', type: 'address' }],
-    name: 'getMaintenanceMargin',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'getMarketPrice',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '_orderId', internalType: 'bytes32', type: 'bytes32' }],
-    name: 'getOrder',
-    outputs: [
       {
-        name: '',
-        internalType: 'struct PerpsSimple.Order',
-        type: 'tuple',
-        components: [
-          { name: 'participant', internalType: 'address', type: 'address' },
-          { name: 'price', internalType: 'uint256', type: 'uint256' },
-          { name: 'quantity', internalType: 'int256', type: 'int256' },
-        ],
+        "indexed": false,
+        "internalType": "int256",
+        "name": "makerFee",
+        "type": "int256"
       },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '_maxLevels', internalType: 'uint256', type: 'uint256' }],
-    name: 'getOrderBookPrices',
-    outputs: [
-      { name: 'bidPrices', internalType: 'uint256[]', type: 'uint256[]' },
-      { name: 'askPrices', internalType: 'uint256[]', type: 'uint256[]' },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '_user', internalType: 'address', type: 'address' }],
-    name: 'getPendingFunding',
-    outputs: [{ name: '', internalType: 'int256', type: 'int256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [
-      { name: '_price', internalType: 'uint256', type: 'uint256' },
-      { name: '_isBid', internalType: 'bool', type: 'bool' },
-    ],
-    name: 'getQuantityAtPrice',
-    outputs: [
-      { name: 'totalQuantity', internalType: 'uint256', type: 'uint256' },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '_user', internalType: 'address', type: 'address' }],
-    name: 'getRequiredMargin',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '_user', internalType: 'address', type: 'address' }],
-    name: 'getUnrealizedPnl',
-    outputs: [{ name: '', internalType: 'int256', type: 'int256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '_user', internalType: 'address', type: 'address' }],
-    name: 'getUserOrders',
-    outputs: [{ name: '', internalType: 'bytes32[]', type: 'bytes32[]' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '_user', internalType: 'address', type: 'address' }],
-    name: 'getUserPosition',
-    outputs: [
       {
-        name: '',
-        internalType: 'struct PerpsSimple.Position',
-        type: 'tuple',
-        components: [
-          { name: 'netQuantity', internalType: 'int256', type: 'int256' },
+        "indexed": false,
+        "internalType": "int256",
+        "name": "takerFee",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "makerNetQtyAfter",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "takerNetQtyAfter",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "makerEntryPriceAfter",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "takerEntryPriceAfter",
+        "type": "uint256"
+      }
+    ],
+    "name": "OrderMatched",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "orderId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "participant",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "newQuantity",
+        "type": "int256"
+      }
+    ],
+    "name": "OrderUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previousOwner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnershipTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "liquidator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "positionSize",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "pnl",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "liquidatorFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "PositionLiquidated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "implementation",
+        "type": "address"
+      }
+    ],
+    "name": "Upgraded",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "CONTRACT_SIZE_HPS_DAY",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "FUNDING_DECIMALS",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_ORDERS_PER_PARTICIPANT",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_PRICE_LEVELS_PER_SIDE",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "ORACLE_UNIT_HPS_DAY",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "QUANTITY_DECIMALS",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "UPGRADE_INTERFACE_VERSION",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "VERSION",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "balanceOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "_orderId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "cancelOrder",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "collateralToken",
+    "outputs": [
+      {
+        "internalType": "contract IERC20",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_price",
+        "type": "uint256"
+      },
+      {
+        "internalType": "int256",
+        "name": "_quantity",
+        "type": "int256"
+      }
+    ],
+    "name": "createOrder",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_price",
+        "type": "uint256"
+      },
+      {
+        "internalType": "int256",
+        "name": "_quantity",
+        "type": "int256"
+      },
+      {
+        "internalType": "enum HashPowerPerpsDEX.TimeInForce",
+        "name": "_tif",
+        "type": "uint8"
+      }
+    ],
+    "name": "createOrderV2",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "cumulativeFundingPerUnit",
+    "outputs": [
+      {
+        "internalType": "int256",
+        "name": "",
+        "type": "int256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "decimals",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "fundingPeriod",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "fundingRateMaxBps",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getBestAskPrice",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getBestBidPrice",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      }
+    ],
+    "name": "getInitialMargin",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      }
+    ],
+    "name": "getMaintenanceMargin",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getMarketPrice",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "_orderId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getOrder",
+    "outputs": [
+      {
+        "components": [
           {
-            name: 'aggregatedEntryPrice',
-            internalType: 'uint256',
-            type: 'uint256',
+            "internalType": "address",
+            "name": "participant",
+            "type": "address"
           },
+          {
+            "internalType": "uint256",
+            "name": "price",
+            "type": "uint256"
+          },
+          {
+            "internalType": "int256",
+            "name": "quantity",
+            "type": "int256"
+          }
         ],
-      },
+        "internalType": "struct HashPowerPerpsDEX.Order",
+        "name": "",
+        "type": "tuple"
+      }
     ],
-    stateMutability: 'view',
+    "stateMutability": "view",
+    "type": "function"
   },
   {
-    type: 'function',
-    inputs: [],
-    name: 'getUsersWithPositions',
-    outputs: [{ name: '', internalType: 'address[]', type: 'address[]' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [
+    "inputs": [
       {
-        name: '_collateralToken',
-        internalType: 'contract IERC20Metadata',
-        type: 'address',
+        "internalType": "uint256",
+        "name": "_maxLevels",
+        "type": "uint256"
+      }
+    ],
+    "name": "getOrderBookPrices",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "bidPrices",
+        "type": "uint256[]"
       },
       {
-        name: '_priceOracle',
-        internalType: 'contract AggregatorV3Interface',
-        type: 'address',
-      },
-      { name: '_marginPercent', internalType: 'uint8', type: 'uint8' },
+        "internalType": "uint256[]",
+        "name": "askPrices",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
       {
-        name: '_maintenanceMarginPercent',
-        internalType: 'uint8',
-        type: 'uint8',
-      },
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      }
     ],
-    name: 'initialize',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '_user', internalType: 'address', type: 'address' }],
-    name: 'isLiquidatable',
-    outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'lastFundingUpdateTime',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '_users', internalType: 'address[]', type: 'address[]' }],
-    name: 'liquidateBatch',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'liquidationFee',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'maintenanceMarginPercent',
-    outputs: [{ name: '', internalType: 'uint8', type: 'uint8' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'makerFeeBps',
-    outputs: [{ name: '', internalType: 'int16', type: 'int16' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'marginPercent',
-    outputs: [{ name: '', internalType: 'uint8', type: 'uint8' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'minimumMarginPerOrder',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'minimumPriceIncrement',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: 'data', internalType: 'bytes[]', type: 'bytes[]' }],
-    name: 'multicall',
-    outputs: [{ name: 'results', internalType: 'bytes[]', type: 'bytes[]' }],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'name',
-    outputs: [{ name: '', internalType: 'string', type: 'string' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'owner',
-    outputs: [{ name: '', internalType: 'address', type: 'address' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'priceOracle',
-    outputs: [
+    "name": "getOrderMargin",
+    "outputs": [
       {
-        name: '',
-        internalType: 'contract AggregatorV3Interface',
-        type: 'address',
-      },
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
     ],
-    stateMutability: 'view',
+    "stateMutability": "view",
+    "type": "function"
   },
   {
-    type: 'function',
-    inputs: [],
-    name: 'proxiableUUID',
-    outputs: [{ name: '', internalType: 'bytes32', type: 'bytes32' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '_amount', internalType: 'uint256', type: 'uint256' }],
-    name: 'removeCollateral',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'renounceOwnership',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'resetState',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [
-      { name: '_fundingRateMaxBps', internalType: 'uint256', type: 'uint256' },
-      { name: '_fundingPeriod', internalType: 'uint256', type: 'uint256' },
-    ],
-    name: 'setFundingParameters',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [
-      { name: '_liquidationFee', internalType: 'uint256', type: 'uint256' },
-    ],
-    name: 'setLiquidationFee',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [
+    "inputs": [
       {
-        name: '_maintenanceMarginPercent',
-        internalType: 'uint8',
-        type: 'uint8',
-      },
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      }
     ],
-    name: 'setMaintenanceMarginPercent',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: '_marginPercent', internalType: 'uint8', type: 'uint8' }],
-    name: 'setMarginPercent',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [
-      { name: '_takerFeeBps', internalType: 'int16', type: 'int16' },
-      { name: '_makerFeeBps', internalType: 'int16', type: 'int16' },
-    ],
-    name: 'setMatchFee',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [
+    "name": "getPendingFunding",
+    "outputs": [
       {
-        name: '_minimumMarginPerOrder',
-        internalType: 'uint256',
-        type: 'uint256',
-      },
+        "internalType": "int256",
+        "name": "",
+        "type": "int256"
+      }
     ],
-    name: 'setMinimumMarginPerOrder',
-    outputs: [],
-    stateMutability: 'nonpayable',
+    "stateMutability": "view",
+    "type": "function"
   },
   {
-    type: 'function',
-    inputs: [
+    "inputs": [
       {
-        name: '_oracle',
-        internalType: 'contract AggregatorV3Interface',
-        type: 'address',
+        "internalType": "uint256",
+        "name": "_price",
+        "type": "uint256"
       },
+      {
+        "internalType": "bool",
+        "name": "_isBid",
+        "type": "bool"
+      }
     ],
-    name: 'setOracle',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [
-      { name: '_price', internalType: 'uint256', type: 'uint256' },
-      { name: '_quantity', internalType: 'int256', type: 'int256' },
+    "name": "getQuantityAtPrice",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "totalQuantity",
+        "type": "uint256"
+      }
     ],
-    name: 'simulateOrder',
-    outputs: [
-      { name: 'filledQuantity', internalType: 'int256', type: 'int256' },
-      { name: 'averageFillPrice', internalType: 'uint256', type: 'uint256' },
-      { name: 'remainingQuantity', internalType: 'int256', type: 'int256' },
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      }
     ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'symbol',
-    outputs: [{ name: '', internalType: 'string', type: 'string' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'takerFeeBps',
-    outputs: [{ name: '', internalType: 'int16', type: 'int16' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'totalSupply',
-    outputs: [{ name: '', internalType: 'uint256', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    inputs: [
-      { name: 'to', internalType: 'address', type: 'address' },
-      { name: 'value', internalType: 'uint256', type: 'uint256' },
+    "name": "getRequiredMargin",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
     ],
-    name: 'transfer',
-    outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
-    stateMutability: 'nonpayable',
+    "stateMutability": "view",
+    "type": "function"
   },
   {
-    type: 'function',
-    inputs: [
-      { name: 'from', internalType: 'address', type: 'address' },
-      { name: 'to', internalType: 'address', type: 'address' },
-      { name: 'value', internalType: 'uint256', type: 'uint256' },
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      }
     ],
-    name: 'transferFrom',
-    outputs: [{ name: '', internalType: 'bool', type: 'bool' }],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [{ name: 'newOwner', internalType: 'address', type: 'address' }],
-    name: 'transferOwnership',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [],
-    name: 'updateFunding',
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    inputs: [
-      { name: 'newImplementation', internalType: 'address', type: 'address' },
-      { name: 'data', internalType: 'bytes', type: 'bytes' },
+    "name": "getUnrealizedPnl",
+    "outputs": [
+      {
+        "internalType": "int256",
+        "name": "",
+        "type": "int256"
+      }
     ],
-    name: 'upgradeToAndCall',
-    outputs: [],
-    stateMutability: 'payable',
+    "stateMutability": "view",
+    "type": "function"
   },
   {
-    type: 'function',
-    inputs: [{ name: '_amount', internalType: 'uint256', type: 'uint256' }],
-    name: 'withdrawReservePool',
-    outputs: [],
-    stateMutability: 'nonpayable',
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      }
+    ],
+    "name": "getUserOrders",
+    "outputs": [
+      {
+        "internalType": "bytes32[]",
+        "name": "",
+        "type": "bytes32[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
   },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      }
+    ],
+    "name": "getUserPosition",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "int256",
+            "name": "netQuantity",
+            "type": "int256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "aggregatedEntryPrice",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct HashPowerPerpsDEX.Position",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getUsersWithPositions",
+    "outputs": [
+      {
+        "internalType": "address[]",
+        "name": "",
+        "type": "address[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "hook",
+    "outputs": [
+      {
+        "internalType": "contract IPointsHook",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract AggregatorV3Interface",
+        "name": "_priceOracle",
+        "type": "address"
+      },
+      {
+        "internalType": "contract ICollateralVault",
+        "name": "_vault",
+        "type": "address"
+      }
+    ],
+    "name": "initialize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract ICollateralVault",
+        "name": "_vault",
+        "type": "address"
+      },
+      {
+        "internalType": "contract IPortfolioMarginEngine",
+        "name": "_pm",
+        "type": "address"
+      }
+    ],
+    "name": "initializeV2",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      }
+    ],
+    "name": "isLiquidatable",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "lastFundingUpdateTime",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "_orderId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "liquidateOrder",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_closeQty",
+        "type": "uint256"
+      }
+    ],
+    "name": "liquidatePosition",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "liquidationFee",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "maintenanceMarginPercent",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "makerFeeBps",
+    "outputs": [
+      {
+        "internalType": "int16",
+        "name": "",
+        "type": "int16"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "marginPercent",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "minimumMarginPerOrder",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "minimumPriceIncrement",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes[]",
+        "name": "data",
+        "type": "bytes[]"
+      }
+    ],
+    "name": "multicall",
+    "outputs": [
+      {
+        "internalType": "bytes[]",
+        "name": "results",
+        "type": "bytes[]"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes[]",
+        "name": "data",
+        "type": "bytes[]"
+      }
+    ],
+    "name": "multicallStopOnFailure",
+    "outputs": [
+      {
+        "internalType": "bool[]",
+        "name": "successes",
+        "type": "bool[]"
+      },
+      {
+        "internalType": "bytes[]",
+        "name": "results",
+        "type": "bytes[]"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "owner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "portfolioMargin",
+    "outputs": [
+      {
+        "internalType": "contract IPortfolioMarginEngine",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "priceOracle",
+    "outputs": [
+      {
+        "internalType": "contract AggregatorV3Interface",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "proxiableUUID",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "renounceOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "resetState",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_fundingRateMaxBps",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_fundingPeriod",
+        "type": "uint256"
+      }
+    ],
+    "name": "setFundingParameters",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_hook",
+        "type": "address"
+      }
+    ],
+    "name": "setHook",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_liquidationFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "setLiquidationFee",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "int16",
+        "name": "_takerFeeBps",
+        "type": "int16"
+      },
+      {
+        "internalType": "int16",
+        "name": "_makerFeeBps",
+        "type": "int16"
+      }
+    ],
+    "name": "setMatchFee",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_minimumMarginPerOrder",
+        "type": "uint256"
+      }
+    ],
+    "name": "setMinimumMarginPerOrder",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract AggregatorV3Interface",
+        "name": "_oracle",
+        "type": "address"
+      }
+    ],
+    "name": "setOracle",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract IPortfolioMarginEngine",
+        "name": "_pm",
+        "type": "address"
+      }
+    ],
+    "name": "setPortfolioMargin",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_price",
+        "type": "uint256"
+      },
+      {
+        "internalType": "int256",
+        "name": "_quantity",
+        "type": "int256"
+      }
+    ],
+    "name": "simulateOrder",
+    "outputs": [
+      {
+        "internalType": "int256",
+        "name": "filledQuantity",
+        "type": "int256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "averageFillPrice",
+        "type": "uint256"
+      },
+      {
+        "internalType": "int256",
+        "name": "remainingQuantity",
+        "type": "int256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "takerFeeBps",
+    "outputs": [
+      {
+        "internalType": "int16",
+        "name": "",
+        "type": "int16"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "transferOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "updateFunding",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newImplementation",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes",
+        "name": "data",
+        "type": "bytes"
+      }
+    ],
+    "name": "upgradeToAndCall",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "vault",
+    "outputs": [
+      {
+        "internalType": "contract ICollateralVault",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
 ] as const;
+
+export const PerpsABI = HashPowerPerpsDEXAbi;

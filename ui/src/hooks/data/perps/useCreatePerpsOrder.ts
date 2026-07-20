@@ -2,10 +2,13 @@ import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { getContract } from "viem";
 import { PerpsABI } from "../../../abi/Perps";
 import { QUANTITY_SCALE_NUM } from "../../../lib/units";
+import { TimeInForce, type TimeInForceValue } from "../../../types/timeInForce";
 
 interface CreatePerpsOrderProps {
   price: bigint;
   quantity: number; // Positive for Buy, Negative for Sell
+  /** Defaults to GTC. */
+  timeInForce?: TimeInForceValue;
 }
 
 export function useCreatePerpsOrder() {
@@ -26,12 +29,12 @@ export function useCreatePerpsOrder() {
     // Contract expects: positive = Buy, negative = Sell
     // Multiply by QUANTITY_SCALE_NUM to convert decimal to integer (QUANTITY_DECIMALS precision)
     const quantityWithDecimals = Math.round(props.quantity * QUANTITY_SCALE_NUM);
-    console.log("🚀 ~ createOrderAsync ~ quantityWithDecimals:", quantityWithDecimals)
     const quantityBigInt = BigInt(quantityWithDecimals);
-    console.log("🚀 ~ createOrderAsync ~ quantityBigInt:", quantityBigInt)
 
-    const req = await perpsContract.simulate.createOrder(
-      [props.price, quantityBigInt],
+    const tif = props.timeInForce ?? TimeInForce.GTC;
+
+    const req = await perpsContract.simulate.createOrderV2(
+      [props.price, quantityBigInt, tif],
       { account: walletClient.account.address },
     );
 

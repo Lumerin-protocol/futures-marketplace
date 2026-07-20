@@ -55,7 +55,9 @@ async function main() {
   });
 
   logStep("Deployed", addrUrl(pc, futuresImpl.address));
-  await verifyContract(futuresImpl.address, [vaultAddress]);
+  await verifyContract(futuresImpl.address, [vaultAddress], undefined, {
+    contract: "contracts/Futures.sol:Futures",
+  });
   logStep("Verified", addrUrl(pc, futuresImpl.address));
 
   const newVersion = await futuresImpl.read.VERSION();

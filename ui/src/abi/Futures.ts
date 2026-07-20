@@ -59,6 +59,11 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "FillOrKillNotFilled",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "InsufficientMarginBalance",
     "type": "error"
   },
@@ -85,6 +90,11 @@ export const FuturesAbi = [
   {
     "inputs": [],
     "name": "InvalidQty",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidTimeInForce",
     "type": "error"
   },
   {
@@ -837,6 +847,34 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "_price",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_expirationAt",
+        "type": "uint256"
+      },
+      {
+        "internalType": "int256",
+        "name": "_quantity",
+        "type": "int256"
+      },
+      {
+        "internalType": "enum Futures.TimeInForce",
+        "name": "_tif",
+        "type": "uint8"
+      }
+    ],
+    "name": "createOrderV2",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "components": [
           {
             "internalType": "uint256",
@@ -860,6 +898,41 @@ export const FuturesAbi = [
       }
     ],
     "name": "createOrders",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "price",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "expirationAt",
+            "type": "uint256"
+          },
+          {
+            "internalType": "int256",
+            "name": "quantity",
+            "type": "int256"
+          },
+          {
+            "internalType": "enum Futures.TimeInForce",
+            "name": "timeInForce",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct Futures.OrderIntentV2[]",
+        "name": "_intents",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "createOrdersV2",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
