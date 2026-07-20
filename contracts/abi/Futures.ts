@@ -59,11 +59,6 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "FillOrKillNotFilled",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "InsufficientMarginBalance",
     "type": "error"
   },
@@ -187,6 +182,11 @@ export const FuturesAbi = [
   {
     "inputs": [],
     "name": "SettlementDateNotReached",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TimeInForceNotFilled",
     "type": "error"
   },
   {
