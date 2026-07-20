@@ -163,8 +163,8 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
   const makerFee = 0n;
   const takerFee = parseUnits("1", USDC_DECIMALS);
   const { timestamp: now } = await pc.getBlock({ blockTag: "latest" });
-  const futureDeliveryDatesCount = 10;
-  const firstFutureDeliveryDate = now + BigInt(expirationIntervalSeconds);
+  const futureExpirationDatesCount = 10;
+  const firstFutureExpirationDate = now + BigInt(expirationIntervalSeconds);
   const collateralAmount = parseUnits("10000", USDC_DECIMALS);
 
   // Get wallet client for deployments
@@ -219,8 +219,8 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
           liquidationMarginPercent,
           priceLadderStep,
           expirationIntervalDays,
-          futureDeliveryDatesCount,
-          firstFutureDeliveryDate,
+          futureExpirationDatesCount,
+          firstFutureExpirationDate,
         ],
       }),
     ],
@@ -306,7 +306,7 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
 
   await futures.write.setMakerFee([makerFee], { account: owner.account });
   await futures.write.setTakerFee([takerFee], { account: owner.account });
-  const deliveryDates = await futures.read.getDeliveryDates();
+  const deliveryDates = await futures.read.getExpirationDates();
 
   // `depositFor` pulls USDC via the vault — approve the vault, not Futures.
   for (const w of [seller, buyer, buyer2, validator, owner]) {
@@ -330,8 +330,8 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
       makerFee,
       takerFee,
       deliveryDates,
-      futureDeliveryDatesCount,
-      firstFutureDeliveryDate,
+      futureExpirationDatesCount,
+      firstFutureExpirationDate,
       expirationIntervalDays,
       collateralAmount,
     },
@@ -387,16 +387,16 @@ export async function deployOnlyFuturesWithDummyData(
   const d = config.deliveryDates[0];
   const dst = "//shev8.contract:anything@stratum.braiins.com:3333";
 
-  await futures.write.createOrder([mp + inc, d, "", -1], { account: seller.account });
-  await futures.write.createOrder([mp + 2n * inc, d, "", -1], { account: seller.account });
-  await futures.write.createOrder([mp + 3n * inc, d, "", -1], { account: seller.account });
+  await futures.write.createOrder([mp + inc, d, -1], { account: seller.account });
+  await futures.write.createOrder([mp + 2n * inc, d, -1], { account: seller.account });
+  await futures.write.createOrder([mp + 3n * inc, d, -1], { account: seller.account });
 
-  await futures.write.createOrder([mp - inc, d, dst, 1], { account: buyer.account });
-  await futures.write.createOrder([mp - 2n * inc, d, dst, 1], { account: buyer.account });
-  await futures.write.createOrder([mp - 3n * inc, d, dst, 1], { account: buyer.account });
+  await futures.write.createOrder([mp - inc, d, 1], { account: buyer.account });
+  await futures.write.createOrder([mp - 2n * inc, d, 1], { account: buyer.account });
+  await futures.write.createOrder([mp - 3n * inc, d, 1], { account: buyer.account });
 
-  await futures.write.createOrder([mp, d, dst, -1], { account: seller.account });
-  await futures.write.createOrder([mp, d, dst, 1], { account: buyer.account });
+  await futures.write.createOrder([mp, d, -1], { account: seller.account });
+  await futures.write.createOrder([mp, d, 1], { account: buyer.account });
 
   // Physical-delivery escrow is disabled; futures cash-settle at maturity via
   // `settlePosition`, so no delivery payment is deposited for the seeded position.

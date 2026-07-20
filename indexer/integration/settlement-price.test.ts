@@ -17,8 +17,8 @@ import { futuresExpirationId } from "./helpers.ts";
 
 const conn = await network.getOrCreate();
 
-// Opens a matched lot (seller short / buyer long) at ~$100 on the first delivery date.
-async function openLot() {
+// Opens a matched position (seller short / buyer long) at ~$100 on the first expiration date.
+async function openMatchedPosition() {
   const data = await conn.networkHelpers.loadFixture(deployFuturesFixture);
   const { contracts, accounts, config } = data;
   const { futures, collateralVault } = contracts;
@@ -35,21 +35,22 @@ async function openLot() {
   await conn.matchstick.captureViewMocks();
   await conn.matchstick.anchor();
 
-  await futures.write.createOrder([entry, deliveryDate, "", -1], { account: seller.account });
-  const tx = await futures.write.createOrder([entry, deliveryDate, "dst", 1], {
+  await futures.write.createOrder([entry, deliveryDate, -1n], { account: seller.account });
+  const tx = await futures.write.createOrder([entry, deliveryDate, 1n], {
     account: buyer.account,
   });
   const receipt = await pc.waitForTransactionReceipt({ hash: tx });
-  const [created] = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "LotCreated" });
+  const [matched] = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "OrderMatched" });
+  assert.ok(matched);
 
-  return { ...data, lotId: created.args.lotId, deliveryDate };
+  return { ...data, deliveryDate, seller, buyer };
 }
 
 describe("FuturesExpiration: settlement price", () => {
   after(() => conn.matchstick.reset());
 
   it("records the settlement price via recordSettlementPrice", async () => {
-    const { contracts, accounts, deliveryDate } = await openLot();
+    const { contracts, accounts, deliveryDate } = await openMatchedPosition();
     const { futures, hashrateOracle } = contracts;
     const { buyer2, tc, pc } = accounts;
 
@@ -64,7 +65,7 @@ describe("FuturesExpiration: settlement price", () => {
     const exp = snap.entity("FuturesExpiration", id);
 
     assert.ok(exp, "FuturesExpiration entity must exist");
-    assert.equal(String(exp.deliveryAt), deliveryDate.toString());
+    assert.equal(String(exp.expirationAt), deliveryDate.toString());
     assert.equal(String(exp.settlementPrice), pinned.toString());
     assert.ok(String(exp.settledAt) !== "" && exp.settledAt != null, "settledAt must be set");
     assert.equal(
@@ -80,14 +81,23 @@ describe("FuturesExpiration: settlement price", () => {
   });
 
   it("lazily pins the settlement price the first time settlePosition runs", async () => {
-    const { contracts, accounts, deliveryDate, lotId } = await openLot();
+    const { contracts, accounts, deliveryDate, buyer } = await openMatchedPosition();
     const { futures, hashrateOracle } = contracts;
     const { buyer2, tc, pc } = accounts;
 
     await refreshHashprice(hashrateOracle, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
-    const tx = await futures.write.settlePosition([lotId], { account: buyer2.account });
-    await pc.waitForTransactionReceipt({ hash: tx });
+    const tx = await futures.write.settlePosition([buyer.account.address, deliveryDate], {
+      account: buyer2.account,
+    });
+    const receipt = await pc.waitForTransactionReceipt({ hash: tx });
+
+    const settled = parseEventLogs({
+      logs: receipt.logs,
+      abi: futures.abi,
+      eventName: "PositionSettled",
+    });
+    assert.equal(settled.length, 1, "settlePosition must emit PositionSettled");
 
     const pinned = await futures.read.settlementPrice([deliveryDate]);
     const id = futuresExpirationId(deliveryDate);

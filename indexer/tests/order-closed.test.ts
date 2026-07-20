@@ -7,15 +7,14 @@ import {
 } from "matchstick-as/assembly/index";
 import { newTypedMockEventWithParams } from "matchstick-as/assembly/defaults";
 import { Address, BigInt, Bytes } from "@graphprotocol/graph-ts";
-import { OrderClosed, OrderCreated } from "../generated/Futures/Futures";
-import { handleOrderClosed, handleOrderCreated } from "../src/handlers/orders";
+import { OrderCancelled, OrderCreated } from "../generated/Futures/Futures";
+import { handleOrderCancelled, handleOrderCreated } from "../src/handlers/orders";
 import {
   bytes32Id,
   orderAggKeyDefaultTx,
   paramAddr,
-  paramBool,
   paramBytes,
-  paramString,
+  paramInt,
   paramUint,
   priceLevelKey,
   setupDataSourceMock,
@@ -29,29 +28,28 @@ const DELIVERY = BigInt.fromI64(1_700_000_000);
 function createOrderCreatedEvent(
   orderId: Bytes,
   participant: Address,
-  isBuy: boolean,
+  quantity: BigInt,
 ): OrderCreated {
   return newTypedMockEventWithParams<OrderCreated>([
     paramBytes("orderId", orderId),
     paramAddr("participant", participant),
-    paramString("destURL", "url"),
-    paramUint("pricePerDay", PRICE),
-    paramUint("deliveryAt", DELIVERY),
-    paramBool("isBuy", isBuy),
+    paramUint("price", PRICE),
+    paramInt("quantity", quantity),
+    paramUint("expirationAt", DELIVERY),
   ]);
 }
 
-function createOrderClosedEvent(
+function createOrderCancelledEvent(
   orderId: Bytes,
-  reason: i32 = 1, // CANCELLED
-): OrderClosed {
-  return newTypedMockEventWithParams<OrderClosed>([
+  participant: Address,
+): OrderCancelled {
+  return newTypedMockEventWithParams<OrderCancelled>([
     paramBytes("orderId", orderId),
-    paramUint("reason", BigInt.fromI32(reason)),
+    paramAddr("participant", participant),
   ]);
 }
 
-describe("handleOrderClosed", () => {
+describe("handleOrderCancelled", () => {
   beforeEach(() => {
     clearStore();
     setupDataSourceMock();
@@ -61,8 +59,8 @@ describe("handleOrderClosed", () => {
   test("cancelling the only entry marks the Order CANCELLED and clears active counters", () => {
     const user = userAddress(1);
     const oid = bytes32Id(1);
-    handleOrderCreated(createOrderCreatedEvent(oid, user, true));
-    handleOrderClosed(createOrderClosedEvent(oid));
+    handleOrderCreated(createOrderCreatedEvent(oid, user, BigInt.fromI32(1)));
+    handleOrderCancelled(createOrderCancelledEvent(oid, user));
 
     const aggId = orderAggKeyDefaultTx(user, PRICE, DELIVERY, true);
     assert.fieldEquals("Order", aggId, "quantity", "0");
@@ -71,31 +69,43 @@ describe("handleOrderClosed", () => {
     assert.fieldEquals("Order", aggId, "status", "CANCELLED");
 
     assert.fieldEquals("OrderEntry", oid.toHexString(), "status", "CANCELLED");
+    assert.fieldEquals("OrderEntry", oid.toHexString(), "remainingQuantity", "0");
     assert.fieldEquals("PriceLevel", priceLevelKey(DELIVERY, PRICE, true), "totalQuantity", "0");
     assert.fieldEquals("Futures", "0", "activeOrders", "0");
     assert.fieldEquals("User", user.toHexString(), "activeOrderCount", "0");
   });
 
-  test("cancelling one of two entries leaves the Order PARTIAL", () => {
+  test("cancelling a qty=2 order clears the full remaining quantity", () => {
     const user = userAddress(1);
-    handleOrderCreated(createOrderCreatedEvent(bytes32Id(1), user, true));
-    handleOrderCreated(createOrderCreatedEvent(bytes32Id(2), user, true));
-
-    handleOrderClosed(createOrderClosedEvent(bytes32Id(1)));
+    handleOrderCreated(createOrderCreatedEvent(bytes32Id(1), user, BigInt.fromI32(2)));
+    handleOrderCancelled(createOrderCancelledEvent(bytes32Id(1), user));
 
     const aggId = orderAggKeyDefaultTx(user, PRICE, DELIVERY, true);
-    assert.fieldEquals("Order", aggId, "quantity", "1");
-    assert.fieldEquals("Order", aggId, "cancelledQuantity", "1");
+    assert.fieldEquals("Order", aggId, "quantity", "0");
+    assert.fieldEquals("Order", aggId, "cancelledQuantity", "2");
     assert.fieldEquals("Order", aggId, "originalQuantity", "2");
-    assert.fieldEquals("Order", aggId, "status", "PARTIAL");
-    assert.fieldEquals("PriceLevel", priceLevelKey(DELIVERY, PRICE, true), "totalQuantity", "1");
-    assert.fieldEquals("Futures", "0", "activeOrders", "1");
-    assert.fieldEquals("User", user.toHexString(), "activeOrderCount", "1");
+    assert.fieldEquals("Order", aggId, "status", "CANCELLED");
+    assert.fieldEquals("PriceLevel", priceLevelKey(DELIVERY, PRICE, true), "totalQuantity", "0");
+    assert.fieldEquals("Futures", "0", "activeOrders", "0");
+    assert.fieldEquals("User", user.toHexString(), "activeOrderCount", "0");
   });
 
-  test("OrderClosed for unknown id is a no-op", () => {
-    handleOrderClosed(createOrderClosedEvent(bytes32Id(42)));
+  test("OrderCancelled for unknown id is a no-op", () => {
+    handleOrderCancelled(createOrderCancelledEvent(bytes32Id(42), userAddress(1)));
     assert.entityCount("OrderEntry", 0);
     assert.entityCount("Order", 0);
+  });
+
+  test("OrderCancelled after expirationAt marks OrderEntry EXPIRED", () => {
+    const user = userAddress(1);
+    const oid = bytes32Id(1);
+    handleOrderCreated(createOrderCreatedEvent(oid, user, BigInt.fromI32(1)));
+
+    const cancelled = createOrderCancelledEvent(oid, user);
+    cancelled.block.timestamp = DELIVERY.plus(BigInt.fromI32(1));
+    handleOrderCancelled(cancelled);
+
+    assert.fieldEquals("OrderEntry", oid.toHexString(), "status", "EXPIRED");
+    assert.fieldEquals("Order", orderAggKeyDefaultTx(user, PRICE, DELIVERY, true), "status", "CANCELLED");
   });
 });

@@ -23,27 +23,7 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "CollateralTokenMismatch",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "DeliveryDateExpired",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "DeliveryDateNotAvailable",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "DeliveryDateShouldBeInTheFuture",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "DeliveryNotFinishedYet",
+    "name": "ArrayLengthMismatch",
     "type": "error"
   },
   {
@@ -64,23 +44,17 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "FailedCall",
+    "name": "ExpirationDateNotAvailable",
     "type": "error"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "reserve",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "required",
-        "type": "uint256"
-      }
-    ],
-    "name": "InsufficientContractReserve",
+    "inputs": [],
+    "name": "ExpirationDateShouldBeInTheFuture",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "FailedCall",
     "type": "error"
   },
   {
@@ -130,32 +104,17 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "NothingToWithdraw",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "OnlyPositionBuyer",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "OnlyValidatorOrPositionParticipant",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "OracleStale",
     "type": "error"
   },
   {
     "inputs": [],
-    "name": "OrderNotBelongToParticipant",
+    "name": "OrderNotBelongToSender",
     "type": "error"
   },
   {
     "inputs": [],
-    "name": "OrderNotBelongToSender",
+    "name": "OrderNotBelongToUser",
     "type": "error"
   },
   {
@@ -202,32 +161,7 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "PositionAlreadyPaid",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "PositionDeliveryExpired",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "PositionDeliveryNotExpired",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "PositionDeliveryNotStartedYet",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "PositionDestURLNotSet",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "PositionNotBelongToParticipant",
+    "name": "PositionExpirationNotStartedYet",
     "type": "error"
   },
   {
@@ -238,11 +172,6 @@ export const FuturesAbi = [
   {
     "inputs": [],
     "name": "SettlementDateNotReached",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "TransferDisabled",
     "type": "error"
   },
   {
@@ -293,7 +222,7 @@ export const FuturesAbi = [
       {
         "indexed": true,
         "internalType": "address",
-        "name": "account",
+        "name": "user",
         "type": "address"
       },
       {
@@ -338,7 +267,7 @@ export const FuturesAbi = [
           },
           {
             "internalType": "uint8",
-            "name": "futureDeliveryDatesCount",
+            "name": "futureExpirationDatesCount",
             "type": "uint8"
           },
           {
@@ -393,105 +322,7 @@ export const FuturesAbi = [
       {
         "indexed": true,
         "internalType": "bytes32",
-        "name": "lotId",
-        "type": "bytes32"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "seller",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "buyer",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "int256",
-        "name": "sellerPnl",
-        "type": "int256"
-      },
-      {
-        "indexed": false,
-        "internalType": "int256",
-        "name": "buyerPnl",
-        "type": "int256"
-      },
-      {
-        "indexed": false,
-        "internalType": "address",
-        "name": "closedBy",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "enum Futures.LotCloseReason",
-        "name": "reason",
-        "type": "uint8"
-      }
-    ],
-    "name": "LotClosed",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "lotId",
-        "type": "bytes32"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "seller",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "buyer",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "pricePerDay",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "deliveryAt",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "bytes32",
-        "name": "makerOrderId",
-        "type": "bytes32"
-      },
-      {
-        "indexed": false,
-        "internalType": "bytes32",
-        "name": "takerOrderId",
-        "type": "bytes32"
-      }
-    ],
-    "name": "LotCreated",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "lotId",
+        "name": "orderId",
         "type": "bytes32"
       },
       {
@@ -499,101 +330,9 @@ export const FuturesAbi = [
         "internalType": "address",
         "name": "participant",
         "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "liquidator",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "fee",
-        "type": "uint256"
       }
     ],
-    "name": "LotLiquidated",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "oldLotId",
-        "type": "bytes32"
-      },
-      {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "newLotId",
-        "type": "bytes32"
-      },
-      {
-        "indexed": false,
-        "internalType": "address",
-        "name": "exitingParticipant",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "address",
-        "name": "newParticipant",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "int256",
-        "name": "exitPnl",
-        "type": "int256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "newSellPricePerDay",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "newBuyPricePerDay",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "bytes32",
-        "name": "makerOrderId",
-        "type": "bytes32"
-      },
-      {
-        "indexed": false,
-        "internalType": "bytes32",
-        "name": "takerOrderId",
-        "type": "bytes32"
-      }
-    ],
-    "name": "LotTransferred",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "orderId",
-        "type": "bytes32"
-      },
-      {
-        "indexed": false,
-        "internalType": "enum Futures.OrderCloseReason",
-        "name": "reason",
-        "type": "uint8"
-      }
-    ],
-    "name": "OrderClosed",
+    "name": "OrderCancelled",
     "type": "event"
   },
   {
@@ -613,27 +352,21 @@ export const FuturesAbi = [
       },
       {
         "indexed": false,
-        "internalType": "string",
-        "name": "destURL",
-        "type": "string"
-      },
-      {
-        "indexed": false,
         "internalType": "uint256",
-        "name": "pricePerDay",
+        "name": "price",
         "type": "uint256"
       },
       {
         "indexed": false,
-        "internalType": "uint256",
-        "name": "deliveryAt",
-        "type": "uint256"
+        "internalType": "int256",
+        "name": "quantity",
+        "type": "int256"
       },
       {
         "indexed": false,
-        "internalType": "bool",
-        "name": "isBuy",
-        "type": "bool"
+        "internalType": "uint256",
+        "name": "expirationAt",
+        "type": "uint256"
       }
     ],
     "name": "OrderCreated",
@@ -651,7 +384,7 @@ export const FuturesAbi = [
       {
         "indexed": true,
         "internalType": "address",
-        "name": "participant",
+        "name": "user",
         "type": "address"
       },
       {
@@ -668,6 +401,110 @@ export const FuturesAbi = [
       }
     ],
     "name": "OrderLiquidated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "makerOrderId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "maker",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "taker",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "expirationAt",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "tradePrice",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "takerQuantity",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "makerFee",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "takerFee",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "makerNetQtyAfter",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "takerNetQtyAfter",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "makerEntryPriceAfter",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "takerEntryPriceAfter",
+        "type": "uint256"
+      }
+    ],
+    "name": "OrderMatched",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "orderId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "participant",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "newQuantity",
+        "type": "int256"
+      }
+    ],
+    "name": "OrderUpdated",
     "type": "event"
   },
   {
@@ -694,8 +531,94 @@ export const FuturesAbi = [
     "inputs": [
       {
         "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "liquidator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
         "internalType": "uint256",
-        "name": "deliveryAt",
+        "name": "expirationAt",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "closedQuantity",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "pnl",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "liquidatorFee",
+        "type": "uint256"
+      }
+    ],
+    "name": "PositionLiquidated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "expirationAt",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "closedQuantity",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "int256",
+        "name": "pnl",
+        "type": "int256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "settlementPrice",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "settledBy",
+        "type": "address"
+      }
+    ],
+    "name": "PositionSettled",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "expirationAt",
         "type": "uint256"
       },
       {
@@ -726,19 +649,6 @@ export const FuturesAbi = [
     ],
     "name": "Upgraded",
     "type": "event"
-  },
-  {
-    "inputs": [],
-    "name": "BREACH_PENALTY_DECIMALS",
-    "outputs": [
-      {
-        "internalType": "uint8",
-        "name": "",
-        "type": "uint8"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
   },
   {
     "inputs": [],
@@ -787,19 +697,6 @@ export const FuturesAbi = [
         "internalType": "uint8",
         "name": "",
         "type": "uint8"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "MAX_ORDER_QTY",
-    "outputs": [
-      {
-        "internalType": "int8",
-        "name": "",
-        "type": "int8"
       }
     ],
     "stateMutability": "view",
@@ -865,7 +762,7 @@ export const FuturesAbi = [
         "type": "bytes32"
       }
     ],
-    "name": "closeOrder",
+    "name": "cancelOrder",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -909,14 +806,9 @@ export const FuturesAbi = [
         "type": "uint256"
       },
       {
-        "internalType": "string",
-        "name": "_destURL",
-        "type": "string"
-      },
-      {
-        "internalType": "int8",
-        "name": "_qty",
-        "type": "int8"
+        "internalType": "int256",
+        "name": "_quantity",
+        "type": "int256"
       }
     ],
     "name": "createOrder",
@@ -930,23 +822,18 @@ export const FuturesAbi = [
         "components": [
           {
             "internalType": "uint256",
-            "name": "pricePerDay",
+            "name": "price",
             "type": "uint256"
           },
           {
             "internalType": "uint256",
-            "name": "deliveryDate",
+            "name": "expirationAt",
             "type": "uint256"
           },
           {
-            "internalType": "string",
-            "name": "destURL",
-            "type": "string"
-          },
-          {
-            "internalType": "int8",
-            "name": "qty",
-            "type": "int8"
+            "internalType": "int256",
+            "name": "quantity",
+            "type": "int256"
           }
         ],
         "internalType": "struct Futures.OrderIntent[]",
@@ -974,19 +861,6 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "deliveryIntervalDays",
-    "outputs": [
-      {
-        "internalType": "uint8",
-        "name": "",
-        "type": "uint8"
-      }
-    ],
-    "stateMutability": "pure",
-    "type": "function"
-  },
-  {
-    "inputs": [],
     "name": "expirationIntervalDays",
     "outputs": [
       {
@@ -1000,7 +874,7 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "firstFutureDeliveryDate",
+    "name": "firstFutureExpirationDate",
     "outputs": [
       {
         "internalType": "uint256",
@@ -1013,7 +887,7 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "futureDeliveryDatesCount",
+    "name": "futureExpirationDatesCount",
     "outputs": [
       {
         "internalType": "uint8",
@@ -1027,41 +901,12 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "_expirationAt",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_maxLevels",
-        "type": "uint256"
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
       }
     ],
-    "name": "getAskPrices",
-    "outputs": [
-      {
-        "internalType": "uint256[]",
-        "name": "",
-        "type": "uint256[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_expirationAt",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_maxLevels",
-        "type": "uint256"
-      }
-    ],
-    "name": "getBidPrices",
+    "name": "getActiveExpirationDates",
     "outputs": [
       {
         "internalType": "uint256[]",
@@ -1074,50 +919,12 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "getDeliveryDates",
+    "name": "getExpirationDates",
     "outputs": [
       {
         "internalType": "uint256[]",
         "name": "",
         "type": "uint256[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_participant",
-        "type": "address"
-      }
-    ],
-    "name": "getFuturesOrderMargin",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_participant",
-        "type": "address"
-      }
-    ],
-    "name": "getFuturesUnrealizedPnl",
-    "outputs": [
-      {
-        "internalType": "int256",
-        "name": "",
-        "type": "int256"
       }
     ],
     "stateMutability": "view",
@@ -1163,38 +970,28 @@ export const FuturesAbi = [
         "type": "bytes32"
       }
     ],
-    "name": "getOrderById",
+    "name": "getOrder",
     "outputs": [
       {
         "components": [
-          {
-            "internalType": "bool",
-            "name": "isBuy",
-            "type": "bool"
-          },
           {
             "internalType": "address",
             "name": "participant",
             "type": "address"
           },
           {
-            "internalType": "string",
-            "name": "destURL",
-            "type": "string"
-          },
-          {
             "internalType": "uint256",
-            "name": "pricePerDay",
+            "name": "price",
             "type": "uint256"
           },
           {
-            "internalType": "uint256",
-            "name": "deliveryAt",
-            "type": "uint256"
+            "internalType": "int256",
+            "name": "quantity",
+            "type": "int256"
           },
           {
             "internalType": "uint256",
-            "name": "createdAt",
+            "name": "expirationAt",
             "type": "uint256"
           }
         ],
@@ -1209,121 +1006,46 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "_participant",
-        "type": "address"
-      }
-    ],
-    "name": "getOrderIds",
-    "outputs": [
-      {
-        "internalType": "bytes32[]",
-        "name": "",
-        "type": "bytes32[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "_positionId",
-        "type": "bytes32"
-      }
-    ],
-    "name": "getPositionById",
-    "outputs": [
-      {
-        "components": [
-          {
-            "internalType": "address",
-            "name": "seller",
-            "type": "address"
-          },
-          {
-            "internalType": "address",
-            "name": "buyer",
-            "type": "address"
-          },
-          {
-            "internalType": "string",
-            "name": "destURL",
-            "type": "string"
-          },
-          {
-            "internalType": "uint256",
-            "name": "sellPricePerDay",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "buyPricePerDay",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "deliveryAt",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "createdAt",
-            "type": "uint256"
-          },
-          {
-            "internalType": "bool",
-            "name": "paid",
-            "type": "bool"
-          }
-        ],
-        "internalType": "struct Futures.Position",
-        "name": "",
-        "type": "tuple"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_participant",
-        "type": "address"
-      }
-    ],
-    "name": "getPositionIds",
-    "outputs": [
-      {
-        "internalType": "bytes32[]",
-        "name": "",
-        "type": "bytes32[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_participant",
-        "type": "address"
-      },
-      {
         "internalType": "uint256",
         "name": "_expirationAt",
         "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_maxLevels",
+        "type": "uint256"
       }
     ],
-    "name": "getPositionsByParticipantDeliveryDate",
+    "name": "getOrderBookPrices",
     "outputs": [
       {
-        "internalType": "bytes32[]",
+        "internalType": "uint256[]",
+        "name": "bids",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "asks",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      }
+    ],
+    "name": "getOrderMargin",
+    "outputs": [
+      {
+        "internalType": "uint256",
         "name": "",
-        "type": "bytes32[]"
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -1353,6 +1075,80 @@ export const FuturesAbi = [
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      }
+    ],
+    "name": "getUnrealizedPnl",
+    "outputs": [
+      {
+        "internalType": "int256",
+        "name": "",
+        "type": "int256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      }
+    ],
+    "name": "getUserOrders",
+    "outputs": [
+      {
+        "internalType": "bytes32[]",
+        "name": "",
+        "type": "bytes32[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_expirationAt",
+        "type": "uint256"
+      }
+    ],
+    "name": "getUserPosition",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "int256",
+            "name": "netQuantity",
+            "type": "int256"
+          },
+          {
+            "internalType": "int256",
+            "name": "netEntryValue",
+            "type": "int256"
+          }
+        ],
+        "internalType": "struct Futures.Position",
+        "name": "",
+        "type": "tuple"
       }
     ],
     "stateMutability": "view",
@@ -1421,12 +1217,12 @@ export const FuturesAbi = [
       },
       {
         "internalType": "uint8",
-        "name": "_futureDeliveryDatesCount",
+        "name": "_futureExpirationDatesCount",
         "type": "uint8"
       },
       {
         "internalType": "uint256",
-        "name": "_firstFutureDeliveryDate",
+        "name": "_firstFutureExpirationDate",
         "type": "uint256"
       }
     ],
@@ -1458,7 +1254,7 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "address",
-        "name": "_participant",
+        "name": "_user",
         "type": "address"
       },
       {
@@ -1476,7 +1272,7 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "address",
-        "name": "_participant",
+        "name": "_user",
         "type": "address"
       }
     ],
@@ -1489,13 +1285,18 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "address",
-        "name": "_participant",
+        "name": "_user",
         "type": "address"
       },
       {
-        "internalType": "bytes32",
-        "name": "_positionId",
-        "type": "bytes32"
+        "internalType": "uint256",
+        "name": "_expirationAt",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_closeQty",
+        "type": "uint256"
       }
     ],
     "name": "liquidatePosition",
@@ -1507,13 +1308,18 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "address",
-        "name": "_participant",
+        "name": "_user",
         "type": "address"
       },
       {
-        "internalType": "bytes32[]",
-        "name": "_positionIds",
-        "type": "bytes32[]"
+        "internalType": "uint256[]",
+        "name": "_expirationAts",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "_closeQtys",
+        "type": "uint256[]"
       }
     ],
     "name": "liquidatePositions",
@@ -1635,7 +1441,7 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "deliveryAt",
+        "name": "expirationAt",
         "type": "uint256"
       }
     ],
@@ -1687,11 +1493,11 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "uint8",
-        "name": "_futureDeliveryDatesCount",
+        "name": "_futureExpirationDatesCount",
         "type": "uint8"
       }
     ],
-    "name": "setFutureDeliveryDatesCount",
+    "name": "setFutureExpirationDatesCount",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1790,9 +1596,14 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
-        "internalType": "bytes32",
-        "name": "_positionId",
-        "type": "bytes32"
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_expirationAt",
+        "type": "uint256"
       }
     ],
     "name": "settlePosition",
@@ -1803,9 +1614,14 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
-        "internalType": "bytes32[]",
-        "name": "_positionIds",
-        "type": "bytes32[]"
+        "internalType": "address[]",
+        "name": "_users",
+        "type": "address[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "_expirationAts",
+        "type": "uint256[]"
       }
     ],
     "name": "settlePositions",

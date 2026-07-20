@@ -4,7 +4,7 @@ import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 
 /**
  * Hook to get additional futures contract constants
- * Fetches: futureDeliveryDatesCount, expirationIntervalDays, MAX_ORDERS_PER_PARTICIPANT,
+ * Fetches: futureExpirationDatesCount, expirationIntervalDays, MAX_ORDERS_PER_PARTICIPANT,
  *          makerFee, takerFee
  */
 export function useFuturesContractConstants() {
@@ -15,7 +15,7 @@ export function useFuturesContractConstants() {
       {
         address: futuresAddress,
         abi: FuturesAbi,
-        functionName: "futureDeliveryDatesCount",
+        functionName: "futureExpirationDatesCount",
       },
       {
         address: futuresAddress,
@@ -46,7 +46,7 @@ export function useFuturesContractConstants() {
     },
   });
 
-  const futureDeliveryDatesCount = result.data?.[0]?.result as number | undefined;
+  const futureExpirationDatesCount = result.data?.[0]?.result as number | undefined;
   const expirationIntervalDays = result.data?.[1]?.result as number | undefined;
   const maxOrdersPerParticipant = result.data?.[2]?.result as number | undefined;
   const makerFee = result.data?.[3]?.result as bigint | undefined;
@@ -54,7 +54,7 @@ export function useFuturesContractConstants() {
 
   return {
     ...result,
-    futureDeliveryDatesCount,
+    futureExpirationDatesCount,
     expirationIntervalDays,
     maxOrdersPerParticipant,
     makerFee,

@@ -7,8 +7,7 @@ interface ModifyOrderProps {
   oldQuantity: number; // Current quantity (positive for Buy, negative for Sell)
   newPrice: bigint;
   newQuantity: number; // New quantity (positive for Buy, negative for Sell)
-  destUrl: string;
-  deliveryDate: bigint;
+  expirationAt: bigint;
 }
 
 export function useModifyOrder() {
@@ -25,28 +24,21 @@ export function useModifyOrder() {
       client: publicClient,
     });
 
-    // Clamp quantities to int8 range (-128 to 127)
-    const clampOldQuantity = Math.max(-128, Math.min(127, props.oldQuantity));
-    const clampNewQuantity = Math.max(-128, Math.min(127, props.newQuantity));
+    const oppositeOldQuantity = -props.oldQuantity;
 
-    // Create opposite quantity to close the old order
-    const oppositeOldQuantity = -clampOldQuantity;
-
-    // Encode the two createOrder calls
     const calldata = [
       encodeFunctionData({
         abi: FuturesAbi,
         functionName: "createOrder",
-        args: [props.oldPrice, props.deliveryDate, props.destUrl, oppositeOldQuantity],
+        args: [props.oldPrice, props.expirationAt, BigInt(oppositeOldQuantity)],
       }),
       encodeFunctionData({
         abi: FuturesAbi,
         functionName: "createOrder",
-        args: [props.newPrice, props.deliveryDate, props.destUrl, clampNewQuantity],
+        args: [props.newPrice, props.expirationAt, BigInt(props.newQuantity)],
       }),
     ];
 
-    // Simulate the multicall transaction
     const req = await futuresContract.simulate.multicall([calldata], {
       account: walletClient.account.address,
     });

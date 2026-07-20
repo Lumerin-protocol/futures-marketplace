@@ -53,19 +53,15 @@ const fetchParticipantAsync = async (
     isBuy: order.isBuy,
     isActive: isActiveStatus(order.status),
     pricePerDay: BigInt(order.price),
-    deliveryAt: BigInt(order.deliveryAt),
+    expirationAt: BigInt(order.expirationAt),
     timestamp: order.createdAt,
     closedAt: order.closedAt,
-    // Schema collapses qty=N OrderCreated events into a single Order with
-    // running counts. `quantity` is the still-open units (initial −
-    // filled − cancelled); `originalQuantity` / `filledQuantity` are
-    // surfaced for the "filled / total" display in OrdersListWidget.
+    // 3.0: one createOrder → one OrderEntry with abs qty; aggregates may still
+    // collapse same-tx same-price placements. `quantity` is remaining contracts.
     quantity: order.quantity,
     originalQuantity: order.originalQuantity,
     filledQuantity: order.filledQuantity,
     cancelledQuantity: order.cancelledQuantity,
-    // Physical delivery is retired (futures are cash-settled); only closedBy
-    // remains relevant and the new schema exposes it on OrderEntry, not Order.
     closedBy: null,
     participant: {
       address: (order.user.id as `0x${string}`) ?? participantAddress,
@@ -117,7 +113,7 @@ export type Participant = {
 export type ParticipantOrder = {
   closedAt: string | null;
   closedBy: string | null;
-  deliveryAt: bigint;
+  expirationAt: bigint;
   id: string;
   isActive: boolean;
   isBuy: boolean;
@@ -150,7 +146,7 @@ type UserFuturesOrdersResponse = {
     blockNumber: string;
     cancelledQuantity: number;
     closedAt: string | null;
-    deliveryAt: string;
+    expirationAt: string;
     createdAt: string;
     filledQuantity: number;
     id: string;

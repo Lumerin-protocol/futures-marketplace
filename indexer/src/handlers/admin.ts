@@ -39,7 +39,7 @@ export function handleConfigUpdated(event: ConfigUpdated): void {
   futures.liquidationFee = cfg.liquidationFee;
   futures.minimumPriceIncrement = cfg.minimumPriceIncrement;
   futures.liquidationMarginPercent = cfg.liquidationMarginPercent;
-  futures.futureDeliveryDatesCount = cfg.futureDeliveryDatesCount;
+  futures.futureExpirationDatesCount = cfg.futureExpirationDatesCount;
   futures.hashrateOracleAddress = cfg.hashrateOracle;
   futures.marginEngineAddress = cfg.marginEngine;
   futures.lastUpdatedAt = event.block.timestamp;

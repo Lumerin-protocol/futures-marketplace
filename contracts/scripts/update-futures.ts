@@ -34,6 +34,17 @@ async function main() {
     HashrateOracle: await futuresProxy.read.hashrateOracle(),
   });
 
+  // 3.x cutover: order/position semantics change; 3.1+ also breaks Order storage layout
+  // (safe after resetState). Required order: pause MM/keeper → futures-reset-state →
+  // this upgrade → new subgraph from upgrade block → cut over keeper/MM/UI ABI.
+  if (typeof currentVersion === "string" && currentVersion.startsWith("2.")) {
+    logInfo("3.x cutover reminder", {
+      BeforeUpgrade: "run scripts/futures-reset-state.ts (clear orders + positions)",
+      AfterUpgrade: "redeploy indexer from upgrade block; point keeper ABI at 3.x",
+      Docs: "docs/06.Event-Desing-Spec.md § Cutover notes",
+    });
+  }
+
   await logPrompt("Review the configuration above. Proceed with upgrade?");
 
   // ── 1. Deploy new implementation ────────────────────────────────────────

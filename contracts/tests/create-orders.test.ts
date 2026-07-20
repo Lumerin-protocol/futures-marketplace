@@ -9,10 +9,9 @@ const { viem, networkHelpers } = await network.getOrCreate();
 
 // Reusable per-intent shape that matches `Futures.OrderIntent` exactly.
 type OrderIntent = {
-  pricePerDay: bigint;
-  deliveryDate: bigint;
-  destURL: string;
-  qty: number;
+  price: bigint;
+  expirationAt: bigint;
+  quantity: number;
 };
 
 describe("Futures.createOrders (batch placement)", () => {
@@ -41,7 +40,7 @@ describe("Futures.createOrders (batch placement)", () => {
     );
   });
 
-  it("places multiple same-side orders in one call and emits one OrderCreated per unit", async () => {
+  it("places multiple same-side orders in one call and emits one OrderCreated per intent", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, pc } = accounts;
@@ -53,11 +52,11 @@ describe("Futures.createOrders (batch placement)", () => {
     const dd = config.deliveryDates[0];
 
     const intents: OrderIntent[] = [
-      { pricePerDay: mp + step, deliveryDate: dd, destURL: "", qty: -1 },
-      { pricePerDay: mp + 2n * step, deliveryDate: dd, destURL: "", qty: -1 },
-      { pricePerDay: mp + 3n * step, deliveryDate: dd, destURL: "", qty: -1 },
+      { price: mp + step, expirationAt: dd, quantity: -1 },
+      { price: mp + 2n * step, expirationAt: dd, quantity: -1 },
+      { price: mp + 3n * step, expirationAt: dd, quantity: -1 },
       // qty > 1 expands into multiple OrderCreated events under the same intent
-      { pricePerDay: mp + 4n * step, deliveryDate: dd, destURL: "", qty: -2 },
+      { price: mp + 4n * step, expirationAt: dd, quantity: -2 },
     ];
 
     const tx = await futures.write.createOrders([intents], { account: seller.account });
@@ -69,12 +68,13 @@ describe("Futures.createOrders (batch placement)", () => {
       abi: futures.abi,
       eventName: "OrderCreated",
     });
-    // 1 + 1 + 1 + 2 = 5 emitted; all on the seller's account.
-    assert.equal(created.length, 5);
+    // One OrderCreated per intent (qty-bearing); intents are -1,-1,-1,-2 → 4 events.
+    assert.equal(created.length, 4);
+    const qtys = created.map((ev) => ev.args.quantity).sort((a, b) => (a < b ? -1 : 1));
+    assert.deepEqual(qtys, [-2n, -1n, -1n, -1n]);
     for (const ev of created) {
       assert.equal(getAddress(ev.args.participant), getAddress(seller.account.address));
-      assert.equal(ev.args.isBuy, false);
-      assert.equal(ev.args.deliveryAt, dd);
+      assert.equal(ev.args.expirationAt, dd);
     }
   });
 
@@ -92,33 +92,33 @@ describe("Futures.createOrders (batch placement)", () => {
 
     // Seller rests asks at mp, mp+step, mp+2*step.
     const restingAsks: OrderIntent[] = [
-      { pricePerDay: mp, deliveryDate: dd, destURL: "", qty: -1 },
-      { pricePerDay: mp + step, deliveryDate: dd, destURL: "", qty: -1 },
-      { pricePerDay: mp + 2n * step, deliveryDate: dd, destURL: "", qty: -1 },
+      { price: mp, expirationAt: dd, quantity: -1 },
+      { price: mp + step, expirationAt: dd, quantity: -1 },
+      { price: mp + 2n * step, expirationAt: dd, quantity: -1 },
     ];
     await futures.write.createOrders([restingAsks], { account: seller.account });
 
     // Buyer batches three lifts at exactly those three levels.
     const lifts: OrderIntent[] = restingAsks.map((a) => ({
-      pricePerDay: a.pricePerDay,
-      deliveryDate: dd,
-      destURL: "buyer-url",
-      qty: 1,
+      price: a.price,
+      expirationAt: dd,
+      quantity: 1,
     }));
     const tx = await futures.write.createOrders([lifts], { account: buyer.account });
     const receipt = await pc.waitForTransactionReceipt({ hash: tx });
     assert.equal(receipt.status, "success");
 
-    const lots = parseEventLogs({
+    const matches = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "LotCreated",
+      eventName: "OrderMatched",
     });
-    assert.equal(lots.length, 3);
-    for (const lot of lots) {
-      assert.equal(getAddress(lot.args.seller), getAddress(seller.account.address));
-      assert.equal(getAddress(lot.args.buyer), getAddress(buyer.account.address));
-      assert.equal(lot.args.deliveryAt, dd);
+    assert.equal(matches.length, 3);
+    for (const m of matches) {
+      assert.equal(getAddress(m.args.maker), getAddress(seller.account.address));
+      assert.equal(getAddress(m.args.taker), getAddress(buyer.account.address));
+      assert.equal(m.args.expirationAt, dd);
+      assert.equal(m.args.takerQuantity, 1n);
     }
   });
 
@@ -133,10 +133,10 @@ describe("Futures.createOrders (batch placement)", () => {
     const dd = config.deliveryDates[0];
 
     const intents: OrderIntent[] = [
-      { pricePerDay: mp, deliveryDate: dd, destURL: "", qty: -1 },
+      { price: mp, expirationAt: dd, quantity: -1 },
       // Bad: zero price → InvalidPrice
-      { pricePerDay: 0n, deliveryDate: dd, destURL: "", qty: -1 },
-      { pricePerDay: mp + config.priceLadderStep, deliveryDate: dd, destURL: "", qty: -1 },
+      { price: 0n, expirationAt: dd, quantity: -1 },
+      { price: mp + config.priceLadderStep, expirationAt: dd, quantity: -1 },
     ];
 
     await viem.assertions.revertWithCustomError(
@@ -146,14 +146,14 @@ describe("Futures.createOrders (batch placement)", () => {
     );
 
     // Nothing should have landed; the seller's order set must remain empty.
-    const sellerOrders = await futures.read.getOrderIds([seller.account.address]);
+    const sellerOrders = await futures.read.getUserOrders([seller.account.address]);
     assert.equal(sellerOrders.length, 0);
 
     // Sanity: matching tx-cost gas via a successful baseline call.
     const tx = await futures.write.createOrders(
       [
         [
-          { pricePerDay: mp, deliveryDate: dd, destURL: "", qty: -1 } satisfies OrderIntent,
+          { price: mp, expirationAt: dd, quantity: -1 } satisfies OrderIntent,
         ],
       ],
       { account: seller.account },
@@ -175,9 +175,9 @@ describe("Futures.createOrders (batch placement)", () => {
     const dd = config.deliveryDates[0];
 
     const intents: OrderIntent[] = [
-      { pricePerDay: mp, deliveryDate: dd, destURL: "", qty: -1 },
-      { pricePerDay: mp + step, deliveryDate: dd, destURL: "", qty: -1 },
-      { pricePerDay: mp + 2n * step, deliveryDate: dd, destURL: "", qty: -1 },
+      { price: mp, expirationAt: dd, quantity: -1 },
+      { price: mp + step, expirationAt: dd, quantity: -1 },
+      { price: mp + 2n * step, expirationAt: dd, quantity: -1 },
     ];
 
     await viem.assertions.revertWithCustomError(
@@ -186,7 +186,7 @@ describe("Futures.createOrders (batch placement)", () => {
       "InsufficientMarginBalance",
     );
 
-    const sellerOrders = await futures.read.getOrderIds([seller.account.address]);
+    const sellerOrders = await futures.read.getUserOrders([seller.account.address]);
     assert.equal(sellerOrders.length, 0);
   });
 
@@ -201,7 +201,7 @@ describe("Futures.createOrders (batch placement)", () => {
     const dd = config.deliveryDates[0];
 
     // Seller rests one order.
-    await futures.write.createOrder([mp, dd, "", -1], { account: seller.account });
+    await futures.write.createOrder([mp, dd, -1], { account: seller.account });
 
     await warpPastDeliveryWithFreshOracle(
       tc,
@@ -210,21 +210,20 @@ describe("Futures.createOrders (batch placement)", () => {
       BigInt(config.expirationIntervalSeconds),
     );
 
-    // The stale order is now past `deliveryAt`, but a fresh `createOrders`
+    // The stale order is now past `expirationAt`, but a fresh `createOrders`
     // call must NOT close it (the prologue sweep is gone). The only effect on
     // the seller's order set is the newly-added intent.
-    const ordersBefore = await futures.read.getOrderIds([seller.account.address]);
+    const ordersBefore = await futures.read.getUserOrders([seller.account.address]);
     assert.equal(ordersBefore.length, 1, "stale order should still be present pre-placement");
 
-    const freshDeliveryDate = (await futures.read.getDeliveryDates()).at(-1)!;
+    const freshDeliveryDate = (await futures.read.getExpirationDates()).at(-1)!;
     const tx = await futures.write.createOrders(
       [
         [
           {
-            pricePerDay: mp,
-            deliveryDate: freshDeliveryDate,
-            destURL: "",
-            qty: -1,
+            price: mp,
+            expirationAt: freshDeliveryDate,
+            quantity: -1,
           } satisfies OrderIntent,
         ],
       ],
@@ -236,11 +235,11 @@ describe("Futures.createOrders (batch placement)", () => {
     const closed = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "OrderClosed",
+      eventName: "OrderCancelled",
     });
     assert.equal(closed.length, 0, "createOrders must not implicitly close expired orders");
 
-    const ordersAfter = await futures.read.getOrderIds([seller.account.address]);
+    const ordersAfter = await futures.read.getUserOrders([seller.account.address]);
     assert.equal(ordersAfter.length, 2, "stale order is still resting next to the new one");
   });
 
@@ -265,7 +264,7 @@ describe("Futures.createOrders (batch placement)", () => {
         encodeFunctionData({
           abi: futures.abi,
           functionName: "createOrder",
-          args: [mp + BigInt(i + 1) * step, dd, "", -1],
+          args: [mp + BigInt(i + 1) * step, dd, -1],
         }),
       );
     }
@@ -280,10 +279,9 @@ describe("Futures.createOrders (batch placement)", () => {
     for (let i = 0; i < N; i++) {
       // Place buys far below market so they rest without matching the seller's asks.
       intents.push({
-        pricePerDay: mp - BigInt(i + 1) * step,
-        deliveryDate: dd,
-        destURL: "buyer-url",
-        qty: 1,
+        price: mp - BigInt(i + 1) * step,
+        expirationAt: dd,
+        quantity: 1,
       });
     }
     const batchTx = await futures.write.createOrders([intents], { account: buyer.account });

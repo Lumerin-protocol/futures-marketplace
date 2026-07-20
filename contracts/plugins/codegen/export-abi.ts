@@ -96,6 +96,21 @@ function main(contracts?: string[]): void {
   );
   writeFileSync(OUT_ERRORS_JSON, JSON.stringify(outAbi, null, 2) + "\n", "utf-8");
 
+  // So `github:…&path:/contracts/abi` is a resolvable package without a pnpm patch.
+  writeFileSync(
+    join(OUT_DIR, "package.json"),
+    `${JSON.stringify(
+      {
+        name: "futures-marketplace-abi",
+        type: "module",
+        exports: { "./*": "./*" },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf-8",
+  );
+
   console.log(`contract errors: ${rows.length} unique → ${relative(REPO_ROOT, OUT_ERRORS_TS)}`);
   console.log("");
   for (const r of rows) {

@@ -16,7 +16,7 @@ import type { ContractMode } from "../../../types/types";
 
 export interface FuturesTradesModalSelection {
   pricePerDay: bigint;
-  deliveryAt: string;
+  expirationAt: string;
   positionType: "Long" | "Short";
 }
 
@@ -49,7 +49,7 @@ interface NormalizedPosition {
   id: string;
   transactionHash: `0x${string}`;
   timestamp: string;
-  deliveryAt: string;
+  expirationAt: string;
   pricePerDay: bigint;
   isLong: boolean;
   isActive: boolean;
@@ -100,7 +100,7 @@ export const FuturesTradesModal = ({
           id: p.id,
           transactionHash: p.transactionHash,
           timestamp: p.timestamp,
-          deliveryAt: p.deliveryAt,
+          expirationAt: p.expirationAt,
           pricePerDay: isLong ? p.buyPricePerDay : p.sellPricePerDay,
           isLong,
           isActive: p.isActive,
@@ -112,7 +112,7 @@ export const FuturesTradesModal = ({
         id: p.id,
         transactionHash: p.transactionHash,
         timestamp: p.timestamp,
-        deliveryAt: p.deliveryAt,
+        expirationAt: p.expirationAt,
         pricePerDay: p.pricePerDay,
         isLong: p.isLong,
         isActive: p.isActive,
@@ -122,7 +122,7 @@ export const FuturesTradesModal = ({
     ];
 
     const matchingPositions = normalized.filter((p) => {
-      if (p.deliveryAt !== selection.deliveryAt) return false;
+      if (p.expirationAt !== selection.expirationAt) return false;
       const positionType: "Long" | "Short" = p.isLong ? "Long" : "Short";
       if (positionType !== selection.positionType) return false;
       return p.pricePerDay === selection.pricePerDay;
@@ -163,11 +163,11 @@ export const FuturesTradesModal = ({
 
     // Perpetual fallback (kept for safety; this modal isn't currently opened
     // outside futures, but the `contractMode` prop allows for it). Group one
-    // row per (transactionHash, deliveryAt, pricePerDay) tuple.
+    // row per (transactionHash, expirationAt, pricePerDay) tuple.
     const groups = new Map<string, TradeRow>();
     for (const p of matchingPositions) {
       const positionType: "Long" | "Short" = p.isLong ? "Long" : "Short";
-      const key = `${p.transactionHash}-${p.deliveryAt}-${p.pricePerDay}`;
+      const key = `${p.transactionHash}-${p.expirationAt}-${p.pricePerDay}`;
 
       const existing = groups.get(key);
       if (!existing) {

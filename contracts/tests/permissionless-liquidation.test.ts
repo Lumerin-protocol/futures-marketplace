@@ -15,7 +15,7 @@ const { viem, networkHelpers } = await network.getOrCreate();
  * Surface under test:
  *   - liquidateOrder(participant, id)
  *   - liquidateOrders(participant)              — FIFO sweep until healthy
- *   - liquidatePosition(participant, positionId) — reverts OrdersStillOpen if any orders remain
+ *   - liquidatePosition(participant, expirationAt, closeQty) — reverts OrdersStillOpen if any orders remain
  *   - setLiquidationFee — single flat fee charged per cancelled order and per closed position
  */
 async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
@@ -42,27 +42,20 @@ async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
   await collateralVault.write.deposit([positionMargin], { account: buyer2.account });
 
   // Open a matched position: seller short, buyer long.
-  await futures.write.createOrder([entryPricePerDay, deliveryDate, "", -1], {
+  await futures.write.createOrder([entryPricePerDay, deliveryDate, -1], {
     account: seller.account,
   });
-  const matchTx = await futures.write.createOrder([entryPricePerDay, deliveryDate, "", 1], {
+  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1], {
     account: buyer.account,
   });
-  const matchReceipt = await pc.waitForTransactionReceipt({ hash: matchTx });
-  const [positionEvt] = parseEventLogs({
-    logs: matchReceipt.logs,
-    abi: futures.abi,
-    eventName: "LotCreated",
-  });
-  const positionId = positionEvt.args.lotId;
 
   // Two extra resting BUY orders for buyer at the matched price. Same-side as the
   // position so they aren't auto-offset; once the hashprice drops they go deeply
-  // negative-PnL and blow up `getFuturesOrderMargin`, breaking MM.
-  await futures.write.createOrder([entryPricePerDay, deliveryDate, "", 1], {
+  // negative-PnL and blow up `getOrderMargin`, breaking MM.
+  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1], {
     account: buyer.account,
   });
-  await futures.write.createOrder([entryPricePerDay, deliveryDate, "", 1], {
+  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1], {
     account: buyer.account,
   });
 
@@ -72,7 +65,6 @@ async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
   return {
     ...data,
     config: { ...config, entryPricePerDay, deliveryDate, liquidationFee },
-    positionId,
     async makeUnderwater() {
       // Drop hashprice deeply (÷20) so the buyer (long) breaks MM even after
       // resting orders are force-cancelled by the keeper's first step. The MM
@@ -124,7 +116,7 @@ describe("Futures - permissionless liquidation entry points", function () {
       const { futures } = contracts;
       const { buyer, buyer2 } = accounts;
 
-      const orders = await futures.read.getOrderIds([buyer.account.address]);
+      const orders = await futures.read.getUserOrders([buyer.account.address]);
       assert.ok(orders.length > 0);
 
       await viem.assertions.revertWithCustomError(
@@ -136,7 +128,7 @@ describe("Futures - permissionless liquidation entry points", function () {
       );
     });
 
-    it("reverts OrderNotBelongToParticipant when id is owned by someone else", async function () {
+    it("reverts OrderNotBelongToUser when id is owned by someone else", async function () {
       const data = await networkHelpers.loadFixture(underwaterWithOrdersAndPositionFixture);
       const { contracts, accounts } = data;
       const { futures } = contracts;
@@ -144,7 +136,7 @@ describe("Futures - permissionless liquidation entry points", function () {
 
       await data.makeUnderwater();
 
-      const buyerOrders = await futures.read.getOrderIds([buyer.account.address]);
+      const buyerOrders = await futures.read.getUserOrders([buyer.account.address]);
       assert.ok(buyerOrders.length > 0);
 
       // Seller is healthy at this point too (price drop benefits the short), so we use
@@ -155,7 +147,7 @@ describe("Futures - permissionless liquidation entry points", function () {
           account: buyer2.account,
         }),
         futures,
-        "OrderNotBelongToParticipant",
+        "OrderNotBelongToUser",
       );
 
       // And: the predicate-then-ownership ordering — seller is healthy, so passing a
@@ -177,7 +169,7 @@ describe("Futures - permissionless liquidation entry points", function () {
 
       await data.makeUnderwater();
 
-      const ordersBefore = await futures.read.getOrderIds([buyer.account.address]);
+      const ordersBefore = await futures.read.getUserOrders([buyer.account.address]);
       assert.equal(ordersBefore.length, 2);
       const target = ordersBefore[0];
 
@@ -196,18 +188,18 @@ describe("Futures - permissionless liquidation entry points", function () {
       assert.equal(liqBalAfter - liqBalBefore, 0n);
       assert.equal(userBalBefore - userBalAfter, 0n);
 
-      const ordersAfter = await futures.read.getOrderIds([buyer.account.address]);
+      const ordersAfter = await futures.read.getUserOrders([buyer.account.address]);
       assert.equal(ordersAfter.length, 1);
       assert.ok(!ordersAfter.includes(target));
 
       const events = parseEventLogs({ logs: receipt.logs, abi: futures.abi });
-      const orderClosed = events.find(
-        (e: any) => e.eventName === "OrderClosed" && e.args.orderId === target,
+      const orderUpdated = events.find(
+        (e: any) => e.eventName === "OrderUpdated" && e.args.orderId === target,
       ) as any;
       const orderLiquidated = events.find(
         (e: any) => e.eventName === "OrderLiquidated" && e.args.orderId === target,
       ) as any;
-      assert.ok(orderClosed, "OrderClosed should be emitted for indexer compatibility");
+      assert.ok(orderUpdated, "OrderUpdated should be emitted when quantity goes to zero");
       assert.ok(orderLiquidated);
       assert.equal(orderLiquidated.args.fee, 0n);
     });
@@ -226,7 +218,7 @@ describe("Futures - permissionless liquidation entry points", function () {
       const userBalBefore = await collateralVault.read.balanceOf([buyer.account.address]);
       const liqBalBefore = await collateralVault.read.balanceOf([buyer2.account.address]);
 
-      const orders = await futures.read.getOrderIds([buyer.account.address]);
+      const orders = await futures.read.getUserOrders([buyer.account.address]);
       await futures.write.liquidateOrder([buyer.account.address, orders[0]], {
         account: buyer2.account,
       });
@@ -262,7 +254,7 @@ describe("Futures - permissionless liquidation entry points", function () {
 
       await data.makeUnderwater();
 
-      const ordersBefore = await futures.read.getOrderIds([buyer.account.address]);
+      const ordersBefore = await futures.read.getUserOrders([buyer.account.address]);
       assert.equal(ordersBefore.length, 2);
 
       const liqBalBefore = await collateralVault.read.balanceOf([buyer2.account.address]);
@@ -270,7 +262,7 @@ describe("Futures - permissionless liquidation entry points", function () {
       await futures.write.liquidateOrders([buyer.account.address], { account: buyer2.account });
 
       const liqBalAfter = await collateralVault.read.balanceOf([buyer2.account.address]);
-      const ordersAfter = await futures.read.getOrderIds([buyer.account.address]);
+      const ordersAfter = await futures.read.getUserOrders([buyer.account.address]);
 
       assert.equal(ordersAfter.length, 0);
       // Keeper-incentive payout is disabled: sweeping every order earns nothing.
@@ -279,74 +271,18 @@ describe("Futures - permissionless liquidation entry points", function () {
   });
 
   describe("liquidatePosition", function () {
-    it("reverts PositionNotExists for unknown id", async function () {
-      const { contracts, accounts } = await networkHelpers.loadFixture(
-        underwaterWithOrdersAndPositionFixture,
-      );
-      const { futures } = contracts;
-      const { buyer, buyer2 } = accounts;
-
-      await viem.assertions.revertWithCustomError(
-        futures.write.liquidatePosition([buyer.account.address, zeroHash], {
-          account: buyer2.account,
-        }),
-        futures,
-        "PositionNotExists",
-      );
-    });
-
-    it("reverts PositionNotBelongToParticipant when participant is neither side", async function () {
+    it("reverts NotLiquidatable for unknown expirationAt with zero net", async function () {
       const data = await networkHelpers.loadFixture(underwaterWithOrdersAndPositionFixture);
-      const { contracts, accounts, positionId } = data;
-      const { futures } = contracts;
-      const { buyer2 } = accounts;
-
-      // buyer2 is not on either side of the position.
-      await viem.assertions.revertWithCustomError(
-        futures.write.liquidatePosition([buyer2.account.address, positionId], {
-          account: buyer2.account,
-        }),
-        futures,
-        "PositionNotBelongToParticipant",
-      );
-    });
-
-    it("reverts OrdersStillOpen when participant has resting orders", async function () {
-      const data = await networkHelpers.loadFixture(underwaterWithOrdersAndPositionFixture);
-      const { contracts, accounts, positionId } = data;
+      const { contracts, accounts, config } = data;
       const { futures } = contracts;
       const { buyer, buyer2 } = accounts;
 
       await data.makeUnderwater();
+      await futures.write.liquidateOrders([buyer.account.address], { account: buyer2.account });
 
-      const ordersBefore = await futures.read.getOrderIds([buyer.account.address]);
-      assert.ok(ordersBefore.length > 0);
-
+      const unknownDate = config.deliveryDates[1];
       await viem.assertions.revertWithCustomError(
-        futures.write.liquidatePosition([buyer.account.address, positionId], {
-          account: buyer2.account,
-        }),
-        futures,
-        "OrdersStillOpen",
-      );
-    });
-
-    it("reverts NotLiquidatable when participant is healthy (no orders)", async function () {
-      const data = await networkHelpers.loadFixture(underwaterWithOrdersAndPositionFixture);
-      const { contracts, accounts, positionId } = data;
-      const { futures } = contracts;
-      const { buyer, buyer2 } = accounts;
-
-      // Cancel buyer's resting orders permissionlessly is gated by underwater predicate, so
-      // for "healthy + no orders" we cancel them via the participant themselves first.
-      const orders = await futures.read.getOrderIds([buyer.account.address]);
-      for (const id of orders) {
-        await futures.write.closeOrder([id], { account: buyer.account });
-      }
-
-      // No price move — buyer remains healthy.
-      await viem.assertions.revertWithCustomError(
-        futures.write.liquidatePosition([buyer.account.address, positionId], {
+        futures.write.liquidatePosition([buyer.account.address, unknownDate, 1n], {
           account: buyer2.account,
         }),
         futures,
@@ -354,36 +290,109 @@ describe("Futures - permissionless liquidation entry points", function () {
       );
     });
 
-    it("succeeds after orders are cleared via liquidateOrders + cash-settles position", async function () {
+    it("reverts NotLiquidatable when user has no position at expirationAt", async function () {
       const data = await networkHelpers.loadFixture(underwaterWithOrdersAndPositionFixture);
-      const { contracts, accounts, positionId, config } = data;
+      const { contracts, accounts, config } = data;
+      const { futures } = contracts;
+      const { buyer2 } = accounts;
+
+      // buyer2 has no position at this delivery — only buyer/seller matched.
+      await viem.assertions.revertWithCustomError(
+        futures.write.liquidatePosition(
+          [buyer2.account.address, config.deliveryDate, 1n],
+          { account: buyer2.account },
+        ),
+        futures,
+        "NotLiquidatable",
+      );
+    });
+
+    it("reverts OrdersStillOpen when participant has resting orders", async function () {
+      const data = await networkHelpers.loadFixture(underwaterWithOrdersAndPositionFixture);
+      const { contracts, accounts, config } = data;
+      const { futures } = contracts;
+      const { buyer, buyer2 } = accounts;
+
+      await data.makeUnderwater();
+
+      const ordersBefore = await futures.read.getUserOrders([buyer.account.address]);
+      assert.ok(ordersBefore.length > 0);
+
+      await viem.assertions.revertWithCustomError(
+        futures.write.liquidatePosition(
+          [buyer.account.address, config.deliveryDate, 1n],
+          { account: buyer2.account },
+        ),
+        futures,
+        "OrdersStillOpen",
+      );
+    });
+
+    it("reverts NotLiquidatable when participant is healthy (no orders)", async function () {
+      const data = await networkHelpers.loadFixture(underwaterWithOrdersAndPositionFixture);
+      const { contracts, accounts, config } = data;
+      const { futures } = contracts;
+      const { buyer, buyer2 } = accounts;
+
+      // Cancel buyer's resting orders permissionlessly is gated by underwater predicate, so
+      // for "healthy + no orders" we cancel them via the participant themselves first.
+      const orders = await futures.read.getUserOrders([buyer.account.address]);
+      for (const id of orders) {
+        await futures.write.cancelOrder([id], { account: buyer.account });
+      }
+
+      // No price move — buyer remains healthy.
+      await viem.assertions.revertWithCustomError(
+        futures.write.liquidatePosition(
+          [buyer.account.address, config.deliveryDate, 1n],
+          { account: buyer2.account },
+        ),
+        futures,
+        "NotLiquidatable",
+      );
+    });
+
+    it("succeeds after orders are cleared via liquidateOrders and cash-settles the user's aggregate", async function () {
+      const data = await networkHelpers.loadFixture(underwaterWithOrdersAndPositionFixture);
+      const { contracts, accounts, config } = data;
       const { futures, collateralVault } = contracts;
-      const { buyer, buyer2, pc } = accounts;
+      const { buyer, seller, buyer2, pc } = accounts;
 
       await data.makeUnderwater();
 
       // Step 1: clear orders.
       await futures.write.liquidateOrders([buyer.account.address], { account: buyer2.account });
-      assert.equal((await futures.read.getOrderIds([buyer.account.address])).length, 0);
+      assert.equal((await futures.read.getUserOrders([buyer.account.address])).length, 0);
 
       const liqBalBefore = await collateralVault.read.balanceOf([buyer2.account.address]);
 
-      // Step 2: close the position.
-      const tx = await futures.write.liquidatePosition([buyer.account.address, positionId], {
-        account: buyer2.account,
-      });
+      // Step 2: close the buyer's aggregate at expirationAt.
+      const tx = await futures.write.liquidatePosition(
+        [buyer.account.address, config.deliveryDate, 1n],
+        { account: buyer2.account },
+      );
       const receipt = await pc.waitForTransactionReceipt({ hash: tx });
 
-      // Position is removed from storage.
-      const after = await futures.read.getPositionById([positionId]);
-      assert.equal(after.seller, "0x0000000000000000000000000000000000000000");
+      const buyerPos = await futures.read.getUserPosition([
+        buyer.account.address,
+        config.deliveryDate,
+      ]);
+      assert.equal(buyerPos.netQuantity, 0n, "buyer's aggregate should be fully closed");
 
-      const events = parseEventLogs({ logs: receipt.logs, abi: futures.abi });
-      const positionClosed = events.find((e: any) => e.eventName === "LotClosed") as any;
-      const positionLiquidated = events.find((e: any) => e.eventName === "LotLiquidated") as any;
-      assert.ok(positionClosed, "LotClosed should be emitted for indexer compatibility");
-      assert.ok(positionLiquidated);
-      assert.equal(positionLiquidated.args.lotId, positionId);
+      // Unilateral: seller's short aggregate is untouched.
+      const sellerPos = await futures.read.getUserPosition([
+        seller.account.address,
+        config.deliveryDate,
+      ]);
+      assert.equal(sellerPos.netQuantity, -1n, "seller's aggregate remains open");
+
+      const [positionLiquidated] = parseEventLogs({
+        logs: receipt.logs,
+        abi: futures.abi,
+        eventName: "PositionLiquidated",
+      });
+      assert.equal(positionLiquidated.args.expirationAt, config.deliveryDate);
+      assert.equal(positionLiquidated.args.closedQuantity, 1n);
 
       const liqBalAfter = await collateralVault.read.balanceOf([buyer2.account.address]);
       // Liquidator gets at most the fee (could be less if buyer's vault was wiped by PnL).

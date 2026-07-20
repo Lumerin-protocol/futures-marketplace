@@ -77,9 +77,9 @@ export function paramBool(name: string, value: boolean): ethereum.EventParam {
   return new ethereum.EventParam(name, ethereum.Value.fromBoolean(value));
 }
 
-/// PriceLevel ID format: "{deliveryAt}-{price}-{bid|ask}".
-export function priceLevelKey(deliveryAt: BigInt, price: BigInt, isBid: boolean): string {
-  return deliveryAt.toString() + "-" + price.toString() + "-" + (isBid ? "bid" : "ask");
+/// PriceLevel ID format: "{expirationAt}-{price}-{bid|ask}".
+export function priceLevelKey(expirationAt: BigInt, price: BigInt, isBid: boolean): string {
+  return expirationAt.toString() + "-" + price.toString() + "-" + (isBid ? "bid" : "ask");
 }
 
 /// 32-byte big-endian hex padding for a non-negative BigInt. Mirrors the
@@ -88,10 +88,10 @@ function bigIntHex32(value: BigInt): string {
   return padLeft(value.toHexString().slice(2), 64, "0");
 }
 
-/// (user, deliveryAt) pointer id: 20-byte address ++ 32-byte deliveryAt.
-export function pointerKey(user: Address, deliveryAt: BigInt): string {
+/// (user, expirationAt) pointer id: 20-byte address ++ 32-byte expirationAt.
+export function pointerKey(user: Address, expirationAt: BigInt): string {
   const bytes = changetype<Bytes>(user).concat(
-    Bytes.fromHexString("0x" + bigIntHex32(deliveryAt)) as Bytes,
+    Bytes.fromHexString("0x" + bigIntHex32(expirationAt)) as Bytes,
   );
   return bytes.toHexString();
 }
@@ -113,8 +113,8 @@ export function mockFuturesContractCallsAsReverted(): void {
     ["liquidationMarginPercent", "liquidationMarginPercent():(uint8)"],
     ["CONTRACT_SIZE_HPS_DAY", "CONTRACT_SIZE_HPS_DAY():(uint256)"],
     ["expirationIntervalDays", "expirationIntervalDays():(uint8)"],
-    ["futureDeliveryDatesCount", "futureDeliveryDatesCount():(uint8)"],
-    ["firstFutureDeliveryDate", "firstFutureDeliveryDate():(uint256)"],
+    ["futureExpirationDatesCount", "futureExpirationDatesCount():(uint8)"],
+    ["firstFutureExpirationDate", "firstFutureExpirationDate():(uint256)"],
     ["collectedFeesBalance", "collectedFeesBalance():(uint256)"],
   ];
   for (let i = 0; i < getters.length; i++) {
@@ -138,8 +138,8 @@ export function setupFutures(): void {
   f.liquidationMarginPercent = 0;
   f.contractSizeHpsDay = BigInt.zero();
   f.expirationIntervalDays = 0;
-  f.futureDeliveryDatesCount = 0;
-  f.firstFutureDeliveryDate = BigInt.zero();
+  f.futureExpirationDatesCount = 0;
+  f.firstFutureExpirationDate = BigInt.zero();
   f.collectedFeesBalance = BigInt.zero();
   f.totalUsers = 0;
   f.totalOrders = 0;
@@ -201,16 +201,16 @@ export function eventIdHex(logIndex: i32 = 1): string {
   return MOCK_TX_HASH.concatI32(logIndex).toHexString();
 }
 
-/// Order aggregate id: tx hash ++ user ++ price (32B) ++ deliveryAt (32B) ++ side (1B).
+/// Order aggregate id: tx hash ++ user ++ price (32B) ++ expirationAt (32B) ++ side (1B).
 /// Mirrors `src/ids.ts#orderAggregateId` so tests can predict it.
 export function orderAggKeyDefaultTx(
   user: Address,
   price: BigInt,
-  deliveryAt: BigInt,
+  expirationAt: BigInt,
   isBuy: boolean,
 ): string {
   const priceBytes = Bytes.fromHexString("0x" + bigIntHex32(price)) as Bytes;
-  const deliveryBytes = Bytes.fromHexString("0x" + bigIntHex32(deliveryAt)) as Bytes;
+  const deliveryBytes = Bytes.fromHexString("0x" + bigIntHex32(expirationAt)) as Bytes;
   const sideBytes = Bytes.fromHexString(isBuy ? "0x01" : "0x00") as Bytes;
   return MOCK_TX_HASH.concat(changetype<Bytes>(user))
     .concat(priceBytes)

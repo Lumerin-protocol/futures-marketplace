@@ -7,13 +7,8 @@ import { quantizePrice, refreshHashprice, scaleHashprice } from "./utils.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-// LotCloseReason ordinals (MUTUAL_EXIT, LIQUIDATION, BREACH, SETTLED, RESET, EXPIRED).
-const LOT_CLOSE_REASON_SETTLED = 3;
-
-// Opens a single matched lot (seller short / buyer long) at ~$100 on the first
-// delivery date. Returns the lot id plus the loaded fixture.
-async function openLot() {
+/** Open a matched long for buyer / short for seller at ~$100 on the first expiration date. */
+async function openPosition() {
   const data = await networkHelpers.loadFixture(deployFuturesFixture);
   const { contracts, accounts, config } = data;
   const { futures, collateralVault } = contracts;
@@ -26,36 +21,34 @@ async function openLot() {
   await collateralVault.write.deposit([marginAmount], { account: seller.account });
   await collateralVault.write.deposit([marginAmount], { account: buyer.account });
 
-  await futures.write.createOrder([entryPrice, deliveryDate, "", -1], { account: seller.account });
-  const txHash = await futures.write.createOrder([entryPrice, deliveryDate, "https://dest.com", 1], {
+  await futures.write.createOrder([entryPrice, deliveryDate, -1], { account: seller.account });
+  const txHash = await futures.write.createOrder([entryPrice, deliveryDate, 1], {
     account: buyer.account,
   });
-  const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
-  const [created] = parseEventLogs({
-    logs: receipt.logs,
-    abi: futures.abi,
-    eventName: "LotCreated",
-  });
+  await pc.waitForTransactionReceipt({ hash: txHash });
 
-  return { ...data, positionId: created.args.lotId, deliveryDate };
+  const buyerPos = await futures.read.getUserPosition([buyer.account.address, deliveryDate]);
+  const sellerPos = await futures.read.getUserPosition([seller.account.address, deliveryDate]);
+  assert.equal(buyerPos.netQuantity, 1n);
+  assert.equal(sellerPos.netQuantity, -1n);
+
+  return { ...data, deliveryDate, entryPrice };
 }
 
-// Move the mark away from entry, then warp to the delivery date with a fresh oracle so the
-// next tx mines exactly at maturity with a non-stale answer.
 async function reachMaturityWithMovedMark(
   contracts: FuturesFixture["contracts"],
   tc: FuturesFixture["accounts"]["tc"],
-  deliveryDate: bigint,
+  expirationAt: bigint,
 ) {
   await scaleHashprice(contracts.hashrateOracle, 12n, 10n);
-  await refreshHashprice(contracts.hashrateOracle, deliveryDate);
-  await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
+  await refreshHashprice(contracts.hashrateOracle, expirationAt);
+  await tc.setNextBlockTimestamp({ timestamp: expirationAt });
 }
 
 describe("Futures settlePosition", () => {
-  it("lets any address permissionlessly cash-settle a matured position at the mark", async () => {
-    const data = await openLot();
-    const { contracts, accounts, positionId, deliveryDate } = data;
+  it("lets any address permissionlessly cash-settle a matured aggregate position", async () => {
+    const data = await openPosition();
+    const { contracts, accounts, deliveryDate } = data;
     const { futures, collateralVault } = contracts;
     const { seller, buyer, buyer2, pc, tc } = accounts;
 
@@ -64,97 +57,83 @@ describe("Futures settlePosition", () => {
     const sellerBefore = await collateralVault.read.balanceOf([seller.account.address]);
     const buyerBefore = await collateralVault.read.balanceOf([buyer.account.address]);
 
-    // buyer2 is NOT a participant of the lot — settlement is permissionless.
-    const txHash = await futures.write.settlePosition([positionId], { account: buyer2.account });
+    const txHash = await futures.write.settlePosition([buyer.account.address, deliveryDate], {
+      account: buyer2.account,
+    });
     const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
-    const [closed] = parseEventLogs({
+    const [buyerSettled] = parseEventLogs({
       logs: receipt.logs,
       abi: futures.abi,
-      eventName: "LotClosed",
+      eventName: "PositionSettled",
     });
 
-    assert.equal(closed.args.lotId, positionId);
-    assert.equal(closed.args.reason, LOT_CLOSE_REASON_SETTLED);
-    assert.equal(getAddress(closed.args.closedBy), getAddress(buyer2.account.address));
+    assert.equal(getAddress(buyerSettled.args.user), getAddress(buyer.account.address));
+    assert.equal(buyerSettled.args.expirationAt, deliveryDate);
+    assert.equal(buyerSettled.args.closedQuantity, 1n);
+    assert.equal(getAddress(buyerSettled.args.settledBy), getAddress(buyer2.account.address));
+    assert.notEqual(buyerSettled.args.pnl, 0n);
 
-    // Entry buy price == sell price, so PnL is symmetric and full-notional at the mark.
-    assert.equal(closed.args.sellerPnl, -closed.args.buyerPnl);
-    assert.notEqual(closed.args.buyerPnl, 0n);
+    // Settle the short side too.
+    await futures.write.settlePosition([seller.account.address, deliveryDate], {
+      account: buyer2.account,
+    });
 
     const sellerAfter = await collateralVault.read.balanceOf([seller.account.address]);
     const buyerAfter = await collateralVault.read.balanceOf([buyer.account.address]);
-    assert.equal(sellerAfter - sellerBefore, closed.args.sellerPnl);
-    assert.equal(buyerAfter - buyerBefore, closed.args.buyerPnl);
+    assert.equal(buyerAfter - buyerBefore, buyerSettled.args.pnl);
+    // Seller PnL is opposite direction at same entry; magnitudes match.
+    assert.equal(sellerBefore - sellerAfter, buyerSettled.args.pnl);
 
-    // Position is removed.
-    assert.equal((await futures.read.getPositionById([positionId])).seller, ZERO_ADDRESS);
-
-    // Sanity: PnL magnitude equals |mark - entry| (one contract, no duration multiplier).
-    const expectedMag = closed.args.buyerPnl > 0n ? closed.args.buyerPnl : -closed.args.buyerPnl;
-    assert.ok(expectedMag > 0n);
+    assert.equal((await futures.read.getUserPosition([buyer.account.address, deliveryDate])).netQuantity, 0n);
+    assert.equal((await futures.read.getUserPosition([seller.account.address, deliveryDate])).netQuantity, 0n);
   });
 
-  it("reverts before the position has matured", async () => {
-    const { contracts, accounts, positionId } = await openLot();
+  it("reverts before maturity", async () => {
+    const { contracts, accounts, deliveryDate } = await openPosition();
     const { futures } = contracts;
     const { buyer } = accounts;
 
     await viem.assertions.revertWithCustomError(
-      futures.write.settlePosition([positionId], { account: buyer.account }),
+      futures.write.settlePosition([buyer.account.address, deliveryDate], { account: buyer.account }),
       futures,
-      "PositionDeliveryNotStartedYet",
+      "PositionExpirationNotStartedYet",
     );
   });
 
-  it("reverts for a non-existent position", async () => {
-    const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
+  it("reverts when user has no position at expirationAt", async () => {
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
-    const { buyer } = accounts;
+    const { buyer, tc } = accounts;
+    const expirationAt = config.deliveryDates[0];
 
-    const unknownId = `0x${"ab".repeat(32)}` as `0x${string}`;
+    await refreshHashprice(contracts.hashrateOracle, expirationAt);
+    await tc.setNextBlockTimestamp({ timestamp: expirationAt });
+
     await viem.assertions.revertWithCustomError(
-      futures.write.settlePosition([unknownId], { account: buyer.account }),
+      futures.write.settlePosition([buyer.account.address, expirationAt], {
+        account: buyer.account,
+      }),
       futures,
       "PositionNotExists",
     );
   });
 
-  it("settlePositions settles a batch of matured positions", async () => {
-    const data = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { contracts, accounts, config } = data;
-    const { futures, collateralVault } = contracts;
-    const { seller, buyer, buyer2, pc, tc } = accounts;
-
-    const marginAmount = parseUnits("10000", 6);
-    const deliveryDate = config.deliveryDates[0];
-    const entryPrice = quantizePrice(parseUnits("100", 6), config.priceLadderStep);
-
-    await collateralVault.write.deposit([marginAmount], { account: seller.account });
-    await collateralVault.write.deposit([marginAmount], { account: buyer.account });
-
-    const lotIds: `0x${string}`[] = [];
-    for (let i = 0; i < 2; i++) {
-      await futures.write.createOrder([entryPrice, deliveryDate, "", -1], {
-        account: seller.account,
-      });
-      const txHash = await futures.write.createOrder([entryPrice, deliveryDate, "", 1], {
-        account: buyer.account,
-      });
-      const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
-      const [created] = parseEventLogs({
-        logs: receipt.logs,
-        abi: futures.abi,
-        eventName: "LotCreated",
-      });
-      lotIds.push(created.args.lotId);
-    }
+  it("settlePositions settles a batch of users at an expiry", async () => {
+    const { contracts, accounts, deliveryDate } = await openPosition();
+    const { futures } = contracts;
+    const { seller, buyer, buyer2, tc } = accounts;
 
     await reachMaturityWithMovedMark(contracts, tc, deliveryDate);
 
-    await futures.write.settlePositions([lotIds], { account: buyer2.account });
+    await futures.write.settlePositions(
+      [
+        [buyer.account.address, seller.account.address],
+        [deliveryDate, deliveryDate],
+      ],
+      { account: buyer2.account },
+    );
 
-    for (const id of lotIds) {
-      assert.equal((await futures.read.getPositionById([id])).seller, ZERO_ADDRESS);
-    }
+    assert.equal((await futures.read.getUserPosition([buyer.account.address, deliveryDate])).netQuantity, 0n);
+    assert.equal((await futures.read.getUserPosition([seller.account.address, deliveryDate])).netQuantity, 0n);
   });
 });

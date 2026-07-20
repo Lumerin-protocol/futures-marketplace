@@ -1,4 +1,4 @@
-/// Signed-i32 helpers used by the per-(user, deliveryAt) net-quantity
+/// Signed-i32 helpers used by the per-(user, expirationAt) net-quantity
 /// bookkeeping. Quantities in the futures market are integer unit counts.
 
 export function isSameSignI32(a: i32, b: i32): boolean {

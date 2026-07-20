@@ -6,7 +6,7 @@ export const HISTORICAL_ORDERS_QK = "HistoricalOrders";
 export type HistoricalOrder = {
   id: string;
   timestamp: string;
-  deliveryAt: bigint;
+  expirationAt: bigint;
   pricePerDay: bigint;
   isBuy: boolean;
   isActive: boolean;
@@ -33,7 +33,7 @@ type RawOrder = {
   blockNumber: string;
   cancelledQuantity: number;
   closedAt: string | null;
-  deliveryAt: string;
+  expirationAt: string;
   createdAt: string;
   filledQuantity: number;
   id: string;
@@ -58,7 +58,7 @@ type HistoricalOrdersResponse = {
 const mapOrder = (order: RawOrder): HistoricalOrder => ({
   id: order.id,
   timestamp: order.createdAt,
-  deliveryAt: BigInt(order.deliveryAt),
+  expirationAt: BigInt(order.expirationAt),
   pricePerDay: BigInt(order.price),
   isBuy: order.isBuy,
   // Anything coming back from this query is in a terminal state (FILLED,

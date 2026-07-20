@@ -102,12 +102,12 @@ describe("Futures: full config + address surface populated by loadFuturesFromCon
     assert.equal(String(entity.contractSizeHpsDay), "1000000000000000");
     assert.equal(String(entity.expirationIntervalDays), config.expirationIntervalDays.toString());
     assert.equal(
-      String(entity.futureDeliveryDatesCount),
-      config.futureDeliveryDatesCount.toString(),
+      String(entity.futureExpirationDatesCount),
+      config.futureExpirationDatesCount.toString(),
     );
     assert.equal(
-      String(entity.firstFutureDeliveryDate),
-      config.firstFutureDeliveryDate.toString(),
+      String(entity.firstFutureExpirationDate),
+      config.firstFutureExpirationDate.toString(),
     );
     assert.equal(
       String(entity.collectedFeesBalance),
@@ -169,8 +169,8 @@ describe("Trade.tradingFee and PositionSession.tradingFees reflect makerFee/take
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
-    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
-    const buyTx = await futures.write.createOrder([price, deliveryDate, "dst", 1], {
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
+    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buyTx });
@@ -225,8 +225,8 @@ describe("Trade.tradingFee and PositionSession.tradingFees reflect makerFee/take
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
-    await futures.write.createOrder([price, deliveryDate, "", -1], { account: seller.account });
-    const buyTx = await futures.write.createOrder([price, deliveryDate, "dst", 1], {
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
+    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buyTx });

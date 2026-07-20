@@ -13,9 +13,8 @@ import {
   bytes32Id,
   orderAggKeyDefaultTx,
   paramAddr,
-  paramBool,
   paramBytes,
-  paramString,
+  paramInt,
   paramUint,
   priceLevelKey,
   setupDataSourceMock,
@@ -29,18 +28,16 @@ const DELIVERY = BigInt.fromI64(1_700_000_000);
 function createOrderCreatedEvent(
   orderId: Bytes,
   participant: Address,
-  destURL: string,
   price: BigInt,
-  deliveryAt: BigInt,
-  isBuy: boolean,
+  quantity: BigInt,
+  expirationAt: BigInt,
 ): OrderCreated {
   return newTypedMockEventWithParams<OrderCreated>([
     paramBytes("orderId", orderId),
     paramAddr("participant", participant),
-    paramString("destURL", destURL),
-    paramUint("pricePerDay", price),
-    paramUint("deliveryAt", deliveryAt),
-    paramBool("isBuy", isBuy),
+    paramUint("price", price),
+    paramInt("quantity", quantity),
+    paramUint("expirationAt", expirationAt),
   ]);
 }
 
@@ -54,7 +51,7 @@ describe("handleOrderCreated", () => {
   test("creates User, Order, OrderEntry, PriceLevel and bumps Futures stats", () => {
     const user = userAddress(1);
     const oid = bytes32Id(1);
-    handleOrderCreated(createOrderCreatedEvent(oid, user, "https://node1.example", PRICE, DELIVERY, true));
+    handleOrderCreated(createOrderCreatedEvent(oid, user, PRICE, BigInt.fromI32(1), DELIVERY));
 
     const aggId = orderAggKeyDefaultTx(user, PRICE, DELIVERY, true);
 
@@ -66,7 +63,7 @@ describe("handleOrderCreated", () => {
     assert.fieldEquals("Order", aggId, "user", user.toHexString());
     assert.fieldEquals("Order", aggId, "isBuy", "true");
     assert.fieldEquals("Order", aggId, "price", PRICE.toString());
-    assert.fieldEquals("Order", aggId, "deliveryAt", DELIVERY.toString());
+    assert.fieldEquals("Order", aggId, "expirationAt", DELIVERY.toString());
     assert.fieldEquals("Order", aggId, "quantity", "1");
     assert.fieldEquals("Order", aggId, "originalQuantity", "1");
     assert.fieldEquals("Order", aggId, "filledQuantity", "0");
@@ -74,7 +71,7 @@ describe("handleOrderCreated", () => {
     assert.fieldEquals("Order", aggId, "status", "ACTIVE");
 
     assert.fieldEquals("OrderEntry", oid.toHexString(), "order", aggId);
-    assert.fieldEquals("OrderEntry", oid.toHexString(), "destURL", "https://node1.example");
+    assert.fieldEquals("OrderEntry", oid.toHexString(), "remainingQuantity", "1");
     assert.fieldEquals("OrderEntry", oid.toHexString(), "status", "ACTIVE");
 
     const plKey = priceLevelKey(DELIVERY, PRICE, true);
@@ -89,34 +86,42 @@ describe("handleOrderCreated", () => {
     assert.fieldEquals("User", user.toHexString(), "activeOrderCount", "1");
   });
 
-  test("aggregates qty>1 into a single Order with N OrderEntries; counters bump once", () => {
+  test("qty=3 in one event creates a single OrderEntry with remainingQuantity=3", () => {
     const user = userAddress(1);
-    handleOrderCreated(createOrderCreatedEvent(bytes32Id(1), user, "u1", PRICE, DELIVERY, true));
-    handleOrderCreated(createOrderCreatedEvent(bytes32Id(2), user, "u2", PRICE, DELIVERY, true));
-    handleOrderCreated(createOrderCreatedEvent(bytes32Id(3), user, "u3", PRICE, DELIVERY, true));
+    handleOrderCreated(createOrderCreatedEvent(bytes32Id(1), user, PRICE, BigInt.fromI32(3), DELIVERY));
 
     const aggId = orderAggKeyDefaultTx(user, PRICE, DELIVERY, true);
     assert.entityCount("Order", 1);
-    assert.entityCount("OrderEntry", 3);
+    assert.entityCount("OrderEntry", 1);
     assert.fieldEquals("Order", aggId, "quantity", "3");
     assert.fieldEquals("Order", aggId, "originalQuantity", "3");
+    assert.fieldEquals("OrderEntry", bytes32Id(1).toHexString(), "remainingQuantity", "3");
 
     assert.fieldEquals("PriceLevel", priceLevelKey(DELIVERY, PRICE, true), "totalQuantity", "3");
 
-    // totalOrders / orderCount count *aggregates*; activeOrders / activeOrderCount count
-    // individual ACTIVE OrderEntry units (per on-chain orderId) — so 3 entries = 3 active.
     assert.fieldEquals("Futures", "0", "totalOrders", "1");
-    assert.fieldEquals("Futures", "0", "activeOrders", "3");
+    assert.fieldEquals("Futures", "0", "activeOrders", "1");
     assert.fieldEquals("User", user.toHexString(), "orderCount", "1");
-    assert.fieldEquals("User", user.toHexString(), "activeOrderCount", "3");
+    assert.fieldEquals("User", user.toHexString(), "activeOrderCount", "1");
   });
 
-  test("different (price, side, deliveryAt) tuples create separate Order aggregates", () => {
+  test("negative quantity creates a sell-side Order aggregate", () => {
     const user = userAddress(1);
-    handleOrderCreated(createOrderCreatedEvent(bytes32Id(1), user, "u", PRICE, DELIVERY, true));
-    handleOrderCreated(createOrderCreatedEvent(bytes32Id(2), user, "u", PRICE.plus(BigInt.fromI32(1)), DELIVERY, true));
-    handleOrderCreated(createOrderCreatedEvent(bytes32Id(3), user, "u", PRICE, DELIVERY, false));
-    handleOrderCreated(createOrderCreatedEvent(bytes32Id(4), user, "u", PRICE, DELIVERY.plus(BigInt.fromI32(86400)), true));
+    handleOrderCreated(createOrderCreatedEvent(bytes32Id(1), user, PRICE, BigInt.fromI32(-2), DELIVERY));
+
+    const aggId = orderAggKeyDefaultTx(user, PRICE, DELIVERY, false);
+    assert.fieldEquals("Order", aggId, "isBuy", "false");
+    assert.fieldEquals("Order", aggId, "quantity", "2");
+    assert.fieldEquals("OrderEntry", bytes32Id(1).toHexString(), "remainingQuantity", "2");
+    assert.fieldEquals("PriceLevel", priceLevelKey(DELIVERY, PRICE, false), "totalQuantity", "2");
+  });
+
+  test("different (price, side, expirationAt) tuples create separate Order aggregates", () => {
+    const user = userAddress(1);
+    handleOrderCreated(createOrderCreatedEvent(bytes32Id(1), user, PRICE, BigInt.fromI32(1), DELIVERY));
+    handleOrderCreated(createOrderCreatedEvent(bytes32Id(2), user, PRICE.plus(BigInt.fromI32(1)), BigInt.fromI32(1), DELIVERY));
+    handleOrderCreated(createOrderCreatedEvent(bytes32Id(3), user, PRICE, BigInt.fromI32(-1), DELIVERY));
+    handleOrderCreated(createOrderCreatedEvent(bytes32Id(4), user, PRICE, BigInt.fromI32(1), DELIVERY.plus(BigInt.fromI32(86400))));
 
     assert.entityCount("Order", 4);
     assert.entityCount("OrderEntry", 4);

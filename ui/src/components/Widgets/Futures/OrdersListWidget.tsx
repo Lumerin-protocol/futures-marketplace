@@ -44,7 +44,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   const [selectedCloseOrder, setSelectedCloseOrder] = useState<{
     isBuy: boolean;
     pricePerDay: bigint;
-    deliveryAt: bigint;
+    expirationAt: bigint;
     amount: number;
   } | null>(null);
   const getStatusColor = (isActive: boolean, closedAt: string | null) => {
@@ -94,7 +94,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   const handleCloseOrder = (groupedOrder: {
     isBuy: boolean;
     pricePerDay: bigint;
-    deliveryAt: bigint;
+    expirationAt: bigint;
     amount: number;
   }) => {
     setSelectedCloseOrder(groupedOrder);
@@ -106,23 +106,23 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
     modifyModal.open();
   };
 
-  // Group orders by type, pricePerDay, and deliveryAt.
+  // Group orders by type, pricePerDay, and expirationAt.
   //
   // The indexer aggregates qty=N OrderCreated events from a single
   // `createOrder` call into one Order entity carrying `quantity` /
   // `originalQuantity` / `filledQuantity` counters. We still group across
-  // multiple Order rows here because the same (isBuy, price, deliveryAt)
+  // multiple Order rows here because the same (isBuy, price, expirationAt)
   // tuple can be hit by separate transactions, each producing its own
   // Order — and the modify/close UX collapses those into one row.
   const groupedOrders = orders.reduce(
     (acc, order) => {
-      const key = `${order.isBuy}-${order.pricePerDay}-${order.deliveryAt}`;
+      const key = `${order.isBuy}-${order.pricePerDay}-${order.expirationAt}`;
 
       if (!acc[key]) {
         acc[key] = {
           isBuy: order.isBuy,
           pricePerDay: order.pricePerDay,
-          deliveryAt: order.deliveryAt,
+          expirationAt: order.expirationAt,
           amount: 0,
           originalQuantity: 0,
           filledQuantity: 0,
@@ -149,7 +149,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
       {
         isBuy: boolean;
         pricePerDay: bigint;
-        deliveryAt: bigint;
+        expirationAt: bigint;
         amount: number;
         originalQuantity: number;
         filledQuantity: number;
@@ -194,8 +194,8 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
           </thead>
           <tbody>
             {groupedOrdersArray.map((groupedOrder, index) => (
-              <TableRow key={`${groupedOrder.isBuy}-${groupedOrder.pricePerDay}-${groupedOrder.deliveryAt}-${index}`}>
-                <td><DateTimeCell timestamp={groupedOrder.deliveryAt} /></td>
+              <TableRow key={`${groupedOrder.isBuy}-${groupedOrder.pricePerDay}-${groupedOrder.expirationAt}-${index}`}>
+                <td><DateTimeCell timestamp={groupedOrder.expirationAt} /></td>
                 <td>
                   <TypeBadge $type={groupedOrder.isBuy ? "Long" : "Short"}>
                     {groupedOrder.isBuy ? "Long" : "Short"}
@@ -260,7 +260,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
           <CloseOrderForm
             isBuy={selectedCloseOrder.isBuy}
             pricePerDay={selectedCloseOrder.pricePerDay}
-            deliveryAt={selectedCloseOrder.deliveryAt}
+            expirationAt={selectedCloseOrder.expirationAt}
             amount={selectedCloseOrder.amount}
             contractMode={contractMode}
             closeForm={() => {

@@ -19,12 +19,12 @@ describe("Futures - multicall write", () => {
       encodeFunctionData({
         abi: futures.abi,
         functionName: "createOrder",
-        args: [price, deliveryDate, "", -1],
+        args: [price, deliveryDate, -1],
       }),
       encodeFunctionData({
         abi: futures.abi,
         functionName: "createOrder",
-        args: [price, deliveryDate, "", -1],
+        args: [price, deliveryDate, -1],
       }),
     ];
 
@@ -45,12 +45,12 @@ describe("Futures - multicall write", () => {
       encodeFunctionData({
         abi: futures.abi,
         functionName: "createOrder",
-        args: [price, deliveryDate, "", 1],
+        args: [price, deliveryDate, 1],
       }),
       encodeFunctionData({
         abi: futures.abi,
         functionName: "createOrder",
-        args: [price, deliveryDate, "", 1],
+        args: [price, deliveryDate, 1],
       }),
     ];
 
@@ -60,7 +60,7 @@ describe("Futures - multicall write", () => {
     const closeEvents = parseEventLogs({
       logs: closeReceipt.logs,
       abi: futures.abi,
-      eventName: "OrderClosed",
+      eventName: "OrderCancelled",
     });
     assert.equal(closeEvents.length, 2);
   });

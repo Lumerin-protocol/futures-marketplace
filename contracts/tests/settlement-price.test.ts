@@ -14,17 +14,17 @@ async function openLotBetween(
   short: FuturesFixture["accounts"]["seller"],
   long: FuturesFixture["accounts"]["buyer"],
   entryPrice: bigint,
-  deliveryDate: bigint,
+  expirationAt: bigint,
 ) {
   const { futures } = data.contracts;
   const { pc } = data.accounts;
-  await futures.write.createOrder([entryPrice, deliveryDate, "", -1], { account: short.account });
-  const txHash = await futures.write.createOrder([entryPrice, deliveryDate, "", 1], {
+  await futures.write.createOrder([entryPrice, expirationAt, -1], { account: short.account });
+  const txHash = await futures.write.createOrder([entryPrice, expirationAt, 1], {
     account: long.account,
   });
   const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
-  const [created] = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "LotCreated" });
-  return created.args.lotId;
+  const [matched] = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "OrderMatched" });
+  return matched.args.expirationAt as bigint;
 }
 
 describe("Futures settlement price (pinned)", () => {
@@ -63,7 +63,7 @@ describe("Futures settlement price (pinned)", () => {
 
     // Read the live mark only after the tx has mined at maturity (oracle is fresh there).
     const expected = await futures.read.getMarketPrice();
-    assert.equal(recorded.args.deliveryAt, deliveryDate);
+    assert.equal(recorded.args.expirationAt, deliveryDate);
     assert.equal(recorded.args.price, expected);
     assert.equal(getAddress(recorded.args.recordedBy), getAddress(buyer2.account.address));
     assert.equal(await futures.read.settlementPrice([deliveryDate]), expected);
@@ -115,13 +115,15 @@ describe("Futures settlement price (pinned)", () => {
 
     await contracts.collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await contracts.collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
-    const lotId = await openLotBetween(data, seller, buyer, entryPrice, deliveryDate);
+    await openLotBetween(data, seller, buyer, entryPrice, deliveryDate);
 
     await refreshHashprice(hashrateOracle, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
 
     assert.equal(await futures.read.settlementPrice([deliveryDate]), 0n);
-    const txHash = await futures.write.settlePosition([lotId], { account: buyer2.account });
+    const txHash = await futures.write.settlePosition([buyer.account.address, deliveryDate], {
+      account: buyer2.account,
+    });
     const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
     const recorded = parseEventLogs({
       logs: receipt.logs,
@@ -146,10 +148,14 @@ describe("Futures settlement price (pinned)", () => {
       await collateralVault.write.deposit([margin], { account: a.account });
     }
 
-    // Two lots sharing `seller` as the short side; `buyer` and `buyer2` are the longs. Same
-    // price + date, so both longs must realize identical PnL at the pinned settlement price.
-    const lotA = await openLotBetween(data, seller, buyer, entryPrice, deliveryDate);
-    const lotB = await openLotBetween(data, seller, buyer2, entryPrice, deliveryDate);
+    // Seller aggregates short −2; buyer and buyer2 each hold +1 at the same entry.
+    // Both longs must realize identical PnL at the pinned settlement price.
+    await openLotBetween(data, seller, buyer, entryPrice, deliveryDate);
+    await openLotBetween(data, seller, buyer2, entryPrice, deliveryDate);
+    assert.equal(
+      (await futures.read.getUserPosition([seller.account.address, deliveryDate])).netQuantity,
+      -2n,
+    );
 
     // Reach maturity and pin the price.
     await refreshHashprice(hashrateOracle, deliveryDate);
@@ -157,27 +163,32 @@ describe("Futures settlement price (pinned)", () => {
     await futures.write.recordSettlementPrice([deliveryDate], { account: buyer.account });
     const pinned = await futures.read.settlementPrice([deliveryDate]);
 
-    // Move the oracle, then settle lot A.
+    // Move the oracle, then settle buyer.
     await scaleHashprice(hashrateOracle, 12n, 10n);
     await refreshHashprice(hashrateOracle);
     const rA = await pc.waitForTransactionReceipt({
-      hash: await futures.write.settlePosition([lotA], { account: buyer.account }),
+      hash: await futures.write.settlePosition([buyer.account.address, deliveryDate], {
+        account: buyer.account,
+      }),
     });
-    const [closedA] = parseEventLogs({ logs: rA.logs, abi: futures.abi, eventName: "LotClosed" });
+    const [closedA] = parseEventLogs({ logs: rA.logs, abi: futures.abi, eventName: "PositionSettled" });
 
-    // Move the oracle again, then settle lot B.
+    // Move the oracle again, then settle buyer2.
     await scaleHashprice(hashrateOracle, 8n, 10n);
     await refreshHashprice(hashrateOracle);
     const rB = await pc.waitForTransactionReceipt({
-      hash: await futures.write.settlePosition([lotB], { account: buyer.account }),
+      hash: await futures.write.settlePosition([buyer2.account.address, deliveryDate], {
+        account: buyer.account,
+      }),
     });
-    const [closedB] = parseEventLogs({ logs: rB.logs, abi: futures.abi, eventName: "LotClosed" });
+    const [closedB] = parseEventLogs({ logs: rB.logs, abi: futures.abi, eventName: "PositionSettled" });
 
-    // Both longs realize identical PnL computed at the pinned price, not the moving live mark.
+    // Both longs realize identical PnL at the pinned price, not the moving live mark.
     const expectedLongPnl = pinned - entryPrice;
-    assert.equal(closedA.args.buyerPnl, expectedLongPnl);
-    assert.equal(closedB.args.buyerPnl, expectedLongPnl);
-    assert.equal(closedA.args.buyerPnl, closedB.args.buyerPnl);
+    assert.equal(closedA.args.pnl, expectedLongPnl);
+    assert.equal(closedB.args.pnl, expectedLongPnl);
+    assert.equal(closedA.args.settlementPrice, pinned);
+    assert.equal(closedB.args.settlementPrice, pinned);
   });
 
   it("a pinned settlement price does not affect the live getMarketPrice (liquidation mark)", async () => {

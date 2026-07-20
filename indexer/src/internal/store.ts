@@ -28,8 +28,8 @@ export function getOrCreateFutures(): Futures {
     futures.liquidationMarginPercent = 0;
     futures.contractSizeHpsDay = BigInt.zero();
     futures.expirationIntervalDays = 0;
-    futures.futureDeliveryDatesCount = 0;
-    futures.firstFutureDeliveryDate = BigInt.zero();
+    futures.futureExpirationDatesCount = 0;
+    futures.firstFutureExpirationDate = BigInt.zero();
     futures.collectedFeesBalance = BigInt.zero();
     futures.totalUsers = 0;
     futures.totalOrders = 0;
@@ -91,11 +91,11 @@ export function loadFuturesFromContract(futures: Futures): void {
   const deliveryInterval = contract.try_expirationIntervalDays();
   if (!deliveryInterval.reverted) futures.expirationIntervalDays = deliveryInterval.value;
 
-  const futureCount = contract.try_futureDeliveryDatesCount();
-  if (!futureCount.reverted) futures.futureDeliveryDatesCount = futureCount.value;
+  const futureCount = contract.try_futureExpirationDatesCount();
+  if (!futureCount.reverted) futures.futureExpirationDatesCount = futureCount.value;
 
-  const firstDelivery = contract.try_firstFutureDeliveryDate();
-  if (!firstDelivery.reverted) futures.firstFutureDeliveryDate = firstDelivery.value;
+  const firstDelivery = contract.try_firstFutureExpirationDate();
+  if (!firstDelivery.reverted) futures.firstFutureExpirationDate = firstDelivery.value;
 
   const fees = contract.try_collectedFeesBalance();
   if (!fees.reverted) futures.collectedFeesBalance = fees.value;
@@ -111,7 +111,7 @@ export function getOrCreateUser(address: Address, timestamp: BigInt): User {
     user.tradeCount = 0;
     user.fillCount = 0;
     user.realizedPnl = BigInt.zero();
-    user.lots = [];
+    user.lastCreatedOrderId = Bytes.empty();
     user.createdAt = timestamp;
     user.lastActivityAt = timestamp;
 
@@ -125,30 +125,30 @@ export function getOrCreateUser(address: Address, timestamp: BigInt): User {
 }
 
 /// One row per expiration timestamp, created lazily the first time any entity at that
-/// `deliveryAt` is indexed. Settlement fields stay null until `SettlementPriceRecorded`
+/// `expirationAt` is indexed. Settlement fields stay null until `SettlementPriceRecorded`
 /// pins the price. Returns the (saved) entity so callers can wire the `expiration` relation.
-export function getOrCreateFuturesExpiration(deliveryAt: BigInt): FuturesExpiration {
-  const id = futuresExpirationId(deliveryAt);
+export function getOrCreateFuturesExpiration(expirationAt: BigInt): FuturesExpiration {
+  const id = futuresExpirationId(expirationAt);
   let expiration = FuturesExpiration.load(id);
   if (!expiration) {
     expiration = new FuturesExpiration(id);
-    expiration.deliveryAt = deliveryAt;
+    expiration.expirationAt = expirationAt;
     expiration.save();
   }
   return expiration;
 }
 
 export function getOrCreatePriceLevel(
-  deliveryAt: BigInt,
+  expirationAt: BigInt,
   price: BigInt,
   isBid: boolean,
 ): PriceLevel {
-  const id = priceLevelId(deliveryAt, price, isBid);
+  const id = priceLevelId(expirationAt, price, isBid);
   let level = PriceLevel.load(id);
   if (!level) {
     level = new PriceLevel(id);
-    level.deliveryAt = deliveryAt;
-    level.expiration = getOrCreateFuturesExpiration(deliveryAt).id;
+    level.expirationAt = expirationAt;
+    level.expiration = getOrCreateFuturesExpiration(expirationAt).id;
     level.price = price;
     level.isBid = isBid;
     level.totalQuantity = 0;
@@ -156,7 +156,7 @@ export function getOrCreatePriceLevel(
   return level;
 }
 
-/// Idempotent per-tx marker used by `handleOrderLiquidated` / `handleLotLiquidated`
+/// Idempotent per-tx marker used by `handleOrderLiquidated` / `handlePositionLiquidated`
 /// to bump `Futures.totalLiquidations` exactly once per tx. Returns true iff this
 /// invocation created the marker (i.e. it's the first leg seen in this tx); subsequent
 /// legs in the same tx return false and the caller skips the counter increment.
@@ -167,20 +167,20 @@ export function markLiquidationTx(txHash: Bytes): boolean {
   return true;
 }
 
-/// Per-(user, deliveryAt) bookkeeping pointer: the running net qty, weighted
+/// Per-(user, expirationAt) bookkeeping pointer: the running net qty, weighted
 /// entry price, and id of the currently-OPEN PositionSession (if any).
-/// Required because GraphQL has no Map<deliveryAt, …> support, so we cannot
+/// Required because GraphQL has no Map<expirationAt, …> support, so we cannot
 /// derive this from User alone.
 export function getOrCreatePointer(
   user: Address,
-  deliveryAt: BigInt,
+  expirationAt: BigInt,
 ): UserDeliverySessionPointer {
-  const id = userDeliveryPointerId(user, deliveryAt);
+  const id = userDeliveryPointerId(user, expirationAt);
   let pointer = UserDeliverySessionPointer.load(id);
   if (!pointer) {
     pointer = new UserDeliverySessionPointer(id);
     pointer.user = user;
-    pointer.deliveryAt = deliveryAt;
+    pointer.expirationAt = expirationAt;
     pointer.netQuantity = 0;
     pointer.aggregatedEntryPrice = BigInt.zero();
     pointer.currentSessionId = "";

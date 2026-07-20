@@ -9,17 +9,14 @@ export {
 } from "./handlers/admin";
 
 export {
-  handleOrderClosed,
+  handleOrderCancelled,
   handleOrderCreated,
   handleOrderLiquidated,
+  handleOrderMatched,
+  handleOrderUpdated,
+  handlePositionLiquidated,
+  handlePositionSettled,
 } from "./handlers/orders";
-
-export {
-  handleLotClosed,
-  handleLotCreated,
-  handleLotLiquidated,
-  handleLotTransferred,
-} from "./handlers/lots";
 
 export { handleBadDebt } from "./handlers/liquidation";
 

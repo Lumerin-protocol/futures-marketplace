@@ -1,8 +1,8 @@
 import { gql } from "graphql-request";
 
-// Per-user futures Orders, paged with first/skip and filtered by status + future deliveryAt.
+// Per-user futures Orders, paged with first/skip and filtered by status + future expirationAt.
 // Mirrors the perps `UserPerpsOrdersByStatusQuery` shape (the futures Order entity exposes
-// the same fields plus `deliveryAt`).
+// the same fields plus `expirationAt`).
 export const UserFuturesOrdersByStatusQuery = gql`
   query UserFuturesOrdersByStatus(
     $address: ID!
@@ -12,7 +12,7 @@ export const UserFuturesOrdersByStatusQuery = gql`
     $skip: Int!
   ) {
     orders(
-      where: { user: $address, status_in: $statuses, deliveryAt_gt: $now }
+      where: { user: $address, status_in: $statuses, expirationAt_gt: $now }
       first: $first
       skip: $skip
       orderBy: createdAt
@@ -24,7 +24,7 @@ export const UserFuturesOrdersByStatusQuery = gql`
       blockNumber
       cancelledQuantity
       closedAt
-      deliveryAt
+      expirationAt
       createdAt
       filledQuantity
       id
@@ -46,7 +46,7 @@ export const UserFuturesOrdersByStatusQuery = gql`
 `;
 
 // Per-user PositionSessions for futures, mirroring the perps `UserPositionSessionsQuery`.
-// The futures schema replaces the legacy `Position` book with per-(user, deliveryAt) sessions
+// The futures schema replaces the legacy `Position` book with per-(user, expirationAt) sessions
 // that aggregate the user's trades; the UI collapses each session into a single
 // PositionBookPosition row downstream so consumers keep working.
 export const PositionsBookQuery = gql`
@@ -55,7 +55,7 @@ export const PositionsBookQuery = gql`
       closePrice
       closedQuantity
       liquidatedQuantity
-      deliveryAt
+      expirationAt
       entryPrice
       id
       lastTradeAt
@@ -74,7 +74,7 @@ export const PositionsBookQuery = gql`
       }
       trades {
         blockNumber
-        deliveryAt
+        expirationAt
         fillCount
         id
         netQuantityAfter
@@ -95,38 +95,17 @@ export const PositionsBookQuery = gql`
   }
 `;
 
-export const OrderBookQuery = gql`
-  query OrderBook($deliveryAt: BigInt!) {
-    orders(where: { deliveryAt: $deliveryAt, isActive: true }) {
-      id
-      pricePerDay
-      deliveryAt
-      participant {
-        address
-      }
-      isBuy,
-      isActive
-    },
-    _meta {
-      block {
-        number
-        timestamp
-      }
-    }
-  }
-`;
-
 export const AggregateOrderBookQuery = gql`
-  query AggregateOrderBookQuery($deliveryAt: BigInt!, $first: Int!, $lastId: ID!) {
+  query AggregateOrderBookQuery($expirationAt: BigInt!, $first: Int!, $lastId: ID!) {
     priceLevels(
       first: $first
-      where: { deliveryAt: $deliveryAt, id_gt: $lastId, totalQuantity_gte: 1 }
+      where: { expirationAt: $expirationAt, id_gt: $lastId, totalQuantity_gte: 1 }
       orderBy: id
       orderDirection: asc
     ) {
       id
       isBid
-      deliveryAt
+      expirationAt
       price
       totalQuantity
     }
@@ -200,7 +179,7 @@ export const HistoricalPositionsQuery = gql`
       closePrice
       closedQuantity
       liquidatedQuantity
-      deliveryAt
+      expirationAt
       entryPrice
       id
       lastTradeAt
@@ -218,7 +197,7 @@ export const HistoricalPositionsQuery = gql`
       }
       trades {
         blockNumber
-        deliveryAt
+        expirationAt
         fillCount
         id
         netQuantityAfter
@@ -261,7 +240,7 @@ export const HistoricalOrdersQuery = gql`
       blockNumber
       cancelledQuantity
       closedAt
-      deliveryAt
+      expirationAt
       createdAt
       filledQuantity
       id
@@ -337,7 +316,7 @@ export const AggregatedBtcPriceIndexQuery = gql`
 
 // Per-user futures Trades, mirroring the perps `UserTradesQuery` shape.
 // The futures Trade entity has no `aggregatedEntryPriceAfter` (perps-only)
-// but does carry `deliveryAt` and `fillCount` (futures-only).
+// but does carry `expirationAt` and `fillCount` (futures-only).
 export const UserFuturesTradesQuery = gql`
   query UserFuturesTrades($address: ID!, $first: Int!, $skip: Int!) {
     trades(
@@ -352,7 +331,7 @@ export const UserFuturesTradesQuery = gql`
       }
       transactionHash
       blockNumber
-      deliveryAt
+      expirationAt
       fillCount
       id
       netQuantityAfter

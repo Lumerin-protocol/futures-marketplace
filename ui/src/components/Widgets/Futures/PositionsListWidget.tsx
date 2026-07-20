@@ -27,7 +27,7 @@ interface PositionsListWidgetProps {
   positions: PositionBookPosition[];
   isLoading?: boolean;
   participantAddress?: `0x${string}`;
-  onClosePosition?: (price: string, amount: number, isBuy: boolean, deliveryAt?: number) => void;
+  onClosePosition?: (price: string, amount: number, isBuy: boolean, expirationAt?: number) => void;
   contractMode?: ContractMode;
   balanceQuery: BalanceQueryResult;
 }
@@ -39,28 +39,28 @@ export const PositionsListWidget = ({
   onClosePosition,
   contractMode = "futures",
 }: PositionsListWidgetProps) => {
-  // Conditionally use futures or perps create order hook
   const futuresCreateOrder = useCreateOrder();
   const perpsCreateOrder = useCreatePerpsOrder();
-  const { createOrderAsync, isPending } = contractMode === "perpetual" ? perpsCreateOrder : futuresCreateOrder;
+  const isPending =
+    contractMode === "perpetual" ? perpsCreateOrder.isPending : futuresCreateOrder.isPending;
   const { data: marketPrice } = useGetMarketPrice();
   const contractSpecsQuery = useFuturesContractSpecs();
   const [tradesSelection, setTradesSelection] = useState<FuturesTradesModalSelection | null>(null);
   const { settlePositionsAsync, isPending: isSettling } = useSettlePositions();
-  // deliveryAt currently being claimed, plus any per-expiration claim error message.
-  const [claimingDeliveryAt, setClaimingDeliveryAt] = useState<string | null>(null);
-  const [claimError, setClaimError] = useState<{ deliveryAt: string; message: string } | null>(null);
+  // expirationAt currently being claimed, plus any per-expiration claim error message.
+  const [claimingExpirationAt, setClaimingExpirationAt] = useState<string | null>(null);
+  const [claimError, setClaimError] = useState<{ expirationAt: string; message: string } | null>(null);
 
   const nowSeconds = Math.floor(Date.now() / 1000);
-  const isMatured = (deliveryAt: string) =>
-    contractMode === "futures" && Number(deliveryAt) > 0 && Number(deliveryAt) < nowSeconds;
+  const isMatured = (expirationAt: string) =>
+    contractMode === "futures" && Number(expirationAt) > 0 && Number(expirationAt) < nowSeconds;
 
-  const handleClaim = async (deliveryAt: string) => {
+  const handleClaim = async (expirationAt: string) => {
     setClaimError(null);
-    setClaimingDeliveryAt(deliveryAt);
+    setClaimingExpirationAt(expirationAt);
     try {
       await settlePositionsAsync({
-        deliveryAt: BigInt(deliveryAt),
+        expirationAt: BigInt(expirationAt),
         participant: participantAddress,
       });
     } catch (err) {
@@ -74,9 +74,9 @@ export const PositionsListWidget = ({
       } else if (/User rejected|denied/i.test(raw)) {
         message = "Transaction rejected.";
       }
-      setClaimError({ deliveryAt, message });
+      setClaimError({ expirationAt, message });
     } finally {
-      setClaimingDeliveryAt(null);
+      setClaimingExpirationAt(null);
     }
   };
 
@@ -150,7 +150,7 @@ export const PositionsListWidget = ({
 
   const handleClosePosition = async (groupedPosition: {
     pricePerDay: bigint;
-    deliveryAt: string;
+    expirationAt: string;
     positionType: string;
     amount: number;
     netQuantity: number;
@@ -163,7 +163,7 @@ export const PositionsListWidget = ({
     // Size is taken from the session-level `netQuantity` (the actual signed
     // position size), not `groupedPosition.amount` (a count of how many
     // PositionBookPosition rows fell into this group — usually 1, since
-    // sessions are per-(user, deliveryAt) and one session collapses to one
+    // sessions are per-(user, expirationAt) and one session collapses to one
     // PositionBookPosition).
     const positionSize = Math.abs(groupedPosition.netQuantity);
     const quantity =
@@ -179,31 +179,28 @@ export const PositionsListWidget = ({
 
     // If callback provided, use it to populate place order widget
     if (onClosePosition) {
-      onClosePosition(priceString, Math.abs(quantity), isBuy, Number(groupedPosition.deliveryAt));
+      onClosePosition(priceString, Math.abs(quantity), isBuy, Number(groupedPosition.expirationAt));
       return;
     }
 
     // Otherwise, create order directly (fallback behavior)
     try {
-      // Use deliveryAt directly (it's already a timestamp)
-      const deliveryDate = BigInt(groupedPosition.deliveryAt);
+      // Use expirationAt directly (it's already a timestamp)
+      const expirationAt = BigInt(groupedPosition.expirationAt);
 
       // Use market price for the order
       const closePrice = latestPriceBigInt ?? groupedPosition.pricePerDay;
 
       if (contractMode === "perpetual") {
-        // Perps only needs price and quantity
-        await createOrderAsync({
+        await perpsCreateOrder.createOrderAsync({
           price: closePrice,
           quantity: quantity,
         });
       } else {
-        // Futures needs price, deliveryDate, quantity, and destUrl
-        await createOrderAsync({
+        await futuresCreateOrder.createOrderAsync({
           price: closePrice,
-          deliveryDate: deliveryDate,
+          expirationAt: expirationAt,
           quantity: quantity,
-          destUrl: "",
         });
       }
 
@@ -215,20 +212,20 @@ export const PositionsListWidget = ({
     }
   };
 
-  // Group positions by price (based on position type), deliveryAt, and position type
+  // Group positions by price (based on position type), expirationAt, and position type
   const groupedPositions = positions.reduce(
     (acc, position) => {
       const positionType = getPositionType(position);
       const pricePerDay = getPriceForPosition(position);
-      const key = `${pricePerDay}-${position.deliveryAt}-${positionType}`;
+      const key = `${pricePerDay}-${position.expirationAt}-${positionType}`;
 
       if (!acc[key]) {
         acc[key] = {
           pricePerDay: pricePerDay,
-          deliveryAt: position.deliveryAt,
+          expirationAt: position.expirationAt,
           positionType: positionType,
           amount: 0,
-          // Sessions are per (user, deliveryAt), so every position rolling up
+          // Sessions are per (user, expirationAt), so every position rolling up
           // into this group shares the same session-level net qty. Take it
           // from the first one we see; subsequent ones would just duplicate it.
           netQuantity: position.netQuantity,
@@ -251,7 +248,7 @@ export const PositionsListWidget = ({
       string,
       {
         pricePerDay: bigint;
-        deliveryAt: string;
+        expirationAt: string;
         positionType: string;
         amount: number;
         netQuantity: number;
@@ -301,10 +298,10 @@ export const PositionsListWidget = ({
           <tbody>
             {groupedPositionsArray.map((groupedPosition, index) => (
               <TableRow
-                key={`${groupedPosition.pricePerDay}-${groupedPosition.deliveryAt}-${groupedPosition.positionType}-${index}`}
+                key={`${groupedPosition.pricePerDay}-${groupedPosition.expirationAt}-${groupedPosition.positionType}-${index}`}
               >
                 {(() => {
-                  const matured = isMatured(groupedPosition.deliveryAt);
+                  const matured = isMatured(groupedPosition.expirationAt);
                   const settlementPrice = groupedPosition.settlementPrice;
                   const pricePinned = settlementPrice !== null;
                   // PnL freezes at the pinned settlement price the moment it's recorded.
@@ -314,11 +311,11 @@ export const PositionsListWidget = ({
                     pricePinned ? settlementPrice : null,
                   );
                   const rowClaimError =
-                    claimError?.deliveryAt === groupedPosition.deliveryAt ? claimError.message : null;
-                  const isRowClaiming = claimingDeliveryAt === groupedPosition.deliveryAt;
+                    claimError?.expirationAt === groupedPosition.expirationAt ? claimError.message : null;
+                  const isRowClaiming = claimingExpirationAt === groupedPosition.expirationAt;
                   return (
                     <>
-                      <td style={matured ? { color: "#EF4444" } : undefined}><DateTimeCell timestamp={groupedPosition.deliveryAt} /></td>
+                      <td style={matured ? { color: "#EF4444" } : undefined}><DateTimeCell timestamp={groupedPosition.expirationAt} /></td>
                       <td>
                         <TypeBadge $type={groupedPosition.positionType}>{groupedPosition.positionType}</TypeBadge>
                       </td>
@@ -360,7 +357,7 @@ export const PositionsListWidget = ({
                             onClick={() =>
                               setTradesSelection({
                                 pricePerDay: groupedPosition.pricePerDay,
-                                deliveryAt: groupedPosition.deliveryAt,
+                                expirationAt: groupedPosition.expirationAt,
                                 positionType: groupedPosition.positionType as "Long" | "Short",
                               })
                             }
@@ -384,7 +381,7 @@ export const PositionsListWidget = ({
                             >
                               <span style={{ display: "inline-flex" }}>
                                 <ClaimButton
-                                  onClick={() => handleClaim(groupedPosition.deliveryAt)}
+                                  onClick={() => handleClaim(groupedPosition.expirationAt)}
                                   disabled={isSettling && isRowClaiming}
                                 >
                                   {isRowClaiming ? "Claiming…" : <><span>Claim</span><ClaimHintIcon>?</ClaimHintIcon></>}

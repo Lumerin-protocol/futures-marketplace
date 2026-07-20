@@ -20,7 +20,7 @@ interface TradingHeaderProps {
   totalVolume?: string;
   /// Currently-selected expiration (unix seconds). Used to surface the pinned
   /// cash-settlement price once that expiration has matured and been settled.
-  selectedDeliveryDate?: number;
+  selectedExpirationAt?: number;
 }
 
 const formatVolume = (raw: string): string => {
@@ -37,13 +37,13 @@ export const TradingHeader = ({
   currentPrice,
   fundingRate = "0%",
   totalVolume,
-  selectedDeliveryDate,
+  selectedExpirationAt,
 }: TradingHeaderProps) => {
   const detailedSpecsModal = useModal();
   const { data: contractSpecs } = contractSpecsQuery;
 
   const { data: settlementPriceRaw } = useSettlementPrice(
-    contractMode === "futures" && selectedDeliveryDate ? BigInt(selectedDeliveryDate) : undefined,
+    contractMode === "futures" && selectedExpirationAt ? BigInt(selectedExpirationAt) : undefined,
   );
   // Only show a settlement price once it's been pinned on-chain (non-zero).
   const settlementPrice =

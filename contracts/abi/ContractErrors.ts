@@ -47,11 +47,6 @@ export const contractErrors = [
     "type": "error"
   },
   {
-    "inputs": [],
-    "name": "DeliveryDateShouldBeInTheFuture",
-    "type": "error"
-  },
-  {
     "inputs": [
       {
         "internalType": "address",
@@ -68,39 +63,18 @@ export const contractErrors = [
     "type": "error"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "reserve",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "required",
-        "type": "uint256"
-      }
-    ],
-    "name": "InsufficientContractReserve",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "DeliveryDateExpired",
-    "type": "error"
-  },
-  {
     "inputs": [],
     "name": "UnsupportedTokenDecimals",
     "type": "error"
   },
   {
     "inputs": [],
-    "name": "PositionNotExists",
+    "name": "PositionExpirationNotStartedYet",
     "type": "error"
   },
   {
     "inputs": [],
-    "name": "PositionDestURLNotSet",
+    "name": "PositionNotExists",
     "type": "error"
   },
   {
@@ -138,17 +112,7 @@ export const contractErrors = [
   },
   {
     "inputs": [],
-    "name": "PositionDeliveryExpired",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "StaleData",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "OnlyValidatorOrPositionParticipant",
     "type": "error"
   },
   {
@@ -163,17 +127,17 @@ export const contractErrors = [
   },
   {
     "inputs": [],
+    "name": "OrderNotBelongToUser",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "MarginBreach",
     "type": "error"
   },
   {
     "inputs": [],
-    "name": "DeliveryNotFinishedYet",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "DeliveryDateNotAvailable",
+    "name": "ExpirationDateNotAvailable",
     "type": "error"
   },
   {
@@ -195,11 +159,6 @@ export const contractErrors = [
       }
     ],
     "name": "ERC20InvalidSpender",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "CollateralTokenMismatch",
     "type": "error"
   },
   {
@@ -231,7 +190,12 @@ export const contractErrors = [
   },
   {
     "inputs": [],
-    "name": "TransferDisabled",
+    "name": "ArrayLengthMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ExpirationDateShouldBeInTheFuture",
     "type": "error"
   },
   {
@@ -288,11 +252,6 @@ export const contractErrors = [
   },
   {
     "inputs": [],
-    "name": "NothingToWithdraw",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "NotImplemented",
     "type": "error"
   },
@@ -323,17 +282,7 @@ export const contractErrors = [
   },
   {
     "inputs": [],
-    "name": "PositionDeliveryNotExpired",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "UUPSUnauthorizedCallContext",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "OrderNotBelongToParticipant",
     "type": "error"
   },
   {
@@ -391,17 +340,7 @@ export const contractErrors = [
   },
   {
     "inputs": [],
-    "name": "PositionNotBelongToParticipant",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "InvalidInitialization",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "PositionAlreadyPaid",
     "type": "error"
   },
   {
@@ -423,16 +362,6 @@ export const contractErrors = [
       }
     ],
     "name": "ERC20InsufficientAllowance",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "PositionDeliveryNotStartedYet",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "OnlyPositionBuyer",
     "type": "error"
   }
 ] as const;

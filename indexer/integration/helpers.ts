@@ -4,33 +4,33 @@ import type { EntityFields } from "matchstick-ts";
 
 /**
  * Mirrors `userDeliveryPointerId` in `src/ids.ts`:
- *   20-byte address ++ 32-byte big-endian deliveryAt
+ *   20-byte address ++ 32-byte big-endian expirationAt
  *
  * Full BigInt range — does NOT truncate past the i32 horizon (Jan 2038).
  */
-export function pointerId(user: Hex, deliveryAt: bigint): Hex {
-  const tail = `0x${deliveryAt.toString(16).padStart(64, "0")}` as Hex;
+export function pointerId(user: Hex, expirationAt: bigint): Hex {
+  const tail = `0x${expirationAt.toString(16).padStart(64, "0")}` as Hex;
   return concatHex([user, tail]).toLowerCase() as Hex;
 }
 
 /**
  * Mirrors `futuresExpirationId` in `src/ids.ts`:
- *   32-byte big-endian encoding of the expiration timestamp (deliveryAt).
+ *   32-byte big-endian encoding of the expiration timestamp (expirationAt).
  */
-export function futuresExpirationId(deliveryAt: bigint): Hex {
-  return `0x${deliveryAt.toString(16).padStart(64, "0")}`.toLowerCase() as Hex;
+export function futuresExpirationId(expirationAt: bigint): Hex {
+  return `0x${expirationAt.toString(16).padStart(64, "0")}`.toLowerCase() as Hex;
 }
 
 /**
  * Mirrors `priceLevelId` in `src/ids.ts`:
- *   "{deliveryAt}-{price}-bid" | "{deliveryAt}-{price}-ask"
+ *   "{expirationAt}-{price}-bid" | "{expirationAt}-{price}-ask"
  */
 export function priceLevelId(
-  deliveryAt: bigint,
+  expirationAt: bigint,
   price: bigint,
   isBid: boolean,
 ): string {
-  return `${deliveryAt}-${price}-${isBid ? "bid" : "ask"}`;
+  return `${expirationAt}-${price}-${isBid ? "bid" : "ask"}`;
 }
 
 /**
@@ -50,45 +50,6 @@ export function assertBlockNumberMonotonic(
     assert.ok(
       curr >= prev,
       `${label}: blockNumber must be non-decreasing (row ${i - 1}=${prev}, row ${i}=${curr})`,
-    );
-  }
-}
-
-/**
- * Assert that `Lot` lifecycle timestamps form a non-decreasing chain:
- *   createdAt <= updatedAt
- *   createdAt <= paidAt (if paid)
- *   paidAt <= withdrawnAt (if withdrawn)
- *   createdAt <= closedAt (if closed)
- */
-export function assertLotTimestampInvariants(lot: EntityFields): void {
-  const createdAt = BigInt(String(lot.createdAt));
-  const updatedAt = BigInt(String(lot.updatedAt));
-  assert.ok(
-    updatedAt >= createdAt,
-    `Lot.updatedAt (${updatedAt}) must be >= Lot.createdAt (${createdAt})`,
-  );
-
-  if (lot.paidAt != null && String(lot.paidAt) !== "") {
-    const paidAt = BigInt(String(lot.paidAt));
-    assert.ok(
-      paidAt >= createdAt,
-      `Lot.paidAt (${paidAt}) must be >= Lot.createdAt (${createdAt})`,
-    );
-    if (lot.withdrawnAt != null && String(lot.withdrawnAt) !== "") {
-      const withdrawnAt = BigInt(String(lot.withdrawnAt));
-      assert.ok(
-        withdrawnAt >= paidAt,
-        `Lot.withdrawnAt (${withdrawnAt}) must be >= Lot.paidAt (${paidAt})`,
-      );
-    }
-  }
-
-  if (lot.closedAt != null && String(lot.closedAt) !== "") {
-    const closedAt = BigInt(String(lot.closedAt));
-    assert.ok(
-      closedAt >= createdAt,
-      `Lot.closedAt (${closedAt}) must be >= Lot.createdAt (${createdAt})`,
     );
   }
 }

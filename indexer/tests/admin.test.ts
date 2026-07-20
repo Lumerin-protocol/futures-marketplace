@@ -22,7 +22,7 @@ function buildConfigParam(
   liquidationFee: BigInt,
   minimumPriceIncrement: BigInt,
   liquidationMarginPercent: i32,
-  futureDeliveryDatesCount: i32,
+  futureExpirationDatesCount: i32,
   hashrateOracle: Address,
   marginEngine: Address,
 ): ethereum.EventParam {
@@ -35,7 +35,7 @@ function buildConfigParam(
     ethereum.Value.fromUnsignedBigInt(liquidationFee),
     ethereum.Value.fromUnsignedBigInt(minimumPriceIncrement),
     ethereum.Value.fromI32(liquidationMarginPercent),
-    ethereum.Value.fromI32(futureDeliveryDatesCount),
+    ethereum.Value.fromI32(futureExpirationDatesCount),
     ethereum.Value.fromAddress(hashrateOracle),
     ethereum.Value.fromAddress(marginEngine),
   ]);
@@ -70,7 +70,7 @@ describe("handleConfigUpdated", () => {
     assert.fieldEquals("Futures", "0", "liquidationFee", "99");
     assert.fieldEquals("Futures", "0", "minimumPriceIncrement", "100");
     assert.fieldEquals("Futures", "0", "liquidationMarginPercent", "80");
-    assert.fieldEquals("Futures", "0", "futureDeliveryDatesCount", "4");
+    assert.fieldEquals("Futures", "0", "futureExpirationDatesCount", "4");
     assert.fieldEquals("Futures", "0", "hashrateOracleAddress", userAddress(12).toHexString());
     assert.fieldEquals("Futures", "0", "marginEngineAddress", userAddress(13).toHexString());
   });

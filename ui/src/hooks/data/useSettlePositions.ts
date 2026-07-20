@@ -1,34 +1,32 @@
-import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
-import { useQueryClient } from "@tanstack/react-query";
+import { usePublicClient, useWalletClient, useWriteContract } from "wagmi";
 import { getContract } from "viem";
+import { useQueryClient } from "@tanstack/react-query";
 import { FuturesAbi } from "../../abi/Futures";
 import { waitForBlockNumberPositionBook } from "./getUserFuturesPositions";
-import { HISTORICAL_ORDERS_QK } from "./useHistoricalOrders";
 import { FUTURES_POSITION_HISTORY_QK } from "./useFuturesPositionHistory";
-import { USER_FUTURES_TRADES_QK } from "./useUserFuturesTrades";
 
 interface SettlePositionsProps {
-  /// Expiration (deliveryAt) whose matured positions should be settled.
-  deliveryAt: bigint;
-  /// Participant whose positions to settle. Defaults to the connected wallet.
+  /// Expiration (expirationAt) whose matured aggregate position should be settled.
+  expirationAt: bigint;
+  /// Participant whose position to settle. Defaults to the connected wallet.
   participant?: `0x${string}`;
 }
 
 /**
- * Manual claim for a matured-but-unsettled expiration (used when the keeper is
- * inactive). Looks up the participant's open positions at `deliveryAt` via
- * `getPositionsByParticipantDeliveryDate` and cash-settles them in one
- * permissionless `settlePositions` tx, pinning the settlement price on first call.
- * Refetches the position book and waits for the indexer to catch up.
+ * Cash-settles the participant's aggregate net position at `expirationAt` via
+ * permissionless `settlePosition(user, expirationAt)`, pinning the settlement
+ * price on first call. Refetches the position book and waits for the indexer.
  */
 export function useSettlePositions() {
-  const { writeContractAsync, isPending, isError, error, data: hash } = useWriteContract();
+  const { writeContractAsync, isPending } = useWriteContract();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
   const queryClient = useQueryClient();
 
-  const settlePositionsAsync = async ({ deliveryAt, participant }: SettlePositionsProps) => {
-    if (!writeContractAsync || !publicClient || !walletClient) return;
+  const settlePositionsAsync = async ({ expirationAt, participant }: SettlePositionsProps) => {
+    if (!writeContractAsync || !publicClient || !walletClient) {
+      throw new Error("Wallet not ready");
+    }
 
     const account = participant ?? walletClient.account.address;
 
@@ -38,37 +36,26 @@ export function useSettlePositions() {
       client: publicClient,
     });
 
-    const positionIds = await futuresContract.read.getPositionsByParticipantDeliveryDate([
-      account,
-      deliveryAt,
-    ]);
-
-    if (positionIds.length === 0) {
-      throw new Error("No open positions to settle for this expiration");
+    const pos = await futuresContract.read.getUserPosition([account, expirationAt]);
+    if (pos.netQuantity === 0n) {
+      throw new Error("No open position to settle for this expiration");
     }
 
-    const req = await futuresContract.simulate.settlePositions([positionIds], {
+    const req = await futuresContract.simulate.settlePosition([account, expirationAt], {
       account: walletClient.account.address,
     });
-    const tx = await writeContractAsync(req.request);
+    const hash = await writeContractAsync(req.request);
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
     await waitForBlockNumberPositionBook(receipt.blockNumber, queryClient);
 
-    // Settling closes positions and writes settlement history — reset the
-    // futures history tables back to their newest page.
-    queryClient.resetQueries({ queryKey: [HISTORICAL_ORDERS_QK, account] });
     queryClient.resetQueries({ queryKey: [FUTURES_POSITION_HISTORY_QK, account] });
-    queryClient.resetQueries({ queryKey: [USER_FUTURES_TRADES_QK, account] });
 
-    return tx;
+    return receipt;
   };
 
   return {
     settlePositionsAsync,
     isPending,
-    isError,
-    error,
-    hash,
   };
 }

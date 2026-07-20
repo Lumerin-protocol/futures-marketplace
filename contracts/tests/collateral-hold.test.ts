@@ -7,21 +7,21 @@ import { quantizePrice, refreshHashprice } from "./utils.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
-// Opens a matched lot (seller short / buyer long) at `entryPrice` on the first delivery date.
+// Opens a matched lot (seller short / buyer long) at `entryPrice` on the first expiration date.
 async function openLot(
   data: FuturesFixture,
   entryPrice: bigint,
-  deliveryDate: bigint,
+  expirationAt: bigint,
 ) {
   const { futures } = data.contracts;
   const { seller, buyer, pc } = data.accounts;
-  await futures.write.createOrder([entryPrice, deliveryDate, "", -1], { account: seller.account });
-  const txHash = await futures.write.createOrder([entryPrice, deliveryDate, "", 1], {
+  await futures.write.createOrder([entryPrice, expirationAt, -1], { account: seller.account });
+  const txHash = await futures.write.createOrder([entryPrice, expirationAt, 1], {
     account: buyer.account,
   });
   const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
-  const [created] = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "LotCreated" });
-  return created.args.lotId;
+  const [matched] = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "OrderMatched" });
+  return matched.args.expirationAt as bigint;
 }
 
 // The buyer (long at a price well above the ~$3.44 oracle mark) is the loser: at settlement
@@ -75,7 +75,7 @@ describe("Futures collateral hold until settlement", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
-    const lotId = await openLot(data, entry, deliveryDate);
+    await openLot(data, entry, deliveryDate);
 
     await refreshHashprice(hashrateOracle, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
@@ -90,12 +90,19 @@ describe("Futures collateral hold until settlement", () => {
 
     const sellerBefore = await collateralVault.read.balanceOf([seller.account.address]);
 
-    // Settle (permissionless). Winner is fully paid; no BadDebt is emitted.
-    const receipt = await pc.waitForTransactionReceipt({
-      hash: await futures.write.settlePosition([lotId], { account: validator.account }),
+    // Settle both unilateral aggregates (permissionless). Winner is fully paid; no BadDebt.
+    const buyerReceipt = await pc.waitForTransactionReceipt({
+      hash: await futures.write.settlePosition([buyer.account.address, deliveryDate], {
+        account: validator.account,
+      }),
     });
-    const badDebt = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "BadDebt" });
-    assert.equal(badDebt.length, 0);
+    assert.equal(
+      parseEventLogs({ logs: buyerReceipt.logs, abi: futures.abi, eventName: "BadDebt" }).length,
+      0,
+    );
+    await futures.write.settlePosition([seller.account.address, deliveryDate], {
+      account: validator.account,
+    });
 
     const sellerAfter = await collateralVault.read.balanceOf([seller.account.address]);
     assert.equal(sellerAfter - sellerBefore, expectedLoss); // winner gets the full profit
@@ -113,7 +120,7 @@ describe("Futures collateral hold until settlement", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
-    const lotId = await openLot(data, entry, deliveryDate);
+    await openLot(data, entry, deliveryDate);
 
     const deltaOpen = await futures.read.getNetPositionDelta([buyer.account.address]);
     assert.notEqual(deltaOpen, 0n); // long counted while open
@@ -124,8 +131,13 @@ describe("Futures collateral hold until settlement", () => {
     assert.equal(await futures.read.getNetPositionDelta([buyer.account.address]), deltaOpen);
     assert.equal(await futures.read.settlementPrice([deliveryDate]), 0n);
 
-    // Settle (lazy-pins), then the date is removed from the active set: margin returns to baseline.
-    await futures.write.settlePosition([lotId], { account: validator.account });
+    // Settle both sides (lazy-pins); dates leave the active set and margin returns to baseline.
+    await futures.write.settlePosition([buyer.account.address, deliveryDate], {
+      account: validator.account,
+    });
+    await futures.write.settlePosition([seller.account.address, deliveryDate], {
+      account: validator.account,
+    });
     assert.equal(await futures.read.getNetPositionDelta([buyer.account.address]), 0n);
     assert.equal(await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]), 0n);
   });

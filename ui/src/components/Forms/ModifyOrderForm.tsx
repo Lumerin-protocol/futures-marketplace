@@ -146,22 +146,22 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
         return false;
       }
 
-      // Check for conflicting orders (opposite action, same price, same delivery date)
+      // Check for conflicting orders (opposite action, same price, same expiration date)
       if (participantData?.orders) {
-        const deliveryDateValue = order.deliveryAt;
+        const expirationAtValue = order.expirationAt;
         const conflictingOrder = participantData.orders.find(
           (existingOrder) =>
             existingOrder.isActive &&
             existingOrder.isBuy !== isBuy && // Opposite action
             existingOrder.pricePerDay === newPriceInWei &&
-            existingOrder.deliveryAt === deliveryDateValue &&
+            existingOrder.expirationAt === expirationAtValue &&
             existingOrder.id !== order.id, // Exclude the current order being modified
         );
 
         if (conflictingOrder) {
           const oppositeAction = isBuy ? "Sell" : "Buy";
           alert(
-            `Cannot modify order to price ${newPrice.toFixed(2)} USDC. You already have an active ${oppositeAction} order at the same price and delivery date. Please close or modify the existing order first.`,
+            `Cannot modify order to price ${newPrice.toFixed(2)} USDC. You already have an active ${oppositeAction} order at the same price and expiration date. Please close or modify the existing order first.`,
           );
           return false;
         }
@@ -246,7 +246,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-300">Expiration Date:</span>
-                    <span className="text-white">{new Date(Number(order.deliveryAt) * 1000).toLocaleString()}</span>
+                    <span className="text-white">{new Date(Number(order.expirationAt) * 1000).toLocaleString()}</span>
                   </div>
                   {renderChange("Price", `${oldPrice.toFixed(2)} USDC`, `${newPrice.toFixed(2)} USDC`)}
                   {renderChange("Quantity", `${oldQuantity} units`, `${newQuantity} units`)}
@@ -280,9 +280,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
                 oldQuantity: oldSignedQuantity,
                 newPrice: newPriceBigInt,
                 newQuantity: newSignedQuantity,
-                // Physical delivery is retired; createOrder still takes a destURL arg.
-                destUrl: "",
-                deliveryDate: order.deliveryAt,
+                expirationAt: order.expirationAt,
               });
 
               return {
@@ -292,7 +290,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
             },
             postConfirmation: async (receipt: TransactionReceipt) => {
               // Wait for block number to ensure indexer has updated
-              await waitForOrderBookBlockNumber(receipt.blockNumber, qc, contractMode, Number(order.deliveryAt));
+              await waitForOrderBookBlockNumber(receipt.blockNumber, qc, contractMode, Number(order.expirationAt));
 
               // Refetch order book, positions, and participant data
               await Promise.all([
