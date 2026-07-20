@@ -91,7 +91,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private immutable _decimals;
 
     // constants
-    string public constant VERSION = "3.0.0";
+    string public constant VERSION = "3.1.0";
     uint256 public constant ORACLE_UNIT_HPS_DAY = 100 * 1e12;
     uint256 public constant CONTRACT_SIZE_HPS_DAY = 1e15;
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
@@ -101,21 +101,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     // ── Structs ───────────────────────────────────────────────────────────────
 
-    /// @notice Resting-order storage (layout-preserving vs v2: `quantityAbs` reuses the `destURL` slot).
+    /// @notice Resting order (also the public `getOrder` return type). Signed remaining qty; 0 = empty.
     struct Order {
-        bool isBuy;
-        address participant;
-        uint256 quantityAbs; // remaining abs qty; 0 = closed/empty
-        uint256 price; // was pricePerDay
-        uint256 expirationAt;
-        uint256 createdAt;
-    }
-
-    /// @notice Public/ABI order shape (signed remaining quantity).
-    struct OrderView {
         address participant;
         uint256 price;
-        int256 quantity;
+        int256 quantity; // >0 bid/long, <0 ask/short
         uint256 expirationAt;
     }
 
@@ -303,8 +293,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             if (participantPriceOrderIds.length() > 0) {
                 bytes32 ownId = participantPriceOrderIds.at(0);
                 Order memory ownOrder = orders[ownId];
-                if (ownOrder.participant == _participant && ownOrder.isBuy != isBuy && ownOrder.quantityAbs > 0) {
-                    uint256 cancelledAbs = ownOrder.quantityAbs;
+                if (ownOrder.participant == _participant && (ownOrder.quantity > 0) != isBuy && ownOrder.quantity != 0) {
+                    uint256 cancelledAbs = _abs(ownOrder.quantity);
                     _removeRestingOrder(ownId, ownOrder);
                     emit OrderCancelled(ownId, _participant);
                     remainingAbs -= cancelledAbs < remainingAbs ? cancelledAbs : remainingAbs;
@@ -315,7 +305,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             (, uint256 headIdUint) = oppositeQueue.getNextNode(0);
             bytes32 headId = bytes32(headIdUint);
             Order memory head = orders[headId];
-            if (head.participant == address(0) || head.quantityAbs == 0) {
+            if (head.participant == address(0) || head.quantity == 0) {
                 // Defensive: drop corrupt/empty head
                 oppositeQueue.remove(headIdUint);
                 continue;
@@ -325,11 +315,12 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             if (head.participant == _participant) {
                 _removeRestingOrder(headId, head);
                 emit OrderCancelled(headId, _participant);
-                remainingAbs -= head.quantityAbs < remainingAbs ? head.quantityAbs : remainingAbs;
+                remainingAbs -= _abs(head.quantity) < remainingAbs ? _abs(head.quantity) : remainingAbs;
                 continue;
             }
 
-            uint256 fill = head.quantityAbs < remainingAbs ? head.quantityAbs : remainingAbs;
+            uint256 headAbs = _abs(head.quantity);
+            uint256 fill = headAbs < remainingAbs ? headAbs : remainingAbs;
             int256 takerFillQty = isBuy ? int256(fill) : -int256(fill);
 
             _applyFill(head.participant, -takerFillQty, _price, _expirationAt);
@@ -340,13 +331,13 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             _chargeMatchFees(head.participant, _participant, makerFeeAmt, takerFeeAmt);
             _notifyFill(head.participant, _participant, _price * fill, int256(makerFeeAmt), takerFeeAmt, _price);
 
-            uint256 newHeadAbs = head.quantityAbs - fill;
+            uint256 newHeadAbs = headAbs - fill;
             if (newHeadAbs == 0) {
                 _removeRestingOrder(headId, head);
                 emit OrderUpdated(headId, head.participant, 0);
             } else {
-                orders[headId].quantityAbs = newHeadAbs;
-                int256 newMakerQty = head.isBuy ? int256(newHeadAbs) : -int256(newHeadAbs);
+                int256 newMakerQty = head.quantity > 0 ? int256(newHeadAbs) : -int256(newHeadAbs);
+                orders[headId].quantity = newMakerQty;
                 emit OrderUpdated(headId, head.participant, newMakerQty);
             }
 
@@ -379,12 +370,10 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
                 revert MaxOrdersPerParticipantReached();
             }
             orders[orderId] = Order({
-                isBuy: isBuy,
                 participant: _participant,
-                quantityAbs: remainingAbs,
                 price: _price,
-                expirationAt: _expirationAt,
-                createdAt: block.timestamp
+                quantity: remainingQty,
+                expirationAt: _expirationAt
             });
             StructuredLinkedList.List storage orderQueue = _expirationAtPriceOrderIds(_expirationAt, _price, isBuy);
             _addOrderToQueue(orderQueue, orderId, _expirationAt, _price, isBuy);
@@ -467,7 +456,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     function cancelOrder(bytes32 _orderId) external {
         Order memory order = orders[_orderId];
         if (order.participant != _msgSender()) revert OrderNotBelongToSender();
-        if (order.quantityAbs == 0) revert OrderNotExists();
+        if (order.quantity == 0) revert OrderNotExists();
         _removeRestingOrder(_orderId, order);
         emit OrderCancelled(_orderId, order.participant);
     }
@@ -475,7 +464,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @notice Permissionlessly close a resting order whose `expirationAt` is in the past.
     function removeOutdatedOrder(bytes32 _orderId) external {
         Order memory order = orders[_orderId];
-        if (order.participant == address(0) || order.quantityAbs == 0) revert OrderNotExists();
+        if (order.participant == address(0) || order.quantity == 0) revert OrderNotExists();
         if (order.expirationAt >= block.timestamp) revert OrderNotExpired();
         _removeRestingOrder(_orderId, order);
         emit OrderCancelled(_orderId, order.participant);
@@ -483,8 +472,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     function _removeRestingOrder(bytes32 orderId, Order memory order) private {
         StructuredLinkedList.List storage orderIndexId =
-            _expirationAtPriceOrderIds(order.expirationAt, order.price, order.isBuy);
-        _removeOrderFromQueue(orderIndexId, orderId, order.expirationAt, order.price, order.isBuy);
+            _expirationAtPriceOrderIds(order.expirationAt, order.price, order.quantity > 0);
+        _removeOrderFromQueue(orderIndexId, orderId, order.expirationAt, order.price, order.quantity > 0);
         participantOrderIdsIndex[order.participant].remove(orderId);
         participantExpirationAtPriceOrderIdsIndex[order.participant][order.expirationAt][order.price].remove(orderId);
         delete orders[orderId];
@@ -673,7 +662,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         if (!_underwater(_user)) revert NotLiquidatable();
         Order memory order = orders[_orderId];
         if (order.participant != _user) revert OrderNotBelongToUser();
-        if (order.quantityAbs == 0) revert OrderNotExists();
+        if (order.quantity == 0) revert OrderNotExists();
         _doLiquidateOrder(_user, _orderId, order);
     }
 
@@ -859,10 +848,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         return _roundToNearest(rebased, minimumPriceIncrement);
     }
 
-    function getOrder(bytes32 _orderId) external view returns (OrderView memory) {
-        Order memory o = orders[_orderId];
-        int256 qty = o.quantityAbs == 0 ? int256(0) : (o.isBuy ? int256(o.quantityAbs) : -int256(o.quantityAbs));
-        return OrderView({ participant: o.participant, price: o.price, quantity: qty, expirationAt: o.expirationAt });
+    function getOrder(bytes32 _orderId) external view returns (Order memory) {
+        return orders[_orderId];
     }
 
     function getUserOrders(address _user) external view returns (bytes32[] memory) {
@@ -893,7 +880,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     /// @notice Minimum margin locked by resting orders (token decimals).
-    /// @dev Maintenance × quantityAbs per order, minus mark PnL on the resting qty.
+    /// @dev Maintenance × |qty| per order, minus mark PnL on the resting qty.
     function getOrderMargin(address _participant) public view returns (uint256) {
         EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[_participant];
         uint256 len = _orders.length();
@@ -903,10 +890,10 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         uint256 marginPct = liquidationMarginPercent;
         for (uint256 i = 0; i < len; i++) {
             Order memory order = orders[_orders.at(i)];
-            if (order.expirationAt < block.timestamp || order.quantityAbs == 0) continue;
-            int256 qty = order.isBuy ? int256(order.quantityAbs) : -int256(order.quantityAbs);
-            uint256 maintenanceMargin = order.price * marginPct / 100 * order.quantityAbs;
-            int256 pnl = (int256(marketPrice) - int256(order.price)) * qty;
+            if (order.expirationAt < block.timestamp || order.quantity == 0) continue;
+            uint256 absQty = _abs(order.quantity);
+            uint256 maintenanceMargin = order.price * marginPct / 100 * absQty;
+            int256 pnl = (int256(marketPrice) - int256(order.price)) * order.quantity;
             total += clamp(int256(maintenanceMargin) - pnl);
         }
         return total;
@@ -968,7 +955,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         return out;
     }
 
-    /// @notice Sum of resting `quantityAbs` at one (expirationAt, price, side).
+    /// @notice Sum of resting abs quantity at one (expirationAt, price, side).
     function getQuantityAtPrice(uint256 _expirationAt, uint256 _price, bool _isBid) external view returns (uint256) {
         StructuredLinkedList.List storage queue = _isBid
             ? expirationAtPriceOrdersLongIdQueue[_expirationAt][_price]
@@ -980,7 +967,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
         (, uint256 nodeId) = queue.getNextNode(0);
         for (uint256 i = 0; i < size && nodeId != 0; i++) {
-            total += orders[bytes32(nodeId)].quantityAbs;
+            total += _abs(orders[bytes32(nodeId)].quantity);
             (, nodeId) = queue.getNextNode(nodeId);
         }
         return total;

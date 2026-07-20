@@ -995,7 +995,7 @@ export const FuturesAbi = [
             "type": "uint256"
           }
         ],
-        "internalType": "struct Futures.OrderView",
+        "internalType": "struct Futures.Order",
         "name": "",
         "type": "tuple"
       }
