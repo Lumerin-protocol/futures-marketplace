@@ -1,6 +1,7 @@
 import { type FC, useMemo } from "react";
 import { useAccount } from "wagmi";
 import Tooltip from "@mui/material/Tooltip";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import styled from "@mui/material/styles/styled";
 import { tokens } from "../../styles/tokens";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
@@ -44,6 +45,7 @@ const formatRate = (weight?: bigint, scale?: bigint) => {
 
 export const Leaderboard: FC = () => {
   const { address, isConnected } = useAccount();
+  const isMobile = useMediaQuery("(max-width: 600px)", { noSsr: true });
   const { wMaker, wTaker, weightScale } = usePointsHookWeights();
 
   const { data: rawLeaderboard = [], isLoading: isLeaderboardLoading } = usePointsLeaderboard(20);
@@ -138,7 +140,10 @@ export const Leaderboard: FC = () => {
                           <Tooltip title={entry.address}>
                             <WalletCell>
                               <WalletAvatar address={entry.address} />
-                              {truncateAddress(entry.address, AddressLength.LONG)}
+                              {truncateAddress(
+                                entry.address,
+                                isMobile ? AddressLength.SHORT : AddressLength.LONG,
+                              )}
                               {isCurrentUser && <YouTag>You</YouTag>}
                             </WalletCell>
                           </Tooltip>
@@ -283,6 +288,12 @@ const ScoreContent = styled("div")`
   align-items: center;
   flex-wrap: wrap;
   gap: 1.5rem;
+
+  @media (max-width: 600px) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
 `;
 
 const ScoreBlock = styled("div")`
@@ -290,12 +301,26 @@ const ScoreBlock = styled("div")`
   flex-direction: column;
   gap: 0.35rem;
   min-width: 90px;
+
+  @media (max-width: 600px) {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+    gap: 1rem;
+  }
 `;
 
 const ScoreDivider = styled("div")`
   width: 1px;
   align-self: stretch;
   background: ${tokens.border.default};
+
+  @media (max-width: 600px) {
+    width: 100%;
+    height: 1px;
+    align-self: auto;
+  }
 `;
 
 const ScoreLabel = styled("span")`
@@ -347,6 +372,10 @@ const TableContainer = styled("div")`
     background: ${tokens.overlay.white30};
     border-radius: 2px;
   }
+
+  @media (max-width: 600px) {
+    overflow-x: hidden;
+  }
 `;
 
 const Table = styled("table")`
@@ -374,6 +403,16 @@ const Table = styled("table")`
     font-size: 0.875rem;
     color: ${tokens.text.onDark};
     border-bottom: 1px solid ${tokens.overlay.white05};
+  }
+
+  @media (max-width: 600px) {
+    min-width: 0;
+
+    th,
+    td {
+      padding: 0.5rem 0.35rem;
+      font-size: 0.75rem;
+    }
   }
 `;
 
@@ -411,6 +450,11 @@ const RankBadge = styled("span")<{ $rank: number }>`
         return tokens.overlay.white05;
     }
   }};
+
+  @media (max-width: 600px) {
+    min-width: 26px;
+    padding: 0.15rem 0.3rem;
+  }
 `;
 
 const WalletCell = styled("span")`
@@ -431,6 +475,16 @@ const WalletCell = styled("span")`
     box-shadow: none !important;
     filter: none !important;
     --wui-box-shadow: none;
+  }
+
+  @media (max-width: 600px) {
+    gap: 0.3rem;
+
+    wui-avatar {
+      width: 18px !important;
+      height: 18px !important;
+      margin-right: 0;
+    }
   }
 `;
 

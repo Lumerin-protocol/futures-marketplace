@@ -1,5 +1,5 @@
 import styled from "@mui/material/styles/styled";
-import { Link, useLocation } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { tokens } from "../styles/tokens";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
@@ -21,9 +21,17 @@ const Web3ProviderLazy = safeLazy(() => import("../Web3Provider").then((module) 
 
 export const Header = (props: Props) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const isLeaderboardActive = location.pathname === PathName.Leaderboard;
 
+  // On the leaderboard the logo doubles as a "back to trading" control so users
+  // can leave the page even when the brand text fills the available width;
+  // elsewhere it links out to the Lumerin site.
   const handleLogoClick = () => {
+    if (isLeaderboardActive) {
+      navigate(PathName.Landing);
+      return;
+    }
     window.open("http://lumerin.io/", "_blank", "noopener,noreferrer");
   };
 
@@ -32,20 +40,22 @@ export const Header = (props: Props) => {
       <TitleWrapper>
         <Logo src={LogoIcon} alt="HPDX" onClick={handleLogoClick} />
         <BrandName onClick={handleLogoClick}>
-          <FullBrand>
-            HashPower Derivatives Exchange{isLeaderboardActive ? " Leaderboard" : ""}
-          </FullBrand>
-          <ShortBrand>HPDX{isLeaderboardActive ? " Leaderboard" : ""}</ShortBrand>
+          {isLeaderboardActive ? (
+            <LeaderboardTitle>Leaderboard</LeaderboardTitle>
+          ) : (
+            <>
+              <FullBrand>HashPower Derivatives Exchange</FullBrand>
+              <ShortBrand>HPDX</ShortBrand>
+            </>
+          )}
         </BrandName>
       </TitleWrapper>
       <Nav>
         {isLeaderboardActive ? (
-          <NavLink to={PathName.Landing} $active={false} aria-label="Back to Trading">
-            <NavIcon>
-              <ArrowBackIcon fontSize="small" />
-            </NavIcon>
-            <NavLabel>Back to Trading</NavLabel>
-          </NavLink>
+          <BackButton to={PathName.Landing} aria-label="Back to Trading">
+            <ArrowBackIcon fontSize="small" />
+            Back
+          </BackButton>
         ) : (
           <NavLink to={PathName.Leaderboard} $active={false} aria-label="Leaderboard">
             <NavIcon>
@@ -74,6 +84,37 @@ const Nav = styled("nav")`
   align-items: center;
   gap: 1.5rem;
   margin-left: auto;
+`;
+
+const BackButton = styled(Link)`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  height: 48px;
+  border-radius: ${tokens.radius.md};
+  padding: 0 1rem;
+  font-family: "Inter", sans-serif;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  color: ${tokens.text.onDark};
+  background: none;
+  border: 1px solid ${tokens.border.muted05};
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 150ms ease, border-color 150ms ease;
+
+  &:hover {
+    background: ${tokens.overlay.white08};
+    border-color: ${tokens.text.secondary};
+  }
+`;
+
+const LeaderboardTitle = styled("span")`
+  @media (max-width: 768px) {
+    display: none;
+  }
 `;
 
 const NavLink = styled(Link)<{ $active: boolean }>`
