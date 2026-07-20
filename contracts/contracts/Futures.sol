@@ -944,12 +944,12 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         return expirationDatesArray;
     }
 
-    /// @deprecated Use `getOrderBookPrices` (same shape as perps).
+    /// @notice Deprecated — use `getOrderBookPrices` (same shape as perps). Kept for ABI compat.
     function getBidPrices(uint256 _expirationAt, uint256 _maxLevels) external view returns (uint256[] memory) {
         return _activePricesSlice(activeBidPrices[_expirationAt], _maxLevels);
     }
 
-    /// @deprecated Use `getOrderBookPrices` (same shape as perps).
+    /// @notice Deprecated — use `getOrderBookPrices` (same shape as perps). Kept for ABI compat.
     function getAskPrices(uint256 _expirationAt, uint256 _maxLevels) external view returns (uint256[] memory) {
         return _activePricesSlice(activeAskPrices[_expirationAt], _maxLevels);
     }
