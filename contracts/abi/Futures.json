@@ -918,54 +918,6 @@
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_expirationAt",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_maxLevels",
-        "type": "uint256"
-      }
-    ],
-    "name": "getAskPrices",
-    "outputs": [
-      {
-        "internalType": "uint256[]",
-        "name": "",
-        "type": "uint256[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_expirationAt",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_maxLevels",
-        "type": "uint256"
-      }
-    ],
-    "name": "getBidPrices",
-    "outputs": [
-      {
-        "internalType": "uint256[]",
-        "name": "",
-        "type": "uint256[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [],
     "name": "getExpirationDates",
     "outputs": [

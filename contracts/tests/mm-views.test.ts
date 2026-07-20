@@ -96,16 +96,6 @@ describe("MM views", () => {
     assert.deepEqual(asks, [ask1, ask2]);
     assert.deepEqual(bids, [bid1]);
 
-    // Deprecated split getters still mirror getOrderBookPrices.
-    assert.deepEqual(
-      [...(await futures.read.getAskPrices([dd, 50n]))].sort((a, b) => Number(a - b)),
-      asks,
-    );
-    assert.deepEqual(
-      [...(await futures.read.getBidPrices([dd, 50n]))].sort((a, b) => Number(a - b)),
-      bids,
-    );
-
     assert.equal(await futures.read.getQuantityAtPrice([dd, ask1, false]), 2n);
     assert.equal(await futures.read.getQuantityAtPrice([dd, ask2, false]), 1n);
     assert.equal(await futures.read.getQuantityAtPrice([dd, bid1, true]), 1n);
