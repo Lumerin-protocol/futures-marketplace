@@ -1,7 +1,0 @@
-{
-  "name": "futures-marketplace-abi",
-  "type": "module",
-  "exports": {
-    "./*": "./*"
-  }
-}
