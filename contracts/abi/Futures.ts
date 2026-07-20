@@ -755,6 +755,19 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "EXPIRATION_INTERVAL_DAYS",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "MAX_ORACLE_STALENESS",
     "outputs": [
       {
@@ -826,6 +839,19 @@ export const FuturesAbi = [
         "internalType": "string",
         "name": "",
         "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "_gap7",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
       }
     ],
     "stateMutability": "view",
@@ -956,7 +982,7 @@ export const FuturesAbi = [
         "type": "uint8"
       }
     ],
-    "stateMutability": "view",
+    "stateMutability": "pure",
     "type": "function"
   },
   {
@@ -969,7 +995,7 @@ export const FuturesAbi = [
         "type": "uint8"
       }
     ],
-    "stateMutability": "view",
+    "stateMutability": "pure",
     "type": "function"
   },
   {
@@ -1390,7 +1416,7 @@ export const FuturesAbi = [
       },
       {
         "internalType": "uint8",
-        "name": "_expirationIntervalDays",
+        "name": "",
         "type": "uint8"
       },
       {
