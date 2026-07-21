@@ -139,7 +139,7 @@ export const Leaderboard: FC = () => {
                         <td>
                           <Tooltip title={entry.address}>
                             <WalletCell>
-                              <WalletAvatar address={entry.address} />
+                              {!isMobile && <WalletAvatar address={entry.address} />}
                               {truncateAddress(
                                 entry.address,
                                 isMobile ? AddressLength.SHORT : AddressLength.LONG,
@@ -479,12 +479,6 @@ const WalletCell = styled("span")`
 
   @media (max-width: 600px) {
     gap: 0.3rem;
-
-    wui-avatar {
-      width: 18px !important;
-      height: 18px !important;
-      margin-right: 0;
-    }
   }
 `;
 
