@@ -3,11 +3,12 @@ export function quantizePrice(price: bigint, priceLadderStep: bigint) {
 }
 
 /// Minimal subset of `PriceFeedMock` used by tests to scale the latest hashprice.
+/// Write methods are intentionally loose so Hardhat/viem contract typings assign cleanly.
 type ScalablePriceFeed = {
   read: { latestRoundData: () => Promise<readonly [bigint, bigint, bigint, bigint, bigint]> };
   write: {
-    setPrice: (args: readonly [bigint]) => Promise<`0x${string}`>;
-    setRound: (args: readonly [bigint, bigint, bigint, bigint, bigint]) => Promise<`0x${string}`>;
+    setPrice: (args: readonly [bigint], ...rest: never[]) => Promise<unknown>;
+    setRound: (args: readonly [bigint, bigint, bigint, bigint, bigint], ...rest: never[]) => Promise<unknown>;
   };
 };
 
