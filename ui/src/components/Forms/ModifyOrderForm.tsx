@@ -272,12 +272,8 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
               const newPriceBigInt = BigInt(Math.round(parseFloat(formValues.price) * PAYMENT_TOKEN_SCALE_NUM));
               const newSignedQuantity = getSignedQuantity();
 
-              // Determine old quantity with sign
-              const oldSignedQuantity = isBuy ? currentQuantity : -currentQuantity;
-
               const txhash = await modifyOrderAsync({
-                oldPrice: order.pricePerDay,
-                oldQuantity: oldSignedQuantity,
+                orderIds: orderIds.map((id) => id as `0x${string}`),
                 newPrice: newPriceBigInt,
                 newQuantity: newSignedQuantity,
                 expirationAt: order.expirationAt,

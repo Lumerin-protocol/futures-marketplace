@@ -87,20 +87,145 @@ describe("Futures - portfolio margin (PME)", () => {
     );
   });
 
-  it("active orders increase portfolio IM", async () => {
-    const { contracts, accounts, deliveryDate } = await positionWithMarginFixture();
+  it("position-increasing resting orders increase portfolio IM", async () => {
+    const { contracts, accounts, deliveryDate, config } = await positionWithMarginFixture();
     const { futures, collateralVault, portfolioMarginEngine } = contracts;
     const { buyer } = accounts;
 
     const marketPricePerDay = await futures.read.getMarketPrice();
+    const step = config.priceLadderStep;
     await collateralVault.write.deposit([marketPricePerDay * 10n], { account: buyer.account });
 
     const imBefore = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
-    await futures.write.createOrder([marketPricePerDay, deliveryDate, -1], {
+    // Same-side bid (long + resting buy) — not reduce-only, must lock order margin.
+    await futures.write.createOrder([marketPricePerDay - step, deliveryDate, 1], {
       account: buyer.account,
     });
     const imAfter = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
-    assert.ok(imAfter > imBefore, "resting order adds order margin to IM");
+    assert.ok(imAfter > imBefore, "increasing resting order adds order margin to IM");
+  });
+
+  it("reduce-only resting orders do not increase order margin", async () => {
+    const { contracts, accounts, deliveryDate, config } = await positionWithMarginFixture();
+    const { futures, portfolioMarginEngine } = contracts;
+    const { buyer } = accounts;
+
+    const marketPricePerDay = await futures.read.getMarketPrice();
+    const step = config.priceLadderStep;
+    const orderMarginBefore = await futures.read.getOrderMargin([buyer.account.address]);
+    const imBefore = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
+
+    // Buyer is long 1 — a resting sell of size 1 is fully reduce-only.
+    await futures.write.createOrder([marketPricePerDay + step, deliveryDate, -1], {
+      account: buyer.account,
+    });
+
+    const orderMarginAfter = await futures.read.getOrderMargin([buyer.account.address]);
+    const imAfter = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
+    assert.equal(orderMarginAfter, orderMarginBefore, "reduce-only order margin is netted to zero");
+    assert.equal(imAfter, imBefore, "portfolio IM unchanged by a fully offsetting reduce-only order");
+  });
+
+  it("allows a reduce-only order when margin is tight", async () => {
+    const data = await positionWithMarginFixture();
+    const { contracts, accounts, deliveryDate, entryPricePerDay, config } = data;
+    const { futures, collateralVault, portfolioMarginEngine, hashrateOracle } = contracts;
+    const { buyer, owner } = accounts;
+
+    // Real IM > MM buffer (fixture defaults IM==MM).
+    await portfolioMarginEngine.write.setShocks(
+      [parseUnits("0.20", 18), parseUnits("0.10", 18), 0n, 0n],
+      { account: owner.account },
+    );
+
+    // Skin to just above IM, then adverse mark move into the [MM, IM) band.
+    // (Withdrawals cannot leave balance below IM, so the crash must create the gap.)
+    const im0 = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
+    const bal0 = await collateralVault.read.balanceOf([buyer.account.address]);
+    assert.ok(bal0 > im0 + 1n, "fixture should leave withdrawable surplus above IM");
+    await collateralVault.write.withdraw([bal0 - im0 - 1n], { account: buyer.account });
+
+    await scaleHashprice(hashrateOracle, 100n, 90n);
+
+    const balAfter = await collateralVault.read.balanceOf([buyer.account.address]);
+    const im = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
+    const mm = await portfolioMarginEngine.read.computePortfolioMM([buyer.account.address]);
+    assert.ok(im > mm, "need a real IM>MM buffer");
+    assert.ok(balAfter >= mm, "buyer should remain above MM");
+    assert.ok(balAfter < im, "buyer should be below IM so non-reduce creates fail");
+
+    const step = config.priceLadderStep;
+    await viem.assertions.revertWithCustomError(
+      futures.write.createOrder([entryPricePerDay - step, deliveryDate, 1], {
+        account: buyer.account,
+      }),
+      futures,
+      "InsufficientMarginBalance",
+    );
+
+    await futures.write.createOrder([entryPricePerDay + step, deliveryDate, -1], {
+      account: buyer.account,
+    });
+    const orders = await futures.read.getUserOrders([buyer.account.address]);
+    assert.equal(orders.length, 1, "reduce-only closing order should rest");
+  });
+
+  it("rejects a second stacked reduce-only order when margin is tight", async () => {
+    const data = await positionWithMarginFixture();
+    const { contracts, accounts, deliveryDate, entryPricePerDay, config } = data;
+    const { futures, collateralVault, portfolioMarginEngine, hashrateOracle } = contracts;
+    const { buyer, owner } = accounts;
+
+    await portfolioMarginEngine.write.setShocks(
+      [parseUnits("0.20", 18), parseUnits("0.10", 18), 0n, 0n],
+      { account: owner.account },
+    );
+
+    const im0 = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
+    const bal0 = await collateralVault.read.balanceOf([buyer.account.address]);
+    await collateralVault.write.withdraw([bal0 - im0 - 1n], { account: buyer.account });
+    await scaleHashprice(hashrateOracle, 100n, 90n);
+
+    const step = config.priceLadderStep;
+    // First full-size reduce-only is allowed.
+    await futures.write.createOrder([entryPricePerDay + step, deliveryDate, -1], {
+      account: buyer.account,
+    });
+    // Second would stack past the position — must not skip IM.
+    await viem.assertions.revertWithCustomError(
+      futures.write.createOrder([entryPricePerDay + 2n * step, deliveryDate, -1], {
+        account: buyer.account,
+      }),
+      futures,
+      "InsufficientMarginBalance",
+    );
+  });
+
+  it("rejects an opposite-side order larger than the position when margin is tight", async () => {
+    const data = await positionWithMarginFixture();
+    const { contracts, accounts, deliveryDate, entryPricePerDay, config } = data;
+    const { futures, collateralVault, portfolioMarginEngine, hashrateOracle } = contracts;
+    const { buyer, owner } = accounts;
+
+    await portfolioMarginEngine.write.setShocks(
+      [parseUnits("0.20", 18), parseUnits("0.10", 18), 0n, 0n],
+      { account: owner.account },
+    );
+
+    const im0 = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
+    const bal0 = await collateralVault.read.balanceOf([buyer.account.address]);
+    await collateralVault.write.withdraw([bal0 - im0 - 1n], { account: buyer.account });
+    await scaleHashprice(hashrateOracle, 100n, 90n);
+
+    const step = config.priceLadderStep;
+    // Sell 2 while long 1 — would flip, not reduce-only.
+    await viem.assertions.revertWithCustomError(
+      futures.write.createOrder([entryPricePerDay + step, deliveryDate, -2], {
+        account: buyer.account,
+      }),
+      futures,
+      "InsufficientMarginBalance",
+    );
   });
 
   it("outdated orders drop out of IM after expiry", async () => {

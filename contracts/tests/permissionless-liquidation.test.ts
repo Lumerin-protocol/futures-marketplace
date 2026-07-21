@@ -14,7 +14,7 @@ const { viem, networkHelpers } = await network.getOrCreate();
  *
  * Surface under test:
  *   - liquidateOrder(participant, id)
- *   - liquidateOrders(participant)              — FIFO sweep until healthy
+ *   - liquidateOrders(participant, orderIds)    — keeper-chosen ids, stop-on-failure
  *   - liquidatePosition(participant, expirationAt, closeQty) — reverts OrdersStillOpen if any orders remain
  *   - setLiquidationFee — single flat fee charged per cancelled order and per closed position
  */
@@ -231,7 +231,7 @@ describe("Futures - permissionless liquidation entry points", function () {
     });
   });
 
-  describe("liquidateOrders (FIFO sweep)", function () {
+  describe("liquidateOrders (keeper-chosen ids, stop-on-failure)", function () {
     it("reverts NotLiquidatable when participant is healthy", async function () {
       const { contracts, accounts } = await networkHelpers.loadFixture(
         underwaterWithOrdersAndPositionFixture,
@@ -239,14 +239,15 @@ describe("Futures - permissionless liquidation entry points", function () {
       const { futures } = contracts;
       const { buyer, buyer2 } = accounts;
 
+      const ids = await futures.read.getUserOrders([buyer.account.address]);
       await viem.assertions.revertWithCustomError(
-        futures.write.liquidateOrders([buyer.account.address], { account: buyer2.account }),
+        futures.write.liquidateOrders([buyer.account.address, ids], { account: buyer2.account }),
         futures,
         "NotLiquidatable",
       );
     });
 
-    it("cancels all orders FIFO without paying a fee (payout disabled)", async function () {
+    it("cancels supplied orders without paying a fee (payout disabled)", async function () {
       const data = await networkHelpers.loadFixture(underwaterWithOrdersAndPositionFixture);
       const { contracts, accounts } = data;
       const { futures, collateralVault } = contracts;
@@ -259,7 +260,9 @@ describe("Futures - permissionless liquidation entry points", function () {
 
       const liqBalBefore = await collateralVault.read.balanceOf([buyer2.account.address]);
 
-      await futures.write.liquidateOrders([buyer.account.address], { account: buyer2.account });
+      await futures.write.liquidateOrders([buyer.account.address, ordersBefore], {
+        account: buyer2.account,
+      });
 
       const liqBalAfter = await collateralVault.read.balanceOf([buyer2.account.address]);
       const ordersAfter = await futures.read.getUserOrders([buyer.account.address]);
@@ -278,7 +281,10 @@ describe("Futures - permissionless liquidation entry points", function () {
       const { buyer, buyer2 } = accounts;
 
       await data.makeUnderwater();
-      await futures.write.liquidateOrders([buyer.account.address], { account: buyer2.account });
+      const orderIds = await futures.read.getUserOrders([buyer.account.address]);
+      await futures.write.liquidateOrders([buyer.account.address, orderIds], {
+        account: buyer2.account,
+      });
 
       const unknownDate = config.deliveryDates[1];
       await viem.assertions.revertWithCustomError(
@@ -361,7 +367,10 @@ describe("Futures - permissionless liquidation entry points", function () {
       await data.makeUnderwater();
 
       // Step 1: clear orders.
-      await futures.write.liquidateOrders([buyer.account.address], { account: buyer2.account });
+      const orderIds = await futures.read.getUserOrders([buyer.account.address]);
+      await futures.write.liquidateOrders([buyer.account.address, orderIds], {
+        account: buyer2.account,
+      });
       assert.equal((await futures.read.getUserOrders([buyer.account.address])).length, 0);
 
       const liqBalBefore = await collateralVault.read.balanceOf([buyer2.account.address]);

@@ -11,21 +11,19 @@ const { viem, networkHelpers } = await network.getOrCreate();
 /**
  * `liquidatePositions(user, expirationAts[], closeQtys[])` — batched close-to-IM liquidation.
  *
- * The contract does NOT recompute margin per lot: it closes the keeper-supplied
- * quantities at each expiry (skipping zero-net / zero-qty entries), then reads
- * margin ONCE at the end and reverts `OverLiquidation` if positions remain AND
- * `balance > IM` (with a real IM > MM buffer). Fully-closed accounts skip that
- * guard (bad-debt path). The keeper is responsible for choosing the worst-first
- * subset off-chain.
+ * Keeper-chosen legs; stop when healthy. Each leg's `closeQty` is an upper
+ * bound; an oversize partial reverts `OverLiquidation` when leftover balance
+ * sits above IM with a real IM > MM buffer. Fully-closed accounts skip that
+ * guard (bad-debt path). The keeper sizes worst-first off-chain.
  *
  * Fixture shape (chosen so behaviour is robust to PME rounding):
  *   - PME shocks IM 20% / MM 10% → a genuine buffer (IM > MM).
  *   - 10 long contracts for `buyer`, matched by `seller`.
  *   - Deposit ≈ 2.2·(entry·10)/10 — clears entry IM (2.0·u) so the
  *     position opens, but a 15% hashprice crash breaks MM (MM_req₀ ≈ 2.35·u).
- *   - After the crash: closing a FEW contracts stays at/under IM (no revert),
- *     closing almost ALL contracts overshoots IM (OverLiquidation), closing EVERY
- *     contract skips the guard.
+ *   - After the crash: closing a FEW contracts stays at/under IM,
+ *     closing almost ALL contracts overshoots IM, closing EVERY contract is a
+ *     full close.
  */
 async function partialLiquidationFixture(conn: NetworkConnection) {
   const data = await networkHelpers.loadFixture(deployFuturesFixture);
@@ -167,8 +165,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
 
     await data.makeUnderwater();
 
-    // Interleave an expiry where buyer has no position with a valid close at
-    // their active expiration date. The batch must skip the first and close 2.
+    // Unknown expiry first, then a valid close — stale legs are skipped.
     const unknownDate = config.deliveryDates[1];
     const closeQty = 2n;
 
@@ -211,7 +208,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
     );
   });
 
-  it("reverts OverLiquidation when the supplied set closes past the IM buffer", async function () {
+  it("reverts OverLiquidation when an oversize partial leaves balance above IM", async function () {
     const data = await networkHelpers.loadFixture(partialLiquidationFixture);
     const { contracts, accounts, config } = data;
     const { futures } = contracts;
@@ -219,8 +216,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
 
     await data.makeUnderwater();
 
-    // Close all-but-one — that overshoots IM (balance of the single remaining
-    // contract far exceeds its IM requirement), so the end-of-batch guard reverts.
+    // Request all-but-one — residual IM is tiny vs leftover balance.
     const tooMany = BigInt(config.lotCount) - 1n;
 
     await viem.assertions.revertWithCustomError(
@@ -333,7 +329,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
     const { futures, portfolioMarginEngine } = contracts;
     const { buyer, buyer2, owner } = accounts;
 
-    // Collapse the buffer: IM == MM. The guard's `im > mm` precondition is
+    // Collapse the buffer: IM == MM. The clamp's `im > mm` precondition is
     // false, so there's no over-liquidation ceiling.
     const shock = parseUnits("0.10", 18);
     await portfolioMarginEngine.write.setShocks([shock, shock, 0n, 0n], {
@@ -344,7 +340,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
 
     const tooMany = BigInt(config.lotCount) - 1n;
 
-    // Same "close all-but-one" that reverted under IM>MM now succeeds.
+    // Same "close all-but-one" closes the full requested amount when IM==MM.
     await futures.write.liquidatePositions(
       [buyer.account.address, [config.deliveryDate], [tooMany]],
       { account: buyer2.account },
@@ -354,6 +350,6 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
       buyer.account.address,
       config.deliveryDate,
     ]);
-    assert.equal(posAfter.netQuantity, 1n, "one contract remains, no OverLiquidation revert");
+    assert.equal(posAfter.netQuantity, 1n, "one contract remains when IM==MM");
   });
 });
