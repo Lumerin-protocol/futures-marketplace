@@ -7,7 +7,6 @@ import {
   createWalletClient,
   http,
   type Address,
-  type Hex,
   getContract,
 } from "viem";
 import { hardhat } from "viem/chains";
@@ -36,21 +35,16 @@ export function createRemoteConnection(rpcUrl: string): NetworkConnection {
 
   const conn = {
     viem: {
-      async deployContract(contractName: string, args: unknown[] = []): Promise<never> {
-        await walletClient.deployContract({
-          abi,
-          bytecode,
-          args,
-        });
-
+      async deployContract(_contractName: string, _args: unknown[] = []): Promise<never> {
         throw new Error("deployContract not supported over RPC. Use local connection.");
       },
 
       async getContractAt(name: string, address: Address) {
-        // Dynamically import ABI from generated files
-        const { abi } = await import(`../../abi/${name}.ts`);
+        // Dynamically import ABI from generated files (`export const FooAbi = …`).
+        const mod = (await import(`../../abi/${name}.ts`)) as Record<string, unknown>;
+        const abi = mod[`${name}Abi`] ?? mod.abi;
         return getContract({
-          abi,
+          abi: abi as never,
           address,
           client: { public: publicClient, wallet: walletClient },
         });
@@ -65,18 +59,17 @@ export function createRemoteConnection(rpcUrl: string): NetworkConnection {
       },
 
       async getTestClient() {
-        testClient;
+        return testClient;
+      },
+    },
+    networkHelpers: {
+      async loadFixture<T>(fn: (connection?: NetworkConnection) => Promise<T>): Promise<T> {
+        return _loadFixture(fn, conn as unknown as NetworkConnection);
       },
     },
   };
 
-  conn.networkHelpers = {
-    async loadFixture<T>(fn: () => Promise<T>): Promise<T> {
-      return _loadFixture(fn, conn);
-    },
-  };
-
-  return conn;
+  return conn as unknown as NetworkConnection;
 }
 
 export {
