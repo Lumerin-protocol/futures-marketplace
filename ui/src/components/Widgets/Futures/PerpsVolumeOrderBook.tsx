@@ -53,6 +53,8 @@ type TooltipState = {
 
 export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPriceIncrement }: PerpsVolumeOrderBookProps) => {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  // Separate hover tooltip for the center (market-price) row.
+  const [centerTooltip, setCenterTooltip] = useState<{ x: number; y: number } | null>(null);
   // Compute cumulative totals once per order book update (not per row).
   const { askLevels, bidLevels, maxAskTotal, maxBidTotal, bestAsk, bestBid } = useMemo(() => {
     // Input rows are sorted high -> low price.
@@ -252,14 +254,23 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
   // Hide the hover tooltip on scroll: Safari doesn't fire a row's onMouseLeave
   // when rows move out from under a stationary cursor, so it would get stuck.
   useEffect(() => {
-    const hide = () => setTooltip(null);
+    const hide = () => {
+      setTooltip(null);
+      setCenterTooltip(null);
+    };
     const scroller = containerRef.current?.parentElement;
     scroller?.addEventListener("scroll", hide, { passive: true });
     return () => scroller?.removeEventListener("scroll", hide);
   }, []);
 
   return (
-    <Container ref={containerRef} onMouseLeave={() => setTooltip(null)}>
+    <Container
+      ref={containerRef}
+      onMouseLeave={() => {
+        setTooltip(null);
+        setCenterTooltip(null);
+      }}
+    >
       <ColumnHeader>
         <span>Price</span>
         <span>Size</span>
@@ -268,7 +279,12 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
 
       <AskSection>{askLevels.map((level) => renderRow(level, "ask"))}</AskSection>
 
-      <CenterRow ref={centerRef}>
+      <CenterRow
+        ref={centerRef}
+        onMouseEnter={(e) => setCenterTooltip({ x: e.clientX, y: e.clientY })}
+        onMouseMove={(e) => setCenterTooltip({ x: e.clientX, y: e.clientY })}
+        onMouseLeave={() => setCenterTooltip(null)}
+      >
         <span className={`best ${isUp ? "up" : "down"}`}>
           {bestPrice != null ? formatPrice(bestPrice) : "—"}
           <span className="arrow">{isUp ? "↑" : "↓"}</span>
@@ -300,6 +316,20 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
                 ? `${tooltip.distancePct >= 0 ? "+" : ""}${tooltip.distancePct.toFixed(2)}%`
                 : "—"}
             </span>
+          </div>
+        </Tooltip>
+      )}
+
+      {centerTooltip && marketPrice != null && (
+        <Tooltip
+          style={{
+            left: Math.max(8, centerTooltip.x - 236),
+            top: centerTooltip.y + 12,
+          }}
+        >
+          <div className="row">
+            <span className="label">Underlying Hash Price (USDC)</span>
+            <span className="value">{formatPrice(marketPrice)}</span>
           </div>
         </Tooltip>
       )}
