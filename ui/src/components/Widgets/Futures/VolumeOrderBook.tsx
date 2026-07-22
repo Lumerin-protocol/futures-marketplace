@@ -247,10 +247,10 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
     const highlight = side === "ask" ? Boolean(row.highlightAsk) : Boolean(row.highlightBid);
     const units = side === "ask" ? row.askUnits : row.bidUnits;
 
-    // Both bars share the same scale (largest cumulative total) so the bright
-    // bar — this level's actual size — always sits nested inside the darker
-    // accumulated-depth bar (size <= total at every level).
-    const maxTotal = side === "ask" ? maxAskTotal : maxBidTotal;
+    // One scale for both sides (max cumulative across the book) so a thin ask
+    // book does not stretch to full width next to a deep bid book. Bright size
+    // bar stays nested inside the darker cumulative-total bar.
+    const maxTotal = Math.max(maxAskTotal, maxBidTotal);
     const sizeWidth = maxTotal > 0 ? Math.min(100, (depth.size / maxTotal) * 100) : 0;
     const totalWidth = maxTotal > 0 ? Math.min(100, (depth.total / maxTotal) * 100) : 0;
 

@@ -34,9 +34,11 @@ export const ClassicOrderBook = ({
       </thead>
       <tbody>
         {rows.map((row) => {
-          // Calculate fill percentages for bid and ask
-          const bidFillPercent = row.bidUnits && maxBidAmount > 0 ? (row.bidUnits / maxBidAmount) * 100 : 0;
-          const askFillPercent = row.askUnits && maxAskAmount > 0 ? (row.askUnits / maxAskAmount) * 100 : 0;
+          // Shared scale across sides so thin asks don't stretch to full column
+          // width when the bid book is much deeper.
+          const maxAmount = Math.max(maxBidAmount, maxAskAmount);
+          const bidFillPercent = row.bidUnits && maxAmount > 0 ? (row.bidUnits / maxAmount) * 100 : 0;
+          const askFillPercent = row.askUnits && maxAmount > 0 ? (row.askUnits / maxAmount) * 100 : 0;
 
           return (
             <TableRow
