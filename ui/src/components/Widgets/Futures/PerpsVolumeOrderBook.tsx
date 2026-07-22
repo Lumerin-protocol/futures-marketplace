@@ -249,8 +249,17 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
     hasCenteredRef.current = true;
   }, [askLevels.length, bidLevels.length]);
 
+  // Hide the hover tooltip on scroll: Safari doesn't fire a row's onMouseLeave
+  // when rows move out from under a stationary cursor, so it would get stuck.
+  useEffect(() => {
+    const hide = () => setTooltip(null);
+    const scroller = containerRef.current?.parentElement;
+    scroller?.addEventListener("scroll", hide, { passive: true });
+    return () => scroller?.removeEventListener("scroll", hide);
+  }, []);
+
   return (
-    <Container ref={containerRef}>
+    <Container ref={containerRef} onMouseLeave={() => setTooltip(null)}>
       <ColumnHeader>
         <span>Price</span>
         <span>Size</span>

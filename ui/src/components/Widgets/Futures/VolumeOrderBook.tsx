@@ -180,6 +180,9 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
   const handleScroll = () => {
     const scroller = scrollRef.current;
     if (!scroller) return;
+    // Hide the hover tooltip on scroll: Safari doesn't fire a row's onMouseLeave
+    // when rows move out from under a stationary cursor, so it would get stuck.
+    setTooltip(null);
     if (lastTargetRef.current == null || Math.abs(scroller.scrollTop - lastTargetRef.current) > 2) {
       userScrolledRef.current = true;
     }
