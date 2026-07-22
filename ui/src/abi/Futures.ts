@@ -89,6 +89,11 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "InvalidReduceQuantity",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "InvalidTimeInForce",
     "type": "error"
   },
@@ -1596,6 +1601,24 @@ export const FuturesAbi = [
         "internalType": "bytes32",
         "name": "_orderId",
         "type": "bytes32"
+      },
+      {
+        "internalType": "int256",
+        "name": "_newQuantity",
+        "type": "int256"
+      }
+    ],
+    "name": "reduceOrderSize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "_orderId",
+        "type": "bytes32"
       }
     ],
     "name": "removeOutdatedOrder",
@@ -1843,24 +1866,6 @@ export const FuturesAbi = [
       }
     ],
     "name": "transferOwnership",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "_orderId",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "int256",
-        "name": "_newQuantity",
-        "type": "int256"
-      }
-    ],
-    "name": "reduceOrderSize",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
