@@ -475,12 +475,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             bytes32 makerOrderId = bytes32(orderIdUint);
             Order memory maker = orders[makerOrderId];
 
-            if (maker.participant == address(0) || maker.quantity == 0) {
-                makerOrderQueue.remove(orderIdUint);
-                (, orderIdUint) = makerOrderQueue.getNextNode(0);
-                continue;
-            }
-
             uint256 makerAbs = _abs(maker.quantity);
             uint256 remainingAbs = _abs(_remainingQty);
 
