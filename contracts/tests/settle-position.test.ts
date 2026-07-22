@@ -21,8 +21,8 @@ async function openPosition() {
   await collateralVault.write.deposit([marginAmount], { account: seller.account });
   await collateralVault.write.deposit([marginAmount], { account: buyer.account });
 
-  await futures.write.createOrder([entryPrice, deliveryDate, -1], { account: seller.account });
-  const txHash = await futures.write.createOrder([entryPrice, deliveryDate, 1], {
+  await futures.write.createOrder([entryPrice, deliveryDate, -1n], { account: seller.account });
+  const txHash = await futures.write.createOrder([entryPrice, deliveryDate, 1n], {
     account: buyer.account,
   });
   await pc.waitForTransactionReceipt({ hash: txHash });

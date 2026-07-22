@@ -27,11 +27,11 @@ async function deployPointsStack(
   const hook = await viem.deployContract("PointsHook", [points.address, admin, WAD, WAD, KEEPER_POINTS]);
 
   const minterRole = await points.read.MINTER_ROLE();
-  await points.write.grantRole([minterRole, hook.address], { account: owner.account });
+  await points.write.grantRole([minterRole, hook.address], { account: owner.account.address });
 
   if (grantCaller) {
     const callerRole = await hook.read.HOOK_CALLER_ROLE();
-    await hook.write.grantRole([callerRole, futuresAddress], { account: owner.account });
+    await hook.write.grantRole([callerRole, futuresAddress], { account: owner.account.address });
   }
 
   return { points, hook };
@@ -76,8 +76,8 @@ describe("Futures - points hook wiring", function () {
       await collateralVault.write.deposit([margin], { account: seller.account });
       await collateralVault.write.deposit([margin], { account: buyer.account });
 
-      await futures.write.createOrder([price, deliveryDate, -1], { account: seller.account });
-      await futures.write.createOrder([price, deliveryDate, 1], { account: buyer.account });
+      await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
+      await futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account });
 
       const notional = price;
 
@@ -97,8 +97,8 @@ describe("Futures - points hook wiring", function () {
       await collateralVault.write.deposit([margin], { account: seller.account });
       await collateralVault.write.deposit([margin], { account: buyer.account });
 
-      await futures.write.createOrder([price, deliveryDate, -1], { account: seller.account });
-      await futures.write.createOrder([price, deliveryDate, 1], { account: buyer.account });
+      await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
+      await futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account });
       assert.equal(await futures.read.hook(), zeroAddress);
     });
 
@@ -116,9 +116,9 @@ describe("Futures - points hook wiring", function () {
       await collateralVault.write.deposit([margin], { account: seller.account });
       await collateralVault.write.deposit([margin], { account: buyer.account });
 
-      await futures.write.createOrder([price, deliveryDate, -1], { account: seller.account });
+      await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
       await assert.rejects(
-        futures.write.createOrder([price, deliveryDate, 1], { account: buyer.account }),
+        futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account }),
       );
     });
   });
@@ -143,8 +143,8 @@ describe("Futures - points hook wiring", function () {
       await collateralVault.write.deposit([margin], { account: buyer.account });
 
       // Seller rests at the oracle price (spread 0 → full 3x), buyer takes.
-      await futures.write.createOrder([price, deliveryDate, -1], { account: seller.account });
-      await futures.write.createOrder([price, deliveryDate, 1], { account: buyer.account });
+      await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
+      await futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account });
 
       const notional = price;
 
@@ -179,8 +179,8 @@ describe("Futures - points hook wiring", function () {
 
       // Open the matched position BEFORE plugging in the hook, so the fill path is unaffected
       // and only the liquidation path exercises the hook.
-      await futures.write.createOrder([price, deliveryDate, -1], { account: seller.account });
-      await futures.write.createOrder([price, deliveryDate, 1], { account: buyer.account });
+      await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
+      await futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account });
 
       const { points, hook } = await deployPointsStack(futures.address, owner, grantCaller);
       await futures.write.setHook([hook.address], { account: owner.account });

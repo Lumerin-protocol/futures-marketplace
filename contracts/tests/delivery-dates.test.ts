@@ -176,7 +176,7 @@ describe("Delivery Date Management", () => {
 
     // in the past
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price, config.firstFutureExpirationDate, 1], {
+      futures.write.createOrder([price, config.firstFutureExpirationDate, 1n], {
         account: seller.account,
       }),
       futures,
@@ -185,7 +185,7 @@ describe("Delivery Date Management", () => {
 
     // in the past and not aligned with interval
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price, config.firstFutureExpirationDate + 1n, 1], {
+      futures.write.createOrder([price, config.firstFutureExpirationDate + 1n, 1n], {
         account: seller.account,
       }),
       futures,
@@ -196,7 +196,7 @@ describe("Delivery Date Management", () => {
     const dateWithinRangeNotAligned =
       config.firstFutureExpirationDate + BigInt(config.expirationIntervalSeconds) + 1n;
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price, dateWithinRangeNotAligned, 1], {
+      futures.write.createOrder([price, dateWithinRangeNotAligned, 1n], {
         account: seller.account,
       }),
       futures,
@@ -208,7 +208,7 @@ describe("Delivery Date Management", () => {
       config.firstFutureExpirationDate +
       BigInt(config.expirationIntervalSeconds) * BigInt(config.futureExpirationDatesCount + 1);
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price, dateOutOfRange, 1], { account: seller.account }),
+      futures.write.createOrder([price, dateOutOfRange, 1n], { account: seller.account }),
       futures,
       "ExpirationDateNotAvailable",
     );
@@ -216,7 +216,7 @@ describe("Delivery Date Management", () => {
     // out of available range and not aligned with interval
     const dateOutOfRangeNotAligned = dateOutOfRange + 1n;
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price, dateOutOfRangeNotAligned, 1], {
+      futures.write.createOrder([price, dateOutOfRangeNotAligned, 1n], {
         account: seller.account,
       }),
       futures,
@@ -227,7 +227,7 @@ describe("Delivery Date Management", () => {
     for (let i = 0; i < config.futureExpirationDatesCount; i++) {
       const date =
         config.firstFutureExpirationDate + BigInt(config.expirationIntervalSeconds) * BigInt(i + 1);
-      await futures.write.createOrder([price, date, 1], { account: seller.account });
+      await futures.write.createOrder([price, date, 1n], { account: seller.account });
     }
   });
 });

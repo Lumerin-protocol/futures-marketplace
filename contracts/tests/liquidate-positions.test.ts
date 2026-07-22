@@ -44,7 +44,7 @@ async function partialLiquidationFixture(conn: NetworkConnection) {
 
   const entry = await futures.read.getMarketPrice();
   const deliveryDate = config.deliveryDates[0];
-  const lotCount = 10;
+  const lotCount = 10n;
 
   // u = entry (per-contract notional; one contract settles pricePerDay, no duration
   // multiplier). Deposit 2.2·u·(lotCount/10) = 2.2·u for 10 contracts. See header for
@@ -68,8 +68,8 @@ async function partialLiquidationFixture(conn: NetworkConnection) {
 
   // A foreign position (buyer2 long vs seller) — used to prove partial liquidation
   // only reduces the target user's aggregate.
-  await futures.write.createOrder([entry, deliveryDate, -1], { account: seller.account });
-  await futures.write.createOrder([entry, deliveryDate, 1], {
+  await futures.write.createOrder([entry, deliveryDate, -1n], { account: seller.account });
+  await futures.write.createOrder([entry, deliveryDate, 1n], {
     account: buyer2.account,
   });
 
@@ -96,7 +96,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
     // No crash — buyer remains healthy, so the batch entry point rejects.
     await viem.assertions.revertWithCustomError(
       futures.write.liquidatePositions(
-        [buyer.account.address, [config.deliveryDate], [BigInt(config.lotCount)]],
+        [buyer.account.address, [config.deliveryDate], [config.lotCount]],
         { account: buyer2.account },
       ),
       futures,
@@ -111,7 +111,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
     const { buyer, buyer2 } = accounts;
 
     // A stale far-out-of-market resting buy order that never matches.
-    await futures.write.createOrder([config.entry / 2n, config.deliveryDate, 1], {
+    await futures.write.createOrder([config.entry / 2n, config.deliveryDate, 1n], {
       account: buyer.account,
     });
 
@@ -119,7 +119,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
 
     await viem.assertions.revertWithCustomError(
       futures.write.liquidatePositions(
-        [buyer.account.address, [config.deliveryDate], [BigInt(config.lotCount)]],
+        [buyer.account.address, [config.deliveryDate], [config.lotCount]],
         { account: buyer2.account },
       ),
       futures,
@@ -146,7 +146,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
       buyer.account.address,
       config.deliveryDate,
     ]);
-    assert.equal(posAfter.netQuantity, BigInt(config.lotCount) - closeQty);
+    assert.equal(posAfter.netQuantity, config.lotCount - closeQty);
 
     const liquidated = parseEventLogs({
       logs: receipt.logs,
@@ -178,7 +178,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
       buyer.account.address,
       config.deliveryDate,
     ]);
-    assert.equal(buyerPos.netQuantity, BigInt(config.lotCount) - closeQty);
+    assert.equal(buyerPos.netQuantity, config.lotCount - closeQty);
 
     // The foreign position (buyer2) is untouched — unilateral liquidation.
     const foreignPos = await futures.read.getUserPosition([
@@ -217,7 +217,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
     await data.makeUnderwater();
 
     // Request all-but-one — residual IM is tiny vs leftover balance.
-    const tooMany = BigInt(config.lotCount) - 1n;
+    const tooMany = config.lotCount - 1n;
 
     await viem.assertions.revertWithCustomError(
       futures.write.liquidatePositions(
@@ -240,7 +240,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
     // Closing EVERY contract leaves no positions, so the guard is skipped even
     // though the residual balance sits above (a now-zero) IM.
     await futures.write.liquidatePositions(
-      [buyer.account.address, [config.deliveryDate], [BigInt(config.lotCount)]],
+      [buyer.account.address, [config.deliveryDate], [config.lotCount]],
       { account: buyer2.account },
     );
 
@@ -312,7 +312,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
       seller.account.address,
       config.deliveryDate,
     ]);
-    assert.equal(sellerPos.netQuantity, -BigInt(config.lotCount) - 1n, "seller short remains open");
+    assert.equal(sellerPos.netQuantity, -config.lotCount - 1n, "seller short remains open");
 
     // Insurance fund absorbs the buyer's available collateral.
     const insuranceAfter = await collateralVault.read.balanceOf([insuranceAddr]);
@@ -338,7 +338,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
 
     await data.makeUnderwater();
 
-    const tooMany = BigInt(config.lotCount) - 1n;
+    const tooMany = config.lotCount - 1n;
 
     // Same "close all-but-one" closes the full requested amount when IM==MM.
     await futures.write.liquidatePositions(

@@ -15,8 +15,8 @@ async function openLot(
 ) {
   const { futures } = data.contracts;
   const { seller, buyer, pc } = data.accounts;
-  await futures.write.createOrder([entryPrice, expirationAt, -1], { account: seller.account });
-  const txHash = await futures.write.createOrder([entryPrice, expirationAt, 1], {
+  await futures.write.createOrder([entryPrice, expirationAt, -1n], { account: seller.account });
+  const txHash = await futures.write.createOrder([entryPrice, expirationAt, 1n], {
     account: buyer.account,
   });
   const receipt = await pc.waitForTransactionReceipt({ hash: txHash });

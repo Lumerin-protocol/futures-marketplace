@@ -42,20 +42,20 @@ async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
   await collateralVault.write.deposit([positionMargin], { account: buyer2.account });
 
   // Open a matched position: seller short, buyer long.
-  await futures.write.createOrder([entryPricePerDay, deliveryDate, -1], {
+  await futures.write.createOrder([entryPricePerDay, deliveryDate, -1n], {
     account: seller.account,
   });
-  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1], {
+  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1n], {
     account: buyer.account,
   });
 
   // Two extra resting BUY orders for buyer at the matched price. Same-side as the
   // position so they aren't auto-offset; once the hashprice drops they go deeply
   // negative-PnL and blow up `getOrderMargin`, breaking MM.
-  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1], {
+  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1n], {
     account: buyer.account,
   });
-  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1], {
+  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1n], {
     account: buyer.account,
   });
 

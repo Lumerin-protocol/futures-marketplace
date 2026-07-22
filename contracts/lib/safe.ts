@@ -1,9 +1,18 @@
 import type { Account, Chain, Transport, WalletClient } from "viem";
 import { getAddress } from "viem/utils";
 import { sepolia, mainnet, arbitrum, baseSepolia, base } from "viem/chains";
-import SafeApiKit from "@safe-global/api-kit";
-import Safe from "@safe-global/protocol-kit";
+import * as SafeApiKitModule from "@safe-global/api-kit";
+import * as SafeModule from "@safe-global/protocol-kit";
 import type { MetaTransactionData } from "@safe-global/types-kit";
+
+// `@safe-global/api-kit` and `@safe-global/protocol-kit` ship dual ESM/CJS builds
+// without type-versioned `exports`, so under `nodenext` module resolution the
+// default import resolves to the CJS module namespace rather than the class.
+// Binding both a value and a type alias to `.default` works around this.
+const SafeApiKit = SafeApiKitModule.default;
+type SafeApiKit = InstanceType<typeof SafeApiKitModule.default>;
+const Safe = SafeModule.default;
+type Safe = InstanceType<typeof SafeModule.default>;
 
 export class SafeWallet {
   private readonly safeApiKit: SafeApiKit;
@@ -84,3 +93,6 @@ const chainIdSafePrefixMap = {
   [base.id]: "base",
   [baseSepolia.id]: "base-sep",
 } as Record<number, string>;
+
+// @ts-expect-error debug
+type _Debug1 = SafeApiKitModule.default.default;

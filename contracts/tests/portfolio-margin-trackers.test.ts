@@ -35,8 +35,8 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
       await collateralVault.write.deposit([margin], { account: w.account });
     }
 
-    await futures.write.createOrder([price, deliveryDate, -1], { account: seller.account });
-    await futures.write.createOrder([price, deliveryDate, 1], {
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, 1n], {
       account: buyer.account,
     });
 
@@ -71,10 +71,10 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     // post-state is the *sum* of both — so a leak shows up as a doubled
     // magnitude.
     const laterDeliveryDate = config.deliveryDates[2];
-    await futures.write.createOrder([price, laterDeliveryDate, -1], {
+    await futures.write.createOrder([price, laterDeliveryDate, -1n], {
       account: seller.account,
     });
-    await futures.write.createOrder([price, laterDeliveryDate, 1], {
+    await futures.write.createOrder([price, laterDeliveryDate, 1n], {
       account: buyer.account,
     });
 
@@ -99,7 +99,7 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts, config } = data;
     const { futures, collateralVault, hashrateOracle } = contracts;
-    const { seller, buyer, pc, tc } = accounts;
+    const { seller, buyer, tc, owner } = accounts;
 
     const deliveryDate = config.deliveryDates[0];
     const price = quantizePrice(parseUnits("100", 6), config.priceLadderStep);
@@ -111,8 +111,8 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     await collateralVault.write.deposit([sellerMargin], { account: seller.account });
     await collateralVault.write.deposit([buyerMargin], { account: buyer.account });
 
-    await futures.write.createOrder([price, deliveryDate, -1], { account: seller.account });
-    await futures.write.createOrder([price, deliveryDate, 1], {
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, 1n], {
       account: buyer.account,
     });
 
@@ -134,7 +134,10 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     // market = hashpriceUsd × contractSizeHpsDay / (hashpriceScalingDivisor × ORACLE_UNIT_HPS_DAY)
     //        = hashpriceUsd × 1e15 / (100 × 1e14) = hashpriceUsd / 10
     // ⇒ hashpriceUsd = market × 10. (divisor = 10^(oracleDecimals − tokenDecimals) = 10^(8−6) = 100.)
-    await hashrateOracle.write.setPrice([targetMarketPrice * 10n]);
+    await hashrateOracle.write.setPrice([targetMarketPrice * 10n], {
+      account: owner.account,
+      chain: owner.chain,
+    });
     await tc.mine({ blocks: 1 });
 
     await futures.write.liquidatePosition([seller.account.address, deliveryDate, 1n]);

@@ -46,12 +46,12 @@ describe("Futures - Offset & Cash Settlement", () => {
     const initialPrice = quantizePrice(parseUnits("100", 6), config.priceLadderStep);
     const exitPrice = quantizePrice(parseUnits("120", 6), config.priceLadderStep);
 
-    await futures.write.createOrder([initialPrice, deliveryDate, -1], { account: seller.account });
-    await futures.write.createOrder([initialPrice, deliveryDate, 1], { account: buyer.account });
+    await futures.write.createOrder([initialPrice, deliveryDate, -1n], { account: seller.account });
+    await futures.write.createOrder([initialPrice, deliveryDate, 1n], { account: buyer.account });
 
-    await futures.write.createOrder([exitPrice, deliveryDate, -1], { account: buyer.account });
+    await futures.write.createOrder([exitPrice, deliveryDate, -1n], { account: buyer.account });
 
-    const offsetTxHash = await futures.write.createOrder([exitPrice, deliveryDate, 1], {
+    const offsetTxHash = await futures.write.createOrder([exitPrice, deliveryDate, 1n], {
       account: buyer2.account,
     });
     const offsetReceipt = await pc.waitForTransactionReceipt({ hash: offsetTxHash });
@@ -129,12 +129,12 @@ describe("Futures - Offset & Cash Settlement", () => {
     const initialPrice = quantizePrice(parseUnits("100", 6), config.priceLadderStep);
     const exitPrice = quantizePrice(parseUnits("90", 6), config.priceLadderStep);
 
-    await futures.write.createOrder([initialPrice, deliveryDate, -1], { account: seller.account });
-    await futures.write.createOrder([initialPrice, deliveryDate, 1], { account: buyer.account });
+    await futures.write.createOrder([initialPrice, deliveryDate, -1n], { account: seller.account });
+    await futures.write.createOrder([initialPrice, deliveryDate, 1n], { account: buyer.account });
 
-    await futures.write.createOrder([exitPrice, deliveryDate, -1], { account: buyer.account });
+    await futures.write.createOrder([exitPrice, deliveryDate, -1n], { account: buyer.account });
 
-    const offsetTxHash = await futures.write.createOrder([exitPrice, deliveryDate, 1], {
+    const offsetTxHash = await futures.write.createOrder([exitPrice, deliveryDate, 1n], {
       account: buyer2.account,
     });
     const offsetReceipt = await pc.waitForTransactionReceipt({ hash: offsetTxHash });

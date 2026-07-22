@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
-import { encodeFunctionData, getAddress, parseEventLogs, parseUnits } from "viem";
+import { encodeFunctionData, parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 
 const { networkHelpers } = await network.getOrCreate();
@@ -9,7 +9,7 @@ const { networkHelpers } = await network.getOrCreate();
 type OrderIntent = {
   price: bigint;
   expirationAt: bigint;
-  quantity: number;
+  quantity: bigint;
 };
 
 describe("Futures.updateOrders (cancel + create batch)", () => {
@@ -25,16 +25,16 @@ describe("Futures.updateOrders (cancel + create batch)", () => {
     const dd = config.deliveryDates[0];
 
     const resting: OrderIntent[] = [
-      { price: mp + step, expirationAt: dd, quantity: -1 },
-      { price: mp + 2n * step, expirationAt: dd, quantity: -1 },
+      { price: mp + step, expirationAt: dd, quantity: -1n },
+      { price: mp + 2n * step, expirationAt: dd, quantity: -1n },
     ];
     await futures.write.createOrders([resting], { account: seller.account });
     const before = await futures.read.getUserOrders([seller.account.address]);
     assert.equal(before.length, 2);
 
     const next: OrderIntent[] = [
-      { price: mp + 3n * step, expirationAt: dd, quantity: -1 },
-      { price: mp + 4n * step, expirationAt: dd, quantity: -1 },
+      { price: mp + 3n * step, expirationAt: dd, quantity: -1n },
+      { price: mp + 4n * step, expirationAt: dd, quantity: -1n },
     ];
     const tx = await futures.write.updateOrders([before, next], { account: seller.account });
     const receipt = await pc.waitForTransactionReceipt({ hash: tx });
@@ -72,7 +72,7 @@ describe("Futures.updateOrders (cancel + create batch)", () => {
     const dd = config.deliveryDates[0];
 
     const createOnly: OrderIntent[] = [
-      { price: mp + step, expirationAt: dd, quantity: -1 },
+      { price: mp + step, expirationAt: dd, quantity: -1n },
     ];
     await futures.write.updateOrders([[], createOnly], { account: seller.account });
     const placed = await futures.read.getUserOrders([seller.account.address]);
@@ -97,17 +97,17 @@ describe("Futures.updateOrders (cancel + create batch)", () => {
     const dd = config.deliveryDates[0];
 
     const sellerResting: OrderIntent[] = [
-      { price: mp + step, expirationAt: dd, quantity: -1 },
-      { price: mp + 2n * step, expirationAt: dd, quantity: -1 },
-      { price: mp + 3n * step, expirationAt: dd, quantity: -1 },
+      { price: mp + step, expirationAt: dd, quantity: -1n },
+      { price: mp + 2n * step, expirationAt: dd, quantity: -1n },
+      { price: mp + 3n * step, expirationAt: dd, quantity: -1n },
     ];
     await futures.write.createOrders([sellerResting], { account: seller.account });
     const sellerIds = await futures.read.getUserOrders([seller.account.address]);
 
     const buyerResting: OrderIntent[] = [
-      { price: mp - step, expirationAt: dd, quantity: 1 },
-      { price: mp - 2n * step, expirationAt: dd, quantity: 1 },
-      { price: mp - 3n * step, expirationAt: dd, quantity: 1 },
+      { price: mp - step, expirationAt: dd, quantity: 1n },
+      { price: mp - 2n * step, expirationAt: dd, quantity: 1n },
+      { price: mp - 3n * step, expirationAt: dd, quantity: 1n },
     ];
     await futures.write.createOrders([buyerResting], { account: buyer.account });
     const buyerIds = await futures.read.getUserOrders([buyer.account.address]);
@@ -123,9 +123,9 @@ describe("Futures.updateOrders (cancel + create batch)", () => {
       );
     }
     const sellerNext: OrderIntent[] = [
-      { price: mp + 4n * step, expirationAt: dd, quantity: -1 },
-      { price: mp + 5n * step, expirationAt: dd, quantity: -1 },
-      { price: mp + 6n * step, expirationAt: dd, quantity: -1 },
+      { price: mp + 4n * step, expirationAt: dd, quantity: -1n },
+      { price: mp + 5n * step, expirationAt: dd, quantity: -1n },
+      { price: mp + 6n * step, expirationAt: dd, quantity: -1n },
     ];
     baselineCalls.push(
       encodeFunctionData({
@@ -138,9 +138,9 @@ describe("Futures.updateOrders (cancel + create batch)", () => {
     const baselineGas = (await pc.waitForTransactionReceipt({ hash: baselineTx })).gasUsed;
 
     const buyerNext: OrderIntent[] = [
-      { price: mp - 4n * step, expirationAt: dd, quantity: 1 },
-      { price: mp - 5n * step, expirationAt: dd, quantity: 1 },
-      { price: mp - 6n * step, expirationAt: dd, quantity: 1 },
+      { price: mp - 4n * step, expirationAt: dd, quantity: 1n },
+      { price: mp - 5n * step, expirationAt: dd, quantity: 1n },
+      { price: mp - 6n * step, expirationAt: dd, quantity: 1n },
     ];
     const batchTx = await futures.write.updateOrders([buyerIds, buyerNext], {
       account: buyer.account,

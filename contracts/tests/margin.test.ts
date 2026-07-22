@@ -20,10 +20,10 @@ async function positionWithMarginFixture() {
   await collateralVault.write.deposit([margin], { account: seller.account });
   await collateralVault.write.deposit([margin], { account: buyer.account });
 
-  await futures.write.createOrder([entryPricePerDay, deliveryDate, -1], {
+  await futures.write.createOrder([entryPricePerDay, deliveryDate, -1n], {
     account: seller.account,
   });
-  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1], {
+  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1n], {
     account: buyer.account,
   });
 
@@ -98,7 +98,7 @@ describe("Futures - portfolio margin (PME)", () => {
 
     const imBefore = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
     // Same-side bid (long + resting buy) — not reduce-only, must lock order margin.
-    await futures.write.createOrder([marketPricePerDay - step, deliveryDate, 1], {
+    await futures.write.createOrder([marketPricePerDay - step, deliveryDate, 1n], {
       account: buyer.account,
     });
     const imAfter = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
@@ -116,7 +116,7 @@ describe("Futures - portfolio margin (PME)", () => {
     const imBefore = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
 
     // Buyer is long 1 — a resting sell of size 1 is fully reduce-only.
-    await futures.write.createOrder([marketPricePerDay + step, deliveryDate, -1], {
+    await futures.write.createOrder([marketPricePerDay + step, deliveryDate, -1n], {
       account: buyer.account,
     });
 
@@ -156,14 +156,14 @@ describe("Futures - portfolio margin (PME)", () => {
 
     const step = config.priceLadderStep;
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([entryPricePerDay - step, deliveryDate, 1], {
+      futures.write.createOrder([entryPricePerDay - step, deliveryDate, 1n], {
         account: buyer.account,
       }),
       futures,
       "InsufficientMarginBalance",
     );
 
-    await futures.write.createOrder([entryPricePerDay + step, deliveryDate, -1], {
+    await futures.write.createOrder([entryPricePerDay + step, deliveryDate, -1n], {
       account: buyer.account,
     });
     const orders = await futures.read.getUserOrders([buyer.account.address]);
@@ -188,12 +188,12 @@ describe("Futures - portfolio margin (PME)", () => {
 
     const step = config.priceLadderStep;
     // First full-size reduce-only is allowed.
-    await futures.write.createOrder([entryPricePerDay + step, deliveryDate, -1], {
+    await futures.write.createOrder([entryPricePerDay + step, deliveryDate, -1n], {
       account: buyer.account,
     });
     // Second would stack past the position — must not skip IM.
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([entryPricePerDay + 2n * step, deliveryDate, -1], {
+      futures.write.createOrder([entryPricePerDay + 2n * step, deliveryDate, -1n], {
         account: buyer.account,
       }),
       futures,
@@ -220,7 +220,7 @@ describe("Futures - portfolio margin (PME)", () => {
     const step = config.priceLadderStep;
     // Sell 2 while long 1 — would flip, not reduce-only.
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([entryPricePerDay + step, deliveryDate, -2], {
+      futures.write.createOrder([entryPricePerDay + step, deliveryDate, -2n], {
         account: buyer.account,
       }),
       futures,
@@ -237,7 +237,7 @@ describe("Futures - portfolio margin (PME)", () => {
     const futureDeliveryDate = config.deliveryDates[1];
     await collateralVault.write.deposit([marketPricePerDay * 10n], { account: buyer.account });
 
-    const txHash = await futures.write.createOrder([marketPricePerDay, futureDeliveryDate, 1], {
+    const txHash = await futures.write.createOrder([marketPricePerDay, futureDeliveryDate, 1n], {
       account: buyer.account,
     });
     const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
