@@ -22,11 +22,11 @@ describe("Position Exit", () => {
     await collateralVault.write.deposit([margin], { account: partB.account });
     await collateralVault.write.deposit([margin], { account: partC.account });
 
-    await futures.write.createOrder([price, deliveryDate, -1], { account: partA.account });
-    await futures.write.createOrder([price, deliveryDate, 1], { account: partB.account });
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: partA.account });
+    await futures.write.createOrder([price, deliveryDate, 1n], { account: partB.account });
 
-    await futures.write.createOrder([price2, deliveryDate, -1], { account: partB.account });
-    await futures.write.createOrder([price2, deliveryDate, 1], { account: partA.account });
+    await futures.write.createOrder([price2, deliveryDate, -1n], { account: partB.account });
+    await futures.write.createOrder([price2, deliveryDate, 1n], { account: partA.account });
 
     const partAPos = await futures.read.getUserPosition([partA.account.address, deliveryDate]);
     const partBPos = await futures.read.getUserPosition([partB.account.address, deliveryDate]);
@@ -59,10 +59,10 @@ describe("Position Exit", () => {
     await collateralVault.write.deposit([margin], { account: partB.account });
     await collateralVault.write.deposit([margin], { account: partC.account });
 
-    await futures.write.createOrder([price, deliveryDate, -1], { account: partA.account });
-    await futures.write.createOrder([price, deliveryDate, 1], { account: partB.account });
-    await futures.write.createOrder([price, deliveryDate, 1], { account: partC.account });
-    await futures.write.createOrder([price, deliveryDate, -1], { account: partB.account });
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: partA.account });
+    await futures.write.createOrder([price, deliveryDate, 1n], { account: partB.account });
+    await futures.write.createOrder([price, deliveryDate, 1n], { account: partC.account });
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: partB.account });
 
     const partAPos = await futures.read.getUserPosition([partA.account.address, deliveryDate]);
     const partBPos = await futures.read.getUserPosition([partB.account.address, deliveryDate]);

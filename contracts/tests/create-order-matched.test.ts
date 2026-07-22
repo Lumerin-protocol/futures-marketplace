@@ -28,9 +28,9 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    await futures.write.createOrder([price, deliveryDate, -2], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, -2n], { account: seller.account });
 
-    const txHash = await futures.write.createOrder([price, deliveryDate, 2], {
+    const txHash = await futures.write.createOrder([price, deliveryDate, 2n], {
       account: buyer.account,
     });
 
@@ -69,9 +69,9 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     await collateralVault.write.deposit([margin], { account: buyer.account });
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    await futures.write.createOrder([price, deliveryDate, 2], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, 2n], { account: buyer.account });
 
-    const txHash = await futures.write.createOrder([price, deliveryDate, -2], {
+    const txHash = await futures.write.createOrder([price, deliveryDate, -2n], {
       account: seller.account,
     });
 
@@ -110,14 +110,14 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     await collateralVault.write.deposit([margin], { account: account2.account });
     await collateralVault.write.deposit([margin], { account: account3.account });
 
-    await futures.write.createOrder([price, deliveryDate, -1], { account: account1.account });
-    await futures.write.createOrder([price, deliveryDate, 1], { account: account2.account });
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: account1.account });
+    await futures.write.createOrder([price, deliveryDate, 1n], { account: account2.account });
 
     const account2BalanceBefore = await collateralVault.read.balanceOf([account2.account.address]);
 
-    await futures.write.createOrder([exitPrice, deliveryDate, -1], { account: account2.account });
+    await futures.write.createOrder([exitPrice, deliveryDate, -1n], { account: account2.account });
 
-    const exitTxHash = await futures.write.createOrder([exitPrice, deliveryDate, 1], {
+    const exitTxHash = await futures.write.createOrder([exitPrice, deliveryDate, 1n], {
       account: account3.account,
     });
 
@@ -161,16 +161,16 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     await collateralVault.write.deposit([margin], { account: account2.account });
     await collateralVault.write.deposit([margin], { account: account3.account });
 
-    await futures.write.createOrder([price, deliveryDate, -1], { account: account1.account });
-    await futures.write.createOrder([price, deliveryDate, 1], { account: account2.account });
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: account1.account });
+    await futures.write.createOrder([price, deliveryDate, 1n], { account: account2.account });
 
     const account2BalanceBefore = await collateralVault.read.balanceOf([account2.account.address]);
 
-    await futures.write.createOrder([exitPrice, deliveryDate, -1], { account: account2.account });
+    await futures.write.createOrder([exitPrice, deliveryDate, -1n], { account: account2.account });
 
     const contractBalanceBefore = await totalContractBalance(contracts);
 
-    const exitTxHash = await futures.write.createOrder([exitPrice, deliveryDate, 1], {
+    const exitTxHash = await futures.write.createOrder([exitPrice, deliveryDate, 1n], {
       account: account3.account,
     });
 
@@ -212,11 +212,11 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     await collateralVault.write.deposit([margin], { account: buyer.account });
     await collateralVault.write.deposit([margin], { account: buyer2.account });
 
-    await futures.write.createOrder([price, deliveryDate, -1], { account: seller.account });
-    await futures.write.createOrder([price, deliveryDate, 1], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account });
 
     const newPrice = price * 2n;
-    const createOrderTxHash = await futures.write.createOrder([newPrice, deliveryDate, -1], {
+    const createOrderTxHash = await futures.write.createOrder([newPrice, deliveryDate, -1n], {
       account: buyer.account,
     });
     const createOrderReceipt = await pc.waitForTransactionReceipt({ hash: createOrderTxHash });
@@ -226,7 +226,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
       eventName: "OrderCreated",
     });
 
-    const txHash2 = await futures.write.createOrder([newPrice, deliveryDate, 1], {
+    const txHash2 = await futures.write.createOrder([newPrice, deliveryDate, 1n], {
       account: buyer2.account,
     });
 
@@ -277,7 +277,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    const restTxHash = await futures.write.createOrder([price, deliveryDate, -1], {
+    const restTxHash = await futures.write.createOrder([price, deliveryDate, -1n], {
       account: seller.account,
     });
     const restReceipt = await pc.waitForTransactionReceipt({ hash: restTxHash });
@@ -288,7 +288,7 @@ describe("Futures - createOrder - Order Matching and Position Creation", () => {
     });
     assert.equal(getAddress(makerCreated.args.participant), getAddress(seller.account.address));
 
-    const takeTxHash = await futures.write.createOrder([price, deliveryDate, 1], {
+    const takeTxHash = await futures.write.createOrder([price, deliveryDate, 1n], {
       account: buyer.account,
     });
     const takeReceipt = await pc.waitForTransactionReceipt({ hash: takeTxHash });

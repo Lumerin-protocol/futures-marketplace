@@ -48,7 +48,7 @@ describe("Futures - Oracle staleness", function () {
   it("reverts getMarketPrice with OracleStale once the answer ages past MAX_ORACLE_STALENESS", async function () {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, hashrateOracle } = contracts;
-    const { tc, pc } = accounts;
+    const { tc, pc, owner } = accounts;
 
     // Sanity check: a fresh feed serves market price normally.
     await futures.read.getMarketPrice();
@@ -66,22 +66,23 @@ describe("Futures - Oracle staleness", function () {
 
     // Pushing a fresh answer brings the feed back online without redeploying.
     const [, answer] = await hashrateOracle.read.latestRoundData();
-    await hashrateOracle.write.setPrice([answer]);
+    await hashrateOracle.write.setPrice([answer], { account: owner.account, chain: owner.chain });
     await futures.read.getMarketPrice();
   });
 
   it("reverts getMarketPrice with InvalidOracle when the feed answers with a non-positive value", async function () {
-    const { contracts } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, hashrateOracle } = contracts;
+    const { owner } = accounts;
 
-    await hashrateOracle.write.setPrice([0n]);
+    await hashrateOracle.write.setPrice([0n], { account: owner.account, chain: owner.chain });
     await viem.assertions.revertWithCustomError(
       futures.read.getMarketPrice(),
       futures,
       "InvalidOracle",
     );
 
-    await hashrateOracle.write.setPrice([-1n]);
+    await hashrateOracle.write.setPrice([-1n], { account: owner.account, chain: owner.chain });
     await viem.assertions.revertWithCustomError(
       futures.read.getMarketPrice(),
       futures,

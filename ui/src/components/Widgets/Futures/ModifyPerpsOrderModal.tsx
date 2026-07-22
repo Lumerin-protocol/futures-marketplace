@@ -3,8 +3,7 @@ import Modal from "@mui/material/Modal";
 import CloseIcon from "@mui/icons-material/Close";
 import IconButton from "@mui/material/IconButton";
 import type { PerpsOrder } from "../../../hooks/data/perps/useUserPerpsOrders";
-import { useCreatePerpsOrder } from "../../../hooks/data/perps/useCreatePerpsOrder";
-import { useCancelPerpsOrder } from "../../../hooks/data/perps/useCancelPerpsOrder";
+import { useUpdatePerpsOrders } from "../../../hooks/data/perps/useUpdatePerpsOrders";
 import { useQueryClient } from "@tanstack/react-query";
 import { USER_PERPS_ORDERS_QK } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { USER_POSITION_SESSIONS_QK } from "../../../hooks/data/perps/useUserPositionSessions";
@@ -48,8 +47,7 @@ export const ModifyPerpsOrderModal = ({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showReview, setShowReview] = useState(false);
 
-  const { createOrderAsync } = useCreatePerpsOrder();
-  const { cancelOrderAsync } = useCancelPerpsOrder();
+  const { updateOrdersAsync } = useUpdatePerpsOrders();
   const queryClient = useQueryClient();
   const publicClient = usePublicClient();
 
@@ -95,21 +93,17 @@ export const ModifyPerpsOrderModal = ({
     setSubmitError(null);
 
     try {
-      // 1. Cancel the existing order
-      const cancelHash = await cancelOrderAsync({ orderId: order.id as `0x${string}` });
-      if (cancelHash && publicClient) {
-        const cancelReceipt = await publicClient.waitForTransactionReceipt({ hash: cancelHash });
-        await waitForOrderBookBlockNumber(cancelReceipt.blockNumber, queryClient, "perpetual");
-      }
-
-      // 2. Place a new order with the updated price & quantity (same side)
       const newPriceBig = BigInt(Math.round(form.currentPrice * PAYMENT_TOKEN_SCALE_NUM));
       // Positive quantity = Buy (Long), negative = Sell (Short)
       const signedQty = order.isBuy ? newQty : -newQty;
-      const createHash = await createOrderAsync({ price: newPriceBig, quantity: signedQty });
-      if (createHash && publicClient) {
-        const createReceipt = await publicClient.waitForTransactionReceipt({ hash: createHash });
-        await waitForOrderBookBlockNumber(createReceipt.blockNumber, queryClient, "perpetual");
+
+      const txHash = await updateOrdersAsync({
+        cancelIds: [order.id as `0x${string}`],
+        creates: [{ price: newPriceBig, quantity: signedQty }],
+      });
+      if (txHash && publicClient) {
+        const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+        await waitForOrderBookBlockNumber(receipt.blockNumber, queryClient, "perpetual");
       }
 
       await Promise.all([
@@ -131,7 +125,7 @@ export const ModifyPerpsOrderModal = ({
       setIsSubmitting(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order, form.currentPrice, form.amount, form.amountMode, createOrderAsync, cancelOrderAsync, queryClient, publicClient, participantAddress, handleClose, onConfirmed]);
+  }, [order, form.currentPrice, form.amount, form.amountMode, updateOrdersAsync, queryClient, publicClient, participantAddress, handleClose, onConfirmed]);
 
   if (!order) return null;
 

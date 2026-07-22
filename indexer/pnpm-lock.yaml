@@ -18,24 +18,30 @@ importers:
         specifier: ^7.2.0
         version: 7.4.0(graphql@16.14.2)
       viem:
-        specifier: ^2.37.9
+        specifier: ^2.54.6
         version: 2.54.6(typescript@5.9.3)(zod@3.25.76)
     devDependencies:
+      '@biomejs/biome':
+        specifier: 2.4.13
+        version: 2.4.13
       '@graphprotocol/graph-cli':
         specifier: ^0.98.1
-        version: 0.98.1(@types/node@25.9.4)(typescript@5.9.3)(zod@3.25.76)
+        version: 0.98.1(@types/node@25.9.4)(supports-color@8.1.1)(typescript@5.9.3)(zod@3.25.76)
       '@nomicfoundation/hardhat-network-helpers':
-        specifier: ^3.0.8
+        specifier: ^3.0.11
         version: 3.0.11(hardhat@3.9.1)
       '@nomicfoundation/hardhat-node-test-runner':
-        specifier: ^3.0.8
+        specifier: ^3.0.17
         version: 3.0.17(hardhat@3.9.1)
       '@nomicfoundation/hardhat-viem':
-        specifier: ^3.0.7
+        specifier: ^3.0.9
         version: 3.0.9(hardhat@3.9.1)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76))
       '@types/node':
         specifier: ^25.9.1
         version: 25.9.4
+      '@typescript/native-preview':
+        specifier: 7.0.0-dev.20260707.2
+        version: 7.0.0-dev.20260707.2
       assemblyscript:
         specifier: ^0.19.23
         version: 0.19.23
@@ -43,7 +49,7 @@ importers:
         specifier: link:../contracts
         version: link:../contracts
       hardhat:
-        specifier: ^3.4.0
+        specifier: ^3.9.1
         version: 3.9.1
       hardhat-matchstick-ts:
         specifier: github:lsheva/matchstick-ts#6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad&path:packages/hardhat-matchstick-ts
@@ -53,7 +59,7 @@ importers:
         version: 0.6.0
       matchstick-ts:
         specifier: github:lsheva/matchstick-ts#6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad&path:packages/matchstick-ts
-        version: https://codeload.github.com/lsheva/matchstick-ts/tar.gz/6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad#path:packages/matchstick-ts(@graphprotocol/graph-cli@0.98.1(@types/node@25.9.4)(typescript@5.9.3)(zod@3.25.76))(@graphprotocol/graph-ts@0.37.0)(matchstick-as@0.6.0)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76))
+        version: https://codeload.github.com/lsheva/matchstick-ts/tar.gz/6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad#path:packages/matchstick-ts(@graphprotocol/graph-cli@0.98.1(@types/node@25.9.4)(supports-color@8.1.1)(typescript@5.9.3)(zod@3.25.76))(@graphprotocol/graph-ts@0.37.0)(matchstick-as@0.6.0)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76))
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -85,6 +91,63 @@ packages:
   '@babel/helper-validator-identifier@7.29.7':
     resolution: {integrity: sha512-qehxGkRj55h/ff8EMaJ+cYhyaKlHIxqYDn682wQD7RNp9UujOQsHog2uS0r2vzr4pW+sXf90NeeayjcNaX3fFg==}
     engines: {node: '>=6.9.0'}
+
+  '@biomejs/biome@2.4.13':
+    resolution: {integrity: sha512-gLXOwkOBBg0tr7bDsqlkIh4uFeKuMjxvqsrb1Tukww1iDmHcfr4Uu8MoQxp0Rcte+69+osRNWXwHsu/zxT6XqA==}
+    engines: {node: '>=14.21.3'}
+    hasBin: true
+
+  '@biomejs/cli-darwin-arm64@2.4.13':
+    resolution: {integrity: sha512-2KImO1jhNFBa2oWConyr0x6flxbQpGKv6902uGXpYM62Xyem8U80j441SyUJ8KyngsmKbQjeIv1q2CQfDkNnYg==}
+    engines: {node: '>=14.21.3'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@biomejs/cli-darwin-x64@2.4.13':
+    resolution: {integrity: sha512-BKrJklbaFN4p1Ts4kPBczo+PkbsHQg57kmJ+vON9u2t6uN5okYHaSr7h/MutPCWQgg2lglaWoSmm+zhYW+oOkg==}
+    engines: {node: '>=14.21.3'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@biomejs/cli-linux-arm64-musl@2.4.13':
+    resolution: {integrity: sha512-U5MsuBQW25dXaYtqWWSPM3P96H6Y+fHuja3TQpMNnylocHW0tEbtFTDlUj6oM+YJLntvEkQy4grBvQNUD4+RCg==}
+    engines: {node: '>=14.21.3'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@biomejs/cli-linux-arm64@2.4.13':
+    resolution: {integrity: sha512-NzkUDSqfvMBrPplKgVr3aXLHZ2NEELvvF4vZxXulEylKWIGqlvNEcwUcj9OLrn75TD3lJ/GIqCVlBwd1MZCuYQ==}
+    engines: {node: '>=14.21.3'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@biomejs/cli-linux-x64-musl@2.4.13':
+    resolution: {integrity: sha512-Z601MienRgTBDza/+u2CH3RSrWoXo9rtr8NK6A4KJzqGgfxx+H3VlyLgTJ4sRo40T3pIsqpTmiOQEvYzQvBRvQ==}
+    engines: {node: '>=14.21.3'}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@biomejs/cli-linux-x64@2.4.13':
+    resolution: {integrity: sha512-Az3ZZedYRBo9EQzNnD9SxFcR1G5QsGo6VEc2hIyVPZ1rdKwee/7E9oeBBZFpE8Z44ekxsDQBqbiWGW5ShOhUSQ==}
+    engines: {node: '>=14.21.3'}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@biomejs/cli-win32-arm64@2.4.13':
+    resolution: {integrity: sha512-Px9PS2B5/Q183bUwy/5VHqp3J2lzdOCeVGzMpphYfl8oSa7VDCqenBdqWpy6DCy/en4Rbf/Y1RieZF6dJPcc9A==}
+    engines: {node: '>=14.21.3'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@biomejs/cli-win32-x64@2.4.13':
+    resolution: {integrity: sha512-tTcMkXyBrmHi9BfrD2VNHs/5rYIUKETqsBlYOvSAABwBkJhSDVb5e7wPukftsQbO3WzQkXe6kaztC6WtUOXSoQ==}
+    engines: {node: '>=14.21.3'}
+    cpu: [x64]
+    os: [win32]
 
   '@chainsafe/is-ip@2.1.0':
     resolution: {integrity: sha512-KIjt+6IfysQ4GCv66xihEitBjvhU/bixbbbFxdJ1sqCp4uJ0wuZiYBPhksZoy4lfaF0k9cwNzY5upEW/VWdw3w==}
@@ -685,6 +748,53 @@ packages:
 
   '@types/ws@7.4.7':
     resolution: {integrity: sha512-JQbbmxZTZehdc2iszGKs5oC3NFnjeay7mtAWrdt7qNtAVK0g19muApzAy4bm9byz79xa2ZnO/BOBC2R8RC5Lww==}
+
+  '@typescript/native-preview-darwin-arm64@7.0.0-dev.20260707.2':
+    resolution: {integrity: sha512-wny2pgKjGbiZtnOIHVa3tXC1UfDqxNEFzyPGmiqybedG8hipG2Nfp0l5UxbaKCjkLacUpH/W5bP2hBOMVhCOzg==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@typescript/native-preview-darwin-x64@7.0.0-dev.20260707.2':
+    resolution: {integrity: sha512-Afc7M5zOwo+GpfcYwz5Z8HMB2tPVsui7nNIqEuuFB73MPdVqNn/Wmpe4tP4MRri0AtJnJknoHBaTJ/VDAp/Jhw==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@typescript/native-preview-linux-arm64@7.0.0-dev.20260707.2':
+    resolution: {integrity: sha512-iITBa2WjjTI5N9t5l7Z4KoOSI+2zBlhbvFzsD/f8qX8QoKjz/Y4DPyBDgezYi8nkqjjksbgSOJ3/ykzhwrB9cg==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@typescript/native-preview-linux-arm@7.0.0-dev.20260707.2':
+    resolution: {integrity: sha512-hJm/UOqZTr9FHmR7uNm8VGX4oKtfWk0Jem0zPeJFNC8ckGUfSBueyiEYMZB+XmRc1aG4x1E46y3CplP4CLHvGQ==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm]
+    os: [linux]
+
+  '@typescript/native-preview-linux-x64@7.0.0-dev.20260707.2':
+    resolution: {integrity: sha512-du0dzi6y97Po5vDNdPJTyyijHCpaS22JLRnKZEJXBDaO9gCIymOv/5QQokFRuOlQm0bWl3i9PF4OVdGP6uAOQA==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [linux]
+
+  '@typescript/native-preview-win32-arm64@7.0.0-dev.20260707.2':
+    resolution: {integrity: sha512-SsAwfhyHJ1akgBc+99z4+hwdbHsdWaKB8EwCNIMA6JfSLMeUjffrYvxu+vfMyxVtOVOz7RrRXRoiDiu4a2sCtg==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@typescript/native-preview-win32-x64@7.0.0-dev.20260707.2':
+    resolution: {integrity: sha512-DL4u27stv0fo71sVhOzHSwE+YMZsbBijVI+kg5dLDLilSH79WFTJ8RSQ46vJrCMt+Gjlv/JOZP1PuLJDfioYeQ==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [win32]
+
+  '@typescript/native-preview@7.0.0-dev.20260707.2':
+    resolution: {integrity: sha512-oUGp+Rep/hqMhPunyinsALUwSlzHINSxitifPiSaeqoKOKD2OlR9NE3TaPqwsl4NlGslsOSUXI1JotWQzpYCPg==}
+    engines: {node: '>=16.20.0'}
+    hasBin: true
 
   '@whatwg-node/disposablestack@0.0.6':
     resolution: {integrity: sha512-LOtTn+JgJvX8WfBVJtF08TGrdjuFzGJc4mkP8EdDI8ADbvO7kiexYep1o8dwnt0okb0jYclCDXF13xU7Ge4zSw==}
@@ -2316,6 +2426,41 @@ snapshots:
 
   '@babel/helper-validator-identifier@7.29.7': {}
 
+  '@biomejs/biome@2.4.13':
+    optionalDependencies:
+      '@biomejs/cli-darwin-arm64': 2.4.13
+      '@biomejs/cli-darwin-x64': 2.4.13
+      '@biomejs/cli-linux-arm64': 2.4.13
+      '@biomejs/cli-linux-arm64-musl': 2.4.13
+      '@biomejs/cli-linux-x64': 2.4.13
+      '@biomejs/cli-linux-x64-musl': 2.4.13
+      '@biomejs/cli-win32-arm64': 2.4.13
+      '@biomejs/cli-win32-x64': 2.4.13
+
+  '@biomejs/cli-darwin-arm64@2.4.13':
+    optional: true
+
+  '@biomejs/cli-darwin-x64@2.4.13':
+    optional: true
+
+  '@biomejs/cli-linux-arm64-musl@2.4.13':
+    optional: true
+
+  '@biomejs/cli-linux-arm64@2.4.13':
+    optional: true
+
+  '@biomejs/cli-linux-x64-musl@2.4.13':
+    optional: true
+
+  '@biomejs/cli-linux-x64@2.4.13':
+    optional: true
+
+  '@biomejs/cli-win32-arm64@2.4.13':
+    optional: true
+
+  '@biomejs/cli-win32-x64@2.4.13':
+    optional: true
+
   '@chainsafe/is-ip@2.1.0': {}
 
   '@chainsafe/netmask@2.0.0':
@@ -2416,13 +2561,13 @@ snapshots:
       graphql-import-node: 0.0.5(graphql@16.14.2)
       js-yaml: 4.1.0
 
-  '@graphprotocol/graph-cli@0.98.1(@types/node@25.9.4)(typescript@5.9.3)(zod@3.25.76)':
+  '@graphprotocol/graph-cli@0.98.1(@types/node@25.9.4)(supports-color@8.1.1)(typescript@5.9.3)(zod@3.25.76)':
     dependencies:
       '@float-capital/float-subgraph-uncrashable': 0.0.0-internal-testing.5
       '@oclif/core': 4.5.5
-      '@oclif/plugin-autocomplete': 3.2.53
+      '@oclif/plugin-autocomplete': 3.2.53(supports-color@8.1.1)
       '@oclif/plugin-not-found': 3.2.88(@types/node@25.9.4)
-      '@oclif/plugin-warn-if-update-available': 3.1.68
+      '@oclif/plugin-warn-if-update-available': 3.1.68(supports-color@8.1.1)
       '@pinax/graph-networks-registry': 0.7.1
       '@whatwg-node/fetch': 0.10.13
       assemblyscript: 0.19.23
@@ -2432,7 +2577,7 @@ snapshots:
       docker-compose: 1.3.0
       fs-extra: 11.3.2
       glob: 11.0.3
-      gluegun: 5.2.0(debug@4.4.3)
+      gluegun: 5.2.0(debug@4.4.3(supports-color@8.1.1))
       graphql: 16.11.0
       immutable: 5.1.4
       jayson: 4.2.0
@@ -2869,7 +3014,7 @@ snapshots:
       wordwrap: 1.0.0
       wrap-ansi: 7.0.0
 
-  '@oclif/plugin-autocomplete@3.2.53':
+  '@oclif/plugin-autocomplete@3.2.53(supports-color@8.1.1)':
     dependencies:
       '@oclif/core': 4.5.5
       ansis: 3.17.0
@@ -2887,12 +3032,12 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
-  '@oclif/plugin-warn-if-update-available@3.1.68':
+  '@oclif/plugin-warn-if-update-available@3.1.68(supports-color@8.1.1)':
     dependencies:
       '@oclif/core': 4.5.5
       ansis: 3.17.0
       debug: 4.4.3(supports-color@8.1.1)
-      http-call: 5.3.0
+      http-call: 5.3.0(supports-color@8.1.1)
       lodash: 4.18.1
       registry-auth-token: 5.1.1
     transitivePeerDependencies:
@@ -2966,6 +3111,37 @@ snapshots:
     dependencies:
       '@types/node': 25.9.4
 
+  '@typescript/native-preview-darwin-arm64@7.0.0-dev.20260707.2':
+    optional: true
+
+  '@typescript/native-preview-darwin-x64@7.0.0-dev.20260707.2':
+    optional: true
+
+  '@typescript/native-preview-linux-arm64@7.0.0-dev.20260707.2':
+    optional: true
+
+  '@typescript/native-preview-linux-arm@7.0.0-dev.20260707.2':
+    optional: true
+
+  '@typescript/native-preview-linux-x64@7.0.0-dev.20260707.2':
+    optional: true
+
+  '@typescript/native-preview-win32-arm64@7.0.0-dev.20260707.2':
+    optional: true
+
+  '@typescript/native-preview-win32-x64@7.0.0-dev.20260707.2':
+    optional: true
+
+  '@typescript/native-preview@7.0.0-dev.20260707.2':
+    optionalDependencies:
+      '@typescript/native-preview-darwin-arm64': 7.0.0-dev.20260707.2
+      '@typescript/native-preview-darwin-x64': 7.0.0-dev.20260707.2
+      '@typescript/native-preview-linux-arm': 7.0.0-dev.20260707.2
+      '@typescript/native-preview-linux-arm64': 7.0.0-dev.20260707.2
+      '@typescript/native-preview-linux-x64': 7.0.0-dev.20260707.2
+      '@typescript/native-preview-win32-arm64': 7.0.0-dev.20260707.2
+      '@typescript/native-preview-win32-x64': 7.0.0-dev.20260707.2
+
   '@whatwg-node/disposablestack@0.0.6':
     dependencies:
       '@whatwg-node/promise-helpers': 1.3.2
@@ -3026,9 +3202,9 @@ snapshots:
 
   any-signal@4.2.0: {}
 
-  apisauce@2.1.6(debug@4.4.3):
+  apisauce@2.1.6(debug@4.4.3(supports-color@8.1.1)):
     dependencies:
-      axios: 0.21.4(debug@4.4.3)
+      axios: 0.21.4(debug@4.4.3(supports-color@8.1.1))
     transitivePeerDependencies:
       - debug
 
@@ -3053,9 +3229,9 @@ snapshots:
     dependencies:
       possible-typed-array-names: 1.1.0
 
-  axios@0.21.4(debug@4.4.3):
+  axios@0.21.4(debug@4.4.3(supports-color@8.1.1)):
     dependencies:
-      follow-redirects: 1.16.0(debug@4.4.3)
+      follow-redirects: 1.16.0(debug@4.4.3(supports-color@8.1.1))
     transitivePeerDependencies:
       - debug
 
@@ -3467,7 +3643,7 @@ snapshots:
     dependencies:
       to-regex-range: 5.0.1
 
-  follow-redirects@1.16.0(debug@4.4.3):
+  follow-redirects@1.16.0(debug@4.4.3(supports-color@8.1.1)):
     optionalDependencies:
       debug: 4.4.3(supports-color@8.1.1)
 
@@ -3553,9 +3729,9 @@ snapshots:
       once: 1.4.0
       path-is-absolute: 1.0.1
 
-  gluegun@5.2.0(debug@4.4.3):
+  gluegun@5.2.0(debug@4.4.3(supports-color@8.1.1)):
     dependencies:
-      apisauce: 2.1.6(debug@4.4.3)
+      apisauce: 2.1.6(debug@4.4.3(supports-color@8.1.1))
       app-module-path: 2.2.0
       cli-table3: 0.6.0
       colors: 1.4.0
@@ -3658,7 +3834,7 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
-  http-call@5.3.0:
+  http-call@5.3.0(supports-color@8.1.1):
     dependencies:
       content-type: 1.0.5
       debug: 4.4.3(supports-color@8.1.1)
@@ -3979,9 +4155,9 @@ snapshots:
     dependencies:
       wabt: 1.0.24
 
-  matchstick-ts@https://codeload.github.com/lsheva/matchstick-ts/tar.gz/6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad#path:packages/matchstick-ts(@graphprotocol/graph-cli@0.98.1(@types/node@25.9.4)(typescript@5.9.3)(zod@3.25.76))(@graphprotocol/graph-ts@0.37.0)(matchstick-as@0.6.0)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76)):
+  matchstick-ts@https://codeload.github.com/lsheva/matchstick-ts/tar.gz/6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad#path:packages/matchstick-ts(@graphprotocol/graph-cli@0.98.1(@types/node@25.9.4)(supports-color@8.1.1)(typescript@5.9.3)(zod@3.25.76))(@graphprotocol/graph-ts@0.37.0)(matchstick-as@0.6.0)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76)):
     dependencies:
-      '@graphprotocol/graph-cli': 0.98.1(@types/node@25.9.4)(typescript@5.9.3)(zod@3.25.76)
+      '@graphprotocol/graph-cli': 0.98.1(@types/node@25.9.4)(supports-color@8.1.1)(typescript@5.9.3)(zod@3.25.76)
       '@graphprotocol/graph-ts': 0.37.0
       graphql: 16.14.2
       matchstick-as: 0.6.0

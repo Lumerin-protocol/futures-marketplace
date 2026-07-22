@@ -150,9 +150,10 @@ describe("OrderEntryStatus.LIQUIDATED: liquidateOrders force-cancels resting ord
     // 3. Crash the market so the seller's portfolio MM is breached.
     await scaleHashprice(hashrateOracle, 40n, 1n);
 
-    const liqTx = await futures.write.liquidateOrders([seller.account.address], {
-      account: validator.account,
-    });
+    const liqTx = await futures.write.liquidateOrders(
+      [seller.account.address, [restingOrderId]],
+      { account: validator.account },
+    );
     const liqReceipt = await pc.waitForTransactionReceipt({ hash: liqTx });
 
     const orderLiquidatedEvents = parseEventLogs({

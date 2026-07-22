@@ -15,8 +15,8 @@ describe("Get Positions", () => {
     const deliveryDate = config.deliveryDates[0];
     await collateralVault.write.deposit([price * 10n], { account: seller.account });
     await collateralVault.write.deposit([price * 10n], { account: buyer.account });
-    await futures.write.createOrder([price, deliveryDate, -1], { account: seller.account });
-    await futures.write.createOrder([price, deliveryDate, 1], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account });
 
     const sellerPos = await futures.read.getUserPosition([seller.account.address, deliveryDate]);
     const buyerPos = await futures.read.getUserPosition([buyer.account.address, deliveryDate]);
@@ -42,14 +42,14 @@ describe("Get Positions", () => {
     await collateralVault.write.deposit([margin], { account: buyer.account });
     await collateralVault.write.deposit([margin], { account: buyer2.account });
 
-    await futures.write.createOrder([price, deliveryDate, -1], { account: seller.account });
-    await futures.write.createOrder([price, deliveryDate, 1], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account });
 
     const buyerPosBefore = await futures.read.getUserPosition([buyer.account.address, deliveryDate]);
     assert.equal(buyerPosBefore.netQuantity, 1n);
 
-    await futures.write.createOrder([price, deliveryDate, 1], { account: buyer2.account });
-    await futures.write.createOrder([price, deliveryDate, -1], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, 1n], { account: buyer2.account });
+    await futures.write.createOrder([price, deliveryDate, -1n], { account: buyer.account });
 
     const buyerPosAfter = await futures.read.getUserPosition([buyer.account.address, deliveryDate]);
     assert.equal(buyerPosAfter.netQuantity, 0n);

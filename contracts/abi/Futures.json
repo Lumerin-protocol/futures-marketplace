@@ -1403,6 +1403,11 @@
         "internalType": "address",
         "name": "_user",
         "type": "address"
+      },
+      {
+        "internalType": "bytes32[]",
+        "name": "_orderIds",
+        "type": "bytes32[]"
       }
     ],
     "name": "liquidateOrders",
@@ -1838,6 +1843,41 @@
       }
     ],
     "name": "transferOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32[]",
+        "name": "_cancelIds",
+        "type": "bytes32[]"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "price",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "expirationAt",
+            "type": "uint256"
+          },
+          {
+            "internalType": "int256",
+            "name": "quantity",
+            "type": "int256"
+          }
+        ],
+        "internalType": "struct Futures.OrderIntent[]",
+        "name": "_intents",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "updateOrders",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

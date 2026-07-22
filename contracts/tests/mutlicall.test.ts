@@ -19,12 +19,12 @@ describe("Futures - multicall write", () => {
       encodeFunctionData({
         abi: futures.abi,
         functionName: "createOrder",
-        args: [price, deliveryDate, -1],
+        args: [price, deliveryDate, -1n],
       }),
       encodeFunctionData({
         abi: futures.abi,
         functionName: "createOrder",
-        args: [price, deliveryDate, -1],
+        args: [price, deliveryDate, -1n],
       }),
     ];
 
@@ -45,12 +45,12 @@ describe("Futures - multicall write", () => {
       encodeFunctionData({
         abi: futures.abi,
         functionName: "createOrder",
-        args: [price, deliveryDate, 1],
+        args: [price, deliveryDate, 1n],
       }),
       encodeFunctionData({
         abi: futures.abi,
         functionName: "createOrder",
-        args: [price, deliveryDate, 1],
+        args: [price, deliveryDate, 1n],
       }),
     ];
 

@@ -93,7 +93,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private immutable _decimals;
 
     // constants
-    string public constant VERSION = "3.3.1";
+    string public constant VERSION = "3.6.1";
     uint256 public constant ORACLE_UNIT_HPS_DAY = 100 * 1e12;
     uint256 public constant CONTRACT_SIZE_HPS_DAY = 1e15;
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
@@ -230,6 +230,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     error InvalidOracle();
     error NotLiquidatable();
     error OrdersStillOpen();
+    /// @notice Partial liquidation left balance above IM while a real IM>MM buffer remains.
     error OverLiquidation();
     error OrderNotBelongToUser();
     error OrderNotExists();
@@ -275,17 +276,19 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     // ── Order placement ───────────────────────────────────────────────────────
 
     /// @notice Place a GTC limit order. `quantity` > 0 = buy/long, < 0 = sell/short.
+    /// @dev Reduce-only legs (opposite side, size ≤ position at `expirationAt`) skip the IM check.
     function createOrder(uint256 _price, uint256 _expirationAt, int256 _quantity) external {
         address sender = _msgSender();
-        _createOrderInternal(sender, _price, _expirationAt, _quantity, TimeInForce.GTC);
-        ensureNoCollateralDeficit(sender);
+        bool skipMargin = _createOrderInternal(sender, _price, _expirationAt, _quantity, TimeInForce.GTC);
+        if (!skipMargin) ensureNoCollateralDeficit(sender);
     }
 
     /// @notice Place a limit order with explicit time-in-force (GTC / IOC / FOK).
+    /// @dev Reduce-only legs skip the IM check (same rule as `createOrder`).
     function createOrderV2(uint256 _price, uint256 _expirationAt, int256 _quantity, TimeInForce _tif) external {
         address sender = _msgSender();
-        _createOrderInternal(sender, _price, _expirationAt, _quantity, _tif);
-        ensureNoCollateralDeficit(sender);
+        bool skipMargin = _createOrderInternal(sender, _price, _expirationAt, _quantity, _tif);
+        if (!skipMargin) ensureNoCollateralDeficit(sender);
     }
 
     /// @notice Batched GTC placement — IM check once at the end.
@@ -310,18 +313,40 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         ensureNoCollateralDeficit(sender);
     }
 
+    /// @notice Cancel then place GTC orders in one call — IM check once at the end.
+    /// @dev Cancels run first so freed margin is available to the creates.
+    function updateOrders(bytes32[] calldata _cancelIds, OrderIntent[] calldata _intents) external {
+        address sender = _msgSender();
+        uint256 cancelLen = _cancelIds.length;
+        for (uint256 i = 0; i < cancelLen; i++) {
+            _cancelOrderInternal(sender, _cancelIds[i]);
+        }
+        uint256 createLen = _intents.length;
+        for (uint256 j = 0; j < createLen; j++) {
+            OrderIntent calldata intent = _intents[j];
+            _createOrderInternal(sender, intent.price, intent.expirationAt, intent.quantity, TimeInForce.GTC);
+        }
+        ensureNoCollateralDeficit(sender);
+    }
+
     /// @dev Per-leg body of `createOrder` / `createOrderV2` without the IM-check epilogue.
+    ///      Returns true when the leg is reduce-only (single-order callers may skip IM);
+    ///      batch callers always check once at the end.
     function _createOrderInternal(
         address _participant,
         uint256 _price,
         uint256 _expirationAt,
         int256 _quantity,
         TimeInForce _tif
-    ) private {
+    ) private returns (bool isReduceOnly) {
         if (uint8(_tif) > uint8(TimeInForce.FOK)) revert InvalidTimeInForce();
         validatePrice(_price);
         validateExpirationAt(_expirationAt);
         if (_quantity == 0) revert InvalidQty();
+
+        // Snapshot before matching — reduce-only vs position minus already-resting reduces.
+        int256 positionBefore = participantExpirationAtNetDelta[_participant][_expirationAt];
+        uint256 reducingBefore = _restingReduceAbs(_participant, _expirationAt, positionBefore);
 
         bool isBuy = _quantity > 0;
         bytes32 orderId = bytes32(++nonce);
@@ -359,6 +384,28 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             // IOC (or FOK after a full fill): never rest; close the taker order id at 0.
             if (partiallyOrFullyFilled || _tif == TimeInForce.IOC) {
                 emit OrderUpdated(orderId, _participant, 0);
+            }
+        }
+
+        // Opposite side and combined reducing size (resting + this intent) ≤ position.
+        isReduceOnly = positionBefore != 0 && (positionBefore > 0 ? _quantity < 0 : _quantity > 0)
+            && _abs(_quantity) + reducingBefore <= _abs(positionBefore);
+    }
+
+    /// @dev Absolute qty of resting orders that reduce `_net` at `_expirationAt`.
+    function _restingReduceAbs(address _user, uint256 _expirationAt, int256 _net)
+        private
+        view
+        returns (uint256 total)
+    {
+        if (_net == 0) return 0;
+        EnumerableSet.Bytes32Set storage ids = participantOrderIdsIndex[_user];
+        uint256 len = ids.length();
+        for (uint256 i = 0; i < len; i++) {
+            Order memory order = orders[ids.at(i)];
+            if (order.expirationAt != _expirationAt || order.quantity == 0) continue;
+            if (_net > 0 ? order.quantity < 0 : order.quantity > 0) {
+                total += _abs(order.quantity);
             }
         }
     }
@@ -545,8 +592,13 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     /// @notice Cancel a resting order owned by the caller.
     function cancelOrder(bytes32 _orderId) external {
+        _cancelOrderInternal(_msgSender(), _orderId);
+    }
+
+    /// @dev Shared cancel body for `cancelOrder` / `updateOrders`.
+    function _cancelOrderInternal(address _participant, bytes32 _orderId) private {
         Order memory order = orders[_orderId];
-        if (order.participant != _msgSender()) revert OrderNotBelongToSender();
+        if (order.participant != _participant) revert OrderNotBelongToSender();
         if (order.quantity == 0) revert OrderNotExists();
         _removeRestingOrder(_orderId, order);
         emit OrderCancelled(_orderId, order.participant);
@@ -799,13 +851,18 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         _doLiquidateOrder(_user, _orderId, order);
     }
 
-    function liquidateOrders(address _user) external {
-        EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[_user];
+    /// @notice Cancel keeper-chosen resting orders. Keeps prior cancels; skips
+    ///         raced/stale ids; stops when the user is healthy.
+    function liquidateOrders(address _user, bytes32[] calldata _orderIds) external {
         uint256 cancelled = 0;
-        while (_orders.length() > 0) {
+        uint256 len = _orderIds.length;
+        for (uint256 i = 0; i < len; i++) {
             if (!_underwater(_user)) break;
-            bytes32 orderId = _orders.at(0);
-            _doLiquidateOrder(_user, orderId, orders[orderId]);
+            bytes32 orderId = _orderIds[i];
+            Order memory order = orders[orderId];
+            // Skip raced/stale ids; stop only once healthy.
+            if (order.participant != _user || order.quantity == 0) continue;
+            _doLiquidateOrder(_user, orderId, order);
             cancelled++;
         }
         if (cancelled == 0) revert NotLiquidatable();
@@ -821,69 +878,70 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     // ── Position liquidation ──────────────────────────────────────────────────
 
     /// @notice Force-close up to `closeQty` contracts of an underwater user's net at `expirationAt`.
-    /// @dev Orders-first: reverts `OrdersStillOpen` if the user still has resting orders.
-    ///      No counterparty order recreation — only this user's aggregate is reduced.
+    /// @dev Orders-first. Keeper sizes `closeQty` off-chain; partial closes revert `OverLiquidation`
+    ///      if leftover balance sits above IM when a real IM>MM buffer exists. Full closes skip
+    ///      that guard (bad-debt / deep-underwater path).
     function liquidatePosition(address _user, uint256 _expirationAt, uint256 _closeQty) external {
         if (participantOrderIdsIndex[_user].length() != 0) revert OrdersStillOpen();
         if (!_underwater(_user)) revert NotLiquidatable();
+        if (_closeQty == 0) revert InvalidQty();
 
         int256 netQty = participantExpirationAtNetDelta[_user][_expirationAt];
         if (netQty == 0) revert NotLiquidatable();
-        if (_closeQty == 0) revert InvalidQty();
 
-        uint256 absNet = _abs(netQty);
-        uint256 closeAbs = _closeQty < absNet ? _closeQty : absNet;
-
-        if (closeAbs == absNet) {
-            _doLiquidateFullPosition(_user, _expirationAt, netQty);
-            return;
-        }
-
-        (int256 pnl, int256 signedClose) = _doPartialLiquidatePosition(_user, _expirationAt, netQty, closeAbs);
-
-        uint256 im = marginEngine.computePortfolioIM(_user);
-        uint256 mm = marginEngine.computePortfolioMM(_user);
-        if (im > mm && collateralVault.balanceOf(_user) > im) revert OverLiquidation();
-
-        emit PositionLiquidated(_user, _msgSender(), _expirationAt, signedClose, pnl, 0);
-        _notifyLiquidation(_msgSender(), 0);
+        if (!_closePosition(_user, _expirationAt, netQty, _closeQty)) revert NotLiquidatable();
+        _revertIfOverLiquidated(_user);
     }
 
-    /// @notice Batch liquidate across expiries. Keeper sizes worst-first off-chain.
+    /// @notice Batch liquidate across expiries. Keeper chooses legs; keeps prior closes.
+    /// @dev Skips empty legs; stops when healthy. End-of-tx `OverLiquidation` if oversize.
     function liquidatePositions(address _user, uint256[] calldata _expirationAts, uint256[] calldata _closeQtys)
         external
     {
         if (_expirationAts.length != _closeQtys.length) revert ArrayLengthMismatch();
         if (participantOrderIdsIndex[_user].length() != 0) revert OrdersStillOpen();
-        if (!_underwater(_user)) revert NotLiquidatable();
 
         uint256 closed = 0;
         for (uint256 i = 0; i < _expirationAts.length; i++) {
+            if (!_underwater(_user)) break;
             uint256 expirationAt = _expirationAts[i];
             uint256 closeQty = _closeQtys[i];
             int256 netQty = participantExpirationAtNetDelta[_user][expirationAt];
+            // Skip empty/stale legs; stop only once healthy.
             if (netQty == 0 || closeQty == 0) continue;
-
-            uint256 absNet = _abs(netQty);
-            uint256 closeAbs = closeQty < absNet ? closeQty : absNet;
-
-            if (closeAbs == absNet) {
-                _doLiquidateFullPosition(_user, expirationAt, netQty);
-            } else {
-                (int256 pnl, int256 signedClose) = _doPartialLiquidatePosition(_user, expirationAt, netQty, closeAbs);
-                emit PositionLiquidated(_user, _msgSender(), expirationAt, signedClose, pnl, 0);
-                _notifyLiquidation(_msgSender(), 0);
-            }
+            if (!_closePosition(_user, expirationAt, netQty, closeQty)) continue;
             closed++;
         }
 
         if (closed == 0) revert NotLiquidatable();
+        _revertIfOverLiquidated(_user);
+    }
 
-        if (participantActiveExpirationAts[_user].length() > 0) {
-            uint256 im = marginEngine.computePortfolioIM(_user);
-            uint256 mm = marginEngine.computePortfolioMM(_user);
-            if (im > mm && collateralVault.balanceOf(_user) > im) revert OverLiquidation();
+    /// @dev Close up to `_closeQty` at `_expirationAt`. Returns false when no positive close.
+    function _closePosition(address _user, uint256 _expirationAt, int256 _netQty, uint256 _closeQty)
+        private
+        returns (bool)
+    {
+        uint256 absNet = _abs(_netQty);
+        uint256 closeAbs = _closeQty < absNet ? _closeQty : absNet;
+        if (closeAbs == 0) return false;
+
+        if (closeAbs == absNet) {
+            _doLiquidateFullPosition(_user, _expirationAt, _netQty);
+            return true;
         }
+
+        (int256 pnl, int256 signedClose) = _doPartialLiquidatePosition(_user, _expirationAt, _netQty, closeAbs);
+        emit PositionLiquidated(_user, _msgSender(), _expirationAt, signedClose, pnl, 0);
+        _notifyLiquidation(_msgSender(), 0);
+        return true;
+    }
+
+    /// @dev With remaining portfolio risk and a real IM>MM buffer, balance must be ≤ IM.
+    function _revertIfOverLiquidated(address _user) private view {
+        uint256 im = marginEngine.computePortfolioIM(_user);
+        uint256 mm = marginEngine.computePortfolioMM(_user);
+        if (im > mm && collateralVault.balanceOf(_user) > im) revert OverLiquidation();
     }
 
     function _doLiquidateFullPosition(address _user, uint256 _expirationAt, int256 _netQty) private {
@@ -909,15 +967,13 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         int256 netEntry = participantExpirationAtNetEntryValue[_user][_expirationAt];
         uint256 absNet = _abs(_netQty);
         uint256 avgEntry = _abs(netEntry) / absNet;
-
         signedClose = _netQty > 0 ? int256(_closeAbs) : -int256(_closeAbs);
         pnl = (int256(mark) - int256(avgEntry)) * signedClose;
         _transferPnl(_insuranceFundAccount(), _user, pnl);
 
         // Reduce toward zero; scale netEntryValue proportionally.
-        participantExpirationAtNetDelta[_user][_expirationAt] = _netQty > 0
-            ? _netQty - int256(_closeAbs)
-            : _netQty + int256(_closeAbs);
+        participantExpirationAtNetDelta[_user][_expirationAt] =
+            _netQty > 0 ? _netQty - int256(_closeAbs) : _netQty + int256(_closeAbs);
         participantExpirationAtNetEntryValue[_user][_expirationAt] =
             netEntry * int256(absNet - _closeAbs) / int256(absNet);
     }
@@ -1013,21 +1069,61 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     /// @notice Minimum margin locked by resting orders (token decimals).
-    /// @dev Maintenance × |qty| per order, minus mark PnL on the resting qty.
+    /// @dev Per order: maintenance × |qty| − mark PnL. A reducing-side order at an
+    ///      expiry with an open position is offset up to that position's remaining
+    ///      margin cap (same spirit as perps `reducingVal`). No calendar scan —
+    ///      position is read via `participantExpirationAtNetDelta[user][expiry]`.
     function getOrderMargin(address _participant) public view returns (uint256) {
         EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[_participant];
         uint256 len = _orders.length();
         if (len == 0) return 0;
-        uint256 total = 0;
+
         uint256 marketPrice = getMarketPrice();
         uint256 marginPct = liquidationMarginPercent;
+
+        // Remaining reduce-credit per expiry we've seen (at most one entry per
+        // distinct resting-order expiry, ≤ len).
+        uint256[] memory redExpiries = new uint256[](len);
+        uint256[] memory redRemaining = new uint256[](len);
+        uint256 nRed = 0;
+
+        uint256 total = 0;
         for (uint256 i = 0; i < len; i++) {
             Order memory order = orders[_orders.at(i)];
             if (order.expirationAt < block.timestamp || order.quantity == 0) continue;
+
             uint256 absQty = _abs(order.quantity);
             uint256 maintenanceMargin = order.price * marginPct / 100 * absQty;
             int256 pnl = (int256(marketPrice) - int256(order.price)) * order.quantity;
-            total += clamp(int256(maintenanceMargin) - pnl);
+            uint256 contrib = clamp(int256(maintenanceMargin) - pnl);
+
+            int256 net = participantExpirationAtNetDelta[_participant][order.expirationAt];
+            bool isReducing = net != 0 && (net > 0 ? order.quantity < 0 : order.quantity > 0);
+            if (!isReducing) {
+                total += contrib;
+                continue;
+            }
+
+            // Lazy-init remaining cap for this expiry on first reducing order.
+            uint256 slot = nRed;
+            bool found = false;
+            for (uint256 s = 0; s < nRed; s++) {
+                if (redExpiries[s] == order.expirationAt) {
+                    slot = s;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                redExpiries[nRed] = order.expirationAt;
+                redRemaining[nRed] = marketPrice * marginPct / 100 * _abs(net);
+                slot = nRed;
+                nRed++;
+            }
+
+            uint256 credit = contrib < redRemaining[slot] ? contrib : redRemaining[slot];
+            redRemaining[slot] -= credit;
+            total += contrib - credit;
         }
         return total;
     }

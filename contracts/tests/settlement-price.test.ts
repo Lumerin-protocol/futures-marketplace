@@ -18,8 +18,8 @@ async function openLotBetween(
 ) {
   const { futures } = data.contracts;
   const { pc } = data.accounts;
-  await futures.write.createOrder([entryPrice, expirationAt, -1], { account: short.account });
-  const txHash = await futures.write.createOrder([entryPrice, expirationAt, 1], {
+  await futures.write.createOrder([entryPrice, expirationAt, -1n], { account: short.account });
+  const txHash = await futures.write.createOrder([entryPrice, expirationAt, 1n], {
     account: long.account,
   });
   const receipt = await pc.waitForTransactionReceipt({ hash: txHash });

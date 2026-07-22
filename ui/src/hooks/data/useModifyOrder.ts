@@ -1,15 +1,17 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
-import { encodeFunctionData, getContract } from "viem";
+import { getContract } from "viem";
 import { FuturesAbi } from "../../abi/Futures";
 
 interface ModifyOrderProps {
-  oldPrice: bigint;
-  oldQuantity: number; // Current quantity (positive for Buy, negative for Sell)
+  /** Resting order ids to cancel before placing the replacement. */
+  orderIds: `0x${string}`[];
   newPrice: bigint;
-  newQuantity: number; // New quantity (positive for Buy, negative for Sell)
+  /** Signed whole-contract quantity: positive = buy/long, negative = sell/short. */
+  newQuantity: number | bigint;
   expirationAt: bigint;
 }
 
+/** Cancel then place via a single `updateOrders` (one IM check). */
 export function useModifyOrder() {
   const { writeContractAsync, isPending, isError, error, data: hash } = useWriteContract();
   const publicClient = usePublicClient();
@@ -24,24 +26,27 @@ export function useModifyOrder() {
       client: publicClient,
     });
 
-    const oppositeOldQuantity = -props.oldQuantity;
+    const quantity = BigInt(props.newQuantity);
+    if (props.orderIds.length === 0) {
+      throw new Error("orderIds must be non-empty");
+    }
+    if (quantity === 0n) {
+      throw new Error("quantity must be non-zero");
+    }
 
-    const calldata = [
-      encodeFunctionData({
-        abi: FuturesAbi,
-        functionName: "createOrder",
-        args: [props.oldPrice, props.expirationAt, BigInt(oppositeOldQuantity)],
-      }),
-      encodeFunctionData({
-        abi: FuturesAbi,
-        functionName: "createOrder",
-        args: [props.newPrice, props.expirationAt, BigInt(props.newQuantity)],
-      }),
-    ];
-
-    const req = await futuresContract.simulate.multicall([calldata], {
-      account: walletClient.account.address,
-    });
+    const req = await futuresContract.simulate.updateOrders(
+      [
+        props.orderIds,
+        [
+          {
+            price: props.newPrice,
+            expirationAt: props.expirationAt,
+            quantity,
+          },
+        ],
+      ],
+      { account: walletClient.account.address },
+    );
 
     return writeContractAsync(req.request);
   };

@@ -11,7 +11,7 @@ const { viem, networkHelpers } = await network.getOrCreate();
 type OrderIntent = {
   price: bigint;
   expirationAt: bigint;
-  quantity: number;
+  quantity: bigint;
 };
 
 describe("Futures.createOrders (batch placement)", () => {
@@ -52,11 +52,11 @@ describe("Futures.createOrders (batch placement)", () => {
     const dd = config.deliveryDates[0];
 
     const intents: OrderIntent[] = [
-      { price: mp + step, expirationAt: dd, quantity: -1 },
-      { price: mp + 2n * step, expirationAt: dd, quantity: -1 },
-      { price: mp + 3n * step, expirationAt: dd, quantity: -1 },
+      { price: mp + step, expirationAt: dd, quantity: -1n },
+      { price: mp + 2n * step, expirationAt: dd, quantity: -1n },
+      { price: mp + 3n * step, expirationAt: dd, quantity: -1n },
       // qty > 1 expands into multiple OrderCreated events under the same intent
-      { price: mp + 4n * step, expirationAt: dd, quantity: -2 },
+      { price: mp + 4n * step, expirationAt: dd, quantity: -2n },
     ];
 
     const tx = await futures.write.createOrders([intents], { account: seller.account });
@@ -92,9 +92,9 @@ describe("Futures.createOrders (batch placement)", () => {
 
     // Seller rests asks at mp, mp+step, mp+2*step.
     const restingAsks: OrderIntent[] = [
-      { price: mp, expirationAt: dd, quantity: -1 },
-      { price: mp + step, expirationAt: dd, quantity: -1 },
-      { price: mp + 2n * step, expirationAt: dd, quantity: -1 },
+      { price: mp, expirationAt: dd, quantity: -1n },
+      { price: mp + step, expirationAt: dd, quantity: -1n },
+      { price: mp + 2n * step, expirationAt: dd, quantity: -1n },
     ];
     await futures.write.createOrders([restingAsks], { account: seller.account });
 
@@ -102,7 +102,7 @@ describe("Futures.createOrders (batch placement)", () => {
     const lifts: OrderIntent[] = restingAsks.map((a) => ({
       price: a.price,
       expirationAt: dd,
-      quantity: 1,
+      quantity: 1n,
     }));
     const tx = await futures.write.createOrders([lifts], { account: buyer.account });
     const receipt = await pc.waitForTransactionReceipt({ hash: tx });
@@ -133,10 +133,10 @@ describe("Futures.createOrders (batch placement)", () => {
     const dd = config.deliveryDates[0];
 
     const intents: OrderIntent[] = [
-      { price: mp, expirationAt: dd, quantity: -1 },
+      { price: mp, expirationAt: dd, quantity: -1n },
       // Bad: zero price → InvalidPrice
-      { price: 0n, expirationAt: dd, quantity: -1 },
-      { price: mp + config.priceLadderStep, expirationAt: dd, quantity: -1 },
+      { price: 0n, expirationAt: dd, quantity: -1n },
+      { price: mp + config.priceLadderStep, expirationAt: dd, quantity: -1n },
     ];
 
     await viem.assertions.revertWithCustomError(
@@ -153,7 +153,7 @@ describe("Futures.createOrders (batch placement)", () => {
     const tx = await futures.write.createOrders(
       [
         [
-          { price: mp, expirationAt: dd, quantity: -1 } satisfies OrderIntent,
+          { price: mp, expirationAt: dd, quantity: -1n } satisfies OrderIntent,
         ],
       ],
       { account: seller.account },
@@ -175,9 +175,9 @@ describe("Futures.createOrders (batch placement)", () => {
     const dd = config.deliveryDates[0];
 
     const intents: OrderIntent[] = [
-      { price: mp, expirationAt: dd, quantity: -1 },
-      { price: mp + step, expirationAt: dd, quantity: -1 },
-      { price: mp + 2n * step, expirationAt: dd, quantity: -1 },
+      { price: mp, expirationAt: dd, quantity: -1n },
+      { price: mp + step, expirationAt: dd, quantity: -1n },
+      { price: mp + 2n * step, expirationAt: dd, quantity: -1n },
     ];
 
     await viem.assertions.revertWithCustomError(
@@ -201,7 +201,7 @@ describe("Futures.createOrders (batch placement)", () => {
     const dd = config.deliveryDates[0];
 
     // Seller rests one order.
-    await futures.write.createOrder([mp, dd, -1], { account: seller.account });
+    await futures.write.createOrder([mp, dd, -1n], { account: seller.account });
 
     await warpPastDeliveryWithFreshOracle(
       tc,
@@ -216,14 +216,17 @@ describe("Futures.createOrders (batch placement)", () => {
     const ordersBefore = await futures.read.getUserOrders([seller.account.address]);
     assert.equal(ordersBefore.length, 1, "stale order should still be present pre-placement");
 
-    const freshDeliveryDate = (await futures.read.getExpirationDates()).at(-1)!;
+    const freshDeliveryDate = (await futures.read.getExpirationDates()).at(-1);
+    if (!freshDeliveryDate) {
+      assert.fail("no delivery dates")
+    }
     const tx = await futures.write.createOrders(
       [
         [
           {
             price: mp,
             expirationAt: freshDeliveryDate,
-            quantity: -1,
+            quantity: -1n,
           } satisfies OrderIntent,
         ],
       ],
@@ -264,7 +267,7 @@ describe("Futures.createOrders (batch placement)", () => {
         encodeFunctionData({
           abi: futures.abi,
           functionName: "createOrder",
-          args: [mp + BigInt(i + 1) * step, dd, -1],
+          args: [mp + BigInt(i + 1) * step, dd, -1n],
         }),
       );
     }
@@ -281,7 +284,7 @@ describe("Futures.createOrders (batch placement)", () => {
       intents.push({
         price: mp - BigInt(i + 1) * step,
         expirationAt: dd,
-        quantity: 1,
+        quantity: 1n,
       });
     }
     const batchTx = await futures.write.createOrders([intents], { account: buyer.account });
