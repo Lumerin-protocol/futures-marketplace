@@ -148,6 +148,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // Get market price from contract - polls every 10 seconds
   const {
     data: marketPrice,
+    previousData: previousMarketPrice,
     dataFetchedAt: marketPriceFetchedAt,
   } = useGetMarketPrice();
 
@@ -343,6 +344,27 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
   const currentPriceFormatted = marketPrice ? (Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2) : null;
 
+  // Change of the current market price vs the previous distinct polled value.
+  const priceChange = useMemo(() => {
+    if (marketPrice == null || previousMarketPrice == null || marketPrice === previousMarketPrice) {
+      return null;
+    }
+    const delta = Number(marketPrice - previousMarketPrice) / PAYMENT_TOKEN_SCALE_NUM;
+    const prev = Number(previousMarketPrice) / PAYMENT_TOKEN_SCALE_NUM;
+    const pct = prev !== 0 ? (delta / prev) * 100 : null;
+    return { delta, pct };
+  }, [marketPrice, previousMarketPrice]);
+
+  // Surface the change indicator only briefly after each price move, then hide
+  // it so the header settles back to just the current price.
+  const [visiblePriceChange, setVisiblePriceChange] = useState<{ delta: number; pct: number | null } | null>(null);
+  useEffect(() => {
+    if (!priceChange) return;
+    setVisiblePriceChange(priceChange);
+    const timer = setTimeout(() => setVisiblePriceChange(null), 5000);
+    return () => clearTimeout(timer);
+  }, [priceChange]);
+
   return (
     <FuturesContainer>
       <LiquidationToast notifications={liquidationNotifications} onDismiss={dismissLiquidation} />
@@ -353,6 +375,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
           onContractModeChange={handleContractModeChange}
           contractSpecsQuery={contractSpecsQuery}
           currentPrice={currentPriceFormatted}
+          priceChange={visiblePriceChange}
           fundingRate={fundingRateQuery.data?.formattedRate ?? "0%"}
           totalVolume={perpsCollectionQuery.data?.data?.totalVolume}
           selectedExpirationAt={selectedExpirationAt}

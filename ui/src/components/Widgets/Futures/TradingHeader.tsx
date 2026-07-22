@@ -16,6 +16,9 @@ interface TradingHeaderProps {
   onContractModeChange: (mode: ContractMode) => void;
   contractSpecsQuery: UseQueryResult<GetResponse<FuturesContractSpecs>, Error>;
   currentPrice?: string | null;
+  /// Change of the current market price vs the previous polled value. Used to
+  /// render a green (up) / red (down) delta next to the current price.
+  priceChange?: { delta: number; pct: number | null } | null;
   fundingRate?: string;
   totalVolume?: string;
   /// Currently-selected expiration (unix seconds). Used to surface the pinned
@@ -35,6 +38,7 @@ export const TradingHeader = ({
   onContractModeChange,
   contractSpecsQuery,
   currentPrice,
+  priceChange,
   fundingRate = "0%",
   totalVolume,
   selectedExpirationAt,
@@ -52,6 +56,20 @@ export const TradingHeader = ({
       : null;
 
   const formatSpeed = (contractSizeHpsDay: bigint) => `${formatHashratePHPS(contractSizeHpsDay).full} per day`;
+
+  const renderPriceChange = () => {
+    if (!priceChange) return null;
+    const isUp = priceChange.delta >= 0;
+    const sign = isUp ? "+" : "";
+    const pctText = priceChange.pct != null ? ` (${sign}${priceChange.pct.toFixed(2)}%)` : "";
+    return (
+      <PriceChange $up={isUp}>
+        {isUp ? "▲" : "▼"} {sign}
+        {priceChange.delta.toFixed(2)}
+        {pctText}
+      </PriceChange>
+    );
+  };
 
   return (
     <>
@@ -77,7 +95,10 @@ export const TradingHeader = ({
           {contractMode === "perpetual" ? (
             <>
               <StatItem>
-                <StatValue>{currentPrice ?? "—"}</StatValue>
+                <StatValue>
+                  {currentPrice ?? "—"}
+                  {renderPriceChange()}
+                </StatValue>
                 <StatLabel>Current Price (USDC)</StatLabel>
               </StatItem>
               <Divider />
@@ -98,7 +119,10 @@ export const TradingHeader = ({
           ) : (
             <>
               <StatItem>
-                <StatValue>{currentPrice ?? "—"}</StatValue>
+                <StatValue>
+                  {currentPrice ?? "—"}
+                  {renderPriceChange()}
+                </StatValue>
                 <StatLabel>Current Price (USDC)</StatLabel>
               </StatItem>
               {contractSpecs?.data && (
@@ -208,6 +232,13 @@ const StatValue = styled("span")`
   font-weight: 600;
   color: ${tokens.text.onDark};
   line-height: 1.2;
+`;
+
+const PriceChange = styled("span")<{ $up: boolean }>`
+  margin-left: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: ${(props) => (props.$up ? tokens.trading.long : tokens.trading.short)};
 `;
 
 const StatLabel = styled("span")`
