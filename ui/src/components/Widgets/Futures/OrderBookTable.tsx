@@ -7,9 +7,10 @@ import { useAggregateOrderBook } from "../../../hooks/data/useAggregateOrderBook
 import { usePerpsOrderBook } from "../../../hooks/data/perps/usePerpsOrderBook";
 import { usePerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
-import { createFinalOrderBookData } from "./orderBookHelpers";
+import { createFinalOrderBookData, createPerpsOrderBookData } from "./orderBookHelpers";
 import { ClassicOrderBook } from "./ClassicOrderBook";
 import { VolumeOrderBook } from "./VolumeOrderBook";
+import { PerpsVolumeOrderBook } from "./PerpsVolumeOrderBook";
 import { TradesList } from "./TradesList";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
@@ -196,12 +197,18 @@ export const OrderBookTable = ({
     return state;
   }, [orderBookData, minimumPriceIncrement]);
 
-  // Create final order book data — a contiguous tick ladder (empty + live rows)
-  // spanning +/-50% of the market price. Memoized because it can produce
-  // thousands of rows for high-priced markets.
+  // Create final order book data.
+  // - Futures: a contiguous tick ladder (empty + live rows) spanning +/-50% of
+  //   the market price.
+  // - Perpetuals: the pre-#209 compact book (live levels + a small static
+  //   window), with no empty gaps between real price levels.
+  // Memoized because the futures ladder can produce thousands of rows.
   const finalOrderBookData = useMemo(
-    () => createFinalOrderBookData(orderBookData, marketPrice, minimumPriceIncrement),
-    [orderBookData, marketPrice, minimumPriceIncrement],
+    () =>
+      contractMode === "perpetual"
+        ? createPerpsOrderBookData(orderBookData, marketPrice, minimumPriceIncrement)
+        : createFinalOrderBookData(orderBookData, marketPrice, minimumPriceIncrement),
+    [contractMode, orderBookData, marketPrice, minimumPriceIncrement],
   );
 
   // Add highlighting to final order book data based on price changes
@@ -440,12 +447,22 @@ export const OrderBookTable = ({
         {viewMode === "trades" ? (
           <TradesList contractMode={contractMode} />
         ) : viewMode === "volume" ? (
-          <VolumeOrderBook
-            rows={finalOrderBookDataWithHighlights}
-            contractMode={contractMode}
-            onRowClick={onRowClick}
-            marketPrice={marketPriceNumber}
-          />
+          contractMode === "perpetual" ? (
+            <PerpsVolumeOrderBook
+              rows={finalOrderBookDataWithHighlights}
+              contractMode={contractMode}
+              onRowClick={onRowClick}
+              marketPrice={marketPriceNumber}
+              minimumPriceIncrement={minimumPriceIncrement}
+            />
+          ) : (
+            <VolumeOrderBook
+              rows={finalOrderBookDataWithHighlights}
+              contractMode={contractMode}
+              onRowClick={onRowClick}
+              marketPrice={marketPriceNumber}
+            />
+          )
         ) : (
           <ClassicOrderBook
             rows={finalOrderBookDataWithHighlights}
@@ -549,6 +566,10 @@ const TableContainer = styled("div")`
   position: relative;
   overflow-y: auto;
   width: 100%;
+  /* Grow to fill the widget height (which matches the chart column) so the book
+     keeps a consistent height even with only a few records. */
+  flex: 1 1 auto;
+  min-height: 0;
   max-height: 510px; /* ~20 rows * 26px per row */
   background-color: ${tokens.surface.panel};
 
