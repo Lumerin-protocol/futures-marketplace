@@ -37,6 +37,7 @@ export function useModifyOrder() {
     const req = await futuresContract.simulate.updateOrders(
       [
         props.orderIds,
+        [],
         [
           {
             price: props.newPrice,

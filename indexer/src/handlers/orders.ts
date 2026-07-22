@@ -102,6 +102,13 @@ export function handleOrderCreated(event: OrderCreated): void {
   futures.save();
 }
 
+/// Stash the most recent OrderUpdated shrink so a following OrderMatched in the
+/// same tx can reclassify cancelled → filled. A lone shrink is a reduce-only
+/// amend (or self-cross), not a trade.
+let pendingUpdateOrderIdHex = "";
+let pendingUpdateDelta = 0;
+let pendingUpdateTxHash = "";
+
 export function handleOrderUpdated(event: OrderUpdated): void {
   log.debug("order updated event {}", [stringifyParameters(event)]);
   const entry = OrderEntry.load(event.params.orderId);
@@ -119,22 +126,26 @@ export function handleOrderUpdated(event: OrderUpdated): void {
   const newQtyI32 = event.params.newQuantity.toI32();
   const newAbs = absI32(newQtyI32);
   const oldAbs = entry.remainingQuantity;
-  const filledDelta = oldAbs - newAbs;
-  if (filledDelta > 0) {
-    order.quantity -= filledDelta;
-    order.filledQuantity += filledDelta;
+  const shrinkDelta = oldAbs - newAbs;
+  if (shrinkDelta > 0) {
+    // Tentative amend / self-cross. OrderMatched may reclassify to a fill.
+    order.quantity -= shrinkDelta;
+    order.cancelledQuantity += shrinkDelta;
     const level = getOrCreatePriceLevel(order.expirationAt, order.price, order.isBuy);
-    level.totalQuantity -= filledDelta;
+    level.totalQuantity -= shrinkDelta;
     level.save();
+    pendingUpdateOrderIdHex = event.params.orderId.toHexString();
+    pendingUpdateDelta = shrinkDelta;
+    pendingUpdateTxHash = event.transaction.hash.toHexString();
   }
   entry.remainingQuantity = newAbs;
   if (newAbs == 0) {
     entry.status = OrderEntryStatus.MATCHED;
     entry.closedAt = event.block.timestamp;
     entry.closedByTx = event.transaction.from;
-    // Tentative fill attribution — OrderLiquidated may reclassify to cancel.
+    // Tentative — OrderMatched reclassifies cancel→fill; OrderLiquidated may flip status.
     pendingZeroOrderIdHex = event.params.orderId.toHexString();
-    pendingZeroQty = filledDelta;
+    pendingZeroQty = shrinkDelta;
     const user = User.load(order.user);
     if (user) {
       user.activeOrderCount -= 1;
@@ -195,8 +206,8 @@ export function handleOrderCancelled(event: OrderCancelled): void {
   futures.save();
 }
 
-/// Perps-shaped match: book qty is updated by OrderUpdated; this handler only
-/// records Fill/Trade/PositionSession for maker + taker.
+/// Book qty is updated by OrderUpdated; this handler records Fill/Trade/
+/// PositionSession and reclassifies a just-stashed shrink from cancelled→filled.
 export function handleOrderMatched(event: OrderMatched): void {
   log.debug("order matched event {}", [stringifyParameters(event)]);
 
@@ -235,6 +246,41 @@ export function handleOrderMatched(event: OrderMatched): void {
     1,
   );
 
+  // Futures emits OrderUpdated then OrderMatched for the maker. Reclassify the
+  // tentative cancel stash into a fill so reduce-only amends (no match) stay cancels.
+  const makerOidHex = event.params.makerOrderId.toHexString();
+  if (
+    pendingUpdateOrderIdHex == makerOidHex &&
+    pendingUpdateTxHash == event.transaction.hash.toHexString() &&
+    pendingUpdateDelta > 0
+  ) {
+    const entry = OrderEntry.load(event.params.makerOrderId);
+    if (entry) {
+      const order = Order.load(entry.order);
+      if (order) {
+        const move = pendingUpdateDelta < absQty ? pendingUpdateDelta : absQty;
+        if (order.cancelledQuantity >= move) {
+          order.cancelledQuantity -= move;
+          order.filledQuantity += move;
+          order.updatedAt = event.block.timestamp;
+          recomputeOrderStatus(order, event.block.timestamp);
+          order.save();
+        }
+        if (pendingZeroOrderIdHex == makerOidHex) {
+          // Zero-qty close was stashed as cancel; mirror into pendingZero for
+          // liquidation reclassification (filled portion only).
+          pendingZeroQty = move;
+        }
+      }
+    }
+    pendingUpdateDelta -= absQty;
+    if (pendingUpdateDelta <= 0) {
+      pendingUpdateOrderIdHex = "";
+      pendingUpdateDelta = 0;
+      pendingUpdateTxHash = "";
+    }
+  }
+
   const futures = getOrCreateFutures();
   flushFuturesCounters(futures);
   futures.totalVolume = futures.totalVolume.plus(tradePrice.times(BigInt.fromI32(absQty)));
@@ -260,8 +306,12 @@ export function handleOrderLiquidated(event: OrderLiquidated): void {
   if (order != null) {
     if (pendingZeroQty > 0) {
       if (event.params.orderId.toHexString() == pendingZeroOrderIdHex) {
-        order.filledQuantity -= pendingZeroQty;
-        order.cancelledQuantity += pendingZeroQty;
+        // Only reclassify when the zero-update was counted as a fill (OrderMatched
+        // ran). Reduce-only / cancel-first attribution already sits in cancelledQuantity.
+        if (order.filledQuantity >= pendingZeroQty) {
+          order.filledQuantity -= pendingZeroQty;
+          order.cancelledQuantity += pendingZeroQty;
+        }
         order.updatedAt = event.block.timestamp;
         recomputeOrderStatus(order, event.block.timestamp);
         order.save();

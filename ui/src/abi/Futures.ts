@@ -1850,9 +1850,44 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
+        "internalType": "bytes32",
+        "name": "_orderId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "int256",
+        "name": "_newQuantity",
+        "type": "int256"
+      }
+    ],
+    "name": "reduceOrderSize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "bytes32[]",
         "name": "_cancelIds",
         "type": "bytes32[]"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "orderId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "int256",
+            "name": "newQuantity",
+            "type": "int256"
+          }
+        ],
+        "internalType": "struct Futures.ReduceIntent[]",
+        "name": "_reduces",
+        "type": "tuple[]"
       },
       {
         "components": [

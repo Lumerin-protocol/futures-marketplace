@@ -29,7 +29,7 @@ export function useUpdatePerpsOrders() {
       quantity: BigInt(Math.round(c.quantity * QUANTITY_SCALE_NUM)),
     }));
 
-    const req = await perpsContract.simulate.updateOrders([props.cancelIds, intents], {
+    const req = await perpsContract.simulate.updateOrders([props.cancelIds, [], intents], {
       account: walletClient.account.address,
     });
 

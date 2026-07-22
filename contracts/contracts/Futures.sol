@@ -93,7 +93,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private immutable _decimals;
 
     // constants
-    string public constant VERSION = "3.6.1";
+    string public constant VERSION = "3.7.0";
     uint256 public constant ORACLE_UNIT_HPS_DAY = 100 * 1e12;
     uint256 public constant CONTRACT_SIZE_HPS_DAY = 1e15;
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
@@ -125,6 +125,12 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         uint256 expirationAt;
         int256 quantity;
         TimeInForce timeInForce;
+    }
+
+    /// @notice Shrink a resting order in place (FIFO position preserved).
+    struct ReduceIntent {
+        bytes32 orderId;
+        int256 newQuantity; // same sign as resting; 0 < |new| < |old|
     }
 
     /// @notice Order lifetime / fill policy. GTD is not supported.
@@ -172,6 +178,9 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     event OrderCreated(
         bytes32 indexed orderId, address indexed participant, uint256 price, int256 quantity, uint256 expirationAt
     );
+    /// @notice Resting size changed (partial fill, IOC remainder close, or reduce-only amend).
+    /// @dev Indexers must attribute fills only when paired with `OrderMatched` in the same tx;
+    ///      a lone shrink is a reduce-only amend (FIFO kept, not a trade).
     event OrderUpdated(bytes32 indexed orderId, address indexed participant, int256 newQuantity);
     event OrderCancelled(bytes32 indexed orderId, address indexed participant);
     event OrderMatched(
@@ -240,6 +249,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @notice FOK could not fill entirely, or IOC matched nothing.
     error TimeInForceNotFilled();
     error InvalidTimeInForce();
+    error InvalidReduceQuantity();
 
     /// @param _collateralVault Must use the same underlying ERC20 as initialized against.
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -313,13 +323,22 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         ensureNoCollateralDeficit(sender);
     }
 
-    /// @notice Cancel then place GTC orders in one call — IM check once at the end.
-    /// @dev Cancels run first so freed margin is available to the creates.
-    function updateOrders(bytes32[] calldata _cancelIds, OrderIntent[] calldata _intents) external {
+    /// @notice Cancel, reduce-in-place, then place GTC orders — IM check once at the end.
+    /// @dev Cancels/reduces run first so freed margin is available to the creates.
+    ///      Reduces keep FIFO queue position; creates always join the back.
+    function updateOrders(
+        bytes32[] calldata _cancelIds,
+        ReduceIntent[] calldata _reduces,
+        OrderIntent[] calldata _intents
+    ) external {
         address sender = _msgSender();
         uint256 cancelLen = _cancelIds.length;
         for (uint256 i = 0; i < cancelLen; i++) {
             _cancelOrderInternal(sender, _cancelIds[i]);
+        }
+        uint256 reduceLen = _reduces.length;
+        for (uint256 r = 0; r < reduceLen; r++) {
+            _reduceOrderSizeInternal(sender, _reduces[r].orderId, _reduces[r].newQuantity);
         }
         uint256 createLen = _intents.length;
         for (uint256 j = 0; j < createLen; j++) {
@@ -327,6 +346,12 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             _createOrderInternal(sender, intent.price, intent.expirationAt, intent.quantity, TimeInForce.GTC);
         }
         ensureNoCollateralDeficit(sender);
+    }
+
+    /// @notice Shrink a resting order owned by the caller without losing FIFO priority.
+    /// @dev Rejects grow / sign flip / zero (use `cancelOrder` to remove entirely).
+    function reduceOrderSize(bytes32 _orderId, int256 _newQuantity) external {
+        _reduceOrderSizeInternal(_msgSender(), _orderId, _newQuantity);
     }
 
     /// @dev Per-leg body of `createOrder` / `createOrderV2` without the IM-check epilogue.
@@ -602,6 +627,20 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         if (order.quantity == 0) revert OrderNotExists();
         _removeRestingOrder(_orderId, order);
         emit OrderCancelled(_orderId, order.participant);
+    }
+
+    /// @dev In-place size shrink. Keeps the order id in its price/expiry queue slot.
+    function _reduceOrderSizeInternal(address _participant, bytes32 _orderId, int256 _newQuantity) private {
+        Order storage order = orders[_orderId];
+        if (order.participant == address(0) || order.quantity == 0) revert OrderNotExists();
+        if (order.participant != _participant) revert OrderNotBelongToSender();
+
+        int256 oldQty = order.quantity;
+        if (_newQuantity == 0 || (_newQuantity > 0) != (oldQty > 0)) revert InvalidReduceQuantity();
+        if (_abs(_newQuantity) >= _abs(oldQty)) revert InvalidReduceQuantity();
+
+        order.quantity = _newQuantity;
+        emit OrderUpdated(_orderId, order.participant, _newQuantity);
     }
 
     /// @notice Permissionlessly close a resting order whose `expirationAt` is in the past.

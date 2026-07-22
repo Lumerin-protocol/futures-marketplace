@@ -4,7 +4,7 @@ import { network } from "hardhat";
 import { encodeFunctionData, parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 
-const { networkHelpers } = await network.getOrCreate();
+const { networkHelpers } = await network.connect();
 
 type OrderIntent = {
   price: bigint;
@@ -12,7 +12,12 @@ type OrderIntent = {
   quantity: bigint;
 };
 
-describe("Futures.updateOrders (cancel + create batch)", () => {
+type ReduceIntent = {
+  orderId: `0x${string}`;
+  newQuantity: bigint;
+};
+
+describe("Futures.updateOrders (cancel + reduce + create batch)", () => {
   it("cancels then places in one call with a single IM check", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
@@ -36,7 +41,7 @@ describe("Futures.updateOrders (cancel + create batch)", () => {
       { price: mp + 3n * step, expirationAt: dd, quantity: -1n },
       { price: mp + 4n * step, expirationAt: dd, quantity: -1n },
     ];
-    const tx = await futures.write.updateOrders([before, next], { account: seller.account });
+    const tx = await futures.write.updateOrders([before, [], next], { account: seller.account });
     const receipt = await pc.waitForTransactionReceipt({ hash: tx });
     assert.equal(receipt.status, "success");
 
@@ -74,14 +79,94 @@ describe("Futures.updateOrders (cancel + create batch)", () => {
     const createOnly: OrderIntent[] = [
       { price: mp + step, expirationAt: dd, quantity: -1n },
     ];
-    await futures.write.updateOrders([[], createOnly], { account: seller.account });
+    await futures.write.updateOrders([[], [], createOnly], { account: seller.account });
     const placed = await futures.read.getUserOrders([seller.account.address]);
     assert.equal(placed.length, 1);
 
-    const cancelTx = await futures.write.updateOrders([placed, []], { account: seller.account });
+    const cancelTx = await futures.write.updateOrders([placed, [], []], { account: seller.account });
     const cancelReceipt = await pc.waitForTransactionReceipt({ hash: cancelTx });
     assert.equal(cancelReceipt.status, "success");
     assert.equal((await futures.read.getUserOrders([seller.account.address])).length, 0);
+  });
+
+  it("reduces size in place and keeps FIFO membership", async () => {
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures, collateralVault } = contracts;
+    const { seller, pc } = accounts;
+
+    await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
+
+    const mp = await futures.read.getMarketPrice();
+    const step = config.priceLadderStep;
+    const dd = config.deliveryDates[0];
+    const price = mp + step;
+
+    await futures.write.createOrders(
+      [
+        [
+          { price, expirationAt: dd, quantity: -8n },
+          { price, expirationAt: dd, quantity: -2n },
+        ],
+      ],
+      { account: seller.account },
+    );
+    const ids = await futures.read.getUserOrders([seller.account.address]);
+    assert.equal(ids.length, 2);
+    const head = ids[0];
+
+    const reduces: ReduceIntent[] = [{ orderId: head, newQuantity: -3n }];
+    const tx = await futures.write.updateOrders([[], reduces, []], { account: seller.account });
+    const receipt = await pc.waitForTransactionReceipt({ hash: tx });
+    assert.equal(receipt.status, "success");
+
+    const updated = parseEventLogs({
+      logs: receipt.logs,
+      abi: futures.abi,
+      eventName: "OrderUpdated",
+    });
+    const matched = parseEventLogs({
+      logs: receipt.logs,
+      abi: futures.abi,
+      eventName: "OrderMatched",
+    });
+    assert.equal(updated.length, 1);
+    assert.equal(matched.length, 0, "reduce must not emit OrderMatched");
+    assert.equal(updated[0].args.orderId, head);
+    assert.equal(updated[0].args.newQuantity, -3n);
+
+    const afterIds = await futures.read.getUserOrders([seller.account.address]);
+    assert.deepEqual(afterIds, ids, "order ids unchanged");
+    assert.equal((await futures.read.getOrder([head])).quantity, -3n);
+
+    await futures.write.reduceOrderSize([ids[1], -1n], { account: seller.account });
+    assert.equal((await futures.read.getOrder([ids[1]])).quantity, -1n);
+  });
+
+  it("rejects grow, zero, and sign flip on reduce", async () => {
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures, collateralVault } = contracts;
+    const { seller } = accounts;
+
+    await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
+
+    const mp = await futures.read.getMarketPrice();
+    const step = config.priceLadderStep;
+    const dd = config.deliveryDates[0];
+    await futures.write.createOrder([mp + step, dd, -4n], { account: seller.account });
+    const [id] = await futures.read.getUserOrders([seller.account.address]);
+
+    await assert.rejects(
+      () => futures.write.reduceOrderSize([id, 0n], { account: seller.account }),
+      /InvalidReduceQuantity/,
+    );
+    await assert.rejects(
+      () => futures.write.reduceOrderSize([id, -5n], { account: seller.account }),
+      /InvalidReduceQuantity/,
+    );
+    await assert.rejects(
+      () => futures.write.reduceOrderSize([id, 2n], { account: seller.account }),
+      /InvalidReduceQuantity/,
+    );
   });
 
   it("is cheaper than multicall(cancelOrder × N + createOrders)", async () => {
@@ -142,7 +227,7 @@ describe("Futures.updateOrders (cancel + create batch)", () => {
       { price: mp - 5n * step, expirationAt: dd, quantity: 1n },
       { price: mp - 6n * step, expirationAt: dd, quantity: 1n },
     ];
-    const batchTx = await futures.write.updateOrders([buyerIds, buyerNext], {
+    const batchTx = await futures.write.updateOrders([buyerIds, [], buyerNext], {
       account: buyer.account,
     });
     const batchGas = (await pc.waitForTransactionReceipt({ hash: batchTx })).gasUsed;
