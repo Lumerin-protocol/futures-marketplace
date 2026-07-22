@@ -1,5 +1,6 @@
 import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
+import Tooltip from "@mui/material/Tooltip";
 import EastIcon from "@mui/icons-material/East";
 import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
@@ -57,6 +58,18 @@ export const TradingHeader = ({
 
   const formatSpeed = (contractSizeHpsDay: bigint) => `${formatHashratePHPS(contractSizeHpsDay).full} per day`;
 
+  const renderHashPriceStat = () => (
+    <Tooltip title="Underlying price" arrow>
+      <StatItem>
+        <StatValue>
+          {currentPrice ?? "—"}
+          {renderPriceChange()}
+        </StatValue>
+        <StatLabel>Hash Price (USDC)</StatLabel>
+      </StatItem>
+    </Tooltip>
+  );
+
   const renderPriceChange = () => {
     if (!priceChange) return null;
     const isUp = priceChange.delta >= 0;
@@ -94,13 +107,7 @@ export const TradingHeader = ({
         <StatsRow>
           {contractMode === "perpetual" ? (
             <>
-              <StatItem>
-                <StatValue>
-                  {currentPrice ?? "—"}
-                  {renderPriceChange()}
-                </StatValue>
-                <StatLabel>Current Price (USDC)</StatLabel>
-              </StatItem>
+              {renderHashPriceStat()}
               <Divider />
               <StatItem>
                 <StatValue>{fundingRate}</StatValue>
@@ -118,13 +125,7 @@ export const TradingHeader = ({
             </>
           ) : (
             <>
-              <StatItem>
-                <StatValue>
-                  {currentPrice ?? "—"}
-                  {renderPriceChange()}
-                </StatValue>
-                <StatLabel>Current Price (USDC)</StatLabel>
-              </StatItem>
+              {renderHashPriceStat()}
               {contractSpecs?.data && (
                 <>
                   <Divider />
