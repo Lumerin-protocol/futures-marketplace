@@ -18,7 +18,7 @@ importers:
         specifier: ^7.2.0
         version: 7.4.0(graphql@16.14.2)
       viem:
-        specifier: ^2.37.9
+        specifier: ^2.54.6
         version: 2.54.6(typescript@5.9.3)(zod@3.25.76)
     devDependencies:
       '@graphprotocol/graph-cli':
