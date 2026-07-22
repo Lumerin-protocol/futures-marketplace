@@ -459,7 +459,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
           </PeriodButton>
         </PeriodSwitch>
       </ChartControls>
-      <div style={{ position: "relative", width: "100%", height: "450px", paddingTop: "1rem" }}>
+      <div style={{ position: "relative", width: "100%", paddingTop: "1rem" }}>
         <HighchartsReact highcharts={Highcharts} options={options} containerProps={{ style: { height: "100%" } }} />
         {(isFetching || isBtcPriceFetching) && (
           <div
