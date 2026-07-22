@@ -8,7 +8,7 @@ import { ModalCard } from "../../Modal.styled";
 import { ModalActions, ModalCancelButton, ModalConfirmButton } from "./PerpsOrderFormFields";
 import type { PositionSession } from "../../../hooks/data/perps/useUserPositionSessions";
 import { readContract } from "@wagmi/core";
-import { PerpsABI } from "../../../abi/Perps";
+import { HashPowerPerpsDEXAbi } from "../../../abi/Perps";
 import { useConfig } from "wagmi";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 
@@ -72,7 +72,7 @@ export const CloseAllModal = ({ open, onClose, positionSessions, marketPrice, on
 
         const result = await readContract(config, {
           address: process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`,
-          abi: PerpsABI,
+          abi: HashPowerPerpsDEXAbi,
           functionName: "simulateOrder",
           args: [closePrice, closeQuantity],
         });
