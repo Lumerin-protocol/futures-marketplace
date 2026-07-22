@@ -23,17 +23,17 @@
     "@graphprotocol/graph-ts": "0.37.0",
     "graphql": "^16.11.0",
     "graphql-request": "^7.2.0",
-    "viem": "^2.37.9"
+    "viem": "^2.54.6"
   },
   "devDependencies": {
     "@graphprotocol/graph-cli": "^0.98.1",
-    "@nomicfoundation/hardhat-network-helpers": "^3.0.8",
-    "@nomicfoundation/hardhat-node-test-runner": "^3.0.8",
-    "@nomicfoundation/hardhat-viem": "^3.0.7",
+    "@nomicfoundation/hardhat-network-helpers": "^3.0.11",
+    "@nomicfoundation/hardhat-node-test-runner": "^3.0.17",
+    "@nomicfoundation/hardhat-viem": "^3.0.9",
     "@types/node": "^25.9.1",
     "assemblyscript": "^0.19.23",
     "futures-contracts": "link:../contracts",
-    "hardhat": "^3.4.0",
+    "hardhat": "^3.9.1",
     "hardhat-matchstick-ts": "github:lsheva/matchstick-ts#6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad&path:packages/hardhat-matchstick-ts",
     "matchstick-as": "0.6.0",
     "matchstick-ts": "github:lsheva/matchstick-ts#6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad&path:packages/matchstick-ts",

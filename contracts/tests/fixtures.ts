@@ -387,16 +387,16 @@ export async function deployOnlyFuturesWithDummyData(
   const d = config.deliveryDates[0];
   const dst = "//shev8.contract:anything@stratum.braiins.com:3333";
 
-  await futures.write.createOrder([mp + inc, d, -1], { account: seller.account });
-  await futures.write.createOrder([mp + 2n * inc, d, -1], { account: seller.account });
-  await futures.write.createOrder([mp + 3n * inc, d, -1], { account: seller.account });
+  await futures.write.createOrder([mp + inc, d, -1n], { account: seller.account });
+  await futures.write.createOrder([mp + 2n * inc, d, -1n], { account: seller.account });
+  await futures.write.createOrder([mp + 3n * inc, d, -1n], { account: seller.account });
 
-  await futures.write.createOrder([mp - inc, d, 1], { account: buyer.account });
-  await futures.write.createOrder([mp - 2n * inc, d, 1], { account: buyer.account });
-  await futures.write.createOrder([mp - 3n * inc, d, 1], { account: buyer.account });
+  await futures.write.createOrder([mp - inc, d, 1n], { account: buyer.account });
+  await futures.write.createOrder([mp - 2n * inc, d, 1n], { account: buyer.account });
+  await futures.write.createOrder([mp - 3n * inc, d, 1n], { account: buyer.account });
 
-  await futures.write.createOrder([mp, d, -1], { account: seller.account });
-  await futures.write.createOrder([mp, d, 1], { account: buyer.account });
+  await futures.write.createOrder([mp, d, -1n], { account: seller.account });
+  await futures.write.createOrder([mp, d, 1n], { account: buyer.account });
 
   // Physical-delivery escrow is disabled; futures cash-settle at maturity via
   // `settlePosition`, so no delivery payment is deposited for the seeded position.

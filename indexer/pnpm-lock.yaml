@@ -23,15 +23,15 @@ importers:
     devDependencies:
       '@graphprotocol/graph-cli':
         specifier: ^0.98.1
-        version: 0.98.1(@types/node@25.9.4)(typescript@5.9.3)(zod@3.25.76)
+        version: 0.98.1(@types/node@25.9.4)(supports-color@8.1.1)(typescript@5.9.3)(zod@3.25.76)
       '@nomicfoundation/hardhat-network-helpers':
-        specifier: ^3.0.8
+        specifier: ^3.0.11
         version: 3.0.11(hardhat@3.9.1)
       '@nomicfoundation/hardhat-node-test-runner':
-        specifier: ^3.0.8
+        specifier: ^3.0.17
         version: 3.0.17(hardhat@3.9.1)
       '@nomicfoundation/hardhat-viem':
-        specifier: ^3.0.7
+        specifier: ^3.0.9
         version: 3.0.9(hardhat@3.9.1)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76))
       '@types/node':
         specifier: ^25.9.1
@@ -43,7 +43,7 @@ importers:
         specifier: link:../contracts
         version: link:../contracts
       hardhat:
-        specifier: ^3.4.0
+        specifier: ^3.9.1
         version: 3.9.1
       hardhat-matchstick-ts:
         specifier: github:lsheva/matchstick-ts#6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad&path:packages/hardhat-matchstick-ts
@@ -53,7 +53,7 @@ importers:
         version: 0.6.0
       matchstick-ts:
         specifier: github:lsheva/matchstick-ts#6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad&path:packages/matchstick-ts
-        version: https://codeload.github.com/lsheva/matchstick-ts/tar.gz/6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad#path:packages/matchstick-ts(@graphprotocol/graph-cli@0.98.1(@types/node@25.9.4)(typescript@5.9.3)(zod@3.25.76))(@graphprotocol/graph-ts@0.37.0)(matchstick-as@0.6.0)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76))
+        version: https://codeload.github.com/lsheva/matchstick-ts/tar.gz/6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad#path:packages/matchstick-ts(@graphprotocol/graph-cli@0.98.1(@types/node@25.9.4)(supports-color@8.1.1)(typescript@5.9.3)(zod@3.25.76))(@graphprotocol/graph-ts@0.37.0)(matchstick-as@0.6.0)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76))
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -2416,13 +2416,13 @@ snapshots:
       graphql-import-node: 0.0.5(graphql@16.14.2)
       js-yaml: 4.1.0
 
-  '@graphprotocol/graph-cli@0.98.1(@types/node@25.9.4)(typescript@5.9.3)(zod@3.25.76)':
+  '@graphprotocol/graph-cli@0.98.1(@types/node@25.9.4)(supports-color@8.1.1)(typescript@5.9.3)(zod@3.25.76)':
     dependencies:
       '@float-capital/float-subgraph-uncrashable': 0.0.0-internal-testing.5
       '@oclif/core': 4.5.5
-      '@oclif/plugin-autocomplete': 3.2.53
+      '@oclif/plugin-autocomplete': 3.2.53(supports-color@8.1.1)
       '@oclif/plugin-not-found': 3.2.88(@types/node@25.9.4)
-      '@oclif/plugin-warn-if-update-available': 3.1.68
+      '@oclif/plugin-warn-if-update-available': 3.1.68(supports-color@8.1.1)
       '@pinax/graph-networks-registry': 0.7.1
       '@whatwg-node/fetch': 0.10.13
       assemblyscript: 0.19.23
@@ -2432,7 +2432,7 @@ snapshots:
       docker-compose: 1.3.0
       fs-extra: 11.3.2
       glob: 11.0.3
-      gluegun: 5.2.0(debug@4.4.3)
+      gluegun: 5.2.0(debug@4.4.3(supports-color@8.1.1))
       graphql: 16.11.0
       immutable: 5.1.4
       jayson: 4.2.0
@@ -2869,7 +2869,7 @@ snapshots:
       wordwrap: 1.0.0
       wrap-ansi: 7.0.0
 
-  '@oclif/plugin-autocomplete@3.2.53':
+  '@oclif/plugin-autocomplete@3.2.53(supports-color@8.1.1)':
     dependencies:
       '@oclif/core': 4.5.5
       ansis: 3.17.0
@@ -2887,12 +2887,12 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
-  '@oclif/plugin-warn-if-update-available@3.1.68':
+  '@oclif/plugin-warn-if-update-available@3.1.68(supports-color@8.1.1)':
     dependencies:
       '@oclif/core': 4.5.5
       ansis: 3.17.0
       debug: 4.4.3(supports-color@8.1.1)
-      http-call: 5.3.0
+      http-call: 5.3.0(supports-color@8.1.1)
       lodash: 4.18.1
       registry-auth-token: 5.1.1
     transitivePeerDependencies:
@@ -3026,9 +3026,9 @@ snapshots:
 
   any-signal@4.2.0: {}
 
-  apisauce@2.1.6(debug@4.4.3):
+  apisauce@2.1.6(debug@4.4.3(supports-color@8.1.1)):
     dependencies:
-      axios: 0.21.4(debug@4.4.3)
+      axios: 0.21.4(debug@4.4.3(supports-color@8.1.1))
     transitivePeerDependencies:
       - debug
 
@@ -3053,9 +3053,9 @@ snapshots:
     dependencies:
       possible-typed-array-names: 1.1.0
 
-  axios@0.21.4(debug@4.4.3):
+  axios@0.21.4(debug@4.4.3(supports-color@8.1.1)):
     dependencies:
-      follow-redirects: 1.16.0(debug@4.4.3)
+      follow-redirects: 1.16.0(debug@4.4.3(supports-color@8.1.1))
     transitivePeerDependencies:
       - debug
 
@@ -3467,7 +3467,7 @@ snapshots:
     dependencies:
       to-regex-range: 5.0.1
 
-  follow-redirects@1.16.0(debug@4.4.3):
+  follow-redirects@1.16.0(debug@4.4.3(supports-color@8.1.1)):
     optionalDependencies:
       debug: 4.4.3(supports-color@8.1.1)
 
@@ -3553,9 +3553,9 @@ snapshots:
       once: 1.4.0
       path-is-absolute: 1.0.1
 
-  gluegun@5.2.0(debug@4.4.3):
+  gluegun@5.2.0(debug@4.4.3(supports-color@8.1.1)):
     dependencies:
-      apisauce: 2.1.6(debug@4.4.3)
+      apisauce: 2.1.6(debug@4.4.3(supports-color@8.1.1))
       app-module-path: 2.2.0
       cli-table3: 0.6.0
       colors: 1.4.0
@@ -3658,7 +3658,7 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
-  http-call@5.3.0:
+  http-call@5.3.0(supports-color@8.1.1):
     dependencies:
       content-type: 1.0.5
       debug: 4.4.3(supports-color@8.1.1)
@@ -3979,9 +3979,9 @@ snapshots:
     dependencies:
       wabt: 1.0.24
 
-  matchstick-ts@https://codeload.github.com/lsheva/matchstick-ts/tar.gz/6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad#path:packages/matchstick-ts(@graphprotocol/graph-cli@0.98.1(@types/node@25.9.4)(typescript@5.9.3)(zod@3.25.76))(@graphprotocol/graph-ts@0.37.0)(matchstick-as@0.6.0)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76)):
+  matchstick-ts@https://codeload.github.com/lsheva/matchstick-ts/tar.gz/6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad#path:packages/matchstick-ts(@graphprotocol/graph-cli@0.98.1(@types/node@25.9.4)(supports-color@8.1.1)(typescript@5.9.3)(zod@3.25.76))(@graphprotocol/graph-ts@0.37.0)(matchstick-as@0.6.0)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76)):
     dependencies:
-      '@graphprotocol/graph-cli': 0.98.1(@types/node@25.9.4)(typescript@5.9.3)(zod@3.25.76)
+      '@graphprotocol/graph-cli': 0.98.1(@types/node@25.9.4)(supports-color@8.1.1)(typescript@5.9.3)(zod@3.25.76)
       '@graphprotocol/graph-ts': 0.37.0
       graphql: 16.14.2
       matchstick-as: 0.6.0

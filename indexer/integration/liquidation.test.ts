@@ -12,7 +12,7 @@ import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { encodeFunctionData, parseEventLogs, parseUnits } from "viem";
-import { EntityFields, read } from "matchstick-ts";
+import { read, type EntityFields } from "matchstick-ts";
 import { deployFuturesFixture } from "../../contracts/tests/fixtures.ts";
 import { quantizePrice, scaleHashprice } from "../../contracts/tests/utils.ts";
 import { pointerId } from "./helpers.ts";
