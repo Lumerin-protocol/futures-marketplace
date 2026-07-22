@@ -1,5 +1,5 @@
 import { useReadContract } from "wagmi";
-import { PerpsABI } from "../../../abi/Perps";
+import { HashPowerPerpsDEXAbi } from "../../../abi/Perps";
 
 /**
  * Initial margin required for the user's open positions and resting orders (Perps contract view).
@@ -11,7 +11,7 @@ export function useGetPerpsInitialMargin(
 ) {
   return useReadContract({
     address: process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`,
-    abi: PerpsABI,
+    abi: HashPowerPerpsDEXAbi,
     functionName: "getInitialMargin",
     args: address ? [address] : undefined,
     query: {

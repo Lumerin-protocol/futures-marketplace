@@ -1,5 +1,5 @@
 import { useReadContract } from "wagmi";
-import { PerpsABI } from "../../../abi/Perps";
+import { HashPowerPerpsDEXAbi } from "../../../abi/Perps";
 
 /**
  * Hook to fetch the required margin for a user's perps positions and orders
@@ -9,7 +9,7 @@ import { PerpsABI } from "../../../abi/Perps";
 export function useGetPerpsRequiredMargin(address: `0x${string}` | undefined) {
   return useReadContract({
     address: process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`,
-    abi: PerpsABI,
+    abi: HashPowerPerpsDEXAbi,
     functionName: "getMaintenanceMargin",
     args: address ? [address] : undefined,
     query: {

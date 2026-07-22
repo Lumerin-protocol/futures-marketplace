@@ -6,7 +6,7 @@ interface CloseOrdersProps {
   orderIds: `0x${string}`[];
 }
 
-/** Cancel resting futures orders via `updateOrders(ids, [])`. */
+/** Cancel resting futures orders via `updateOrders(ids, [], [])`. */
 export function useCloseOrder() {
   const { writeContractAsync, isPending, isError, error, data: hash } = useWriteContract();
   const publicClient = usePublicClient();
@@ -22,7 +22,7 @@ export function useCloseOrder() {
       client: publicClient,
     });
 
-    const req = await futuresContract.simulate.updateOrders([props.orderIds, []], {
+    const req = await futuresContract.simulate.updateOrders([props.orderIds, [], []], {
       account: walletClient.account.address,
     });
 

@@ -20,7 +20,9 @@ export function recomputeOrderStatus(order: Order, timestamp: BigInt): void {
       order.status = OrderStatus.PARTIALLY_FILLED;
     }
     order.closedAt = timestamp;
-  } else if (order.filledQuantity > 0 || order.cancelledQuantity > 0) {
+  } else if (order.filledQuantity > 0) {
+    // Still resting with some fills — PARTIAL. Size-reduce amends bump
+    // cancelledQuantity without fills and must stay ACTIVE.
     order.status = OrderStatus.PARTIAL;
   } else {
     order.status = OrderStatus.ACTIVE;
