@@ -93,7 +93,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private immutable _decimals;
 
     // constants
-    string public constant VERSION = "3.7.0";
+    string public constant VERSION = "3.7.1";
     uint256 public constant ORACLE_UNIT_HPS_DAY = 100 * 1e12;
     uint256 public constant CONTRACT_SIZE_HPS_DAY = 1e15;
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
@@ -474,12 +474,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         while (_remainingQty != 0 && orderIdUint != 0) {
             bytes32 makerOrderId = bytes32(orderIdUint);
             Order memory maker = orders[makerOrderId];
-
-            if (maker.participant == address(0) || maker.quantity == 0) {
-                makerOrderQueue.remove(orderIdUint);
-                (, orderIdUint) = makerOrderQueue.getNextNode(0);
-                continue;
-            }
 
             uint256 makerAbs = _abs(maker.quantity);
             uint256 remainingAbs = _abs(_remainingQty);
