@@ -569,12 +569,28 @@ const ChartArea = styled("div")`
 `;
 
 // Row 2, Col 2: Order Book
+// Stretches to match the chart column's height so the two blocks line up, but
+// is clamped between a 437px floor (so it never collapses to a few records) and
+// a 540px cap (so a very tall chart doesn't drag it oversized).
+//
+// The child is absolutely positioned to fill this area so its own content never
+// contributes to the (content-sized `auto`) grid row. Without this the tall
+// Trades list would inflate the row to the 540px cap while the internally
+// scrolled order book left it at the chart's height — giving two different
+// heights per tab. With it, only the chart drives the row and the order book
+// fills that height identically across tabs, modes, and data density.
 const OrderBookArea = styled("div")`
   grid-column: 2;
   grid-row: 2;
   min-width: 0;
+  position: relative;
+  align-self: stretch;
+  min-height: 437px;
+  max-height: 540px;
 
   > * {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
   }
@@ -582,6 +598,12 @@ const OrderBookArea = styled("div")`
   @media (max-width: 1024px) {
     grid-column: 1;
     grid-row: auto;
+    position: static;
+    max-height: none;
+
+    > * {
+      position: static;
+    }
   }
 `;
 
