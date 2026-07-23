@@ -16,9 +16,6 @@ interface VolumeOrderBookProps {
 // Fixed row height (px). Used both for the styled rows and as the virtualizer's
 // size estimate so scroll math stays exact.
 const ROW_HEIGHT = 22;
-// Visible scroll viewport height. Kept just under the parent container's
-// max-height so the parent never adds a second scrollbar.
-const VIEWPORT_HEIGHT = 480;
 
 // Scroll offset that puts the given row index in the vertical middle of the
 // viewport. Deterministic because every row is exactly ROW_HEIGHT tall.
@@ -341,6 +338,8 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
 const Container = styled("div")`
   position: relative;
   width: 100%;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 `;
@@ -408,11 +407,15 @@ const ColumnHeader = styled("div")`
 `;
 
 // Virtualized scroll viewport. Only the rows currently in view are mounted.
+// Fills the remaining height below the sticky column header (the parent
+// OrderBookArea sets the overall clamped height); the virtualizer reads this
+// element's live clientHeight, so no fixed viewport height is needed.
 const Scroller = styled("div")`
   position: relative;
   overflow-y: auto;
   width: 100%;
-  height: ${VIEWPORT_HEIGHT}px;
+  flex: 1 1 auto;
+  min-height: 0;
 
   &::-webkit-scrollbar {
     width: 4px;

@@ -340,7 +340,7 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
 const Container = styled("div")`
   width: 100%;
   height: 100%;
-  min-height: 480px;
+  min-height: 437px;
   display: flex;
   flex-direction: column;
 `;

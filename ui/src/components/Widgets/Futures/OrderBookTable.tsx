@@ -566,11 +566,18 @@ const TableContainer = styled("div")`
   position: relative;
   overflow-y: auto;
   width: 100%;
-  /* Grow to fill the widget height (which matches the chart column) so the book
-     keeps a consistent height even with only a few records. */
+  /* Always reserve the scrollbar gutter so the inner content width stays fixed
+     whether or not the view overflows (avoids a horizontal jump between the
+     order book and trades tabs, and between perps and futures). */
+  scrollbar-gutter: stable;
+  /* Fill the widget (sized by OrderBookArea: chart-height, clamped 437-540px)
+     and scroll internally. min-height 0 lets this flex child shrink so it never
+     overflows its parent and spawns a second scrollbar. The shared height lives
+     on OrderBookArea, so perps/futures and the order book/trades tabs all match
+     and don't resize on tab or data changes. */
   flex: 1 1 auto;
   min-height: 0;
-  max-height: 510px; /* ~20 rows * 26px per row */
+  max-height: 540px;
   background-color: ${tokens.surface.panel};
 
   &::-webkit-scrollbar {
