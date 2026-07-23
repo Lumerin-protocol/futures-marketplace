@@ -159,7 +159,12 @@ export const FundingUpdatesQuery = gql`
 
 export const UserPositionSessionsQuery = gql`
   query UserPositionSessions($address: ID!) {
-    positionSessions(where: { user: $address }) {
+    positionSessions(
+      where: { user: $address }
+      orderBy: openedAt
+      orderDirection: desc
+      first: 100
+    ) {
       closePrice
       entryPrice
       closedQuantity
