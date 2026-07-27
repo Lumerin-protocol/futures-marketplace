@@ -32,6 +32,21 @@ export function useGetMarketPrice() {
     lastRef.current = current;
   }, [result.data]);
 
+  // Warn when the on-chain read has settled but returned no usable price.
+  // A 0 or undefined value keeps the Place Order widget stuck on the
+  // "Loading contract specifications..." spinner, so surface it explicitly.
+  useEffect(() => {
+    if (result.isLoading) return; // ignore the initial in-flight fetch
+    const current = result.data as bigint | undefined;
+    if (current === undefined || current === 0n) {
+      console.warn(
+        `[useGetMarketPrice] getMarketPrice() returned ${
+          current === undefined ? "undefined" : "0"
+        }.  `
+      );
+    }
+  }, [result.data, result.isLoading]);
+
   return {
     ...result,
     previousData,
