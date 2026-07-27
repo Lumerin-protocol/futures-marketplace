@@ -1,11 +1,35 @@
 import fs from "node:fs";
-import { encodeFunctionData, getAddress } from "viem";
+import { encodeFunctionData, getAddress, formatUnits } from "viem";
 import hre from "hardhat";
 import { readOptionalAddress, requireAddress, requireEnvsSet } from "../lib/env.ts";
 import { writeAndWait } from "../lib/writeContract.ts";
 import { verifyContract } from "../lib/verify.ts";
 import { addrUrl, txUrl } from "../lib/explorer.ts";
 import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts";
+
+/** Minimal AggregatorV3 slice used to sanity-check HashpriceUSD before deploy. */
+const aggregatorV3Abi = [
+  {
+    type: "function",
+    name: "decimals",
+    inputs: [],
+    outputs: [{ type: "uint8" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "latestRoundData",
+    inputs: [],
+    outputs: [
+      { type: "uint80" },
+      { type: "int256" },
+      { type: "uint256" },
+      { type: "uint256" },
+      { type: "uint80" },
+    ],
+    stateMutability: "view",
+  },
+] as const;
 
 async function main() {
   logTitle("Futures Deployment");
@@ -15,7 +39,7 @@ async function main() {
   // The Futures contract reads its underlying ERC20 (and decimals) from the
   // collateral vault, so `USDC_TOKEN_ADDRESS` is no longer a deploy-time input.
   const collateralVaultAddress = requireAddress("VAULT_ADDRESS");
-  const hashrateOracleAddress = requireAddress("HASHRATE_ORACLE_ADDRESS");
+  const hashpriceUsdAddress = requireAddress("HASHPRICE_USD_ADDRESS");
   const SAFE_OWNER_ADDRESS = readOptionalAddress("SAFE_OWNER_ADDRESS");
   // Optional: when set, wire the Futures contract into the cross-product
   // PortfolioMarginEngine end-to-end (Futures.setMarginEngine + PME.setFutures
@@ -56,10 +80,20 @@ async function main() {
     Decimals: await paymentToken.read.decimals(),
   });
 
-  const hashrateOracle = await viem.getContractAt("HashrateOracle", hashrateOracleAddress);
-  logInfo("hashrate oracle", {
-    Address: addrUrl(pc, hashrateOracle.address),
-    HashesForBTC: await hashrateOracle.read.getHashesForBTC(),
+  const decimals = await pc.readContract({
+    address: hashpriceUsdAddress,
+    abi: aggregatorV3Abi,
+    functionName: "decimals",
+  });
+  const [, answer] = await pc.readContract({
+    address: hashpriceUsdAddress,
+    abi: aggregatorV3Abi,
+    functionName: "latestRoundData",
+  });
+  logInfo("HASHPRICE_USD", {
+    Address: addrUrl(pc, hashpriceUsdAddress),
+    Decimals: decimals,
+    Answer: formatUnits(answer, decimals),
   });
 
   if (SAFE_OWNER_ADDRESS) {
@@ -91,7 +125,7 @@ async function main() {
     abi: futuresImpl.abi,
     functionName: "initialize",
     args: [
-      hashrateOracleAddress,
+      hashpriceUsdAddress,
       Number(env.LIQUIDATION_MARGIN_PERCENT),
       BigInt(env.MINIMUM_PRICE_INCREMENT),
       Number(env.EXPIRATION_INTERVAL_DAYS),
@@ -177,6 +211,7 @@ async function main() {
   logInfo("addresses", {
     Futures: futures.address,
     "  futures impl": futuresImpl.address,
+    HASHPRICE_USD: hashpriceUsdAddress,
   });
 
   logSuccess(`Futures ${futures.address}`);

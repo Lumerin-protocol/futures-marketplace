@@ -37,10 +37,10 @@ describe("MM views", () => {
     const p2 = parseUnits("101", 6);
 
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
-    await refreshHashprice(contracts.hashrateOracle);
+    await refreshHashprice(contracts.hashpriceUsd);
     // Two separate placements (qty does not merge across createOrder calls).
     await futures.write.createOrder([p1, dd, 1n], { account: seller.account });
-    await refreshHashprice(contracts.hashrateOracle);
+    await refreshHashprice(contracts.hashpriceUsd);
     await futures.write.createOrder([p2, dd, 2n], { account: seller.account });
 
     const ids = await futures.read.getUserOrders([seller.account.address]);
@@ -57,9 +57,9 @@ describe("MM views", () => {
 
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
-    await refreshHashprice(contracts.hashrateOracle);
+    await refreshHashprice(contracts.hashpriceUsd);
     await futures.write.createOrder([price, dd, -1n], { account: seller.account });
-    await refreshHashprice(contracts.hashrateOracle);
+    await refreshHashprice(contracts.hashpriceUsd);
     await futures.write.createOrder([price, dd, 1n], { account: buyer.account });
 
     const sellerIds = await futures.read.getActiveExpirationDates([seller.account.address]);
@@ -81,13 +81,13 @@ describe("MM views", () => {
 
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
-    await refreshHashprice(contracts.hashrateOracle);
+    await refreshHashprice(contracts.hashpriceUsd);
     await futures.write.createOrder([ask1, dd, -1n], { account: seller.account });
-    await refreshHashprice(contracts.hashrateOracle);
+    await refreshHashprice(contracts.hashpriceUsd);
     await futures.write.createOrder([ask1, dd, -1n], { account: seller.account });
-    await refreshHashprice(contracts.hashrateOracle);
+    await refreshHashprice(contracts.hashpriceUsd);
     await futures.write.createOrder([ask2, dd, -1n], { account: seller.account });
-    await refreshHashprice(contracts.hashrateOracle);
+    await refreshHashprice(contracts.hashpriceUsd);
     await futures.write.createOrder([bid1, dd, 1n], { account: buyer.account });
 
     const [bookBids, bookAsks] = await futures.read.getOrderBookPrices([dd, 50n]);
@@ -108,9 +108,9 @@ describe("MM views", () => {
     const price = parseUnits("100", 6);
 
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
-    await refreshHashprice(contracts.hashrateOracle);
+    await refreshHashprice(contracts.hashpriceUsd);
     await futures.write.createOrder([price, dd, -1n], { account: seller.account });
-    await refreshHashprice(contracts.hashrateOracle);
+    await refreshHashprice(contracts.hashpriceUsd);
     await futures.write.createOrder([price, dd, -1n], { account: seller.account });
 
     let [, asks] = await futures.read.getOrderBookPrices([dd, 50n]);
@@ -158,7 +158,7 @@ describe("MM views", () => {
     const dd = (await futures.read.getExpirationDates())[0];
 
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
-    await refreshHashprice(contracts.hashrateOracle);
+    await refreshHashprice(contracts.hashpriceUsd);
     await futures.write.createOrder([parseUnits("100", 6), dd, -1n], { account: seller.account });
     const ids = await futures.read.getUserOrders([seller.account.address]);
 

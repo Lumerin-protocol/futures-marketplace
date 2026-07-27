@@ -14,7 +14,7 @@ describe("Futures - Initialization", () => {
     // Check hashrate oracle address (now serves the hashprice in USD; getter name kept for back-compat)
     assert.equal(
       getAddress(await futures.read.hashrateOracle()),
-      getAddress(contracts.hashrateOracle.address),
+      getAddress(contracts.hashpriceUsd.address),
     );
     // Check margin percentages
     assert.equal(await futures.read.liquidationMarginPercent(), config.liquidationMarginPercent);
@@ -47,7 +47,7 @@ describe("Futures - Oracle staleness", function () {
 
   it("reverts getMarketPrice with OracleStale once the answer ages past MAX_ORACLE_STALENESS", async function () {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, hashrateOracle } = contracts;
+    const { futures, hashpriceUsd } = contracts;
     const { tc, pc, owner } = accounts;
 
     // Sanity check: a fresh feed serves market price normally.
@@ -65,24 +65,24 @@ describe("Futures - Oracle staleness", function () {
     );
 
     // Pushing a fresh answer brings the feed back online without redeploying.
-    const [, answer] = await hashrateOracle.read.latestRoundData();
-    await hashrateOracle.write.setPrice([answer], { account: owner.account, chain: owner.chain });
+    const [, answer] = await hashpriceUsd.read.latestRoundData();
+    await hashpriceUsd.write.setPrice([answer], { account: owner.account, chain: owner.chain });
     await futures.read.getMarketPrice();
   });
 
   it("reverts getMarketPrice with InvalidOracle when the feed answers with a non-positive value", async function () {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, hashrateOracle } = contracts;
+    const { futures, hashpriceUsd } = contracts;
     const { owner } = accounts;
 
-    await hashrateOracle.write.setPrice([0n], { account: owner.account, chain: owner.chain });
+    await hashpriceUsd.write.setPrice([0n], { account: owner.account, chain: owner.chain });
     await viem.assertions.revertWithCustomError(
       futures.read.getMarketPrice(),
       futures,
       "InvalidOracle",
     );
 
-    await hashrateOracle.write.setPrice([-1n], { account: owner.account, chain: owner.chain });
+    await hashpriceUsd.write.setPrice([-1n], { account: owner.account, chain: owner.chain });
     await viem.assertions.revertWithCustomError(
       futures.read.getMarketPrice(),
       futures,
@@ -92,24 +92,21 @@ describe("Futures - Oracle staleness", function () {
 });
 
 describe("Futures - contract size (mark price)", function () {
-  it("getMarketPrice rebases the oracle answer by contractSizeHpsDay / ORACLE_UNIT_HPS_DAY", async function () {
+  it("getMarketPrice scales the oracle answer to token decimals (no unit rebase)", async function () {
     const { contracts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, hashrateOracle } = contracts;
+    const { futures, hashpriceUsd } = contracts;
 
-    const [, answer] = await hashrateOracle.read.latestRoundData();
+    const [, answer] = await hashpriceUsd.read.latestRoundData();
     const contractSize = await futures.read.CONTRACT_SIZE_HPS_DAY();
-    const oracleUnit = await futures.read.ORACLE_UNIT_HPS_DAY();
     const divisor = await futures.read.hashpriceScalingDivisor();
     const step = await futures.read.minimumPriceIncrement();
 
-    const rebased = (answer * contractSize) / (divisor * oracleUnit);
-    const rounded = ((rebased + step / 2n) / step) * step;
+    assert.equal(contractSize, 10n ** 15n, "one contract settles 1 PH/s/day");
+
+    // Oracle already quotes 1 PH/s/day (= CONTRACT_SIZE_HPS_DAY); only rescale decimals.
+    const scaled = answer / divisor;
+    const rounded = ((scaled + step / 2n) / step) * step;
 
     assert.equal(await futures.read.getMarketPrice(), rounded);
-
-    // CONTRACT_SIZE_HPS_DAY = 1 PH/s·day, so the mark is 10× the oracle's
-    // per-100TH answer (rebased to token decimals).
-    const perOracleUnit = answer / divisor;
-    assert.equal(await futures.read.getMarketPrice(), perOracleUnit * 10n);
   });
 });

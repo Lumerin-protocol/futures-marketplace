@@ -205,7 +205,7 @@ describe("Futures.createOrders (batch placement)", () => {
 
     await warpPastDeliveryWithFreshOracle(
       tc,
-      contracts.hashrateOracle,
+      contracts.hashpriceUsd,
       dd,
       BigInt(config.expirationIntervalSeconds),
     );

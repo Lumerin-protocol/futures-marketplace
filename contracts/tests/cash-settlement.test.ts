@@ -21,8 +21,8 @@ async function reachMaturityWithMovedMark(
   tc: FuturesFixture["accounts"]["tc"],
   expirationAt: bigint,
 ) {
-  await scaleHashprice(contracts.hashrateOracle, 12n, 10n);
-  await refreshHashprice(contracts.hashrateOracle, expirationAt);
+  await scaleHashprice(contracts.hashpriceUsd, 12n, 10n);
+  await refreshHashprice(contracts.hashpriceUsd, expirationAt);
   await tc.setNextBlockTimestamp({ timestamp: expirationAt });
 }
 

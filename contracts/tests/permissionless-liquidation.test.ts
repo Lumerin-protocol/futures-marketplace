@@ -71,7 +71,7 @@ async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
       // includes the position's mark-to-market loss (`futuresUnrealizedLoss`), so
       // a deep drop leaves the position itself underwater once the order-margin
       // contribution is gone — no reliance on any liquidation-fee balance drain.
-      await scaleHashprice(contracts.hashrateOracle, 1n, 20n);
+      await scaleHashprice(contracts.hashpriceUsd, 1n, 20n);
     },
   };
 }

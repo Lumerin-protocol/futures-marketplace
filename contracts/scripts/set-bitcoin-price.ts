@@ -6,11 +6,11 @@ import { requireAddress } from "../lib/env.ts";
 async function main() {
   const { viem } = await hre.network.getOrCreate();
 
-  const oracleAddress = process.env.HASHRATE_ORACLE_ADDRESS as `0x${string}` | undefined;
+  const oracleAddress = process.env.HASHPRICE_USD_ADDRESS as `0x${string}` | undefined;
   if (!oracleAddress) {
-    console.error("HASHRATE_ORACLE_ADDRESS environment variable is required");
+    console.error("HASHPRICE_USD_ADDRESS environment variable is required");
     console.error(
-      "Usage: HASHRATE_ORACLE_ADDRESS=0x... npx hardhat run scripts/set-bitcoin-price.ts --network localhost",
+      "Usage: HASHPRICE_USD_ADDRESS=0x... npx hardhat run scripts/set-bitcoin-price.ts --network localhost",
     );
     process.exit(1);
   }
@@ -25,7 +25,7 @@ async function main() {
   const decimals = await priceFeedMock.read.decimals();
   let currentPrice = Number(formatUnits(answer, decimals));
 
-  console.log(`Current hashprice: $${currentPrice.toLocaleString()} per 100 TH/s per day`);
+  console.log(`Current hashprice: $${currentPrice.toLocaleString()} per 1 PH/s per day`);
 
   const rl = createInterface({
     input: process.stdin,

@@ -172,7 +172,7 @@ describe("Delivery Date Management", () => {
 
     await tc.setNextBlockTimestamp({ timestamp: config.firstFutureExpirationDate + 1n });
     await tc.mine({ blocks: 1 });
-    await refreshHashprice(contracts.hashrateOracle);
+    await refreshHashprice(contracts.hashpriceUsd);
 
     // in the past
     await viem.assertions.revertWithCustomError(

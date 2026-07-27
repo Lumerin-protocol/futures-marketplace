@@ -30,7 +30,7 @@ async function main() {
   logInfo("contracts", {
     Multicall3: base.contracts.multicall3.address,
     USDCMock: base.contracts.usdcMock.address,
-    HashrateOracle: base.contracts.hashrateOracle.address,
+    HASHPRICE_USD: base.contracts.hashpriceUsd.address,
     Futures: futures.contracts.futures.address,
     CollateralVault: futures.contracts.collateralVault.address,
     PortfolioMarginEngine: futures.contracts.portfolioMarginEngine.address,

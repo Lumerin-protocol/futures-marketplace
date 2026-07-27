@@ -71,10 +71,6 @@ export const useHashrateIndexData = (props?: { refetch?: boolean; timePeriod?: T
 
 const PRICE_SCALE = 10 ** 8;
 
-// The oracle/indexer quotes hashprice per 100 TH/s per day, but a contract unit
-// is 1 PH/s per day (10x). Scale chart values up so they match the contract basis.
-const CONTRACT_SIZE_MULTIPLIER = 10;
-
 async function fetchHashrateIndexData(timePeriod: TimePeriod) {
   if (timePeriod === "week" || timePeriod === "month") {
     return fetchAggregatedHashrateIndex(timePeriod);
@@ -136,7 +132,7 @@ async function fetchDayHashrateIndex() {
       updatedAt: +item.timestamp / 1000,
       updatedAtDate: new Date(+item.timestamp / 1000),
       id: item.id,
-      priceToken: (Number(item.price) / PRICE_SCALE) * CONTRACT_SIZE_MULTIPLIER,
+      priceToken: Number(item.price) / PRICE_SCALE,
     };
   });
   return data;
@@ -207,7 +203,7 @@ async function fetchAggregatedHashrateIndex(timePeriod: "week" | "month") {
       updatedAt: item.timestamp,
       updatedAtDate: new Date(+item.timestamp / 1000),
       id: item.id,
-      priceToken: (avgPrice / PRICE_SCALE) * CONTRACT_SIZE_MULTIPLIER,
+      priceToken: avgPrice / PRICE_SCALE,
     };
   });
   return data;

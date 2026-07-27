@@ -737,19 +737,6 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "ORACLE_UNIT_HPS_DAY",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
     "name": "UPGRADE_INTERFACE_VERSION",
     "outputs": [
       {

@@ -191,7 +191,7 @@ describe("Futures - points hook wiring", function () {
         hook,
         deliveryDate,
         async makeUnderwater() {
-          await scaleHashprice(contracts.hashrateOracle, 100n, 300n);
+          await scaleHashprice(contracts.hashpriceUsd, 100n, 300n);
         },
       };
     }

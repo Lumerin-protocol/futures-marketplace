@@ -13,7 +13,6 @@ export default defineConfig({
       "Futures",
       "USDCMock",
       "Multicall3",
-      "HashrateOracle",
       "BTCPriceOracleMock",
       "ICollateralVault",
       "IPortfolioMarginEngine",
@@ -41,7 +40,6 @@ export default defineConfig({
       "collateral-margin/contracts/contracts/interfaces/IPortfolioMarginEngine.sol",
       "collateral-margin/contracts/contracts/mocks/PerpsDEXMock.sol",
       "collateral-margin/contracts/contracts/mocks/OptionsEngineMock.sol",
-      "hashprice-oracle/contracts/contracts/HashrateOracle.sol",
     ],
     compilers: [
       {
