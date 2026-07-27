@@ -122,17 +122,7 @@ export const contractErrors = [
   },
   {
     "inputs": [],
-    "name": "StaleData",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "OrderNotExpired",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "Unauthorized",
     "type": "error"
   },
   {
@@ -253,16 +243,6 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "InsuranceFundNotConfigured",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "ValueCannotBeZero",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "NotImplemented",
     "type": "error"
   },
   {
