@@ -355,6 +355,11 @@ export const contractErrors = [
   },
   {
     "inputs": [],
+    "name": "InvalidReduceQuantity",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "InvalidInitialization",
     "type": "error"
   },
