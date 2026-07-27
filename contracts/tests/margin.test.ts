@@ -41,7 +41,7 @@ async function positionWithMarginFixture() {
 describe("Futures - portfolio margin (PME)", () => {
   it("buyer IM grows on adverse mark, seller IM shrinks", async () => {
     const { contracts, accounts } = await positionWithMarginFixture();
-    const { hashrateOracle, portfolioMarginEngine } = contracts;
+    const { hashpriceUsd, portfolioMarginEngine } = contracts;
     const { buyer, seller } = accounts;
 
     const buyerImBefore = await portfolioMarginEngine.read.computePortfolioIM([
@@ -54,7 +54,7 @@ describe("Futures - portfolio margin (PME)", () => {
     assert.equal(sellerImBefore, buyerImBefore);
 
     // Drop hashprice so the buyer (long) accrues an unrealized loss.
-    await scaleHashprice(hashrateOracle, 100n, 110n);
+    await scaleHashprice(hashpriceUsd, 100n, 110n);
 
     const buyerImAfter = await portfolioMarginEngine.read.computePortfolioIM([
       buyer.account.address,
@@ -129,7 +129,7 @@ describe("Futures - portfolio margin (PME)", () => {
   it("allows a reduce-only order when margin is tight", async () => {
     const data = await positionWithMarginFixture();
     const { contracts, accounts, deliveryDate, entryPricePerDay, config } = data;
-    const { futures, collateralVault, portfolioMarginEngine, hashrateOracle } = contracts;
+    const { futures, collateralVault, portfolioMarginEngine, hashpriceUsd } = contracts;
     const { buyer, owner } = accounts;
 
     // Real IM > MM buffer (fixture defaults IM==MM).
@@ -145,7 +145,7 @@ describe("Futures - portfolio margin (PME)", () => {
     assert.ok(bal0 > im0 + 1n, "fixture should leave withdrawable surplus above IM");
     await collateralVault.write.withdraw([bal0 - im0 - 1n], { account: buyer.account });
 
-    await scaleHashprice(hashrateOracle, 100n, 90n);
+    await scaleHashprice(hashpriceUsd, 100n, 90n);
 
     const balAfter = await collateralVault.read.balanceOf([buyer.account.address]);
     const im = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
@@ -173,7 +173,7 @@ describe("Futures - portfolio margin (PME)", () => {
   it("rejects a second stacked reduce-only order when margin is tight", async () => {
     const data = await positionWithMarginFixture();
     const { contracts, accounts, deliveryDate, entryPricePerDay, config } = data;
-    const { futures, collateralVault, portfolioMarginEngine, hashrateOracle } = contracts;
+    const { futures, collateralVault, portfolioMarginEngine, hashpriceUsd } = contracts;
     const { buyer, owner } = accounts;
 
     await portfolioMarginEngine.write.setShocks(
@@ -184,7 +184,7 @@ describe("Futures - portfolio margin (PME)", () => {
     const im0 = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
     const bal0 = await collateralVault.read.balanceOf([buyer.account.address]);
     await collateralVault.write.withdraw([bal0 - im0 - 1n], { account: buyer.account });
-    await scaleHashprice(hashrateOracle, 100n, 90n);
+    await scaleHashprice(hashpriceUsd, 100n, 90n);
 
     const step = config.priceLadderStep;
     // First full-size reduce-only is allowed.
@@ -204,7 +204,7 @@ describe("Futures - portfolio margin (PME)", () => {
   it("rejects an opposite-side order larger than the position when margin is tight", async () => {
     const data = await positionWithMarginFixture();
     const { contracts, accounts, deliveryDate, entryPricePerDay, config } = data;
-    const { futures, collateralVault, portfolioMarginEngine, hashrateOracle } = contracts;
+    const { futures, collateralVault, portfolioMarginEngine, hashpriceUsd } = contracts;
     const { buyer, owner } = accounts;
 
     await portfolioMarginEngine.write.setShocks(
@@ -215,7 +215,7 @@ describe("Futures - portfolio margin (PME)", () => {
     const im0 = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
     const bal0 = await collateralVault.read.balanceOf([buyer.account.address]);
     await collateralVault.write.withdraw([bal0 - im0 - 1n], { account: buyer.account });
-    await scaleHashprice(hashrateOracle, 100n, 90n);
+    await scaleHashprice(hashpriceUsd, 100n, 90n);
 
     const step = config.priceLadderStep;
     // Sell 2 while long 1 — would flip, not reduce-only.
@@ -230,7 +230,7 @@ describe("Futures - portfolio margin (PME)", () => {
 
   it("outdated orders drop out of IM after expiry", async () => {
     const { contracts, accounts, config } = await positionWithMarginFixture();
-    const { futures, collateralVault, hashrateOracle, portfolioMarginEngine } = contracts;
+    const { futures, collateralVault, hashpriceUsd, portfolioMarginEngine } = contracts;
     const { buyer, tc, pc } = accounts;
     const marketPricePerDay = await futures.read.getMarketPrice();
 
@@ -249,7 +249,7 @@ describe("Futures - portfolio margin (PME)", () => {
 
     // Refresh the oracle at the post-expiry timestamp so PME's `getMarketPrice`
     // call doesn't trip the staleness guard after the time-warp.
-    await refreshHashprice(hashrateOracle, futureDeliveryDate + 1n);
+    await refreshHashprice(hashpriceUsd, futureDeliveryDate + 1n);
     await tc.setNextBlockTimestamp({ timestamp: futureDeliveryDate + 2n });
     await tc.mine({ blocks: 1 });
 

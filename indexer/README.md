@@ -1,6 +1,6 @@
 # Futures Subgraph
 
-This subgraph indexes the Futures contract and HashrateOracle contract to track positions, orders, and hashrate data.
+This subgraph indexes the Futures contract (including its HashpriceUSD / AggregatorV3 oracle address) to track positions, orders, and market activity.
 
 > **Cash settlement (contract `2.15.0`).** Futures are cash-settled at maturity. Settlement
 > surfaces as `LotClosed` with `reason = SETTLED`, emitted by the permissionless `settlePosition`.
@@ -41,26 +41,6 @@ This subgraph indexes the Futures contract and HashrateOracle contract to track 
   - `closedAt`: When the order was closed (if closed)
   - `closedBy`: Who closed the order
 
-### HashrateOracle Timeseries Entities
-
-- **HashesForBTC**: Tracks updates to the hashes per BTC value
-
-  - `id`: Unique identifier (block number + log index)
-  - `value`: Number of hashes required per BTC
-  - `updatedAt`: When the value was updated
-  - `ttl`: Time-to-live for the value
-  - `blockNumber`: Block number of the update
-  - `transactionHash`: Transaction hash
-
-- **HashesForToken**: Tracks calculated hashes per token values
-  - `id`: Unique identifier (block number + log index)
-  - `value`: Calculated hashes per token value
-  - `calculatedAt`: When the calculation was performed
-  - `blockNumber`: Block number
-  - `transactionHash`: Transaction hash
-  - `btcPrice`: BTC price at time of calculation
-  - `hashesForBTC`: Hashes per BTC value used in calculation
-
 ## Event Handlers
 
 ### Futures Contract Events
@@ -71,36 +51,19 @@ This subgraph indexes the Futures contract and HashrateOracle contract to track 
 4. **OrderCreated**: Creates a new order entity and updates participant stats
 5. **OrderClosed**: Marks an order as closed and updates stats
 
-### HashrateOracle Events
-
-1. **Initialized**: Initializes contract instance and creates initial timeseries data point
-2. **HashesForBTCUpdated**: Creates a new HashesForBTC entity and collects comprehensive hashrate data
-3. **Block Handler**: Collects hashrate data on every block for comprehensive timeseries coverage
-
-## Timeseries Collection
-
-The subgraph collects timeseries data for `hashesForBTC` and `hashesForToken` using multiple approaches:
-
-1. **Event-based Collection**: Data is collected when `HashesForBTCUpdated` events are emitted
-2. **Block-based Collection**: Data is collected on every block to ensure comprehensive coverage
-3. **Futures Event Integration**: Data is collected when Futures contract events occur
-
-This multi-layered approach ensures we have a complete historical record of hashrate calculations and their relationship to market activity.
-
 ## Configuration
 
 The subgraph is configured in `subgraph.template.yaml` with:
 
 - Futures contract address and ABI
-- HashrateOracle contract address and ABI
 - Event handlers for all relevant events
+- `HASHPRICE_USD_ADDRESS` is read from the Futures contract (`hashrateOracle()` getter) and stored on the Futures entity
 
 ## Usage
 
 1. Deploy the subgraph using the template configuration
-2. The subgraph will automatically index all Futures and HashrateOracle events
-3. Query the entities to get position, order, and hashrate data
-4. Use the timeseries data to analyze hashrate trends over time
+2. The subgraph will automatically index Futures events
+3. Query the entities to get position and order data
 
 ## Example Queries
 

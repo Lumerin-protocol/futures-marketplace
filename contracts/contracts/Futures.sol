@@ -45,7 +45,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint256 private nonce = 0;
 
     address private _gap;
-    /// @notice Hashprice oracle (price of 100 TH/s per day in `token` currency).
+    /// @notice Hashprice oracle (price of 1 PH/s per day in `token` currency).
     AggregatorV3Interface public hashrateOracle;
     address private _gap6;
 
@@ -93,8 +93,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private immutable _decimals;
 
     // constants
-    string public constant VERSION = "3.7.1";
-    uint256 public constant ORACLE_UNIT_HPS_DAY = 100 * 1e12;
+    string public constant VERSION = "3.8.0";
+    /// @notice One contract settles 1 PH/s/day (hashes/s·day). Matches the hashprice oracle quote basis.
     uint256 public constant CONTRACT_SIZE_HPS_DAY = 1e15;
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     uint256 public constant MAX_PRICE_LEVELS_PER_SIDE = 200;
@@ -1066,8 +1066,9 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     function _getMarketPrice(uint256 _hashpriceUsd) private view returns (uint256) {
-        uint256 rebased = (_hashpriceUsd * CONTRACT_SIZE_HPS_DAY) / (hashpriceScalingDivisor * ORACLE_UNIT_HPS_DAY);
-        return _roundToNearest(rebased, minimumPriceIncrement);
+        // Oracle already quotes 1 PH/s/day (= CONTRACT_SIZE_HPS_DAY); only rescale decimals.
+        uint256 scaled = _hashpriceUsd / hashpriceScalingDivisor;
+        return _roundToNearest(scaled, minimumPriceIncrement);
     }
 
     function getOrder(bytes32 _orderId) external view returns (Order memory) {

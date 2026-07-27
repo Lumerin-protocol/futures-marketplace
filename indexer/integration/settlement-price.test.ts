@@ -51,10 +51,10 @@ describe("FuturesExpiration: settlement price", () => {
 
   it("records the settlement price via recordSettlementPrice", async () => {
     const { contracts, accounts, deliveryDate } = await openMatchedPosition();
-    const { futures, hashrateOracle } = contracts;
+    const { futures, hashpriceUsd } = contracts;
     const { buyer2, tc, pc } = accounts;
 
-    await refreshHashprice(hashrateOracle, deliveryDate);
+    await refreshHashprice(hashpriceUsd, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
     const tx = await futures.write.recordSettlementPrice([deliveryDate], { account: buyer2.account });
     await pc.waitForTransactionReceipt({ hash: tx });
@@ -82,10 +82,10 @@ describe("FuturesExpiration: settlement price", () => {
 
   it("lazily pins the settlement price the first time settlePosition runs", async () => {
     const { contracts, accounts, deliveryDate, buyer } = await openMatchedPosition();
-    const { futures, hashrateOracle } = contracts;
+    const { futures, hashpriceUsd } = contracts;
     const { buyer2, tc, pc } = accounts;
 
-    await refreshHashprice(hashrateOracle, deliveryDate);
+    await refreshHashprice(hashpriceUsd, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
     const tx = await futures.write.settlePosition([buyer.account.address, deliveryDate], {
       account: buyer2.account,

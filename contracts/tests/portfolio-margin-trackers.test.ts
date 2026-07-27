@@ -24,7 +24,7 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
   it("trackers stay consistent across settlePosition → reopen at a new date", async () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts, config } = data;
-    const { futures, collateralVault, hashrateOracle } = contracts;
+    const { futures, collateralVault, hashpriceUsd } = contracts;
     const { seller, buyer, validator, tc } = accounts;
 
     const margin = parseUnits("10000", 6);
@@ -59,7 +59,7 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     await tc.setNextBlockTimestamp({
       timestamp: deliveryDate + BigInt(config.expirationIntervalSeconds) / 2n,
     });
-    await refreshHashprice(hashrateOracle);
+    await refreshHashprice(hashpriceUsd);
     await futures.write.settlePosition([seller.account.address, deliveryDate], {
       account: validator.account,
     });
@@ -98,7 +98,7 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
   it("trackers clear after permissionless liquidatePosition pre-delivery", async () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts, config } = data;
-    const { futures, collateralVault, hashrateOracle } = contracts;
+    const { futures, collateralVault, hashpriceUsd } = contracts;
     const { seller, buyer, tc, owner } = accounts;
 
     const deliveryDate = config.deliveryDates[0];
@@ -131,10 +131,11 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     // Balance ≈ 100. Solve 0.20·C + (C − 100) > 100 ⇒ C > 166.
     // Pick C = 1.95 × price = 195 to clear the threshold with margin to spare.
     const targetMarketPrice = (price * 195n) / 100n;
-    // market = hashpriceUsd × contractSizeHpsDay / (hashpriceScalingDivisor × ORACLE_UNIT_HPS_DAY)
-    //        = hashpriceUsd × 1e15 / (100 × 1e14) = hashpriceUsd / 10
-    // ⇒ hashpriceUsd = market × 10. (divisor = 10^(oracleDecimals − tokenDecimals) = 10^(8−6) = 100.)
-    await hashrateOracle.write.setPrice([targetMarketPrice * 10n], {
+    // market = hashpriceUsd / hashpriceScalingDivisor (oracle already quotes 1 PH/s·day).
+    // divisor = 10^(oracleDecimals − tokenDecimals) = 10^(8−6) = 100
+    // ⇒ hashpriceUsd = market × 100.
+    const divisor = await futures.read.hashpriceScalingDivisor();
+    await hashpriceUsd.write.setPrice([targetMarketPrice * divisor], {
       account: owner.account,
       chain: owner.chain,
     });

@@ -49,7 +49,7 @@ describe("Futures: full config + address surface populated by loadFuturesFromCon
     const { contracts, accounts, config } = await conn.networkHelpers.loadFixture(
       deployFuturesFixture,
     );
-    const { futures, collateralVault, hashrateOracle, portfolioMarginEngine } = contracts;
+    const { futures, collateralVault, hashpriceUsd, portfolioMarginEngine } = contracts;
     const { owner } = accounts;
 
     conn.matchstick.bind("Futures", futures.address, futures.abi);
@@ -81,7 +81,7 @@ describe("Futures: full config + address surface populated by loadFuturesFromCon
     );
     assert.equal(
       String(entity.hashrateOracleAddress).toLowerCase(),
-      hashrateOracle.address.toLowerCase(),
+      hashpriceUsd.address.toLowerCase(),
     );
     assert.equal(
       String(entity.marginEngineAddress).toLowerCase(),

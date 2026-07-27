@@ -24,7 +24,7 @@ async function openLot(
   return matched.args.expirationAt as bigint;
 }
 
-// The buyer (long at a price well above the ~$3.44 oracle mark) is the loser: at settlement
+// The buyer (long at a price well above the ~$34.40 oracle mark) is the loser: at settlement
 // the long realizes (mark - entry) * days < 0. We use entry $100 so the loss is large and the
 // buyer is the constrained party for the collateral-hold assertions.
 const ENTRY = parseUnits("100", 6);
@@ -33,7 +33,7 @@ describe("Futures collateral hold until settlement", () => {
   it("keeps a matured-unsettled position counted in margin (loser cannot withdraw)", async () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts, config } = data;
-    const { futures, collateralVault, portfolioMarginEngine, hashrateOracle } = contracts;
+    const { futures, collateralVault, portfolioMarginEngine, hashpriceUsd } = contracts;
     const { seller, buyer, tc } = accounts;
     const deliveryDate = config.deliveryDates[0];
     const entry = quantizePrice(ENTRY, config.priceLadderStep);
@@ -44,7 +44,7 @@ describe("Futures collateral hold until settlement", () => {
     await openLot(data, entry, deliveryDate);
 
     // Warp to maturity and pin the price (buyer is now the loser).
-    await refreshHashprice(hashrateOracle, deliveryDate);
+    await refreshHashprice(hashpriceUsd, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
     await futures.write.recordSettlementPrice([deliveryDate], { account: seller.account });
     const pinned = await futures.read.settlementPrice([deliveryDate]);
@@ -67,7 +67,7 @@ describe("Futures collateral hold until settlement", () => {
   it("settlement fully pays the winner with no bad debt even after the loser withdraws to the limit", async () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts, config } = data;
-    const { futures, collateralVault, portfolioMarginEngine, hashrateOracle } = contracts;
+    const { futures, collateralVault, portfolioMarginEngine, hashpriceUsd } = contracts;
     const { seller, buyer, validator, tc, pc } = accounts;
     const deliveryDate = config.deliveryDates[0];
     const entry = quantizePrice(ENTRY, config.priceLadderStep);
@@ -77,7 +77,7 @@ describe("Futures collateral hold until settlement", () => {
     await collateralVault.write.deposit([margin], { account: buyer.account });
     await openLot(data, entry, deliveryDate);
 
-    await refreshHashprice(hashrateOracle, deliveryDate);
+    await refreshHashprice(hashpriceUsd, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
     await futures.write.recordSettlementPrice([deliveryDate], { account: seller.account });
     const pinned = await futures.read.settlementPrice([deliveryDate]);
@@ -112,7 +112,7 @@ describe("Futures collateral hold until settlement", () => {
   it("counts matured-unpriced positions and releases margin only after settlement", async () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts, config } = data;
-    const { futures, collateralVault, portfolioMarginEngine, hashrateOracle } = contracts;
+    const { futures, collateralVault, portfolioMarginEngine, hashpriceUsd } = contracts;
     const { seller, buyer, validator, tc } = accounts;
     const deliveryDate = config.deliveryDates[0];
     const entry = quantizePrice(ENTRY, config.priceLadderStep);
@@ -126,7 +126,7 @@ describe("Futures collateral hold until settlement", () => {
     assert.notEqual(deltaOpen, 0n); // long counted while open
 
     // Warp past maturity WITHOUT pinning a price: the position must still be counted.
-    await refreshHashprice(hashrateOracle, deliveryDate);
+    await refreshHashprice(hashpriceUsd, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
     assert.equal(await futures.read.getNetPositionDelta([buyer.account.address]), deltaOpen);
     assert.equal(await futures.read.settlementPrice([deliveryDate]), 0n);

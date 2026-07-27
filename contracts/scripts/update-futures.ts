@@ -31,7 +31,7 @@ async function main() {
     Address: addrUrl(pc, futuresProxy.address),
     Owner: await futuresProxy.read.owner(),
     Version: currentVersion,
-    HashrateOracle: await futuresProxy.read.hashrateOracle(),
+    HASHPRICE_USD: await futuresProxy.read.hashrateOracle(),
   });
 
   // 3.x cutover: order/position semantics change; 3.1+ also breaks Order storage layout
@@ -144,7 +144,7 @@ async function main() {
     logInfo("upgraded futures", {
       Vault: await upgraded.read.collateralVault(atUpgradeBlock),
       MarginEngine: await upgraded.read.marginEngine(atUpgradeBlock),
-      HashrateOracle: await upgraded.read.hashrateOracle(atUpgradeBlock),
+      HASHPRICE_USD: await upgraded.read.hashrateOracle(atUpgradeBlock),
       Hook: await upgraded.read.hook(atUpgradeBlock),
       Owner: await upgraded.read.owner(atUpgradeBlock),
       Version: upgradedVersion,

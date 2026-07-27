@@ -40,8 +40,8 @@ async function reachMaturityWithMovedMark(
   tc: FuturesFixture["accounts"]["tc"],
   expirationAt: bigint,
 ) {
-  await scaleHashprice(contracts.hashrateOracle, 12n, 10n);
-  await refreshHashprice(contracts.hashrateOracle, expirationAt);
+  await scaleHashprice(contracts.hashpriceUsd, 12n, 10n);
+  await refreshHashprice(contracts.hashpriceUsd, expirationAt);
   await tc.setNextBlockTimestamp({ timestamp: expirationAt });
 }
 
@@ -106,7 +106,7 @@ describe("Futures settlePosition", () => {
     const { buyer, tc } = accounts;
     const expirationAt = config.deliveryDates[0];
 
-    await refreshHashprice(contracts.hashrateOracle, expirationAt);
+    await refreshHashprice(contracts.hashpriceUsd, expirationAt);
     await tc.setNextBlockTimestamp({ timestamp: expirationAt });
 
     await viem.assertions.revertWithCustomError(

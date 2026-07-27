@@ -106,17 +106,19 @@ export async function deployTokenOraclesAndMulticall3(conn: NetworkConnection) {
     });
   }
 
-  // 3. Deploy BTC/USD Feed
-  const hashrateOracle = await deployContract<"PriceFeedMock">(
+  // 3. Deploy HashpriceUSD mock feed
+  const hashpriceUsd = await deployContract<"PriceFeedMock">(
     walletClient,
     pc,
     "../artifacts/contracts/mocks/PriceFeedMock.sol/PriceFeedMock.json",
-    [HASHPRICE_DECIMALS, "The price of 100 TH/s per day in USD"],
+    [HASHPRICE_DECIMALS, "The price of 1 PH/s per day in USD"],
   );
-  const hashpriceUsdFeedDecimals = await hashrateOracle.read.decimals();
-  const hashpriceUsdFeedPrice = parseUnits("3.44", hashpriceUsdFeedDecimals);
+  const hashpriceUsdFeedDecimals = await hashpriceUsd.read.decimals();
+  // Seed at the former mark ($34.40 = $3.44 × 10) so dollar sizing stays unchanged
+  // after the oracle unit moved from 100 TH/s·day to 1 PH/s·day.
+  const hashpriceUsdFeedPrice = parseUnits("34.4", hashpriceUsdFeedDecimals);
   await (
-    hashrateOracle.write.setPrice as (
+    hashpriceUsd.write.setPrice as (
       args: [bigint],
       opts?: { account?: unknown },
     ) => Promise<unknown>
@@ -126,7 +128,7 @@ export async function deployTokenOraclesAndMulticall3(conn: NetworkConnection) {
     config: { oracle: { hashpriceUsdFeedDecimals, hashpriceUsdFeedPrice } },
     contracts: {
       usdcMock,
-      hashrateOracle,
+      hashpriceUsd,
       multicall3,
     },
     accounts: {
@@ -150,7 +152,7 @@ export type TokenOraclesFixture = Awaited<ReturnType<typeof deployTokenOraclesAn
 export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: TokenOraclesFixture) {
   const { viem } = conn;
   const { contracts, accounts, config } = data;
-  const { usdcMock, hashrateOracle } = contracts;
+  const { usdcMock, hashpriceUsd } = contracts;
   const { validator, seller, buyer, buyer2, owner, pc, tc } = accounts;
   const { oracle } = config;
 
@@ -215,7 +217,7 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
         abi: futuresImpl.abi,
         functionName: "initialize",
         args: [
-          hashrateOracle.address,
+          hashpriceUsd.address,
           liquidationMarginPercent,
           priceLadderStep,
           expirationIntervalDays,
@@ -337,7 +339,7 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
     },
     contracts: {
       usdcMock,
-      hashrateOracle,
+      hashpriceUsd,
       futures,
       collateralVault,
       portfolioMarginEngine,

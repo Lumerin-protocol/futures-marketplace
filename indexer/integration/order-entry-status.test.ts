@@ -117,7 +117,7 @@ describe("OrderEntryStatus.LIQUIDATED: liquidateOrders force-cancels resting ord
     const { contracts, accounts, config } = await conn.networkHelpers.loadFixture(
       deployFuturesFixture,
     );
-    const { futures, collateralVault, hashrateOracle } = contracts;
+    const { futures, collateralVault, hashpriceUsd } = contracts;
     const { seller, buyer, validator, pc } = accounts;
 
     const price = quantizePrice(await futures.read.getMarketPrice(), config.priceLadderStep);
@@ -148,7 +148,7 @@ describe("OrderEntryStatus.LIQUIDATED: liquidateOrders force-cancels resting ord
     const restingOrderId = restingOrder.args.orderId.toLowerCase() as `0x${string}`;
 
     // 3. Crash the market so the seller's portfolio MM is breached.
-    await scaleHashprice(hashrateOracle, 40n, 1n);
+    await scaleHashprice(hashpriceUsd, 40n, 1n);
 
     const liqTx = await futures.write.liquidateOrders(
       [seller.account.address, [restingOrderId]],

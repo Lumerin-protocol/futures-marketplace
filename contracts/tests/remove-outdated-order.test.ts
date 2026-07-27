@@ -147,7 +147,7 @@ describe("Futures.removeOutdatedOrder", () => {
 
     await warpPastDeliveryWithFreshOracle(
       tc,
-      contracts.hashrateOracle,
+      contracts.hashpriceUsd,
       expiringDd,
       BigInt(config.expirationIntervalSeconds),
     );

@@ -78,7 +78,7 @@ async function partialLiquidationFixture(conn: NetworkConnection) {
     config: { ...config, entry, deliveryDate, lotCount },
     /** 15% hashprice crash — moderate: breaks MM but keeps a recoverable band. */
     async makeUnderwater() {
-      await scaleHashprice(contracts.hashrateOracle, 85n, 100n);
+      await scaleHashprice(contracts.hashpriceUsd, 85n, 100n);
     },
   };
 }
@@ -251,14 +251,14 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
   it("records BadDebt when the loser can't cover on a full close", async function () {
     const data = await networkHelpers.loadFixture(partialLiquidationFixture);
     const { contracts, accounts, config } = data;
-    const { futures, collateralVault, hashrateOracle } = contracts;
+    const { futures, collateralVault, hashpriceUsd } = contracts;
     const { seller, buyer, buyer2, pc } = accounts;
 
     // Deep 99% hashprice crash: the long buyer's realized loss on a full close
     // dwarfs their deposit. Uncovered loss is recorded as BadDebt; the buyer's
     // available collateral is swept to the insurance fund. The seller's short
     // aggregate stays open — unilateral liquidation does not pay the counterparty.
-    await scaleHashprice(hashrateOracle, 1n, 100n);
+    await scaleHashprice(hashpriceUsd, 1n, 100n);
 
     const marketAfter = await futures.read.getMarketPrice();
     const buyerPosBefore = await futures.read.getUserPosition([

@@ -37,9 +37,6 @@ importers:
       collateral-margin:
         specifier: github:Lumerin-protocol/collateral-margin#feat/futures-3-keeper-mm
         version: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/f952ac6a4d4b765e17f11d25f000f82a8d2db456
-      hashprice-oracle:
-        specifier: github:Lumerin-protocol/hashprice-oracle.git#dev
-        version: https://codeload.github.com/Lumerin-protocol/hashprice-oracle/tar.gz/55776ca92c86c69e38e5210e9b63d77d9e4218d8
       multicall3:
         specifier: github:mds1/multicall3
         version: https://codeload.github.com/mds1/multicall3/tar.gz/b667d67ecfa5361a81e8f110234ce242613b0012(patch_hash=f161cbee6da2788494364d99cafb2d9c802738f56fb89426eebbc0a14a4f4a8f)
@@ -1157,10 +1154,6 @@ packages:
 
   hash.js@1.1.7:
     resolution: {integrity: sha512-taOaskGt4z4SOANNseOviYDvjEJinIkRgmp7LbKP2YTTmVxWBl87s/uzK9r+44BclBSp2X7K1hqeNfz9JbBeXA==}
-
-  hashprice-oracle@https://codeload.github.com/Lumerin-protocol/hashprice-oracle/tar.gz/55776ca92c86c69e38e5210e9b63d77d9e4218d8:
-    resolution: {tarball: https://codeload.github.com/Lumerin-protocol/hashprice-oracle/tar.gz/55776ca92c86c69e38e5210e9b63d77d9e4218d8}
-    version: 1.0.0
 
   hmac-drbg@1.0.1:
     resolution: {integrity: sha512-Tti3gMqLdZfhOQY1Mzf/AanLiqh1WTiJgEj26ZuYQ9fbkLomzGchCws4FyrSd4VkpBfiNhaE1On+lOz894jvXg==}
@@ -3088,8 +3081,6 @@ snapshots:
     dependencies:
       inherits: 2.0.4
       minimalistic-assert: 1.0.1
-
-  hashprice-oracle@https://codeload.github.com/Lumerin-protocol/hashprice-oracle/tar.gz/55776ca92c86c69e38e5210e9b63d77d9e4218d8: {}
 
   hmac-drbg@1.0.1:
     dependencies:

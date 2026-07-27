@@ -44,11 +44,11 @@ describe("Futures settlement price (pinned)", () => {
   it("recordSettlementPrice pins the live oracle price once and emits the event", async () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts } = data;
-    const { futures, hashrateOracle } = contracts;
+    const { futures, hashpriceUsd } = contracts;
     const { buyer2, tc, pc } = accounts;
     const deliveryDate = data.config.deliveryDates[0];
 
-    await refreshHashprice(hashrateOracle, deliveryDate);
+    await refreshHashprice(hashpriceUsd, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
 
     const txHash = await futures.write.recordSettlementPrice([deliveryDate], {
@@ -72,18 +72,18 @@ describe("Futures settlement price (pinned)", () => {
   it("is set-once: a later record does not overwrite even after the oracle moves", async () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts } = data;
-    const { futures, hashrateOracle } = contracts;
+    const { futures, hashpriceUsd } = contracts;
     const { buyer2, tc } = accounts;
     const deliveryDate = data.config.deliveryDates[0];
 
-    await refreshHashprice(hashrateOracle, deliveryDate);
+    await refreshHashprice(hashpriceUsd, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
     await futures.write.recordSettlementPrice([deliveryDate], { account: buyer2.account });
     const pinned = await futures.read.settlementPrice([deliveryDate]);
 
     // Move the oracle well away and refresh freshness, then record again.
-    await scaleHashprice(hashrateOracle, 2n, 1n);
-    await refreshHashprice(hashrateOracle);
+    await scaleHashprice(hashpriceUsd, 2n, 1n);
+    await refreshHashprice(hashpriceUsd);
     await futures.write.recordSettlementPrice([deliveryDate], { account: buyer2.account });
 
     assert.equal(await futures.read.settlementPrice([deliveryDate]), pinned);
@@ -108,7 +108,7 @@ describe("Futures settlement price (pinned)", () => {
   it("settlePosition lazily pins the price (no prior record) and emits the event", async () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts, config } = data;
-    const { futures, hashrateOracle } = contracts;
+    const { futures, hashpriceUsd } = contracts;
     const { seller, buyer, buyer2, tc, pc } = accounts;
     const deliveryDate = config.deliveryDates[0];
     const entryPrice = quantizePrice(parseUnits("100", 6), config.priceLadderStep);
@@ -117,7 +117,7 @@ describe("Futures settlement price (pinned)", () => {
     await contracts.collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
     await openLotBetween(data, seller, buyer, entryPrice, deliveryDate);
 
-    await refreshHashprice(hashrateOracle, deliveryDate);
+    await refreshHashprice(hashpriceUsd, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
 
     assert.equal(await futures.read.settlementPrice([deliveryDate]), 0n);
@@ -138,7 +138,7 @@ describe("Futures settlement price (pinned)", () => {
   it("two positions on the same expiry settle at one price despite the oracle moving between txs", async () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts, config } = data;
-    const { futures, collateralVault, hashrateOracle } = contracts;
+    const { futures, collateralVault, hashpriceUsd } = contracts;
     const { seller, buyer, buyer2, tc, pc } = accounts;
     const deliveryDate = config.deliveryDates[0];
     const entryPrice = quantizePrice(parseUnits("100", 6), config.priceLadderStep);
@@ -158,14 +158,14 @@ describe("Futures settlement price (pinned)", () => {
     );
 
     // Reach maturity and pin the price.
-    await refreshHashprice(hashrateOracle, deliveryDate);
+    await refreshHashprice(hashpriceUsd, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
     await futures.write.recordSettlementPrice([deliveryDate], { account: buyer.account });
     const pinned = await futures.read.settlementPrice([deliveryDate]);
 
     // Move the oracle, then settle buyer.
-    await scaleHashprice(hashrateOracle, 12n, 10n);
-    await refreshHashprice(hashrateOracle);
+    await scaleHashprice(hashpriceUsd, 12n, 10n);
+    await refreshHashprice(hashpriceUsd);
     const rA = await pc.waitForTransactionReceipt({
       hash: await futures.write.settlePosition([buyer.account.address, deliveryDate], {
         account: buyer.account,
@@ -174,8 +174,8 @@ describe("Futures settlement price (pinned)", () => {
     const [closedA] = parseEventLogs({ logs: rA.logs, abi: futures.abi, eventName: "PositionSettled" });
 
     // Move the oracle again, then settle buyer2.
-    await scaleHashprice(hashrateOracle, 8n, 10n);
-    await refreshHashprice(hashrateOracle);
+    await scaleHashprice(hashpriceUsd, 8n, 10n);
+    await refreshHashprice(hashpriceUsd);
     const rB = await pc.waitForTransactionReceipt({
       hash: await futures.write.settlePosition([buyer2.account.address, deliveryDate], {
         account: buyer.account,
@@ -194,17 +194,17 @@ describe("Futures settlement price (pinned)", () => {
   it("a pinned settlement price does not affect the live getMarketPrice (liquidation mark)", async () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts, config } = data;
-    const { futures, hashrateOracle } = contracts;
+    const { futures, hashpriceUsd } = contracts;
     const { buyer2, tc } = accounts;
     const deliveryDate = config.deliveryDates[0];
 
-    await refreshHashprice(hashrateOracle, deliveryDate);
+    await refreshHashprice(hashpriceUsd, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
     await futures.write.recordSettlementPrice([deliveryDate], { account: buyer2.account });
     const pinned = await futures.read.settlementPrice([deliveryDate]);
 
-    await scaleHashprice(hashrateOracle, 3n, 2n);
-    await refreshHashprice(hashrateOracle);
+    await scaleHashprice(hashpriceUsd, 3n, 2n);
+    await refreshHashprice(hashpriceUsd);
 
     // The live mark (used by liquidation's _settleAtMark) tracks the oracle, not the pin.
     assert.notEqual(await futures.read.getMarketPrice(), pinned);

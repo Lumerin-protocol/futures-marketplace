@@ -5,7 +5,7 @@ import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/inte
 
 /// @title PriceFeedMock
 /// @notice Test-only mock of an `AggregatorV3Interface` price feed used to drive `Futures.getMarketPrice()`
-///         without standing up the full hashprice-oracle stack. Tests can move the price by calling
+///         without standing up a live HashpriceUSD feed. Tests can move the price by calling
 ///         `setPrice` (auto-bumps roundId/timestamps) or `setRound` for full control.
 /// @dev Defaults to 8 decimals and the description of `HashpriceUSD` so it is a drop-in stand-in for the
 ///      production hashprice oracle.

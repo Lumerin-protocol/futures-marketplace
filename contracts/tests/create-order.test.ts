@@ -504,7 +504,7 @@ describe("Order Creation", () => {
 
     await warpPastDeliveryWithFreshOracle(
       tc,
-      contracts.hashrateOracle,
+      contracts.hashpriceUsd,
       oldDeliveryDate,
       BigInt(config.expirationIntervalSeconds),
     );

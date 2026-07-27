@@ -29,7 +29,7 @@ describe("liquidatePosition: PositionLiquidated, seller netQty=0", () => {
   it("populates Trade liquidation fields + bumps Futures.totalLiquidations once per tx", async () => {
     const { contracts, accounts, config } =
       await conn.networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault, hashrateOracle } = contracts;
+    const { futures, collateralVault, hashpriceUsd } = contracts;
     const { seller, buyer, validator, pc } = accounts;
 
     const price = quantizePrice(await futures.read.getMarketPrice(), config.priceLadderStep);
@@ -49,7 +49,7 @@ describe("liquidatePosition: PositionLiquidated, seller netQty=0", () => {
     await pc.waitForTransactionReceipt({ hash: buyTx });
 
     // Crash hashprice 40x so seller is deeply underwater (PME-MM breached)
-    await scaleHashprice(hashrateOracle, 40n, 1n);
+    await scaleHashprice(hashpriceUsd, 40n, 1n);
 
     const liqTx = await futures.write.liquidatePosition(
       [seller.account.address, deliveryDate, 1n],
@@ -169,7 +169,7 @@ describe("BadDebt: BadDebtEvent when losses exceed participant balance + insuran
   it("BadDebtEvent is created and Futures.totalBadDebt is non-zero", async () => {
     const { contracts, accounts, config } =
       await conn.networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault, hashrateOracle } = contracts;
+    const { futures, collateralVault, hashpriceUsd } = contracts;
     const { seller, buyer, validator, pc } = accounts;
 
     const price = quantizePrice(await futures.read.getMarketPrice(), config.priceLadderStep);
@@ -189,7 +189,7 @@ describe("BadDebt: BadDebtEvent when losses exceed participant balance + insuran
     await pc.waitForTransactionReceipt({ hash: buyTx });
 
     // Spike price 500x — loss exceeds seller (1 000) + insurance fund (10 000)
-    await scaleHashprice(hashrateOracle, 500n, 1n);
+    await scaleHashprice(hashpriceUsd, 500n, 1n);
 
     const liqTx = await futures.write.liquidatePosition(
       [seller.account.address, deliveryDate, 1n],
@@ -286,7 +286,7 @@ describe("multi-position permissionless liquidation: per-tx dedup", () => {
   it("two liquidatePosition txs → 2 PositionLiquidated, totalLiquidations=2", async () => {
     const { contracts, accounts, config } =
       await conn.networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault, hashrateOracle } = contracts;
+    const { futures, collateralVault, hashpriceUsd } = contracts;
     const { seller, buyer, validator, pc } = accounts;
 
     const price1 = quantizePrice(await futures.read.getMarketPrice(), config.priceLadderStep);
@@ -312,7 +312,7 @@ describe("multi-position permissionless liquidation: per-tx dedup", () => {
     });
     await pc.waitForTransactionReceipt({ hash: buy2 });
 
-    await scaleHashprice(hashrateOracle, 40n, 1n);
+    await scaleHashprice(hashpriceUsd, 40n, 1n);
 
     const liqTx1 = await futures.write.liquidatePosition(
       [seller.account.address, deliveryDate, 1n],
@@ -371,7 +371,7 @@ describe("multi-leg liquidation in one tx: liquidatedQuantity counts units", () 
   it("two liquidatePosition legs in one multicall tx → liquidatedQuantity == 2", async () => {
     const { contracts, accounts, config } =
       await conn.networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault, hashrateOracle } = contracts;
+    const { futures, collateralVault, hashpriceUsd } = contracts;
     const { seller, buyer, validator, pc } = accounts;
 
     const price1 = quantizePrice(await futures.read.getMarketPrice(), config.priceLadderStep);
@@ -399,7 +399,7 @@ describe("multi-leg liquidation in one tx: liquidatedQuantity counts units", () 
     });
     await pc.waitForTransactionReceipt({ hash: buy2 });
 
-    await scaleHashprice(hashrateOracle, 40n, 1n);
+    await scaleHashprice(hashpriceUsd, 40n, 1n);
 
     // Liquidate BOTH units in a SINGLE tx via the embedded multicall so the
     // tx carries two PositionLiquidated legs for the same (participant, session).
