@@ -13,8 +13,11 @@ interface TradesListProps {
 
 // Compact notation for the notional Size column (e.g. 15.04K, 1.5M) to match
 // the volume order book layout.
-const formatSize = (value: number): string =>
-  value.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 2 });
+const formatSize = (value: number): string => {
+  // Avoid rendering a misleading "0.00" for tiny non-zero sizes.
+  if (value > 0 && value < 0.01) return "<0.01";
+  return value.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 2 });
+};
 
 // Local wall-clock time (HH:MM:SS) for the Time column.
 const formatTime = (timestampSeconds: number): string =>
@@ -28,6 +31,9 @@ export const TradesList = ({ contractMode = "futures" }: TradesListProps) => {
   const tokenSymbol =
     (contractMode === "perpetual" ? perpsTokenInfo.symbol : futuresTokenInfo.symbol) || "USDC";
 
+  // Hide degenerate trades whose notional size is zero.
+  const visibleTrades = trades?.filter((trade) => trade.size > 0);
+
   return (
     <Container>
       <ColumnHeader>
@@ -38,10 +44,10 @@ export const TradesList = ({ contractMode = "futures" }: TradesListProps) => {
 
       {isLoading ? (
         <StateRow>Loading trades...</StateRow>
-      ) : !trades || trades.length === 0 ? (
+      ) : !visibleTrades || visibleTrades.length === 0 ? (
         <StateRow>No trades yet</StateRow>
       ) : (
-        trades.map((trade) => (
+        visibleTrades.map((trade) => (
           <Row key={trade.id}>
             <PriceCol $side={trade.side}>{trade.price.toFixed(trade.price < 1 ? 5 : 2)}</PriceCol>
             <SizeCol>{formatSize(trade.size)}</SizeCol>

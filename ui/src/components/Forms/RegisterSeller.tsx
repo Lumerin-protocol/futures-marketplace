@@ -13,6 +13,7 @@ import { truncateAddress } from "../../utils/formatters";
 import { GenericCompletedContent } from "./Shared/GenericCompletedContent";
 import { useApproveFee } from "../../hooks/data/useApproveFee";
 import { cloneFactoryAbi } from "contracts-js/dist/abi/abi";
+import { withErrors } from "../../lib/withErrors";
 import { useFeeTokenBalance } from "../../hooks/data/useFeeTokenBalance";
 import { useOnMountUnsafe } from "../../hooks/useOnMountUnsafe";
 import { memo, useCallback, useMemo } from "react";
@@ -35,7 +36,7 @@ export const RegisterSellerForm: React.FC<CreateFormProps> = memo(({ onClose }) 
 
   const minSellerStakeQuery = useReadContract({
     address: process.env.REACT_APP_CLONE_FACTORY,
-    abi: cloneFactoryAbi,
+    abi: withErrors(cloneFactoryAbi),
     functionName: "minSellerStake",
     query: {
       gcTime: Number.POSITIVE_INFINITY,
@@ -51,7 +52,7 @@ export const RegisterSellerForm: React.FC<CreateFormProps> = memo(({ onClose }) 
     defaultValues: async () => {
       const minStake = await readContract(config, {
         address: process.env.REACT_APP_CLONE_FACTORY,
-        abi: cloneFactoryAbi,
+        abi: withErrors(cloneFactoryAbi),
         functionName: "minSellerStake",
       });
 
@@ -146,7 +147,7 @@ export const RegisterSellerForm: React.FC<CreateFormProps> = memo(({ onClose }) 
 
             const req = await publicClient!.simulateContract({
               address: process.env.REACT_APP_CLONE_FACTORY,
-              abi: cloneFactoryAbi,
+              abi: withErrors(cloneFactoryAbi),
               functionName: "sellerRegister",
               args: [stake],
               account: address,

@@ -1,4 +1,5 @@
 import { validatorRegistryAbi } from "contracts-js/dist/abi/abi";
+import { withErrors } from "../../lib/withErrors";
 import { useReadContract, useReadContracts } from "wagmi";
 
 type Props = {
@@ -9,7 +10,7 @@ type Props = {
 export const useValidators = ({ offset, limit }: Props) => {
   const activeValidatorsQuery = useReadContract({
     address: process.env.REACT_APP_VALIDATOR_REGISTRY_ADDRESS,
-    abi: validatorRegistryAbi,
+    abi: withErrors(validatorRegistryAbi),
     functionName: "getActiveValidators",
     args: [BigInt(offset), limit],
     query: {
@@ -23,7 +24,7 @@ export const useValidators = ({ offset, limit }: Props) => {
       (addr) =>
         ({
           address: process.env.REACT_APP_VALIDATOR_REGISTRY_ADDRESS,
-          abi: validatorRegistryAbi,
+          abi: withErrors(validatorRegistryAbi),
           functionName: "getValidator",
           args: [addr],
         }) as const,

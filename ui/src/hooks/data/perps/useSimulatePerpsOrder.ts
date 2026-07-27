@@ -1,5 +1,6 @@
 import { useReadContract } from "wagmi";
 import { HashPowerPerpsDEXAbi } from "../../../abi/Perps";
+import { withErrors } from "../../../lib/withErrors";
 import { QUANTITY_SCALE_NUM } from "../../../lib/units";
 
 interface SimulatePerpsOrderProps {
@@ -32,7 +33,7 @@ export function useSimulatePerpsOrder({ price, quantity, enabled: externalEnable
 
   const result = useReadContract({
     address: process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`,
-    abi: HashPowerPerpsDEXAbi,
+    abi: withErrors(HashPowerPerpsDEXAbi),
     functionName: "simulateOrder",
     args: argsReady ? [price!, quantityBigInt!] : undefined,
     query: {

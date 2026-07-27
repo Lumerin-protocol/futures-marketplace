@@ -1,5 +1,6 @@
 import { useReadContracts } from "wagmi";
 import { FuturesAbi } from "../../abi/Futures";
+import { withErrors } from "../../lib/withErrors";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 
 const futuresAddress = process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}` | undefined;
@@ -21,12 +22,12 @@ export function useMakerTakerFees() {
     contracts: [
       {
         address: futuresAddress,
-        abi: FuturesAbi,
+        abi: withErrors(FuturesAbi),
         functionName: "makerFee",
       },
       {
         address: futuresAddress,
-        abi: FuturesAbi,
+        abi: withErrors(FuturesAbi),
         functionName: "takerFee",
       },
     ],

@@ -5,6 +5,7 @@ import { faCheckCircle } from "@fortawesome/free-solid-svg-icons/faCheckCircle";
 import { tokens } from "../../styles/tokens";
 import { TransactionForm } from "./Shared/MultistepForm";
 import { validatorRegistryAbi } from "contracts-js/dist/abi/abi";
+import { withErrors } from "../../lib/withErrors";
 
 export interface CancelFormProps {
   closeForm: () => void;
@@ -36,7 +37,7 @@ export const DeregisterValidator: FC<CancelFormProps> = ({ closeForm }) => {
           action: async () => {
             const req = await publicClient!.simulateContract({
               address: process.env.REACT_APP_VALIDATOR_REGISTRY_ADDRESS as `0x${string}`,
-              abi: validatorRegistryAbi,
+              abi: withErrors(validatorRegistryAbi),
               functionName: "validatorDeregister",
               account: userAccount!,
             });

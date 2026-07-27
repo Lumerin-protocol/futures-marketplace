@@ -1,6 +1,7 @@
 import { useWriteContract, useWalletClient } from "wagmi";
 import { getContract } from "viem";
 import { CollateralVaultAbi } from "../../abi/ICollateralVault";
+import { withErrors } from "../../lib/withErrors";
 import { useApproveERC20 } from "./useApproveERC20";
 import { useFuturePaymentToken } from "./useFuturePaymentToken";
 import { useFuturesCollateralVault } from "./useFuturesCollateralVault";
@@ -31,7 +32,7 @@ export function useAddMargin() {
 
     const vault = getContract({
       address: collateralVaultAddress,
-      abi: CollateralVaultAbi,
+      abi: withErrors(CollateralVaultAbi),
       client: walletClient,
     });
 

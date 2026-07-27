@@ -1,6 +1,7 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { getContract } from "viem";
 import { implementationAbi } from "contracts-js/dist/abi/abi";
+import { withErrors } from "../../lib/withErrors";
 
 interface EditContractDestinationProps {
   contractAddress: string;
@@ -18,7 +19,7 @@ export function useEditContractDestination() {
 
     const impl = getContract({
       address: props.contractAddress as `0x${string}`,
-      abi: implementationAbi,
+      abi: withErrors(implementationAbi),
       client: publicClient,
     });
 

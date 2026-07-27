@@ -1,5 +1,6 @@
 import { useReadContracts } from "wagmi";
 import { erc20Abi } from "viem";
+import { withErrors } from "../../../lib/withErrors";
 import { usePerpsPaymentToken } from "./usePerpsPaymentToken";
 
 export function usePerpsTokenInfo() {
@@ -9,17 +10,17 @@ export function usePerpsTokenInfo() {
     contracts: [
       {
         address: tokenAddress as `0x${string}`,
-        abi: erc20Abi,
+        abi: withErrors(erc20Abi),
         functionName: "name",
       },
       {
         address: tokenAddress as `0x${string}`,
-        abi: erc20Abi,
+        abi: withErrors(erc20Abi),
         functionName: "symbol",
       },
       {
         address: tokenAddress as `0x${string}`,
-        abi: erc20Abi,
+        abi: withErrors(erc20Abi),
         functionName: "decimals",
       },
     ],

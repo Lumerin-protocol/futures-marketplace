@@ -1,6 +1,7 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { zeroAddress, getContract } from "viem";
 import { cloneFactoryAbi } from "contracts-js/dist/abi/abi";
+import { withErrors } from "../../lib/withErrors";
 
 interface CreateNewRentalContractProps {
   speedHPS: bigint;
@@ -19,7 +20,7 @@ export function useCreateNewRentalContract() {
 
     const cloneFactory = getContract({
       address: process.env.REACT_APP_CLONE_FACTORY as `0x${string}`,
-      abi: cloneFactoryAbi,
+      abi: withErrors(cloneFactoryAbi),
       client: publicClient,
     });
 

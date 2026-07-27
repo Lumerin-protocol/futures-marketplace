@@ -1,5 +1,6 @@
 import { useReadContract } from "wagmi";
 import { CollateralVaultAbi } from "../../abi/ICollateralVault";
+import { withErrors } from "../../lib/withErrors";
 import { useFuturesCollateralVault } from "./useFuturesCollateralVault";
 
 /// Resolves the futures payment (collateral) token address.
@@ -15,7 +16,7 @@ export function useFuturePaymentToken() {
 
   return useReadContract({
     address: collateralVaultAddress,
-    abi: CollateralVaultAbi,
+    abi: withErrors(CollateralVaultAbi),
     functionName: "collateralToken",
     query: {
       enabled: !!collateralVaultAddress,

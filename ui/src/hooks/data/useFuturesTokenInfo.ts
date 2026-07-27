@@ -1,5 +1,6 @@
 import { useReadContracts } from "wagmi";
 import { erc20Abi } from "viem";
+import { withErrors } from "../../lib/withErrors";
 import { useFuturePaymentToken } from "./useFuturePaymentToken";
 
 /**
@@ -12,17 +13,17 @@ export function useFuturesTokenInfo() {
     contracts: [
       {
         address: tokenAddress,
-        abi: erc20Abi,
+        abi: withErrors(erc20Abi),
         functionName: "name",
       },
       {
         address: tokenAddress,
-        abi: erc20Abi,
+        abi: withErrors(erc20Abi),
         functionName: "symbol",
       },
       {
         address: tokenAddress,
-        abi: erc20Abi,
+        abi: withErrors(erc20Abi),
         functionName: "decimals",
       },
     ],

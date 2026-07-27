@@ -1,5 +1,6 @@
 import { useReadContract } from "wagmi";
 import { CollateralVaultAbi } from "../../abi/ICollateralVault";
+import { withErrors } from "../../lib/withErrors";
 import { useFuturesCollateralVault } from "./useFuturesCollateralVault";
 
 /// Reads the user's deposited collateral balance from the CollateralVault.
@@ -10,7 +11,7 @@ export function useGetFutureBalance(address: `0x${string}` | undefined) {
 
   return useReadContract({
     address: collateralVaultAddress,
-    abi: CollateralVaultAbi,
+    abi: withErrors(CollateralVaultAbi),
     functionName: "balanceOf",
     args: [address!],
     query: {

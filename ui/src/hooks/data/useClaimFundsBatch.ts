@@ -1,6 +1,7 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { getContract, encodeFunctionData } from "viem";
 import { implementationAbi, multicall3Abi } from "contracts-js/dist/abi/abi";
+import { withErrors } from "../../lib/withErrors";
 import { chain } from "../../config/chains";
 
 interface ClaimFundsBatchProps {
@@ -21,7 +22,7 @@ export function useClaimFundsBatch() {
 
     const multicall = getContract({
       address: multicallAddress,
-      abi: multicall3Abi,
+      abi: withErrors(multicall3Abi),
       client: publicClient,
     });
 

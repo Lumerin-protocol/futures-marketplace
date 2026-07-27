@@ -10,6 +10,7 @@ import TextField from "@mui/material/TextField";
 import { formatFeePrice, sellerStakeToken } from "../../lib/units";
 import { GenericCompletedContent } from "./Shared/GenericCompletedContent";
 import { cloneFactoryAbi } from "contracts-js/dist/abi/abi";
+import { withErrors } from "../../lib/withErrors";
 import { useFeeTokenBalance } from "../../hooks/data/useFeeTokenBalance";
 import { useApproveStaking } from "../../hooks/data/useApproveStaking";
 
@@ -118,7 +119,7 @@ export const EditSellerForm: FC<EditSellerFormProps> = memo(
 
               const req = await pc!.simulateContract({
                 address: process.env.REACT_APP_CLONE_FACTORY as `0x${string}`,
-                abi: cloneFactoryAbi,
+                abi: withErrors(cloneFactoryAbi),
                 functionName: "sellerRegister",
                 args: [stakeToAdd],
                 account: userAccount,

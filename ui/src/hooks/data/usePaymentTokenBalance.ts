@@ -1,4 +1,5 @@
 import { usdcMockAbi } from "contracts-js/dist/abi/abi";
+import { withErrors } from "../../lib/withErrors";
 import { useReadContract } from "wagmi";
 import { backgroundRefetchOpts } from "./config";
 import { useFuturePaymentToken } from "./useFuturePaymentToken";
@@ -13,7 +14,7 @@ export function useFuturesPaymentTokenBalance(address: `0x${string}` | undefined
 
   return useReadContract({
     address: paymentTokenAddress,
-    abi: usdcMockAbi,
+    abi: withErrors(usdcMockAbi),
     functionName: "balanceOf",
     args: [address!],
     query: {

@@ -1,5 +1,6 @@
 import { useReadContract } from "wagmi";
 import { FuturesAbi } from "../../abi/Futures";
+import { withErrors } from "../../lib/withErrors";
 
 /**
  * Resting-order margin contribution for a participant (Futures 3.0).
@@ -9,7 +10,7 @@ import { FuturesAbi } from "../../abi/Futures";
 export function useGetMinMargin(address: `0x${string}` | undefined) {
   return useReadContract({
     address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS,
-    abi: FuturesAbi,
+    abi: withErrors(FuturesAbi),
     functionName: "getOrderMargin",
     args: [address!],
     query: {

@@ -13,6 +13,7 @@ import { useModal } from "../../hooks/useModal";
 import { EditValidatorForm } from "../Forms/EditValidator";
 import { DeregisterValidator } from "../Forms/DeregisterValidator";
 import { validatorRegistryAbi } from "contracts-js/dist/abi/abi";
+import { withErrors } from "../../lib/withErrors";
 import { GenericNumberStatsWidget } from "./GenericNumberStatsWidget";
 
 export const ValidatorWidget: FC = () => {
@@ -23,7 +24,7 @@ export const ValidatorWidget: FC = () => {
 
   const validatorQuery = useReadContract({
     address: process.env.REACT_APP_VALIDATOR_REGISTRY_ADDRESS,
-    abi: validatorRegistryAbi,
+    abi: withErrors(validatorRegistryAbi),
     functionName: "getValidatorV2",
     args: [address!],
     query: {

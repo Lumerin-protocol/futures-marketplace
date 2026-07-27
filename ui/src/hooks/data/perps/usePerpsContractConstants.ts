@@ -1,5 +1,6 @@
 import { useReadContracts } from "wagmi";
 import { HashPowerPerpsDEXAbi } from "../../../abi/Perps";
+import { withErrors } from "../../../lib/withErrors";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 
 export function usePerpsContractConstants() {
@@ -9,32 +10,32 @@ export function usePerpsContractConstants() {
     contracts: [
       {
         address: perpsAddress,
-        abi: HashPowerPerpsDEXAbi,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "fundingPeriod",
       },
       {
         address: perpsAddress,
-        abi: HashPowerPerpsDEXAbi,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "fundingRateMaxBps",
       },
       {
         address: perpsAddress,
-        abi: HashPowerPerpsDEXAbi,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "MAX_ORDERS_PER_PARTICIPANT",
       },
       {
         address: perpsAddress,
-        abi: HashPowerPerpsDEXAbi,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "liquidationFee",
       },
       {
         address: perpsAddress,
-        abi: HashPowerPerpsDEXAbi,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "MAX_PRICE_LEVELS_PER_SIDE",
       },
       {
         address: perpsAddress,
-        abi: HashPowerPerpsDEXAbi,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "lastFundingUpdateTime",
       },
     ],

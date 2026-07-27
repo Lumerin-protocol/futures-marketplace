@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useReadContract } from "wagmi";
 import { FuturesAbi } from "../../abi/Futures";
-import { contractErrors } from "../../abi/contractErrors";
+import { withErrors } from "../../lib/withErrors";
 
 /**
  * Hook to get current market price from Futures contract
@@ -12,7 +12,7 @@ export function useGetMarketPrice() {
     address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS,
     // Merge the custom error ABI so viem can decode reverts (e.g. OracleStale,
     // InvalidPrice) into named errors instead of opaque hex data.
-    abi: [...FuturesAbi, ...contractErrors],
+    abi: withErrors(FuturesAbi),
     functionName: "getMarketPrice",
     query: {
       refetchInterval: 10000, // Poll every 10 seconds
@@ -35,15 +35,8 @@ export function useGetMarketPrice() {
     lastRef.current = current;
   }, [result.data]);
 
-  // Surface a failed read (revert, decoding, RPC/network error) in the console.
-  useEffect(() => {
-    if (result.error) {
-      console.error(
-        "[useGetMarketPrice] getMarketPrice() request failed:",
-        result.error,
-      );
-    }
-  }, [result.error]);
+  // NOTE: read failures (revert/decoding/RPC) are logged centrally by the
+  // QueryCache.onError handler in Web3Provider, so no per-hook error effect here.
 
   // Warn when the on-chain read has settled but returned no usable price.
   // A 0 or undefined value keeps the Place Order widget stuck on the

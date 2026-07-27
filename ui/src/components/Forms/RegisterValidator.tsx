@@ -5,6 +5,7 @@ import { TransactionForm } from "./Shared/MultistepForm";
 import { formatUnits, parseUnits } from "viem";
 import { memo, useRef } from "react";
 import { validatorRegistryAbi } from "contracts-js/dist/abi/abi";
+import { withErrors } from "../../lib/withErrors";
 import { InputWrapper } from "./Shared/Forms.styled";
 import InputAdornment from "@mui/material/InputAdornment";
 import TextField from "@mui/material/TextField";
@@ -38,7 +39,7 @@ export const RegisterValidatorForm: React.FC<CreateFormProps> = memo(({ onClose 
     defaultValues: async () => {
       const minStake = await publicClient!.readContract({
         address: process.env.REACT_APP_VALIDATOR_REGISTRY_ADDRESS as `0x${string}`,
-        abi: validatorRegistryAbi,
+        abi: withErrors(validatorRegistryAbi),
         functionName: "stakeRegister",
       });
 
@@ -168,7 +169,7 @@ export const RegisterValidatorForm: React.FC<CreateFormProps> = memo(({ onClose 
 
             const req = await publicClient!.simulateContract({
               address: process.env.REACT_APP_VALIDATOR_REGISTRY_ADDRESS,
-              abi: validatorRegistryAbi,
+              abi: withErrors(validatorRegistryAbi),
               functionName: "validatorRegister",
               args: [stake, yParity, x, data.host],
               account: userAccount,

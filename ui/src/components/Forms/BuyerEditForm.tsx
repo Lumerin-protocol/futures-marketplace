@@ -8,6 +8,7 @@ import { CreateEditPurchaseForm } from "./Shared/CreateEditPurchaseForm";
 import { decompressPublicKey } from "../../gateway/utils";
 import { useValidators } from "../../hooks/data/useValidators";
 import { implementationAbi } from "contracts-js/dist/abi/abi";
+import { withErrors } from "../../lib/withErrors";
 import { getPoolInfo, setPoolInfo, storeLastPurchaseDestination } from "../../gateway/localStorage";
 import { getPredefinedPoolByIndex, predefinedPools } from "./BuyerForms/predefinedPools";
 import { useQueryClient } from "@tanstack/react-query";
@@ -40,7 +41,7 @@ export const BuyerEditForm: React.FC<EditFormProps> = memo(
       defaultValues: async () => {
         const startTime = await pc!.readContract({
           address: contractId as `0x${string}`,
-          abi: implementationAbi,
+          abi: withErrors(implementationAbi),
           functionName: "startingBlockTimestamp",
         });
 
@@ -165,7 +166,7 @@ export const BuyerEditForm: React.FC<EditFormProps> = memo(
 
               const sellerPublicKey = await pc!.readContract({
                 address: contractId as `0x${string}`,
-                abi: implementationAbi,
+                abi: withErrors(implementationAbi),
                 functionName: "pubKey",
               });
 

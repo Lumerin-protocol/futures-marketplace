@@ -1,6 +1,7 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { getContract } from "viem";
 import { cloneFactoryAbi } from "contracts-js/dist/abi/abi";
+import { withErrors } from "../../lib/withErrors";
 
 interface SetContractsDeletedProps {
   contractAddresses: `0x${string}`[];
@@ -17,7 +18,7 @@ export function useSetContractsDeleted() {
 
     const cloneFactory = getContract({
       address: process.env.REACT_APP_CLONE_FACTORY as `0x${string}`,
-      abi: cloneFactoryAbi,
+      abi: withErrors(cloneFactoryAbi),
       client: publicClient,
     });
 

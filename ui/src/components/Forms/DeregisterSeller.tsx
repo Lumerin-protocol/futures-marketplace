@@ -8,6 +8,7 @@ import { AddressLength } from "../../types/types";
 import { GenericCompletedContent } from "./Shared/GenericCompletedContent";
 import { useQueryClient } from "@tanstack/react-query";
 import { cloneFactoryAbi } from "contracts-js/dist/abi/abi";
+import { withErrors } from "../../lib/withErrors";
 import { isAddressEqual } from "viem";
 
 export interface CancelFormProps {
@@ -76,7 +77,7 @@ export const DeregisterSeller: React.FC<CancelFormProps> = ({ closeForm }) => {
             }
             const req = await publicClient!.simulateContract({
               address: process.env.REACT_APP_CLONE_FACTORY,
-              abi: cloneFactoryAbi,
+              abi: withErrors(cloneFactoryAbi),
               functionName: "setContractsDeleted",
               args: [contracts.data!.map((c) => c.id as `0x${string}`), true],
               account: userAccount!,
@@ -96,7 +97,7 @@ export const DeregisterSeller: React.FC<CancelFormProps> = ({ closeForm }) => {
           action: async () => {
             const req = await publicClient!.simulateContract({
               address: process.env.REACT_APP_CLONE_FACTORY,
-              abi: cloneFactoryAbi,
+              abi: withErrors(cloneFactoryAbi),
               functionName: "sellerDeregister",
               account: userAccount!,
             });

@@ -1,10 +1,11 @@
 import { cloneFactoryAbi } from "contracts-js/dist/abi/abi";
+import { withErrors } from "../../lib/withErrors";
 import { useReadContract } from "wagmi";
 
 export function useContractDurationInterval() {
   return useReadContract({
     address: process.env.REACT_APP_CLONE_FACTORY,
-    abi: cloneFactoryAbi,
+    abi: withErrors(cloneFactoryAbi),
     functionName: "getContractDurationInterval",
     query: {
       staleTime: Number.POSITIVE_INFINITY,

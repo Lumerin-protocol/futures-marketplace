@@ -1,5 +1,6 @@
 import { useReadContracts } from "wagmi";
 import { IPortfolioMarginEngineAbi } from "../../abi/IPortfolioMarginEngine";
+import { withErrors } from "../../lib/withErrors";
 import { useFuturesMarginEngine } from "./useFuturesMarginEngine";
 
 /// Reads the four risk-shock parameters from the `IPortfolioMarginEngine`
@@ -11,10 +12,10 @@ export function useMarginEngineShocks() {
 
   const result = useReadContracts({
     contracts: [
-      { address: engine, abi: IPortfolioMarginEngineAbi, functionName: "imSpotShock" },
-      { address: engine, abi: IPortfolioMarginEngineAbi, functionName: "mmSpotShock" },
-      { address: engine, abi: IPortfolioMarginEngineAbi, functionName: "imVolShock" },
-      { address: engine, abi: IPortfolioMarginEngineAbi, functionName: "mmVolShock" },
+      { address: engine, abi: withErrors(IPortfolioMarginEngineAbi), functionName: "imSpotShock" },
+      { address: engine, abi: withErrors(IPortfolioMarginEngineAbi), functionName: "mmSpotShock" },
+      { address: engine, abi: withErrors(IPortfolioMarginEngineAbi), functionName: "imVolShock" },
+      { address: engine, abi: withErrors(IPortfolioMarginEngineAbi), functionName: "mmVolShock" },
     ],
     query: {
       enabled: !!engine,

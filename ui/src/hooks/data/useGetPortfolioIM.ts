@@ -1,5 +1,6 @@
 import { useReadContract } from "wagmi";
 import { IPortfolioMarginEngineAbi } from "../../abi/IPortfolioMarginEngine";
+import { withErrors } from "../../lib/withErrors";
 import { useFuturesMarginEngine } from "./useFuturesMarginEngine";
 
 /// Reads the user's portfolio Initial Margin (IM) from the
@@ -12,7 +13,7 @@ export function useGetPortfolioIM(address: `0x${string}` | undefined) {
   const { data: engine } = useFuturesMarginEngine();
   return useReadContract({
     address: engine,
-    abi: IPortfolioMarginEngineAbi,
+    abi: withErrors(IPortfolioMarginEngineAbi),
     functionName: "computePortfolioIM",
     args: address ? [address] : undefined,
     query: {

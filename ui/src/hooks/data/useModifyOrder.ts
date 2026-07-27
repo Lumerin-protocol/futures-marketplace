@@ -1,6 +1,7 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { getContract } from "viem";
 import { FuturesAbi } from "../../abi/Futures";
+import { withErrors } from "../../lib/withErrors";
 
 interface ModifyOrderProps {
   /** Resting order ids to cancel before placing the replacement. */
@@ -22,7 +23,7 @@ export function useModifyOrder() {
 
     const futuresContract = getContract({
       address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`,
-      abi: FuturesAbi,
+      abi: withErrors(FuturesAbi),
       client: publicClient,
     });
 

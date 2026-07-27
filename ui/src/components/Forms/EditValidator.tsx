@@ -4,6 +4,7 @@ import { GenericConfirmContent } from "./Shared/GenericConfirmContent";
 import { TransactionForm } from "./Shared/MultistepForm";
 import { type FC, memo, useRef } from "react";
 import { validatorRegistryAbi } from "contracts-js/dist/abi/abi";
+import { withErrors } from "../../lib/withErrors";
 import { InputWrapper } from "./Shared/Forms.styled";
 import InputAdornment from "@mui/material/InputAdornment";
 import TextField from "@mui/material/TextField";
@@ -155,7 +156,7 @@ export const EditValidatorForm: FC<EditValidatorFormProps> = memo((props) => {
 
             const req = await pc!.simulateContract({
               address: process.env.REACT_APP_VALIDATOR_REGISTRY_ADDRESS as `0x${string}`,
-              abi: validatorRegistryAbi,
+              abi: withErrors(validatorRegistryAbi),
               functionName: "validatorRegister",
               args: [stakeToAdd, yParity, x, data.host],
               account: userAccount,

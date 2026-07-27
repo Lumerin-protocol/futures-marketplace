@@ -1,5 +1,6 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { erc20Abi, getContract } from "viem";
+import { withErrors } from "../../lib/withErrors";
 import { useCallback } from "react";
 
 interface ApproveProps {
@@ -18,7 +19,7 @@ export function useApproveERC20(tokenAddress: `0x${string}`) {
 
       const token = getContract({
         address: tokenAddress,
-        abi: erc20Abi,
+        abi: withErrors(erc20Abi),
         client: wc,
       });
 

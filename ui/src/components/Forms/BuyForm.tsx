@@ -22,6 +22,7 @@ import { usePurchaseContract } from "../../hooks/data/usePurchaseContract";
 import { useApprovePayment } from "../../hooks/data/useApprovePayment";
 import { useApproveFee } from "../../hooks/data/useApproveFee";
 import { implementationAbi } from "contracts-js/dist/abi/abi";
+import { withErrors } from "../../lib/withErrors";
 import { formatFeePrice, formatHashrateTHPS, formatPaymentPrice } from "../../lib/units";
 import { formatDuration } from "../../lib/duration";
 import { getPredefinedPoolByAddress, getPredefinedPoolByIndex, predefinedPools } from "./BuyerForms/predefinedPools";
@@ -216,7 +217,7 @@ export const BuyForm: FC<BuyFormProps> = memo(
 
               const pubKey = await pc!.readContract({
                 address: contract.data!.id as `0x${string}`,
-                abi: implementationAbi,
+                abi: withErrors(implementationAbi),
                 functionName: "pubKey",
               });
               const encrValidatorURL = await encryptMessage(pubKey, validatorURL);

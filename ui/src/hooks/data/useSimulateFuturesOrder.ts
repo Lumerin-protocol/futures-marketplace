@@ -1,5 +1,6 @@
 import { useReadContract } from "wagmi";
 import { FuturesAbi } from "../../abi/Futures";
+import { withErrors } from "../../lib/withErrors";
 
 interface SimulateFuturesOrderProps {
   expirationAt: bigint | undefined;
@@ -25,7 +26,7 @@ export function useSimulateFuturesOrder({
 
   const result = useReadContract({
     address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`,
-    abi: FuturesAbi,
+    abi: withErrors(FuturesAbi),
     functionName: "simulateOrder",
     args: argsReady ? [expirationAt!, price!, quantityBigInt!] : undefined,
     query: {

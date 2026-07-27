@@ -1,6 +1,7 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { getContract } from "viem";
 import { HashPowerPerpsDEXAbi } from "../../../abi/Perps";
+import { withErrors } from "../../../lib/withErrors";
 import { QUANTITY_SCALE_NUM } from "../../../lib/units";
 import { TimeInForce, type TimeInForceValue } from "../../../types/timeInForce";
 
@@ -21,7 +22,7 @@ export function useCreatePerpsOrder() {
 
     const perpsContract = getContract({
       address: process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`,
-      abi: HashPowerPerpsDEXAbi,
+      abi: withErrors(HashPowerPerpsDEXAbi),
       client: publicClient,
     });
 

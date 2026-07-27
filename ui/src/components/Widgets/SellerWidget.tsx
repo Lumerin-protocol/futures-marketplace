@@ -15,6 +15,7 @@ import { useContracts, useSellerContracts } from "../../hooks/data/useContracts"
 import { GenericNumberStatsWidget } from "./GenericNumberStatsWidget";
 import { EditSellerForm } from "../Forms/EditSeller";
 import { cloneFactoryAbi } from "contracts-js/dist/abi/abi";
+import { withErrors } from "../../lib/withErrors";
 import { isAddressEqual } from "viem";
 
 export const SellerWidget: FC = () => {
@@ -25,7 +26,7 @@ export const SellerWidget: FC = () => {
 
   const sellerQuery = useReadContract({
     address: process.env.REACT_APP_CLONE_FACTORY,
-    abi: cloneFactoryAbi,
+    abi: withErrors(cloneFactoryAbi),
     functionName: "sellerByAddress",
     args: [address!],
     query: {

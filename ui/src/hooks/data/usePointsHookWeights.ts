@@ -1,5 +1,6 @@
 import { useReadContracts } from "wagmi";
 import { PointsHookAbi } from "../../abi/PointsHook";
+import { withErrors } from "../../lib/withErrors";
 import { useFuturesHook } from "./useFuturesHook";
 
 /// Reads the points-weighting parameters from the Futures `hook` (IPointsHook):
@@ -17,17 +18,17 @@ export function usePointsHookWeights() {
     contracts: [
       {
         address: hookAddress,
-        abi: PointsHookAbi,
+        abi: withErrors(PointsHookAbi),
         functionName: "WEIGHT_SCALE",
       },
       {
         address: hookAddress,
-        abi: PointsHookAbi,
+        abi: withErrors(PointsHookAbi),
         functionName: "wTaker",
       },
       {
         address: hookAddress,
-        abi: PointsHookAbi,
+        abi: withErrors(PointsHookAbi),
         functionName: "wMaker",
       },
     ],
