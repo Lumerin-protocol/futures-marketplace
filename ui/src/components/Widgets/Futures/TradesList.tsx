@@ -94,6 +94,17 @@ const ColumnHeader = styled("div")`
   span:not(:first-of-type) {
     text-align: right;
   }
+
+  /* MOBILE-ONLY (see MOBILE_TRADING_QUERY): the feed shares its row with the
+     place-order form, so columns tighten and the timestamp gets extra width. */
+  @media (max-width: 768px) {
+    grid-template-columns: 0.8fr 0.8fr 1.4fr;
+    column-gap: 0.3rem;
+
+    span {
+      font-size: 0.55rem;
+    }
+  }
 `;
 
 const Row = styled("div")`
@@ -108,6 +119,13 @@ const Row = styled("div")`
 
   &:hover {
     background: ${tokens.overlay.white10};
+  }
+
+  /* MOBILE-ONLY: matches the compact ColumnHeader template above. */
+  @media (max-width: 768px) {
+    grid-template-columns: 0.8fr 0.8fr 1.4fr;
+    column-gap: 0.3rem;
+    font-size: 0.6rem;
   }
 `;
 

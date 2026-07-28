@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styled from "@mui/material/styles/styled";
-import useMediaQuery from "@mui/material/useMediaQuery";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { tokens } from "../../../styles/tokens";
+import { useIsMobileTradingLayout } from "./mobile/mobileTradingLayout";
 import type { OrderBookRow } from "./ClassicOrderBook";
 import type { ContractMode } from "../../../types/types";
 
@@ -51,8 +51,10 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // On mobile the hover tooltip (price/total/distance-from-market) is more of a
-  // hindrance than help, so suppress it entirely for touch/narrow layouts.
-  const isMobile = useMediaQuery("(max-width: 768px)", { noSsr: true });
+  // hindrance than help, so suppress it entirely for touch/narrow layouts. The
+  // same flag drops the cumulative Total column, since the mobile layout gives
+  // the book only half the screen width (the depth bars still convey it).
+  const isMobile = useIsMobileTradingLayout();
 
   // Compute cumulative depth per side once per order-book update. Rows arrive as
   // one contiguous, tick-by-tick ladder sorted high -> low (empty rows included),
@@ -233,10 +235,10 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
     // (e.g. 3.01, 3.02, ...) to place an order there even with no resting order.
     if (!depth) {
       return (
-        <Row $side={side} $empty onClick={() => onRowClick?.(formatPrice(row.price), null)}>
+        <Row $side={side} $empty $compact={isMobile} onClick={() => onRowClick?.(formatPrice(row.price), null)}>
           <PriceCol $side={side}>{formatPrice(row.price)}</PriceCol>
           <SizeCol />
-          <TotalCol />
+          {!isMobile && <TotalCol />}
         </Row>
       );
     }
@@ -264,6 +266,7 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
       <Row
         $side={side}
         $highlight={highlight}
+        $compact={isMobile}
         onClick={() => onRowClick?.(formatPrice(row.price), units ?? null)}
         onMouseEnter={showTooltip}
         onMouseMove={showTooltip}
@@ -273,17 +276,17 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
         <BrightLayer $side={side} $width={sizeWidth} />
         <PriceCol $side={side}>{formatPrice(row.price)}</PriceCol>
         <SizeCol>{formatVolume(depth.size)}</SizeCol>
-        <TotalCol>{formatVolume(depth.total)}</TotalCol>
+        {!isMobile && <TotalCol>{formatVolume(depth.total)}</TotalCol>}
       </Row>
     );
   };
 
   return (
     <Container>
-      <ColumnHeader>
+      <ColumnHeader $compact={isMobile}>
         <span>Price</span>
         <span>Size</span>
-        <span>Total</span>
+        {!isMobile && <span>Total</span>}
       </ColumnHeader>
 
       <Scroller ref={scrollRef} onScroll={handleScroll}>
@@ -381,16 +384,17 @@ const ScrollToMarketButton = styled("button")`
   }
 `;
 
-const ColumnHeader = styled("div")`
+// `$compact` is the mobile-only two-column variant (Price / Size, no Total).
+const ColumnHeader = styled("div")<{ $compact?: boolean }>`
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: ${(props) => (props.$compact ? "1.2fr 1fr" : "1fr 1fr 1fr")};
   z-index: 2;
   background-color: ${tokens.surface.panel};
   border-bottom: 1px solid ${tokens.overlay.white10};
   padding: 0.3rem 0.5rem;
 
   span {
-    font-size: 0.65rem;
+    font-size: ${(props) => (props.$compact ? "0.6rem" : "0.65rem")};
     font-weight: 600;
     color: ${tokens.text.secondary};
     letter-spacing: 0.03em;
@@ -450,15 +454,15 @@ const VirtualRow = styled("div")`
   width: 100%;
 `;
 
-const Row = styled("div")<{ $side: "ask" | "bid"; $highlight?: boolean; $empty?: boolean }>`
+const Row = styled("div")<{ $side: "ask" | "bid"; $highlight?: boolean; $empty?: boolean; $compact?: boolean }>`
   position: relative;
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: ${(props) => (props.$compact ? "1.2fr 1fr" : "1fr 1fr 1fr")};
   align-items: center;
   height: ${ROW_HEIGHT}px;
   padding: 0 0.5rem;
   cursor: pointer;
-  font-size: 0.75rem;
+  font-size: ${(props) => (props.$compact ? "0.65rem" : "0.75rem")};
   font-family: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
   border-bottom: 1px solid transparent;
   opacity: ${(props) => (props.$empty ? 0.35 : 1)};

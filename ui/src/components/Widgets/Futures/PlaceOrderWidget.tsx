@@ -42,6 +42,7 @@ import {
 } from "../../Forms/Shared/AmountInputForm";
 import { useMakerTakerFees } from "../../../hooks/data/useMakerTakerFees";
 import { ModeToggle, ModeButton, type AmountMode } from "./PerpsOrderFormFields";
+import { MOBILE_TOGGLE_METRICS } from "./mobile/mobileTradingLayout";
 import { useSimulatePerpsOrder } from "../../../hooks/data/perps/useSimulatePerpsOrder";
 import { useSimulateFuturesOrder } from "../../../hooks/data/useSimulateFuturesOrder";
 import { useGetPerpsInitialMargin } from "../../../hooks/data/perps/useGetPerpsInitialMargin";
@@ -1585,7 +1586,12 @@ const PriceInputContainer = styled("div")<{ $isHighlighted?: boolean }>`
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  
+
+  /* MOBILE-ONLY: let the steppers take the input's height instead of their own. */
+  @media (max-width: 768px) {
+    align-items: stretch;
+  }
+
   input {
     flex: 1;
     border-radius: 0;
@@ -1645,6 +1651,15 @@ const PriceButton = styled("button")<{ $isHighlighted?: boolean }>`
     border-top-left-radius: 0;
     border-bottom-left-radius: 0;
   }
+
+  /* MOBILE-ONLY (see MOBILE_TRADING_QUERY): drop the fixed 48px height so the
+     steppers stretch to exactly the price input's height beside them. */
+  @media (max-width: 768px) {
+    height: auto;
+    padding: 0 0.45rem;
+    min-width: 28px;
+    font-size: 1rem;
+  }
 `;
 
 const ButtonSection = styled("div")`
@@ -1663,6 +1678,16 @@ const ButtonSection = styled("div")`
     
     button {
       flex: 1;
+    }
+  }
+
+  /* MOBILE-ONLY (see MOBILE_TRADING_QUERY): Bid/Ask share half a phone screen. */
+  @media (max-width: 768px) {
+    gap: 0.4rem;
+
+    button {
+      padding: 0.6rem 0.4rem;
+      font-size: 0.8rem;
     }
   }
 `;
@@ -1823,6 +1848,28 @@ const StyledSlider = styled(Slider)`
     font-size: 0.75rem;
   }
   
+  /* MOBILE-ONLY (see MOBILE_TRADING_QUERY): the form only gets half the screen,
+     so the thumb and its tick labels shrink to stay proportionate. */
+  @media (max-width: 768px) {
+    & .MuiSlider-thumb {
+      width: 12px;
+      height: 12px;
+
+      &:hover,
+      &.Mui-focusVisible {
+        box-shadow: 0 0 0 5px ${tokens.overlay.white16};
+      }
+
+      &.Mui-active {
+        box-shadow: 0 0 0 9px ${tokens.overlay.white16};
+      }
+    }
+
+    & .MuiSlider-markLabel {
+      font-size: 0.6rem;
+    }
+  }
+
   &.Mui-disabled {
     color: ${tokens.text.muted};
     
@@ -1847,6 +1894,17 @@ const OrderTypeRow = styled("div")`
   flex-wrap: wrap;
   gap: 0.5rem;
   padding-top: 0.25rem;
+
+  /* MOBILE-ONLY (see MOBILE_TRADING_QUERY): the Limit/Market, time-in-force and
+     leverage toggles take the same metrics as the order book's view switcher
+     next to them, so both columns start at the same height. */
+  @media (max-width: 768px) {
+    gap: 0.3rem;
+
+    button {
+      ${MOBILE_TOGGLE_METRICS}
+    }
+  }
 `;
 
 const SliderInfoContainer = styled("div")`
