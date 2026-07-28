@@ -7,6 +7,7 @@ import { ModalItem } from "../../Modal";
 import { DetailedSpecsModal } from "./DetailedSpecsModal";
 import { useSettlementPrice } from "../../../hooks/data/useSettlementPrice";
 import { formatHashratePHPS, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import type { ReactNode } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
@@ -25,6 +26,10 @@ interface TradingHeaderProps {
   /// Currently-selected expiration (unix seconds). Used to surface the pinned
   /// cash-settlement price once that expiration has matured and been settled.
   selectedExpirationAt?: number;
+  /// MOBILE-ONLY (see FuturesMobileLayout): controls pinned to the right end of
+  /// the contract-mode row, currently the chart show/hide toggle. Left undefined
+  /// by the desktop layout, which renders the header exactly as before.
+  mobileActions?: ReactNode;
 }
 
 const formatVolume = (raw: string): string => {
@@ -43,6 +48,7 @@ export const TradingHeader = ({
   fundingRate = "0%",
   totalVolume,
   selectedExpirationAt,
+  mobileActions,
 }: TradingHeaderProps) => {
   const detailedSpecsModal = useModal();
   const { data: contractSpecs } = contractSpecsQuery;
@@ -84,24 +90,36 @@ export const TradingHeader = ({
     );
   };
 
+  const modeToggle = (
+    <ModeToggle>
+      <ModeButton
+        $active={contractMode === "futures"}
+        onClick={() => onContractModeChange("futures")}
+      >
+        Futures
+      </ModeButton>
+      <ModeButton
+        $active={contractMode === "perpetual"}
+        onClick={() => onContractModeChange("perpetual")}
+      >
+        Perpetuals
+      </ModeButton>
+    </ModeToggle>
+  );
+
   return (
     <>
       <HeaderBar>
-        {/* Left: contract mode toggle */}
-        <ModeToggle>
-          <ModeButton
-            $active={contractMode === "futures"}
-            onClick={() => onContractModeChange("futures")}
-          >
-            Futures
-          </ModeButton>
-          <ModeButton
-            $active={contractMode === "perpetual"}
-            onClick={() => onContractModeChange("perpetual")}
-          >
-            Perpetuals
-          </ModeButton>
-        </ModeToggle>
+        {/* Left: contract mode toggle. On mobile it shares a full-width row with
+            the layout's controls, which sit in the right corner. */}
+        {mobileActions ? (
+          <ModeRow>
+            {modeToggle}
+            {mobileActions}
+          </ModeRow>
+        ) : (
+          modeToggle
+        )}
 
         {/* Center: market stats */}
         <StatsRow>
@@ -184,6 +202,17 @@ const HeaderBar = styled("div")`
   @media (max-width: 768px) {
     gap: 0.75rem;
   }
+`;
+
+// MOBILE-ONLY wrapper (only rendered when `mobileActions` is passed): claims a
+// full flex line so the contract-mode toggle and the layout controls sit on their
+// own row, with the controls pushed to the right corner and the stats below.
+const ModeRow = styled("div")`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex: 1 1 100%;
 `;
 
 const ModeToggle = styled("div")`

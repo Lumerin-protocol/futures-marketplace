@@ -8,6 +8,7 @@ import { usePerpsOrderBook } from "../../../hooks/data/perps/usePerpsOrderBook";
 import { usePerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { createFinalOrderBookData, createPerpsOrderBookData } from "./orderBookHelpers";
+import { MOBILE_TOGGLE_METRICS } from "./mobile/mobileTradingLayout";
 import { ClassicOrderBook } from "./ClassicOrderBook";
 import { VolumeOrderBook } from "./VolumeOrderBook";
 import { PerpsVolumeOrderBook } from "./PerpsVolumeOrderBook";
@@ -492,6 +493,14 @@ const TopBar = styled("div")`
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.4rem;
+
+  /* MOBILE-ONLY (see MOBILE_TRADING_QUERY): the book shares its row with the
+     place-order form, so the view tabs and the date switcher stack instead of
+     squeezing each other out. */
+  @media (max-width: 768px) {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
 `;
 
 const Header = styled("div")`
@@ -538,6 +547,13 @@ const DateSwitcher = styled("div")`
     font-weight: 600;
     white-space: nowrap;
     color: ${tokens.text.onDark};
+  }
+
+  /* MOBILE-ONLY: half-width column, so the expiry label steps down a size. */
+  @media (max-width: 768px) {
+    .date-label {
+      font-size: 0.7rem;
+    }
   }
 
   .nav-arrow {
@@ -620,6 +636,12 @@ const ToggleButton = styled("button")<{ $active?: boolean }>`
   &:hover {
     background: ${(props) => (props.$active ? tokens.surface.tabHover : tokens.overlay.white08)};
     color: #FFFFFF;
+  }
+
+  /* MOBILE-ONLY: keep both tabs on one line inside the half-width column, using
+     the metrics the place-order toggles also follow so the two columns align. */
+  @media (max-width: 768px) {
+    ${MOBILE_TOGGLE_METRICS}
   }
 `;
 
