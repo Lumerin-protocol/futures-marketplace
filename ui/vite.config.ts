@@ -7,6 +7,7 @@ import { newAjv } from "./validator";
 import mkcert from "vite-plugin-mkcert";
 // import { analyzer } from "vite-bundle-analyzer";
 import { imagetools } from "vite-imagetools";
+import { seedMetaPlugin } from "./vite-plugin-seed-meta";
 
 declare global {
   namespace NodeJS {
@@ -84,6 +85,7 @@ export default defineConfig(({ mode }) => {
         },
       }),
       svgr(),
+      seedMetaPlugin(),
       env.DEV_SERVER_HTTPS ? mkcert() : null,
 
       // analyzer({

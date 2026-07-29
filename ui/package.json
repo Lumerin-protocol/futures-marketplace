@@ -13,7 +13,7 @@
     "build": "vite build",
     "build:analyze": "vite build --mode analyze && vite-bundle-analyzer build/bundle-analyzer.html",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "serve": "serve -s build -p 3001",
     "lint": "biome lint",
     "lint:fix": "biome lint --write",
