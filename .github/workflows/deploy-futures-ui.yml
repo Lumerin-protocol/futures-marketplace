@@ -264,7 +264,6 @@ jobs:
             REACT_APP_VALIDATOR_REGISTRY_ADDRESS
             REACT_APP_FUTURES_TOKEN_ADDRESS
             REACT_APP_PERPS_TOKEN_ADDRESS
-            REACT_APP_USE_SEED_DATA
           )
           SECRETS=(
             REACT_APP_READ_ONLY_ETH_NODE_URL
@@ -366,7 +365,6 @@ jobs:
           REACT_APP_SUBGRAPH_PERPS_URL=https://example.com
           REACT_APP_SUBGRAPH_POINTS_URL=https://example.com
           REACT_APP_PERPS_TOKEN_ADDRESS=0x0000000000000000000000000000000000000000
-          REACT_APP_USE_SEED_DATA=false
           EOF
           echo "✅ Placeholder .env file created"
 

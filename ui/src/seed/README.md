@@ -1,8 +1,20 @@
 # Seed data
 
 Bundled JSON snapshots used to backfill chart history when the subgraph hasn't
-indexed enough data yet. Lazy-loaded by:
+indexed enough data yet.  Each bundle is lazy-loaded **only when its latest
+timestamp falls within the last 30 days** — once the seed data ages out the
+import is skipped entirely and the subgraph is relied on to serve the full
+history.  When loaded, the seed is merged into the subgraph results for any
+time range it overlaps.
 
+Latest timestamps are tracked in `meta.ts`.  After regenerating seed data,
+update those constants with:
+
+```bash
+node -e "const d=require('./btcUsds.json'); console.log(Math.max(...d.map(i=>+i.timestamp)))"
+```
+
+Used by:
 - `ui/src/hooks/data/useBtcPriceIndexData.ts`
 - `ui/src/hooks/data/useHashRateIndexData.ts`
 
