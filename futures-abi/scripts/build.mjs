@@ -11,8 +11,10 @@ const abiDir = path.resolve(pkgRoot, "../contracts/abi");
 const srcDir = path.join(pkgRoot, "src");
 const jsonDir = path.join(pkgRoot, "json");
 
-// Test-only mocks are not part of the public package
-const EXCLUDE = new Set(["USDCMock"]);
+// Test-only mocks are not part of the public package; "package" skips the
+// package.json manifest that the codegen leaves in contracts/abi — it is a
+// module-resolution shim, not an ABI.
+const EXCLUDE = new Set(["USDCMock", "package"]);
 
 rmSync(srcDir, { recursive: true, force: true });
 rmSync(jsonDir, { recursive: true, force: true });
