@@ -1300,18 +1300,14 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
                 Order storage makerOrder = orders[bytes32(orderIdUint)];
                 // STP: own resting size would net out, not fill.
                 if (makerOrder.participant != msg.sender && makerOrder.quantity != 0) {
-                    uint256 matchAmt = MathLib.abs(makerOrder.quantity) < MathLib.abs(remaining)
-                        ? MathLib.abs(makerOrder.quantity)
-                        : MathLib.abs(remaining);
+                    uint256 matchAmt = MathLib.min(MathLib.abs(makerOrder.quantity), MathLib.abs(remaining));
                     if (matchAmt > 0) {
                         totalNotional += currentPrice * matchAmt;
                         totalFilledAbs += matchAmt;
                         remaining -= MathLib.toSigned(isBuy, matchAmt);
                     }
                 } else if (makerOrder.participant == msg.sender && makerOrder.quantity != 0) {
-                    uint256 cancelAmt = MathLib.abs(makerOrder.quantity) < MathLib.abs(remaining)
-                        ? MathLib.abs(makerOrder.quantity)
-                        : MathLib.abs(remaining);
+                    uint256 cancelAmt = MathLib.min(MathLib.abs(makerOrder.quantity), MathLib.abs(remaining));
                     remaining -= MathLib.toSigned(isBuy, cancelAmt);
                 }
                 (, orderIdUint) = orderQueue.getNextNode(orderIdUint);
