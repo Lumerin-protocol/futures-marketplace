@@ -526,7 +526,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     ) private returns (int256) {
         uint256 makerAbs = MathLib.abs(_makerOrder.quantity);
         uint256 remainingAbs = MathLib.abs(_remainingQty);
-        uint256 cancelAmt = makerAbs < remainingAbs ? makerAbs : remainingAbs;
+        uint256 cancelAmt = MathLib.min(makerAbs, remainingAbs);
         bool isBuy = _makerOrder.quantity > 0;
 
         if (cancelAmt == makerAbs) {
@@ -553,7 +553,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     ) private returns (int256) {
         uint256 makerAbs = MathLib.abs(_makerOrder.quantity);
         uint256 remainingAbs = MathLib.abs(_remainingQty);
-        uint256 fill = makerAbs < remainingAbs ? makerAbs : remainingAbs;
+        uint256 fill = MathLib.min(makerAbs, remainingAbs);
         int256 takerFillQty = _isBuy ? int256(fill) : -int256(fill);
 
         _applyFill(_makerOrder.participant, -takerFillQty, _price, _expirationAt);
@@ -638,7 +638,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         // Opposite direction: reduce / close / flip
         uint256 absDq = MathLib.abs(_signedQty);
         uint256 absNet = MathLib.abs(netQty);
-        uint256 closedAbs = absDq < absNet ? absDq : absNet;
+        uint256 closedAbs = MathLib.min(absDq, absNet);
         uint256 avgEntry = MathLib.abs(netEntry) / absNet;
 
         int256 signedClosed = netQty > 0 ? int256(closedAbs) : -int256(closedAbs);
