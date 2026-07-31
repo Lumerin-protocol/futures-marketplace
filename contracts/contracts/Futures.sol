@@ -180,15 +180,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     /// @dev Former bilateral lot — dead after reset; kept so the `positions` mapping slot stays typed.
+    /// @dev Dead after v3 — slot retained for upgrade safety.
     struct LegacyLot {
-        address seller;
-        address buyer;
-        string destURL;
-        uint256 sellPricePerDay;
-        uint256 buyPricePerDay;
-        uint256 expirationAt;
-        uint256 createdAt;
-        bool paid;
+        address _0; address _1; string _2;
+        uint256 _3; uint256 _4; uint256 _5; uint256 _6;
+        bool _7;
     }
 
     // ── Events ────────────────────────────────────────────────────────────────
