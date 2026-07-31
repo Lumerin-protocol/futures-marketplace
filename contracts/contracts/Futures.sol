@@ -36,34 +36,34 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     mapping(address => mapping(uint256 => mapping(uint256 => EnumerableSet.Bytes32Set))) private
         participantExpirationAtPriceOrderIdsIndex;
 
-    uint256 private _gap5;
+    uint256 private __gap0;
     uint256 public firstFutureExpirationDate;
     /// @dev Reserved — formerly `contractSizeHpsDay` / `speedHps`.
-    uint256 private _gapContractSize;
-    uint256 private _gapMinPriceIncrement;
+    uint256 private __gap1;
+    uint256 private __gap2;
     /// @dev Dead — former takerFee (flat). Now bps-based, appended at end of storage.
-    uint256 private _gapTakerFee;
+    uint256 private __gap3;
     uint256 private nonce = 0;
 
-    address private _gap;
+    address private __gap4;
     /// @notice Hashprice oracle (price of 1 PH/s per day in `token` currency).
     AggregatorV3Interface public priceOracle;
-    address private _gap6;
+    address private __gap5;
 
     /// @dev Reserved — formerly `deliveryDurationDays`.
-    uint8 private _gapDeliveryDuration;
+    uint8 private __gap6;
     /// @dev Reserved — formerly `expirationIntervalDays` (now `EXPIRATION_INTERVAL_DAYS` constant).
-    uint8 public _gap7;
+    uint8 private __gap7;
     uint8 public futureExpirationDatesCount;
     uint8 public liquidationMarginPercent;
-    uint8 private _gap3;
-    string private _gap8;
+    uint8 private __gap8;
+    string private __gap9;
     uint256 public collectedFeesBalance;
-    uint256 private _gap2;
+    uint256 private __gap10;
     /// @dev Reserved — formerly `addressFeeDiscountPercent`.
-    mapping(address => uint8) private _gap4;
+    mapping(address => uint8) private __gap11;
     /// @dev Dead — former hashpriceScalingDivisor. Oracle scaling now via MathLib.scaleDecimals.
-    uint256 private _gapScalingDivisor;
+    uint256 private __gap12;
 
     IPortfolioMarginEngine public portfolioMargin;
     /// @notice Canonical net position quantity per (participant, expirationAt). +long / -short.
@@ -77,10 +77,10 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     mapping(uint256 => StructuredLinkedList.List) private activeAskPrices;
 
     /// @dev Dead — former liquidationFee (flat). Now bps-based via liquidationFeeBps.
-    uint256 private _gapLiquidationFee;
+    uint256 private __gap13;
 
     /// @dev Dead — former makerFee (flat). Now bps-based, appended at end of storage.
-    uint256 private _gapMakerFee;
+    uint256 private __gap14;
 
     IPointsHook public hook;
 
@@ -112,7 +112,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint8 private oracleDecimals;
 
     /// @dev Dead — former vault. Moved to immutable.
-    address private _gapCollateralVault;
+    address private __gap15;
 
     // immutable
     ICollateralVault public immutable vault;
