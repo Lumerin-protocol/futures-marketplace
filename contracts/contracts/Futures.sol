@@ -13,6 +13,7 @@ import { ICollateralVault } from "collateral-margin/contracts/contracts/interfac
 import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/interfaces/IPortfolioMarginEngine.sol";
 import { IPointsHook } from "collateral-margin/contracts/contracts/interfaces/IPointsHook.sol";
 import { PriceLadderLib } from "./libs/PriceLadderLib.sol";
+import { MathLib } from "./libs/MathLib.sol";
 
 /// @title Futures — cash-settled hashrate futures CLOB (v3: aggregate positions + qty-bearing orders)
 contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, Versionable {
@@ -61,8 +62,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint256 private _gap2;
     /// @dev Reserved — formerly `addressFeeDiscountPercent`.
     mapping(address => uint8) private _gap4;
-    /// @notice 10^(oracle.decimals() - token.decimals()). Recomputed on `setOracle`.
-    uint256 public hashpriceScalingDivisor;
+    /// @dev Dead — former hashpriceScalingDivisor. Oracle scaling now via MathLib.scaleDecimals.
+    uint256 private _gapScalingDivisor;
 
     IPortfolioMarginEngine public portfolioMargin;
     /// @notice Canonical net position quantity per (participant, expirationAt). +long / -short.
@@ -105,6 +106,10 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @notice Maker fee in basis points (e.g., 0 = 0% of notional).
     /// @dev Appended at end of storage to preserve the upgradeable layout.
     int16 public makerFeeBps;
+
+    /// @notice Decimals of the oracle feed (cached for gas).
+    /// @dev Appended at end of storage to preserve the upgradeable layout.
+    uint8 private oracleDecimals;
 
     /// @dev Dead — former vault. Moved to immutable.
     address private _gapCollateralVault;
@@ -398,8 +403,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         emit OrderCreated(orderId, _participant, _price, _quantity, _expirationAt);
 
         int256 remainingQty = _matchWithOppositeOrders(_participant, _price, _expirationAt, _quantity);
-        uint256 remainingAbs = _abs(remainingQty);
-        bool partiallyOrFullyFilled = remainingAbs != _abs(_quantity);
+        uint256 remainingAbs = MathLib.abs(remainingQty);
+        bool partiallyOrFullyFilled = remainingAbs != MathLib.abs(_quantity);
 
         if (_tif == TimeInForce.FOK && remainingAbs > 0) revert TimeInForceNotFilled();
         // IOC with zero fill is a noop — revert rather than emit a closed empty order.
@@ -434,7 +439,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
         // Opposite side and combined reducing size (resting + this intent) ≤ position.
         isReduceOnly = positionBefore != 0 && (positionBefore > 0 ? _quantity < 0 : _quantity > 0)
-            && _abs(_quantity) + reducingBefore <= _abs(positionBefore);
+            && MathLib.abs(_quantity) + reducingBefore <= MathLib.abs(positionBefore);
     }
 
     /// @dev Absolute qty of resting orders that reduce `_net` at `_expirationAt`.
@@ -450,7 +455,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             Order memory order = orders[ids.at(i)];
             if (order.expirationAt != _expirationAt || order.quantity == 0) continue;
             if (_net > 0 ? order.quantity < 0 : order.quantity > 0) {
-                total += _abs(order.quantity);
+                total += MathLib.abs(order.quantity);
             }
         }
     }
@@ -505,7 +510,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             (, orderIdUint) = makerOrderQueue.getNextNode(0);
         }
 
-        _removePriceLevelIfEmpty(_expirationAt, _price, !_isBuy);
+        _removePriceLevelIfEmpty(makerOrderQueue, _expirationAt, _price, !_isBuy);
         return _remainingQty;
     }
 
@@ -519,8 +524,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         bool _isBuy,
         uint256 _expirationAt
     ) private returns (int256) {
-        uint256 makerAbs = _abs(_makerOrder.quantity);
-        uint256 remainingAbs = _abs(_remainingQty);
+        uint256 makerAbs = MathLib.abs(_makerOrder.quantity);
+        uint256 remainingAbs = MathLib.abs(_remainingQty);
         uint256 cancelAmt = makerAbs < remainingAbs ? makerAbs : remainingAbs;
         bool isBuy = _makerOrder.quantity > 0;
 
@@ -546,8 +551,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         uint256 _price,
         uint256 _expirationAt
     ) private returns (int256) {
-        uint256 makerAbs = _abs(_makerOrder.quantity);
-        uint256 remainingAbs = _abs(_remainingQty);
+        uint256 makerAbs = MathLib.abs(_makerOrder.quantity);
+        uint256 remainingAbs = MathLib.abs(_remainingQty);
         uint256 fill = makerAbs < remainingAbs ? makerAbs : remainingAbs;
         int256 takerFillQty = _isBuy ? int256(fill) : -int256(fill);
 
@@ -604,7 +609,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     function _avgEntryPrice(address _user, uint256 _expirationAt) private view returns (uint256) {
         int256 netQty = participantExpirationAtNetDelta[_user][_expirationAt];
         if (netQty == 0) return 0;
-        return _abs(participantExpirationAtNetEntryValue[_user][_expirationAt]) / _abs(netQty);
+        return MathLib.abs(participantExpirationAtNetEntryValue[_user][_expirationAt]) / MathLib.abs(netQty);
     }
 
     // ── Position accounting ───────────────────────────────────────────────────
@@ -624,17 +629,17 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             return;
         }
 
-        if (_isSameSign(netQty, _signedQty)) {
+        if (MathLib.isSameSign(netQty, _signedQty)) {
             participantExpirationAtNetDelta[_user][_expirationAt] = netQty + _signedQty;
             participantExpirationAtNetEntryValue[_user][_expirationAt] = netEntry + _signedQty * int256(_tradePrice);
             return;
         }
 
         // Opposite direction: reduce / close / flip
-        uint256 absDq = _abs(_signedQty);
-        uint256 absNet = _abs(netQty);
+        uint256 absDq = MathLib.abs(_signedQty);
+        uint256 absNet = MathLib.abs(netQty);
         uint256 closedAbs = absDq < absNet ? absDq : absNet;
-        uint256 avgEntry = _abs(netEntry) / absNet;
+        uint256 avgEntry = MathLib.abs(netEntry) / absNet;
 
         int256 signedClosed = netQty > 0 ? int256(closedAbs) : -int256(closedAbs);
         int256 pnl = (int256(_tradePrice) - int256(avgEntry)) * signedClosed;
@@ -682,7 +687,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
         int256 oldQty = order.quantity;
         if (_newQuantity == 0 || (_newQuantity > 0) != (oldQty > 0)) revert InvalidReduceQuantity();
-        if (_abs(_newQuantity) >= _abs(oldQty)) revert InvalidReduceQuantity();
+        if (MathLib.abs(_newQuantity) >= MathLib.abs(oldQty)) revert InvalidReduceQuantity();
 
         order.quantity = _newQuantity;
         emit OrderUpdated(_orderId, order.participant, _newQuantity);
@@ -731,7 +736,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         bool _isBuy
     ) private {
         orderIndexId.remove(uint256(_orderId));
-        _removePriceLevelIfEmpty(_expirationAt, _price, _isBuy);
+        _removePriceLevelIfEmpty(orderIndexId, _expirationAt, _price, _isBuy);
     }
 
     /// @notice Insert `_price` into the sorted ladder for `_expirationAt` if absent.
@@ -741,8 +746,12 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     /// @notice Remove price level when its order queue is empty.
-    function _removePriceLevelIfEmpty(uint256 _expirationAt, uint256 _price, bool _isBid) private {
-        StructuredLinkedList.List storage orderQueue = _expirationAtPriceOrderIds(_expirationAt, _price, _isBid);
+    function _removePriceLevelIfEmpty(
+        StructuredLinkedList.List storage orderQueue,
+        uint256 _expirationAt,
+        uint256 _price,
+        bool _isBid
+    ) private {
         StructuredLinkedList.List storage priceList = _isBid ? activeBidPrices[_expirationAt] : activeAskPrices[_expirationAt];
         PriceLadderLib.removeIfEmpty(orderQueue, priceList, _price);
     }
@@ -793,11 +802,10 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             revert InvalidOracle();
         }
         priceOracle = _oracle;
-        uint8 oracleDecimals = _oracle.decimals();
+        oracleDecimals = _oracle.decimals();
         if (collateralDecimals > oracleDecimals) {
             revert UnsupportedTokenDecimals();
         }
-        hashpriceScalingDivisor = 10 ** uint256(oracleDecimals - collateralDecimals);
     }
 
     function setPortfolioMargin(IPortfolioMarginEngine _portfolioMargin) external onlyOwner {
@@ -917,7 +925,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     function _doLiquidateOrder(address _user, bytes32 _orderId, Order memory _order) private {
-        uint256 orderNotional = _order.price * _abs(_order.quantity);
+        uint256 orderNotional = _order.price * MathLib.abs(_order.quantity);
         bool isBuy = _order.quantity > 0;
         _removeRestingOrder(_orderId, _order.expirationAt, _order.price, _order.participant, isBuy);
 
@@ -975,7 +983,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         private
         returns (bool)
     {
-        uint256 absNet = _abs(_netQty);
+        uint256 absNet = MathLib.abs(_netQty);
         uint256 closeAbs = _closeQty < absNet ? _closeQty : absNet;
         if (closeAbs == 0) return false;
 
@@ -1009,7 +1017,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
         _transferPnl(_insuranceFundAccount(), _user, pnl);
 
-        uint256 closedNotional = mark * _abs(_netQty);
+        uint256 closedNotional = mark * MathLib.abs(_netQty);
         uint256 liqFee = _chargeLiquidationFee(_user, closedNotional);
 
         participantExpirationAtNetDelta[_user][_expirationAt] = 0;
@@ -1026,8 +1034,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     {
         uint256 mark = getMarketPrice();
         int256 netEntry = participantExpirationAtNetEntryValue[_user][_expirationAt];
-        uint256 absNet = _abs(_netQty);
-        uint256 avgEntry = _abs(netEntry) / absNet;
+        uint256 absNet = MathLib.abs(_netQty);
+        uint256 avgEntry = MathLib.abs(netEntry) / absNet;
         signedClose = _netQty > 0 ? int256(_closeAbs) : -int256(_closeAbs);
         pnl = (int256(mark) - int256(avgEntry)) * signedClose;
         _transferPnl(_insuranceFundAccount(), _user, pnl);
@@ -1094,9 +1102,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     function _getMarketPrice(uint256 _hashpriceUsd) private view returns (uint256) {
-        // Oracle already quotes 1 PH/s/day (= CONTRACT_SIZE_HPS_DAY); only rescale decimals.
-        uint256 scaled = _hashpriceUsd / hashpriceScalingDivisor;
-        return _roundToNearest(scaled, minimumPriceIncrement);
+        uint256 scaled = MathLib.scaleDecimals(_hashpriceUsd, oracleDecimals, collateralDecimals);
+        return MathLib.roundToNearest(scaled, minimumPriceIncrement);
     }
 
     function getOrder(bytes32 _orderId) external view returns (Order memory) {
@@ -1154,10 +1161,10 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             Order memory order = orders[_orders.at(i)];
             if (order.expirationAt < block.timestamp || order.quantity == 0) continue;
 
-            uint256 absQty = _abs(order.quantity);
+            uint256 absQty = MathLib.abs(order.quantity);
             uint256 maintenanceMargin = order.price * marginPct / 100 * absQty;
             int256 pnl = (int256(marketPrice) - int256(order.price)) * order.quantity;
-            uint256 contrib = clamp(int256(maintenanceMargin) - pnl);
+            uint256 contrib = MathLib.clamp(int256(maintenanceMargin) - pnl);
 
             int256 net = participantExpirationAtNetDelta[_participant][order.expirationAt];
             bool isReducing = net != 0 && (net > 0 ? order.quantity < 0 : order.quantity > 0);
@@ -1178,7 +1185,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             }
             if (!found) {
                 redExpiries[nRed] = order.expirationAt;
-                redRemaining[nRed] = marketPrice * marginPct / 100 * _abs(net);
+                redRemaining[nRed] = marketPrice * marginPct / 100 * MathLib.abs(net);
                 slot = nRed;
                 nRed++;
             }
@@ -1293,18 +1300,18 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
                 Order storage makerOrder = orders[bytes32(orderIdUint)];
                 // STP: own resting size would net out, not fill.
                 if (makerOrder.participant != msg.sender && makerOrder.quantity != 0) {
-                    uint256 matchAmt = _abs(makerOrder.quantity) < _abs(remaining)
-                        ? _abs(makerOrder.quantity)
-                        : _abs(remaining);
+                    uint256 matchAmt = MathLib.abs(makerOrder.quantity) < MathLib.abs(remaining)
+                        ? MathLib.abs(makerOrder.quantity)
+                        : MathLib.abs(remaining);
                     if (matchAmt > 0) {
                         totalNotional += currentPrice * matchAmt;
                         totalFilledAbs += matchAmt;
                         remaining = isBuy ? remaining - int256(matchAmt) : remaining + int256(matchAmt);
                     }
                 } else if (makerOrder.participant == msg.sender && makerOrder.quantity != 0) {
-                    uint256 cancelAmt = _abs(makerOrder.quantity) < _abs(remaining)
-                        ? _abs(makerOrder.quantity)
-                        : _abs(remaining);
+                    uint256 cancelAmt = MathLib.abs(makerOrder.quantity) < MathLib.abs(remaining)
+                        ? MathLib.abs(makerOrder.quantity)
+                        : MathLib.abs(remaining);
                     remaining = isBuy ? remaining - int256(cancelAmt) : remaining + int256(cancelAmt);
                 }
                 (, orderIdUint) = orderQueue.getNextNode(orderIdUint);
@@ -1332,7 +1339,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
         (, uint256 nodeId) = queue.getNextNode(0);
         for (uint256 i = 0; i < size && nodeId != 0; i++) {
-            total += _abs(orders[bytes32(nodeId)].quantity);
+            total += MathLib.abs(orders[bytes32(nodeId)].quantity);
             (, nodeId) = queue.getNextNode(nodeId);
         }
         return total;
@@ -1374,28 +1381,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             revert InvalidOracle();
         }
         return uint256(answer);
-    }
-
-    function _roundToNearest(uint256 _value, uint256 _increment) private pure returns (uint256) {
-        return (_value + _increment / 2) / _increment * _increment;
-    }
-
-    function clamp(int256 _value) private pure returns (uint256) {
-        if (_value > 0) {
-            return uint256(_value);
-        } else {
-            return 0;
-        }
-    }
-
-    function _abs(int256 _value) private pure returns (uint256) {
-        unchecked {
-            return _value >= 0 ? uint256(_value) : uint256(-_value);
-        }
-    }
-
-    function _isSameSign(int256 _a, int256 _b) private pure returns (bool) {
-        return (_a > 0 && _b > 0) || (_a < 0 && _b < 0);
     }
 
     function validatePrice(uint256 _price) private view {

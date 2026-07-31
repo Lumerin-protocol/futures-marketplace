@@ -1318,19 +1318,6 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "hashpriceScalingDivisor",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
     "name": "hook",
     "outputs": [
       {

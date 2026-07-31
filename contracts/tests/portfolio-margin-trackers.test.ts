@@ -131,10 +131,8 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     // Balance ≈ 100. Solve 0.20·C + (C − 100) > 100 ⇒ C > 166.
     // Pick C = 1.95 × price = 195 to clear the threshold with margin to spare.
     const targetMarketPrice = (price * 195n) / 100n;
-    // market = hashpriceUsd / hashpriceScalingDivisor (oracle already quotes 1 PH/s·day).
-    // divisor = 10^(oracleDecimals − tokenDecimals) = 10^(8−6) = 100
-    // ⇒ hashpriceUsd = market × 100.
-    const divisor = await futures.read.hashpriceScalingDivisor();
+    // Oracle has 8 decimals, token has 6 → multiply by 10^2 = 100.
+    const divisor = 100n;
     await hashpriceUsd.write.setPrice([targetMarketPrice * divisor], {
       account: owner.account,
       chain: owner.chain,

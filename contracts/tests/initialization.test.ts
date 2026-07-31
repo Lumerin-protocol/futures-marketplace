@@ -98,12 +98,12 @@ describe("Futures - contract size (mark price)", function () {
 
     const [, answer] = await hashpriceUsd.read.latestRoundData();
     const contractSize = await futures.read.CONTRACT_SIZE_HPS_DAY();
-    const divisor = await futures.read.hashpriceScalingDivisor();
     const step = await futures.read.minimumPriceIncrement();
 
     assert.equal(contractSize, 10n ** 15n, "one contract settles 1 PH/s/day");
 
-    // Oracle already quotes 1 PH/s/day (= CONTRACT_SIZE_HPS_DAY); only rescale decimals.
+    // Oracle has 8 decimals, token has 6 → scale down by 10^2 = 100.
+    const divisor = 100n;
     const scaled = answer / divisor;
     const rounded = ((scaled + step / 2n) / step) * step;
 
