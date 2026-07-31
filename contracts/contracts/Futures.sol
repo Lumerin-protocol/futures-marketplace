@@ -38,15 +38,14 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint256 public firstFutureExpirationDate;
     /// @dev Reserved — formerly `contractSizeHpsDay` / `speedHps`.
     uint256 private _gapContractSize;
-    uint256 public minimumPriceIncrement;
-    /// @notice Flat fee charged to the taker per matched contract unit.
-    /// @dev Occupies the former `orderFee` slot.
-    uint256 public takerFee;
+    uint256 private _gapMinPriceIncrement;
+    /// @dev Dead — former takerFee (flat). Now bps-based, appended at end of storage.
+    uint256 private _gapTakerFee;
     uint256 private nonce = 0;
 
     address private _gap;
     /// @notice Hashprice oracle (price of 1 PH/s per day in `token` currency).
-    AggregatorV3Interface public hashrateOracle;
+    AggregatorV3Interface public priceOracle;
     address private _gap6;
 
     /// @dev Reserved — formerly `deliveryDurationDays`.
@@ -64,7 +63,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @notice 10^(oracle.decimals() - token.decimals()). Recomputed on `setOracle`.
     uint256 public hashpriceScalingDivisor;
 
-    IPortfolioMarginEngine public marginEngine;
+    IPortfolioMarginEngine public portfolioMargin;
     /// @notice Canonical net position quantity per (participant, expirationAt). +long / -short.
     mapping(address => mapping(uint256 => int256)) private participantExpirationAtNetDelta;
     /// @notice Canonical Σ qty_i * entryPrice_i per (participant, expirationAt), token decimals.
@@ -75,10 +74,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @dev Sorted ask prices per expiration (lowest first).
     mapping(uint256 => StructuredLinkedList.List) private activeAskPrices;
 
-    uint256 public liquidationFee;
+    /// @dev Dead — former liquidationFee (flat). Now bps-based via liquidationFeeBps.
+    uint256 private _gapLiquidationFee;
 
-    /// @notice Flat fee charged to the maker per matched contract unit.
-    uint256 public makerFee;
+    /// @dev Dead — former makerFee (flat). Now bps-based, appended at end of storage.
+    uint256 private _gapMakerFee;
 
     IPointsHook public hook;
 
@@ -88,9 +88,29 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @dev Expiration timestamps at which a participant holds a non-zero aggregate position.
     mapping(address => EnumerableSet.UintSet) private participantActiveExpirationAts;
 
+    /// @notice Liquidation fee in basis points on the liquidated notional.
+    ///         e.g., 50 = 0.5% of the closed position or cancelled order value.
+    /// @dev Appended at end of storage to preserve the upgradeable layout.
+    uint16 public liquidationFeeBps;
+    /// @notice Share of the liquidation fee paid to the keeper (msg.sender).
+    ///         In basis points: 10_000 = 100% to liquidator, 5_000 = 50/50 split.
+    ///         The remainder goes to the insurance fund.
+    /// @dev Appended at end of storage to preserve the upgradeable layout.
+    uint16 public liquidatorShareBps;
+
+    /// @notice Taker fee in basis points (e.g., 5 = 0.05% of notional).
+    /// @dev Appended at end of storage to preserve the upgradeable layout.
+    int16 public takerFeeBps;
+    /// @notice Maker fee in basis points (e.g., 0 = 0% of notional).
+    /// @dev Appended at end of storage to preserve the upgradeable layout.
+    int16 public makerFeeBps;
+
+    /// @dev Dead — former vault. Moved to immutable.
+    address private _gapCollateralVault;
+
     // immutable
-    ICollateralVault public immutable collateralVault;
-    uint8 private immutable _decimals;
+    ICollateralVault public immutable vault;
+    uint8 private immutable collateralDecimals;
 
     // constants
     string public constant VERSION = "3.8.0";
@@ -101,6 +121,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint32 private constant SECONDS_PER_DAY = 3600 * 24;
     uint256 public constant MAX_ORACLE_STALENESS = 3600; // 1 hour
     uint8 public constant EXPIRATION_INTERVAL_DAYS = 30;
+    /// @notice Minimum price increment for orders: $0.01 in USDC (6 decimals).
+    uint256 public constant minimumPriceIncrement = 0.01e6;
 
     // ── Structs ───────────────────────────────────────────────────────────────
 
@@ -162,17 +184,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         bool paid;
     }
 
-    struct Config {
-        uint256 makerFee;
-        uint256 takerFee;
-        uint256 liquidationFee;
-        uint256 minimumPriceIncrement;
-        uint8 liquidationMarginPercent;
-        uint8 futureExpirationDatesCount;
-        address hashrateOracle;
-        address marginEngine;
-    }
-
     // ── Events ────────────────────────────────────────────────────────────────
 
     event OrderCreated(
@@ -216,7 +227,14 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     );
     event BadDebt(address indexed user, uint256 amount);
     event SettlementPriceRecorded(uint256 indexed expirationAt, uint256 price, address recordedBy);
-    event ConfigUpdated(Config config);
+    event LiquidationMarginPercentUpdated(uint8 newLiquidationMarginPercent);
+    event FutureExpirationDatesCountUpdated(uint8 newFutureExpirationDatesCount);
+    event MakerFeeBpsUpdated(int16 newMakerFeeBps);
+    event TakerFeeBpsUpdated(int16 newTakerFeeBps);
+    event LiquidationFeeBpsUpdated(uint16 newLiquidationFeeBps);
+    event LiquidatorShareBpsUpdated(uint16 newLiquidatorShareBps);
+    event OracleUpdated(address newOracle);
+    event PortfolioMarginUpdated(address newPortfolioMargin);
     event HookUpdated(address indexed hook);
 
     // ── Errors ────────────────────────────────────────────────────────────────
@@ -251,34 +269,35 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     error InvalidTimeInForce();
     error InvalidReduceQuantity();
 
-    /// @param _collateralVault Must use the same underlying ERC20 as initialized against.
+    /// @param _vault The shared collateral vault. Its `collateralToken()` provides the underlying ERC20.
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(ICollateralVault _collateralVault) {
-        if (address(_collateralVault) == address(0)) revert ZeroAddress();
-        collateralVault = _collateralVault;
-        _decimals = IERC20Metadata(address(_collateralVault)).decimals();
+    constructor(ICollateralVault _vault) {
+        if (address(_vault) == address(0)) revert ZeroAddress();
+        vault = _vault;
+        collateralDecimals = IERC20Metadata(address(_vault.collateralToken())).decimals();
         _disableInitializers();
     }
 
     function initialize(
-        AggregatorV3Interface _hashrateOracle,
+        AggregatorV3Interface _priceOracle,
         uint8 _liquidationMarginPercent,
-        uint256 _minimumPriceIncrement,
-        uint8, // was expirationIntervalDays — now EXPIRATION_INTERVAL_DAYS
+        uint256, // was _minimumPriceIncrement — now constant = 1e4
+        uint8, // was expirationIntervalDays — now EXPIRATION_INTERVAL_DAYS constant
         uint8 _futureExpirationDatesCount,
         uint256 _firstFutureExpirationDate
     ) public initializer {
         __Ownable_init(_msgSender());
         __UUPSUpgradeable_init();
-        _setHashrateOracle(_hashrateOracle);
+        _setPriceOracle(_priceOracle);
         liquidationMarginPercent = _liquidationMarginPercent;
-        minimumPriceIncrement = _minimumPriceIncrement;
         if (_futureExpirationDatesCount < 1) {
             revert ValueOutOfRange(1, int256(uint256(type(uint8).max)));
         }
         futureExpirationDatesCount = _futureExpirationDatesCount;
         firstFutureExpirationDate = _firstFutureExpirationDate;
-        _emitConfigUpdated();
+        emit LiquidationMarginPercentUpdated(_liquidationMarginPercent);
+        emit FutureExpirationDatesCountUpdated(_futureExpirationDatesCount);
+        emit OracleUpdated(address(_priceOracle));
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner { }
@@ -501,10 +520,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             _applyFill(maker.participant, -takerFillQty, _price, _expirationAt);
             _applyFill(_taker, takerFillQty, _price, _expirationAt);
 
-            uint256 makerFeeAmt = makerFee * fill;
-            uint256 takerFeeAmt = takerFee * fill;
+            uint256 notional = _price * fill;
+            uint256 makerFeeAmt = notional * uint256(uint16(makerFeeBps)) / 10_000;
+            uint256 takerFeeAmt = notional * uint256(uint16(takerFeeBps)) / 10_000;
             _chargeMatchFees(maker.participant, _taker, makerFeeAmt, takerFeeAmt);
-            _notifyFill(maker.participant, _taker, _price * fill, int256(makerFeeAmt), takerFeeAmt, _price);
+            _notifyFill(maker.participant, _taker, notional, int256(makerFeeAmt), takerFeeAmt, _price);
 
             uint256 leftoverMakerAbs = makerAbs - fill;
             if (leftoverMakerAbs == 0) {
@@ -728,7 +748,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     function setLiquidationMarginPercent(uint8 _liquidationMarginPercent) external onlyOwner {
         liquidationMarginPercent = _liquidationMarginPercent;
-        _emitConfigUpdated();
+        emit LiquidationMarginPercentUpdated(_liquidationMarginPercent);
     }
 
     function setFutureExpirationDatesCount(uint8 _futureExpirationDatesCount) public onlyOwner {
@@ -736,44 +756,50 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             revert ValueOutOfRange(1, int256(uint256(type(uint8).max)));
         }
         futureExpirationDatesCount = _futureExpirationDatesCount;
-        _emitConfigUpdated();
+        emit FutureExpirationDatesCountUpdated(_futureExpirationDatesCount);
     }
 
-    function setMakerFee(uint256 _makerFee) external onlyOwner {
-        makerFee = _makerFee;
-        _emitConfigUpdated();
+    function setMakerFeeBps(int16 _makerFeeBps) external onlyOwner {
+        makerFeeBps = _makerFeeBps;
+        emit MakerFeeBpsUpdated(_makerFeeBps);
     }
 
-    function setTakerFee(uint256 _takerFee) external onlyOwner {
-        takerFee = _takerFee;
-        _emitConfigUpdated();
+    function setTakerFeeBps(int16 _takerFeeBps) external onlyOwner {
+        takerFeeBps = _takerFeeBps;
+        emit TakerFeeBpsUpdated(_takerFeeBps);
     }
 
-    function setLiquidationFee(uint256 _liquidationFee) external onlyOwner {
-        liquidationFee = _liquidationFee;
-        _emitConfigUpdated();
+    function setLiquidationFeeBps(uint16 _bps) external onlyOwner {
+        liquidationFeeBps = _bps;
+        emit LiquidationFeeBpsUpdated(_bps);
+    }
+
+    function setLiquidatorShareBps(uint16 _bps) external onlyOwner {
+        if (_bps > 10_000) revert ValueOutOfRange(0, 10_000);
+        liquidatorShareBps = _bps;
+        emit LiquidatorShareBpsUpdated(_bps);
     }
 
     function setOracle(address addr) external onlyOwner {
-        _setHashrateOracle(AggregatorV3Interface(addr));
-        _emitConfigUpdated();
+        _setPriceOracle(AggregatorV3Interface(addr));
+        emit OracleUpdated(addr);
     }
 
-    function _setHashrateOracle(AggregatorV3Interface _oracle) private {
+    function _setPriceOracle(AggregatorV3Interface _oracle) private {
         if (address(_oracle) == address(0)) {
             revert InvalidOracle();
         }
-        hashrateOracle = _oracle;
+        priceOracle = _oracle;
         uint8 oracleDecimals = _oracle.decimals();
-        if (_decimals > oracleDecimals) {
+        if (collateralDecimals > oracleDecimals) {
             revert UnsupportedTokenDecimals();
         }
-        hashpriceScalingDivisor = 10 ** uint256(oracleDecimals - _decimals);
+        hashpriceScalingDivisor = 10 ** uint256(oracleDecimals - collateralDecimals);
     }
 
-    function setMarginEngine(address _marginEngine) external onlyOwner {
-        marginEngine = IPortfolioMarginEngine(_marginEngine);
-        _emitConfigUpdated();
+    function setPortfolioMargin(IPortfolioMarginEngine _portfolioMargin) external onlyOwner {
+        portfolioMargin = _portfolioMargin;
+        emit PortfolioMarginUpdated(address(_portfolioMargin));
     }
 
     function setHook(address _hook) external onlyOwner {
@@ -795,7 +821,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     function _refPriceForPoints() private view returns (uint256) {
-        (, int256 answer,, uint256 updatedAt,) = hashrateOracle.latestRoundData();
+        (, int256 answer,, uint256 updatedAt,) = priceOracle.latestRoundData();
         if (answer <= 0) return 0;
         if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) return 0;
         return _getMarketPrice(uint256(answer));
@@ -805,21 +831,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         IPointsHook _hook = hook;
         if (address(_hook) == address(0)) return;
         _hook.onLiquidation(_liquidator, _fee);
-    }
-
-    function _emitConfigUpdated() private {
-        emit ConfigUpdated(
-            Config({
-                makerFee: makerFee,
-                takerFee: takerFee,
-                liquidationFee: liquidationFee,
-                minimumPriceIncrement: minimumPriceIncrement,
-                liquidationMarginPercent: liquidationMarginPercent,
-                futureExpirationDatesCount: futureExpirationDatesCount,
-                hashrateOracle: address(hashrateOracle),
-                marginEngine: address(marginEngine)
-            })
-        );
     }
 
     /// @notice Admin escape hatch: clear orders + aggregate positions for the given participants.
@@ -867,11 +878,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         bool hasState = participantOrderIdsIndex[_participant].length() > 0
             || participantActiveExpirationAts[_participant].length() > 0;
         if (!hasState) return false;
-        return collateralVault.balanceOf(_participant) < marginEngine.computePortfolioMM(_participant);
+        return vault.balanceOf(_participant) < portfolioMargin.computePortfolioMM(_participant);
     }
 
     function _underwater(address _participant) internal view returns (bool) {
-        return collateralVault.balanceOf(_participant) < marginEngine.computePortfolioMM(_participant);
+        return vault.balanceOf(_participant) < portfolioMargin.computePortfolioMM(_participant);
     }
 
     // ── Order liquidation ─────────────────────────────────────────────────────
@@ -902,10 +913,14 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     function _doLiquidateOrder(address _user, bytes32 _orderId, Order memory _order) private {
+        uint256 orderNotional = _order.price * _abs(_order.quantity);
         _removeRestingOrder(_orderId, _order);
-        emit OrderUpdated(_orderId, _user, 0);
-        emit OrderLiquidated(_orderId, _user, _msgSender(), 0);
-        _notifyLiquidation(_msgSender(), 0);
+
+        uint256 liqFee = _chargeLiquidationFee(_user, orderNotional);
+
+        emit OrderCancelled(_orderId, _user);
+        emit OrderLiquidated(_orderId, _user, _msgSender(), liqFee);
+        _notifyLiquidation(_msgSender(), liqFee);
     }
 
     // ── Position liquidation ──────────────────────────────────────────────────
@@ -965,16 +980,21 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         }
 
         (int256 pnl, int256 signedClose) = _doPartialLiquidatePosition(_user, _expirationAt, _netQty, closeAbs);
-        emit PositionLiquidated(_user, _msgSender(), _expirationAt, signedClose, pnl, 0);
-        _notifyLiquidation(_msgSender(), 0);
+
+        uint256 mark = getMarketPrice();
+        uint256 closedNotional = mark * closeAbs;
+        uint256 liqFee = _chargeLiquidationFee(_user, closedNotional);
+
+        emit PositionLiquidated(_user, _msgSender(), _expirationAt, signedClose, pnl, liqFee);
+        _notifyLiquidation(_msgSender(), liqFee);
         return true;
     }
 
     /// @dev With remaining portfolio risk and a real IM>MM buffer, balance must be ≤ IM.
     function _revertIfOverLiquidated(address _user) private view {
-        uint256 im = marginEngine.computePortfolioIM(_user);
-        uint256 mm = marginEngine.computePortfolioMM(_user);
-        if (im > mm && collateralVault.balanceOf(_user) > im) revert OverLiquidation();
+        uint256 im = portfolioMargin.computePortfolioIM(_user);
+        uint256 mm = portfolioMargin.computePortfolioMM(_user);
+        if (im > mm && vault.balanceOf(_user) > im) revert OverLiquidation();
     }
 
     function _doLiquidateFullPosition(address _user, uint256 _expirationAt, int256 _netQty) private {
@@ -984,12 +1004,15 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
         _transferPnl(_insuranceFundAccount(), _user, pnl);
 
+        uint256 closedNotional = mark * _abs(_netQty);
+        uint256 liqFee = _chargeLiquidationFee(_user, closedNotional);
+
         participantExpirationAtNetDelta[_user][_expirationAt] = 0;
         participantExpirationAtNetEntryValue[_user][_expirationAt] = 0;
         participantActiveExpirationAts[_user].remove(_expirationAt);
 
-        emit PositionLiquidated(_user, _msgSender(), _expirationAt, _netQty, pnl, 0);
-        _notifyLiquidation(_msgSender(), 0);
+        emit PositionLiquidated(_user, _msgSender(), _expirationAt, _netQty, pnl, liqFee);
+        _notifyLiquidation(_msgSender(), liqFee);
     }
 
     function _doPartialLiquidatePosition(address _user, uint256 _expirationAt, int256 _netQty, uint256 _closeAbs)
@@ -1021,7 +1044,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     function _ensureSettlementPrice(uint256 expirationAt) private returns (uint256) {
         uint256 price = settlementPrice[expirationAt];
         if (price == 0) {
-            price = _getMarketPrice(_getHashpriceUsd());
+            price = _getMarketPrice(_getPrice());
             if (price == 0) revert InvalidPrice();
             settlementPrice[expirationAt] = price;
             emit SettlementPriceRecorded(expirationAt, price, _msgSender());
@@ -1058,11 +1081,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     // ── Views ─────────────────────────────────────────────────────────────────
 
     function getMarketPrice() public view returns (uint256) {
-        return _getMarketPrice(_getHashpriceUsd());
+        return _getMarketPrice(_getPrice());
     }
 
     function decimals() external view returns (uint8) {
-        return _decimals;
+        return collateralDecimals;
     }
 
     function _getMarketPrice(uint256 _hashpriceUsd) private view returns (uint256) {
@@ -1337,8 +1360,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         }
     }
 
-    function _getHashpriceUsd() private view returns (uint256) {
-        (, int256 answer,, uint256 updatedAt,) = hashrateOracle.latestRoundData();
+    function _getPrice() private view returns (uint256) {
+        (, int256 answer,, uint256 updatedAt,) = priceOracle.latestRoundData();
         if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) {
             revert OracleStale();
         }
@@ -1361,7 +1384,9 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     function _abs(int256 _value) private pure returns (uint256) {
-        return _value >= 0 ? uint256(_value) : uint256(-_value);
+        unchecked {
+            return _value >= 0 ? uint256(_value) : uint256(-_value);
+        }
     }
 
     function _isSameSign(int256 _a, int256 _b) private pure returns (bool) {
@@ -1391,14 +1416,14 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     function ensureNoCollateralDeficit(address _participant) private view {
-        uint256 required = marginEngine.computePortfolioIM(_participant);
-        if (collateralVault.balanceOf(_participant) < required) revert InsufficientMarginBalance();
+        uint256 required = portfolioMargin.computePortfolioIM(_participant);
+        if (vault.balanceOf(_participant) < required) revert InsufficientMarginBalance();
     }
 
     function withdrawCollectedFees() external onlyOwner {
         uint256 amount = collectedFeesBalance;
         collectedFeesBalance = 0;
-        collateralVault.withdrawTo(owner(), amount);
+        vault.withdrawTo(owner(), amount);
     }
 
     function _transferPnl(address _from, address _to, int256 _pnl) private {
@@ -1416,26 +1441,60 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             amount = uint256(-_pnl);
         }
 
-        uint256 available = collateralVault.balanceOf(payer);
+        uint256 available = vault.balanceOf(payer);
         if (available >= amount) {
-            collateralVault.internalTransfer(payer, receiver, amount);
+            vault.internalTransfer(payer, receiver, amount);
             return;
         }
 
         if (available > 0) {
-            collateralVault.internalTransfer(payer, receiver, available);
+            vault.internalTransfer(payer, receiver, available);
         }
         emit BadDebt(payer, amount - available);
     }
 
+    /// @notice Charge a liquidation fee on the closed notional value, split between
+    ///         liquidator (msg.sender) and insurance fund according to `liquidatorShareBps`.
+    /// @dev Fee is `_notionalValue * liquidationFeeBps / 10000`, capped at the user's
+    ///      actual vault balance. The liquidator receives `fee * liquidatorShareBps / 10000`
+    ///      (also capped at available balance), and the remainder goes to the insurance fund.
+    /// @param _user The liquidated user (fee source)
+    /// @param _notionalValue Notional value of the liquidated position/order
+    /// @return totalFee Total fee actually collected (may be less than computed if balance insufficient)
+    function _chargeLiquidationFee(address _user, uint256 _notionalValue) private returns (uint256 totalFee) {
+        uint16 feeBps = liquidationFeeBps;
+        if (feeBps == 0) return 0;
+
+        uint256 computedFee = _notionalValue * uint256(feeBps) / 10_000;
+        if (computedFee == 0) return 0;
+
+        uint256 userBal = vault.balanceOf(_user);
+        totalFee = computedFee < userBal ? computedFee : userBal;
+        if (totalFee == 0) return 0;
+
+        address liquidator = _msgSender();
+        address insurance = _insuranceFundAccount();
+
+        uint16 liqShareBps = liquidatorShareBps;
+        uint256 liquidatorShare = totalFee * uint256(liqShareBps) / 10_000;
+        uint256 insuranceShare = totalFee - liquidatorShare;
+
+        if (liquidatorShare > 0) {
+            _internalTransfer(_user, liquidator, liquidatorShare);
+        }
+        if (insuranceShare > 0) {
+            _internalTransfer(_user, insurance, insuranceShare);
+        }
+    }
+
     function _insuranceFundAccount() private view returns (address) {
-        address fund = collateralVault.INSURANCE_FUND_ADDR();
+        address fund = vault.INSURANCE_FUND_ADDR();
         if (fund == address(0)) revert InsuranceFundNotConfigured();
         return fund;
     }
 
     function _internalTransfer(address from, address to, uint256 amount) private {
         if (amount == 0) return;
-        collateralVault.internalTransfer(from, to, amount);
+        vault.internalTransfer(from, to, amount);
     }
 }

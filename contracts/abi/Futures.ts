@@ -3,7 +3,7 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "contract ICollateralVault",
-        "name": "_collateralVault",
+        "name": "_vault",
         "type": "address"
       }
     ],
@@ -259,55 +259,13 @@ export const FuturesAbi = [
     "anonymous": false,
     "inputs": [
       {
-        "components": [
-          {
-            "internalType": "uint256",
-            "name": "makerFee",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "takerFee",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "liquidationFee",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "minimumPriceIncrement",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint8",
-            "name": "liquidationMarginPercent",
-            "type": "uint8"
-          },
-          {
-            "internalType": "uint8",
-            "name": "futureExpirationDatesCount",
-            "type": "uint8"
-          },
-          {
-            "internalType": "address",
-            "name": "hashrateOracle",
-            "type": "address"
-          },
-          {
-            "internalType": "address",
-            "name": "marginEngine",
-            "type": "address"
-          }
-        ],
         "indexed": false,
-        "internalType": "struct Futures.Config",
-        "name": "config",
-        "type": "tuple"
+        "internalType": "uint8",
+        "name": "newFutureExpirationDatesCount",
+        "type": "uint8"
       }
     ],
-    "name": "ConfigUpdated",
+    "name": "FutureExpirationDatesCountUpdated",
     "type": "event"
   },
   {
@@ -334,6 +292,71 @@ export const FuturesAbi = [
       }
     ],
     "name": "Initialized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "newLiquidationFeeBps",
+        "type": "uint16"
+      }
+    ],
+    "name": "LiquidationFeeBpsUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "newLiquidationMarginPercent",
+        "type": "uint8"
+      }
+    ],
+    "name": "LiquidationMarginPercentUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "newLiquidatorShareBps",
+        "type": "uint16"
+      }
+    ],
+    "name": "LiquidatorShareBpsUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "int16",
+        "name": "newMakerFeeBps",
+        "type": "int16"
+      }
+    ],
+    "name": "MakerFeeBpsUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "newOracle",
+        "type": "address"
+      }
+    ],
+    "name": "OracleUpdated",
     "type": "event"
   },
   {
@@ -550,6 +573,19 @@ export const FuturesAbi = [
     "anonymous": false,
     "inputs": [
       {
+        "indexed": false,
+        "internalType": "address",
+        "name": "newPortfolioMargin",
+        "type": "address"
+      }
+    ],
+    "name": "PortfolioMarginUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
         "indexed": true,
         "internalType": "address",
         "name": "user",
@@ -655,6 +691,19 @@ export const FuturesAbi = [
       }
     ],
     "name": "SettlementPriceRecorded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "int16",
+        "name": "newTakerFeeBps",
+        "type": "int16"
+      }
+    ],
+    "name": "TakerFeeBpsUpdated",
     "type": "event"
   },
   {
@@ -785,19 +834,6 @@ export const FuturesAbi = [
     "name": "cancelOrder",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "collateralVault",
-    "outputs": [
-      {
-        "internalType": "contract ICollateralVault",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -1290,19 +1326,6 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "hashrateOracle",
-    "outputs": [
-      {
-        "internalType": "contract AggregatorV3Interface",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
     "name": "hook",
     "outputs": [
       {
@@ -1318,7 +1341,7 @@ export const FuturesAbi = [
     "inputs": [
       {
         "internalType": "contract AggregatorV3Interface",
-        "name": "_hashrateOracle",
+        "name": "_priceOracle",
         "type": "address"
       },
       {
@@ -1328,7 +1351,7 @@ export const FuturesAbi = [
       },
       {
         "internalType": "uint256",
-        "name": "_minimumPriceIncrement",
+        "name": "",
         "type": "uint256"
       },
       {
@@ -1455,12 +1478,12 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "liquidationFee",
+    "name": "liquidationFeeBps",
     "outputs": [
       {
-        "internalType": "uint256",
+        "internalType": "uint16",
         "name": "",
-        "type": "uint256"
+        "type": "uint16"
       }
     ],
     "stateMutability": "view",
@@ -1481,12 +1504,12 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "makerFee",
+    "name": "liquidatorShareBps",
     "outputs": [
       {
-        "internalType": "uint256",
+        "internalType": "uint16",
         "name": "",
-        "type": "uint256"
+        "type": "uint16"
       }
     ],
     "stateMutability": "view",
@@ -1494,12 +1517,12 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "marginEngine",
+    "name": "makerFeeBps",
     "outputs": [
       {
-        "internalType": "contract IPortfolioMarginEngine",
+        "internalType": "int16",
         "name": "",
-        "type": "address"
+        "type": "int16"
       }
     ],
     "stateMutability": "view",
@@ -1543,6 +1566,32 @@ export const FuturesAbi = [
     "outputs": [
       {
         "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "portfolioMargin",
+    "outputs": [
+      {
+        "internalType": "contract IPortfolioMarginEngine",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "priceOracle",
+    "outputs": [
+      {
+        "internalType": "contract AggregatorV3Interface",
         "name": "",
         "type": "address"
       }
@@ -1662,12 +1711,12 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "_liquidationFee",
-        "type": "uint256"
+        "internalType": "uint16",
+        "name": "_bps",
+        "type": "uint16"
       }
     ],
-    "name": "setLiquidationFee",
+    "name": "setLiquidationFeeBps",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1688,12 +1737,12 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "_makerFee",
-        "type": "uint256"
+        "internalType": "uint16",
+        "name": "_bps",
+        "type": "uint16"
       }
     ],
-    "name": "setMakerFee",
+    "name": "setLiquidatorShareBps",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1701,12 +1750,12 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "_marginEngine",
-        "type": "address"
+        "internalType": "int16",
+        "name": "_makerFeeBps",
+        "type": "int16"
       }
     ],
-    "name": "setMarginEngine",
+    "name": "setMakerFeeBps",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1727,12 +1776,25 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "_takerFee",
-        "type": "uint256"
+        "internalType": "contract IPortfolioMarginEngine",
+        "name": "_portfolioMargin",
+        "type": "address"
       }
     ],
-    "name": "setTakerFee",
+    "name": "setPortfolioMargin",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "int16",
+        "name": "_takerFeeBps",
+        "type": "int16"
+      }
+    ],
+    "name": "setTakerFeeBps",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1833,12 +1895,12 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "takerFee",
+    "name": "takerFeeBps",
     "outputs": [
       {
-        "internalType": "uint256",
+        "internalType": "int16",
         "name": "",
-        "type": "uint256"
+        "type": "int16"
       }
     ],
     "stateMutability": "view",
@@ -1925,6 +1987,19 @@ export const FuturesAbi = [
     "name": "upgradeToAndCall",
     "outputs": [],
     "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "vault",
+    "outputs": [
+      {
+        "internalType": "contract ICollateralVault",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {

@@ -162,8 +162,8 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
   const expirationIntervalDays = 30;
   const expirationIntervalSeconds = expirationIntervalDays * 24 * 3600;
   const priceLadderStep = parseUnits("0.01", USDC_DECIMALS);
-  const makerFee = 0n;
-  const takerFee = parseUnits("1", USDC_DECIMALS);
+  const makerFeeBps = 0;
+  const takerFeeBps = 0; // 0 bps — tests that need fees set them explicitly
   const { timestamp: now } = await pc.getBlock({ blockTag: "latest" });
   const futureExpirationDatesCount = 10;
   const firstFutureExpirationDate = now + BigInt(expirationIntervalSeconds);
@@ -219,8 +219,8 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
         args: [
           hashpriceUsd.address,
           liquidationMarginPercent,
-          priceLadderStep,
-          expirationIntervalDays,
+          0n, // was minimumPriceIncrement — now constant
+          0,  // was expirationIntervalDays — now constant
           futureExpirationDatesCount,
           firstFutureExpirationDate,
         ],
@@ -232,9 +232,7 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
     address: futuresProxy.address,
     client: { public: pc, wallet: walletClient },
   });
-  await collateralVault.write.setAuthorizedCaller([futures.address, true], {
-    account: owner.account,
-  });
+  await collateralVault.write.setAuthorizedCaller([futures.address, true]);
 
   // PME stack with stub mocks for the non-futures products.
   const perpsDEXMock = await deployContract<"PerpsDEXMock">(
@@ -288,7 +286,7 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
 
   // Register futures so PME picks up the cross-product margin path used by
   // `liquidate*` / `computePortfolioMM`.
-  await portfolioMarginEngine.write.setFutures([futures.address], { account: owner.account });
+  await portfolioMarginEngine.write.setFutures([futures.address]);
 
   // Align the PME stress shocks with the legacy futures `liquidationMarginPercent`
   // so test fixtures that previously calibrated deposits/moves around the
@@ -297,17 +295,13 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
   // tuned for perps and would otherwise let the futures-only test cases stay
   // healthy through moves the legacy contract treated as liquidatable.
   const liqShockWad = (BigInt(liquidationMarginPercent) * 10n ** 18n) / 100n;
-  await portfolioMarginEngine.write.setShocks([liqShockWad, liqShockWad, 0n, 0n], {
-    account: owner.account,
-  });
+  await portfolioMarginEngine.write.setShocks([liqShockWad, liqShockWad, 0n, 0n]);
 
-  await futures.write.setMarginEngine([portfolioMarginEngine.address], { account: owner.account });
-  await collateralVault.write.setMarginEngine([portfolioMarginEngine.address], {
-    account: owner.account,
-  });
+  await futures.write.setPortfolioMargin([portfolioMarginEngine.address]);
+  await collateralVault.write.setMarginEngine([portfolioMarginEngine.address]);
 
-  await futures.write.setMakerFee([makerFee], { account: owner.account });
-  await futures.write.setTakerFee([takerFee], { account: owner.account });
+  await futures.write.setMakerFeeBps([makerFeeBps]);
+  await futures.write.setTakerFeeBps([takerFeeBps]);
   const deliveryDates = await futures.read.getExpirationDates();
 
   // `depositFor` pulls USDC via the vault — approve the vault, not Futures.
@@ -329,8 +323,8 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
       liquidationMarginPercent,
       expirationIntervalSeconds,
       priceLadderStep,
-      makerFee,
-      takerFee,
+      makerFeeBps,
+      takerFeeBps,
       deliveryDates,
       futureExpirationDatesCount,
       firstFutureExpirationDate,

@@ -35,10 +35,15 @@ describe("Fees (maker/taker)", () => {
   it("should charge taker on fill and not the maker when makerFee is 0", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
-    const { seller, buyer } = accounts;
+    const { owner, seller, buyer } = accounts;
+
+    const takerFeeBps = 500; // 5% for a visible balance change
+    await futures.write.setTakerFeeBps([takerFeeBps], { account: owner.account });
 
     const price = await futures.read.getMarketPrice();
-    const margin = price * 10n;
+    const notional = price * 1n;
+    const expectedFee = notional * BigInt(takerFeeBps) / 10_000n;
+    const margin = price * 10n + expectedFee;
     const deliveryDate = config.deliveryDates[0];
 
     await collateralVault.write.deposit([margin], { account: seller.account });
@@ -57,8 +62,8 @@ describe("Fees (maker/taker)", () => {
     const feesAfter = await futures.read.collectedFeesBalance();
 
     assert.equal(sellerBalanceAfter, sellerBalanceBefore); // maker pays makerFee=0
-    assert.equal(buyerBalanceBefore - buyerBalanceAfter, config.takerFee);
-    assert.equal(feesAfter - feesBefore, config.takerFee);
+    assert.equal(buyerBalanceBefore - buyerBalanceAfter, expectedFee);
+    assert.equal(feesAfter - feesBefore, expectedFee);
   });
 
   it("should charge both maker and taker on a fill when both fees are set", async () => {
@@ -66,11 +71,16 @@ describe("Fees (maker/taker)", () => {
     const { futures, collateralVault } = contracts;
     const { owner, seller, buyer } = accounts;
 
-    const customMakerFee = parseUnits("0.5", USDC_DECIMALS);
-    await futures.write.setMakerFee([customMakerFee], { account: owner.account });
+    const makerFeeBps = 300; // 3%
+    const takerFeeBps = 500; // 5%
+    await futures.write.setMakerFeeBps([makerFeeBps], { account: owner.account });
+    await futures.write.setTakerFeeBps([takerFeeBps], { account: owner.account });
 
     const price = await futures.read.getMarketPrice();
-    const margin = price * 10n;
+    const notional = price * 1n;
+    const expectedMakerFee = notional * BigInt(makerFeeBps) / 10_000n;
+    const expectedTakerFee = notional * BigInt(takerFeeBps) / 10_000n;
+    const margin = price * 10n + expectedMakerFee + expectedTakerFee;
     const deliveryDate = config.deliveryDates[0];
 
     await collateralVault.write.deposit([margin], { account: seller.account });
@@ -88,9 +98,9 @@ describe("Fees (maker/taker)", () => {
     const buyerBalanceAfter = await collateralVault.read.balanceOf([buyer.account.address]);
     const feesAfter = await futures.read.collectedFeesBalance();
 
-    assert.equal(sellerBalanceBefore - sellerBalanceAfter, customMakerFee);
-    assert.equal(buyerBalanceBefore - buyerBalanceAfter, config.takerFee);
-    assert.equal(feesAfter - feesBefore, customMakerFee + config.takerFee);
+    assert.equal(sellerBalanceBefore - sellerBalanceAfter, expectedMakerFee);
+    assert.equal(buyerBalanceBefore - buyerBalanceAfter, expectedTakerFee);
+    assert.equal(feesAfter - feesBefore, expectedMakerFee + expectedTakerFee);
   });
 
   it("should NOT charge fees when a participant self-cancels via opposite-side qty", async () => {
@@ -118,36 +128,31 @@ describe("Fees (maker/taker)", () => {
     assert.equal(feesAfter, feesBefore);
   });
 
-  it("emits ConfigUpdated carrying maker/taker fees when fees are set", async () => {
+  it("emits MakerFeeBpsUpdated / TakerFeeBpsUpdated when fees are set", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { owner, pc } = accounts;
 
-    const newMakerFee = parseUnits("2", USDC_DECIMALS);
-    const newTakerFee = parseUnits("3", USDC_DECIMALS);
-
-    const makerTx = await futures.write.setMakerFee([newMakerFee], { account: owner.account });
+    const makerTx = await futures.write.setMakerFeeBps([50], { account: owner.account });
     const makerReceipt = await pc.waitForTransactionReceipt({ hash: makerTx });
     const [makerEvent] = parseEventLogs({
       logs: makerReceipt.logs,
       abi: futures.abi,
-      eventName: "ConfigUpdated",
+      eventName: "MakerFeeBpsUpdated",
     });
-    assert.equal(makerEvent.args.config.makerFee, newMakerFee);
+    assert.equal(makerEvent.args.newMakerFeeBps, 50);
 
-    const takerTx = await futures.write.setTakerFee([newTakerFee], { account: owner.account });
+    const takerTx = await futures.write.setTakerFeeBps([30], { account: owner.account });
     const takerReceipt = await pc.waitForTransactionReceipt({ hash: takerTx });
     const [takerEvent] = parseEventLogs({
       logs: takerReceipt.logs,
       abi: futures.abi,
-      eventName: "ConfigUpdated",
+      eventName: "TakerFeeBpsUpdated",
     });
-    assert.equal(takerEvent.args.config.takerFee, newTakerFee);
-    // The snapshot is always whole-config, so the previously-set maker fee is still present.
-    assert.equal(takerEvent.args.config.makerFee, newMakerFee);
+    assert.equal(takerEvent.args.newTakerFeeBps, 30);
 
-    assert.equal(await futures.read.makerFee(), newMakerFee);
-    assert.equal(await futures.read.takerFee(), newTakerFee);
+    assert.equal(await futures.read.makerFeeBps(), 50);
+    assert.equal(await futures.read.takerFeeBps(), 30);
   });
 
   it("should reject non-owner attempts to set maker/taker fees", async () => {
@@ -156,12 +161,12 @@ describe("Fees (maker/taker)", () => {
     const { seller } = accounts;
 
     await viem.assertions.revertWithCustomError(
-      futures.write.setMakerFee([1n], { account: seller.account }),
+      futures.write.setMakerFeeBps([50], { account: seller.account }),
       futures,
       "OwnableUnauthorizedAccount",
     );
     await viem.assertions.revertWithCustomError(
-      futures.write.setTakerFee([1n], { account: seller.account }),
+      futures.write.setTakerFeeBps([30], { account: seller.account }),
       futures,
       "OwnableUnauthorizedAccount",
     );
@@ -184,8 +189,13 @@ describe("Fees (maker/taker)", () => {
     const { futures, usdcMock, collateralVault } = contracts;
     const { owner, seller, buyer } = accounts;
 
+    const takerFeeBps = 500; // 5%
+    await futures.write.setTakerFeeBps([takerFeeBps], { account: owner.account });
+
     const price = await futures.read.getMarketPrice();
-    const margin = price * 10n;
+    const notional = price * 1n;
+    const expectedFee = notional * BigInt(takerFeeBps) / 10_000n;
+    const margin = price * 10n + expectedFee;
     const deliveryDate = config.deliveryDates[0];
 
     await collateralVault.write.deposit([margin], { account: seller.account });
@@ -195,7 +205,7 @@ describe("Fees (maker/taker)", () => {
     await futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account });
 
     const feesAccrued = await futures.read.collectedFeesBalance();
-    assert.equal(feesAccrued, config.takerFee); // makerFee=0, takerFee charged once
+    assert.equal(feesAccrued, expectedFee);
 
     const ownerBalanceBefore = await usdcMock.read.balanceOf([owner.account.address]);
     await futures.write.withdrawCollectedFees({ account: owner.account });

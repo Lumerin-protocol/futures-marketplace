@@ -39,8 +39,8 @@ async function partialLiquidationFixture(conn: NetworkConnection) {
   });
   // Zero trading fees so the deposit math is purely margin-driven (fees are
   // exercised by the dedicated fee/liquidation suites, not here).
-  await futures.write.setMakerFee([0n], { account: owner.account });
-  await futures.write.setTakerFee([0n], { account: owner.account });
+  await futures.write.setMakerFeeBps([0], { account: owner.account });
+  await futures.write.setTakerFeeBps([0], { account: owner.account });
 
   const entry = await futures.read.getMarketPrice();
   const deliveryDate = config.deliveryDates[0];

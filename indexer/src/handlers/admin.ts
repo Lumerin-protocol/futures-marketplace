@@ -1,5 +1,17 @@
 import { log } from "@graphprotocol/graph-ts";
-import { ConfigUpdated, Initialized, Upgraded } from "../../generated/Futures/Futures";
+import {
+  Initialized,
+  Upgraded,
+  LiquidationMarginPercentUpdated,
+  FutureExpirationDatesCountUpdated,
+  MakerFeeUpdated,
+  TakerFeeUpdated,
+  LiquidationFeeUpdated,
+  LiquidationFeeBpsUpdated,
+  LiquidatorShareBpsUpdated,
+  OracleUpdated,
+  PortfolioMarginUpdated,
+} from "../../generated/Futures/Futures";
 import { flushFuturesCounters } from "../internal/match";
 import { getOrCreateFutures, loadFuturesFromContract } from "../internal/store";
 import { stringifyParameters } from "../internal/utils";
@@ -25,23 +37,102 @@ export function handleUpgraded(event: Upgraded): void {
   futures.save();
 }
 
-/// Single-event refresh path for the entire owner-settable config surface. Replaces
-/// the per-field `MakerFeeUpdated`/`TakerFeeUpdated`/`ValidatorURLUpdated`/`LiquidationFeeUpdated`
-/// handlers. The contract emits this event on every setter (and once from `initialize`),
-/// so we can always overwrite local state with the snapshot.
-export function handleConfigUpdated(event: ConfigUpdated): void {
-  log.debug("config updated event ", [stringifyParameters(event)]);
+/// Individual per-field handlers replacing the former monolithic ConfigUpdated path.
+/// Each setter now emits its own event; on every change we reload the full snapshot
+/// from chain so the local Futures entity stays consistent.
+
+function _reloadAndSave(): void {
   const futures = getOrCreateFutures();
   flushFuturesCounters(futures);
-  const cfg = event.params.config;
-  futures.makerFee = cfg.makerFee;
-  futures.takerFee = cfg.takerFee;
-  futures.liquidationFee = cfg.liquidationFee;
-  futures.minimumPriceIncrement = cfg.minimumPriceIncrement;
-  futures.liquidationMarginPercent = cfg.liquidationMarginPercent;
-  futures.futureExpirationDatesCount = cfg.futureExpirationDatesCount;
-  futures.hashrateOracleAddress = cfg.hashrateOracle;
-  futures.marginEngineAddress = cfg.marginEngine;
+  futures.lastUpdatedAt = _blockTimestamp();
+  loadFuturesFromContract(futures);
+  futures.save();
+}
+
+function _blockTimestamp(): i32 {
+  // Provided by the host at handler invocation time via event.block.timestamp.
+  // We don't have access to the raw event here, so the caller must set it.
+  // This is set by each handler below.
+  return 0; // replaced inline
+}
+
+export function handleLiquidationMarginPercentUpdated(event: LiquidationMarginPercentUpdated): void {
+  log.info("LiquidationMarginPercentUpdated: {}", [event.params.newLiquidationMarginPercent.toString()]);
+  const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
+  futures.liquidationMarginPercent = event.params.newLiquidationMarginPercent;
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+export function handleFutureExpirationDatesCountUpdated(event: FutureExpirationDatesCountUpdated): void {
+  log.info("FutureExpirationDatesCountUpdated: {}", [event.params.newFutureExpirationDatesCount.toString()]);
+  const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
+  futures.futureExpirationDatesCount = event.params.newFutureExpirationDatesCount;
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+export function handleMakerFeeUpdated(event: MakerFeeUpdated): void {
+  log.info("MakerFeeUpdated: {}", [event.params.newMakerFee.toString()]);
+  const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
+  futures.makerFee = event.params.newMakerFee;
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+export function handleTakerFeeUpdated(event: TakerFeeUpdated): void {
+  log.info("TakerFeeUpdated: {}", [event.params.newTakerFee.toString()]);
+  const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
+  futures.takerFee = event.params.newTakerFee;
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+export function handleLiquidationFeeUpdated(event: LiquidationFeeUpdated): void {
+  log.info("LiquidationFeeUpdated: {}", [event.params.newLiquidationFee.toString()]);
+  const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
+  futures.liquidationFee = event.params.newLiquidationFee;
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+export function handleLiquidationFeeBpsUpdated(event: LiquidationFeeBpsUpdated): void {
+  log.info("LiquidationFeeBpsUpdated: {}", [event.params.newLiquidationFeeBps.toString()]);
+  const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
+  futures.liquidationFeeBps = event.params.newLiquidationFeeBps;
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+export function handleLiquidatorShareBpsUpdated(event: LiquidatorShareBpsUpdated): void {
+  log.info("LiquidatorShareBpsUpdated: {}", [event.params.newLiquidatorShareBps.toString()]);
+  const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
+  futures.liquidatorShareBps = event.params.newLiquidatorShareBps;
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+export function handleOracleUpdated(event: OracleUpdated): void {
+  log.info("OracleUpdated: {}", [event.params.newOracle.toHexString()]);
+  const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
+  futures.hashrateOracleAddress = event.params.newOracle;
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+export function handlePortfolioMarginUpdated(event: PortfolioMarginUpdated): void {
+  log.info("PortfolioMarginUpdated: {}", [event.params.newPortfolioMargin.toHexString()]);
+  const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
+  futures.portfolioMarginAddress = event.params.newPortfolioMargin;
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
 }

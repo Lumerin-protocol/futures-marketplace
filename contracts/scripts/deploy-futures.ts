@@ -42,7 +42,7 @@ async function main() {
   const hashpriceUsdAddress = requireAddress("HASHPRICE_USD_ADDRESS");
   const SAFE_OWNER_ADDRESS = readOptionalAddress("SAFE_OWNER_ADDRESS");
   // Optional: when set, wire the Futures contract into the cross-product
-  // PortfolioMarginEngine end-to-end (Futures.setMarginEngine + PME.setFutures
+  // PortfolioMarginEngine end-to-end (Futures.setPortfolioMargin + PME.setFutures
   // + Vault.setAuthorizedCaller). When the deployer doesn't own the PME or the
   // vault, the script logs the required calldata for the current owner Safe
   // instead of executing the call.
@@ -127,8 +127,8 @@ async function main() {
     args: [
       hashpriceUsdAddress,
       Number(env.LIQUIDATION_MARGIN_PERCENT),
-      BigInt(env.MINIMUM_PRICE_INCREMENT),
-      Number(env.EXPIRATION_INTERVAL_DAYS),
+      0n, // was minimumPriceIncrement — now constant = 1e4
+      0,  // was expirationIntervalDays — now EXPIRATION_INTERVAL_DAYS constant
       Number(env.FUTURE_DELIVERY_DATES_COUNT),
       firstFutureExpirationDate,
     ],
@@ -154,10 +154,10 @@ async function main() {
     const pmeOwner = await pme.read.owner();
     const deployerIsPmeOwner = getAddress(pmeOwner) === getAddress(deployer.account.address);
 
-    logInfo("Futures.setMarginEngine", { marginEngine: MARGIN_ENGINE_ADDRESS });
+    logInfo("Futures.setPortfolioMargin", { portfolioMargin: MARGIN_ENGINE_ADDRESS });
     await logPrompt("Proceed?");
     {
-      const sim = await futures.simulate.setMarginEngine([MARGIN_ENGINE_ADDRESS]);
+      const sim = await futures.simulate.setPortfolioMargin([MARGIN_ENGINE_ADDRESS]);
       const receipt = await writeAndWait(deployer, sim);
       logStep("Done", txUrl(pc, receipt.transactionHash));
     }

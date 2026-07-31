@@ -5,9 +5,8 @@ type Futures @entity(immutable: false) {
 
   # Contract addresses
   contractAddress: Bytes!
-  collateralToken: Bytes!
   hashrateOracleAddress: Bytes!
-  marginEngineAddress: Bytes!
+  portfolioMarginAddress: Bytes!
 
   "Block number the indexer was configured to start from (sourced from the data source context, set via START_BLOCK_FUTURES)."
   startBlock: BigInt!
@@ -17,6 +16,8 @@ type Futures @entity(immutable: false) {
   makerFee: BigInt!
   takerFee: BigInt!
   liquidationFee: BigInt!
+  liquidationFeeBps: Int!
+  liquidatorShareBps: Int!
   liquidationMarginPercent: Int!
   "Contract size in hashes/s\u00b7day (hashrate sustained over one day), read from the on-chain constant CONTRACT_SIZE_HPS_DAY. Oracle answers are rebased by CONTRACT_SIZE_HPS_DAY / (100 TH/s\u00b7day). Fixed at 1e15 (1 PH/s over a day), so one unit = 1 PH/s/day."
   contractSizeHpsDay: BigInt!

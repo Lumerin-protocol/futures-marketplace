@@ -133,7 +133,7 @@ describe("Futures - points hook wiring", function () {
       await futures.write.setHook([hook.address], { account: owner.account });
 
       // Maker must pay a positive fee to earn; enable a 3x bonus tapering over a 1% spread.
-      await futures.write.setMakerFee([1n], { account: owner.account });
+      await futures.write.setMakerFeeBps([1], { account: owner.account });
       await hook.write.setPriceImprovement([3n * WAD, WAD / 100n], { account: owner.account });
 
       const price = await futures.read.getMarketPrice();

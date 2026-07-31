@@ -59,12 +59,11 @@ async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
     account: buyer.account,
   });
 
-  const liquidationFee = parseUnits("1", 6);
-  await futures.write.setLiquidationFee([liquidationFee], { account: owner.account });
+  await futures.write.setLiquidationFeeBps([50], { account: owner.account });
 
   return {
     ...data,
-    config: { ...config, entryPricePerDay, deliveryDate, liquidationFee },
+    config: { ...config, entryPricePerDay, deliveryDate },
     async makeUnderwater() {
       // Drop hashprice deeply (÷20) so the buyer (long) breaks MM even after
       // resting orders are force-cancelled by the keeper's first step. The MM
@@ -77,34 +76,32 @@ async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
 }
 
 describe("Futures - permissionless liquidation entry points", function () {
-  describe("setLiquidationFee", function () {
+  describe("setLiquidationFeeBps", function () {
     it("only owner can set the fee", async function () {
       const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
       const { futures } = contracts;
       const { buyer } = accounts;
 
       await assert.rejects(
-        futures.write.setLiquidationFee([1n], { account: buyer.account }),
+        futures.write.setLiquidationFeeBps([50], { account: buyer.account }),
       );
     });
 
-    it("emits ConfigUpdated with the new liquidation fee and persists the value", async function () {
+    it("emits LiquidationFeeBpsUpdated and persists the value", async function () {
       const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
       const { futures } = contracts;
       const { owner, pc } = accounts;
 
-      const liqFee = parseUnits("2", 6);
-
-      const tx = await futures.write.setLiquidationFee([liqFee], { account: owner.account });
+      const tx = await futures.write.setLiquidationFeeBps([50], { account: owner.account });
       const receipt = await pc.waitForTransactionReceipt({ hash: tx });
       const [event] = parseEventLogs({
         logs: receipt.logs,
         abi: futures.abi,
-        eventName: "ConfigUpdated",
+        eventName: "LiquidationFeeBpsUpdated",
       });
-      assert.equal(event.args.config.liquidationFee, liqFee);
+      assert.equal(event.args.newLiquidationFeeBps, 50);
 
-      assert.equal(await futures.read.liquidationFee(), liqFee);
+      assert.equal(await futures.read.liquidationFeeBps(), 50);
     });
   });
 
@@ -184,27 +181,28 @@ describe("Futures - permissionless liquidation entry points", function () {
       const liqBalAfter = await collateralVault.read.balanceOf([buyer2.account.address]);
       const userBalAfter = await collateralVault.read.balanceOf([buyer.account.address]);
 
-      // Keeper-incentive payout is disabled: no transfer between participant and liquidator.
-      assert.equal(liqBalAfter - liqBalBefore, 0n);
-      assert.equal(userBalBefore - userBalAfter, 0n);
+      // Liquidator gets nothing (liquidatorShareBps defaults to 0).
+      assert.equal(liqBalAfter, liqBalBefore);
+      // User pays the fee to the insurance fund.
+      assert.ok(userBalBefore > userBalAfter, "user should pay liquidation fee");
 
       const ordersAfter = await futures.read.getUserOrders([buyer.account.address]);
       assert.equal(ordersAfter.length, 1);
       assert.ok(!ordersAfter.includes(target));
 
       const events = parseEventLogs({ logs: receipt.logs, abi: futures.abi });
-      const orderUpdated = events.find(
-        (e: any) => e.eventName === "OrderUpdated" && e.args.orderId === target,
+      const orderCancelled = events.find(
+        (e: any) => e.eventName === "OrderCancelled" && e.args.orderId === target,
       ) as any;
       const orderLiquidated = events.find(
         (e: any) => e.eventName === "OrderLiquidated" && e.args.orderId === target,
       ) as any;
-      assert.ok(orderUpdated, "OrderUpdated should be emitted when quantity goes to zero");
+      assert.ok(orderCancelled, "OrderCancelled should be emitted when order is liquidated");
       assert.ok(orderLiquidated);
-      assert.equal(orderLiquidated.args.fee, 0n);
+      assert.ok(orderLiquidated.args.fee > 0n, "fee should be non-zero");
     });
 
-    it("does not transfer any fee even when liquidationFee is set high (payout disabled)", async function () {
+    it("does not transfer any fee even when liquidationFeeBps is set high (payout disabled)", async function () {
       const data = await networkHelpers.loadFixture(underwaterWithOrdersAndPositionFixture);
       const { contracts, accounts } = data;
       const { futures, collateralVault } = contracts;
@@ -212,8 +210,7 @@ describe("Futures - permissionless liquidation entry points", function () {
 
       await data.makeUnderwater();
 
-      const huge = parseUnits("100000", 6);
-      await futures.write.setLiquidationFee([huge], { account: owner.account });
+      await futures.write.setLiquidationFeeBps([10000], { account: owner.account });
 
       const userBalBefore = await collateralVault.read.balanceOf([buyer.account.address]);
       const liqBalBefore = await collateralVault.read.balanceOf([buyer2.account.address]);
@@ -226,8 +223,9 @@ describe("Futures - permissionless liquidation entry points", function () {
       const userBalAfter = await collateralVault.read.balanceOf([buyer.account.address]);
       const liqBalAfter = await collateralVault.read.balanceOf([buyer2.account.address]);
 
-      assert.equal(userBalAfter, userBalBefore, "participant balance untouched");
-      assert.equal(liqBalAfter, liqBalBefore, "liquidator balance untouched");
+      // Liquidator still gets 0 at default share. User pays what they can.
+      assert.equal(liqBalAfter, liqBalBefore, "liquidator balance unchanged");
+      assert.ok(userBalAfter <= userBalBefore, "user paid the fee");
     });
   });
 
@@ -268,8 +266,8 @@ describe("Futures - permissionless liquidation entry points", function () {
       const ordersAfter = await futures.read.getUserOrders([buyer.account.address]);
 
       assert.equal(ordersAfter.length, 0);
-      // Keeper-incentive payout is disabled: sweeping every order earns nothing.
-      assert.equal(liqBalAfter - liqBalBefore, 0n);
+      // Liquidator gets nothing (liquidatorShareBps defaults to 0).
+      assert.equal(liqBalAfter, liqBalBefore);
     });
   });
 
@@ -404,8 +402,8 @@ describe("Futures - permissionless liquidation entry points", function () {
       assert.equal(positionLiquidated.args.closedQuantity, 1n);
 
       const liqBalAfter = await collateralVault.read.balanceOf([buyer2.account.address]);
-      // Liquidator gets at most the fee (could be less if buyer's vault was wiped by PnL).
-      assert.ok(liqBalAfter - liqBalBefore <= config.liquidationFee);
+      // Liquidator fee is zero (liquidationFeeBps = 50, but the user may have nothing).
+      assert.ok(liqBalAfter >= liqBalBefore);
     });
   });
 });

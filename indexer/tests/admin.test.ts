@@ -72,7 +72,7 @@ describe("handleConfigUpdated", () => {
     assert.fieldEquals("Futures", "0", "liquidationMarginPercent", "80");
     assert.fieldEquals("Futures", "0", "futureExpirationDatesCount", "4");
     assert.fieldEquals("Futures", "0", "hashrateOracleAddress", userAddress(12).toHexString());
-    assert.fieldEquals("Futures", "0", "marginEngineAddress", userAddress(13).toHexString());
+    assert.fieldEquals("Futures", "0", "portfolioMarginAddress", userAddress(13).toHexString());
   });
 });
 

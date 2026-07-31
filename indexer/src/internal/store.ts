@@ -17,14 +17,15 @@ export function getOrCreateFutures(): Futures {
   if (!futures) {
     futures = new Futures(0);
     futures.contractAddress = dataSource.address();
-    futures.collateralToken = Bytes.empty();
     futures.hashrateOracleAddress = Bytes.empty();
-    futures.marginEngineAddress = Bytes.empty();
+    futures.portfolioMarginAddress = Bytes.empty();
     futures.startBlock = readStartBlockFromContext();
     futures.minimumPriceIncrement = BigInt.zero();
     futures.makerFee = BigInt.zero();
     futures.takerFee = BigInt.zero();
     futures.liquidationFee = BigInt.zero();
+    futures.liquidationFeeBps = 0;
+    futures.liquidatorShareBps = 0;
     futures.liquidationMarginPercent = 0;
     futures.contractSizeHpsDay = BigInt.zero();
     futures.expirationIntervalDays = 0;
@@ -62,7 +63,6 @@ export function loadFuturesFromContract(futures: Futures): void {
   const contract = FuturesContract.bind(dataSource.address());
 
   const collateralVault = contract.try_collateralVault();
-  if (!collateralVault.reverted) futures.collateralToken = collateralVault.value;
 
   const hashrate = contract.try_hashrateOracle();
   if (!hashrate.reverted) futures.hashrateOracleAddress = hashrate.value;
@@ -79,8 +79,14 @@ export function loadFuturesFromContract(futures: Futures): void {
   const liquidationFee = contract.try_liquidationFee();
   if (!liquidationFee.reverted) futures.liquidationFee = liquidationFee.value;
 
-  const marginEngine = contract.try_marginEngine();
-  if (!marginEngine.reverted) futures.marginEngineAddress = marginEngine.value;
+  const liquidationFeeBps = contract.try_liquidationFeeBps();
+  if (!liquidationFeeBps.reverted) futures.liquidationFeeBps = liquidationFeeBps.value;
+
+  const liquidatorShareBps = contract.try_liquidatorShareBps();
+  if (!liquidatorShareBps.reverted) futures.liquidatorShareBps = liquidatorShareBps.value;
+
+  const portfolioMargin = contract.try_portfolioMargin();
+  if (!portfolioMargin.reverted) futures.portfolioMarginAddress = portfolioMargin.value;
 
   const liqMargin = contract.try_liquidationMarginPercent();
   if (!liqMargin.reverted) futures.liquidationMarginPercent = liqMargin.value;

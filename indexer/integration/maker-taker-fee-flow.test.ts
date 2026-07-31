@@ -84,7 +84,7 @@ describe("Futures: full config + address surface populated by loadFuturesFromCon
       hashpriceUsd.address.toLowerCase(),
     );
     assert.equal(
-      String(entity.marginEngineAddress).toLowerCase(),
+      String(entity.portfolioMarginAddress).toLowerCase(),
       portfolioMarginEngine.address.toLowerCase(),
     );
 

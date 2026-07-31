@@ -36,7 +36,7 @@ describe("Get Positions", () => {
     const margin = price * 2n;
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.setTakerFee([0n], { account: owner.account });
+    await futures.write.setTakerFeeBps([0], { account: owner.account });
 
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });

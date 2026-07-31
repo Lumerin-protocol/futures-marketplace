@@ -127,9 +127,8 @@ export function mockFuturesContractCallsAsReverted(): void {
 export function setupFutures(): void {
   const f = new Futures(0);
   f.contractAddress = changetype<Bytes>(contractAddress());
-  f.collateralToken = Bytes.empty();
   f.hashrateOracleAddress = Bytes.empty();
-  f.marginEngineAddress = Bytes.empty();
+  f.portfolioMarginAddress = Bytes.empty();
   f.startBlock = BigInt.zero();
   f.minimumPriceIncrement = BigInt.zero();
   f.makerFee = BigInt.zero();
