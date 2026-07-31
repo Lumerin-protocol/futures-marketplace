@@ -124,6 +124,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     uint256 public constant CONTRACT_SIZE_HPS_DAY = 1e15;
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
     uint256 public constant MAX_PRICE_LEVELS_PER_SIDE = 200;
+    uint256 private constant BPS = 10_000; // Basis points denominator
     uint32 private constant SECONDS_PER_DAY = 3600 * 24;
     uint256 public constant MAX_ORACLE_STALENESS = 3600; // 1 hour
     uint8 public constant EXPIRATION_INTERVAL_DAYS = 30;
@@ -560,8 +561,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         _applyFill(_taker, takerFillQty, _price, _expirationAt);
 
         uint256 notional = _price * fill;
-        uint256 makerFeeAmt = notional * uint256(uint16(makerFeeBps)) / 10_000;
-        uint256 takerFeeAmt = notional * uint256(uint16(takerFeeBps)) / 10_000;
+        uint256 makerFeeAmt = notional * uint256(uint16(makerFeeBps)) / BPS;
+        uint256 takerFeeAmt = notional * uint256(uint16(takerFeeBps)) / BPS;
         _chargeMatchFees(_makerOrder.participant, _taker, makerFeeAmt, takerFeeAmt);
         _notifyFill(_makerOrder.participant, _taker, notional, int256(makerFeeAmt), takerFeeAmt, _price);
 
@@ -595,14 +596,10 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     function _chargeMatchFees(address _maker, address _taker, uint256 makerAmt, uint256 takerAmt) private {
-        if (makerAmt > 0) {
-            collectedFeesBalance += makerAmt;
-            _internalTransfer(_maker, address(this), makerAmt);
-        }
-        if (takerAmt > 0) {
-            collectedFeesBalance += takerAmt;
-            _internalTransfer(_taker, address(this), takerAmt);
-        }
+        collectedFeesBalance += makerAmt;
+        _internalTransfer(_maker, address(this), makerAmt);
+        collectedFeesBalance += takerAmt;
+        _internalTransfer(_taker, address(this), takerAmt);
     }
 
     /// @dev Average entry price derived from aggregates; 0 if flat.
@@ -787,7 +784,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     function setLiquidatorShareBps(uint16 _bps) external onlyOwner {
-        if (_bps > 10_000) revert ValueOutOfRange(0, 10_000);
+        if (_bps > BPS) revert ValueOutOfRange(0, int256(BPS));
         liquidatorShareBps = _bps;
         emit LiquidatorShareBpsUpdated(_bps);
     }
@@ -1449,7 +1446,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         uint16 feeBps = liquidationFeeBps;
         if (feeBps == 0) return 0;
 
-        uint256 computedFee = _notionalValue * uint256(feeBps) / 10_000;
+        uint256 computedFee = _notionalValue * uint256(feeBps) / BPS;
         if (computedFee == 0) return 0;
 
         uint256 userBal = vault.balanceOf(_user);
@@ -1460,15 +1457,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         address insurance = _insuranceFundAccount();
 
         uint16 liqShareBps = liquidatorShareBps;
-        uint256 liquidatorShare = totalFee * uint256(liqShareBps) / 10_000;
+        uint256 liquidatorShare = totalFee * uint256(liqShareBps) / BPS;
         uint256 insuranceShare = totalFee - liquidatorShare;
 
-        if (liquidatorShare > 0) {
-            _internalTransfer(_user, liquidator, liquidatorShare);
-        }
-        if (insuranceShare > 0) {
-            _internalTransfer(_user, insurance, insuranceShare);
-        }
+        _internalTransfer(_user, liquidator, liquidatorShare);
+        _internalTransfer(_user, insurance, insuranceShare);
     }
 
     function _insuranceFundAccount() private view returns (address) {
@@ -1478,7 +1471,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     function _internalTransfer(address from, address to, uint256 amount) private {
-        if (amount == 0) return;
         vault.internalTransfer(from, to, amount);
     }
 }
