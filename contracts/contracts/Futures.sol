@@ -1325,9 +1325,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     /// @notice Sum of resting abs quantity at one (expirationAt, price, side).
     function getQuantityAtPrice(uint256 _expirationAt, uint256 _price, bool _isBid) external view returns (uint256) {
-        StructuredLinkedList.List storage queue = _isBid
-            ? expirationAtPriceOrdersLongIdQueue[_expirationAt][_price]
-            : expirationAtPriceOrdersShortIdQueue[_expirationAt][_price];
+        StructuredLinkedList.List storage queue = _expirationAtPriceOrderIds(_expirationAt, _price, _isBid);
 
         uint256 total = 0;
         uint256 size = queue.sizeOf();
