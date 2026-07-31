@@ -109,6 +109,11 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "MaxPriceLevelsReached",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "NotInitializing",
     "type": "error"
   },

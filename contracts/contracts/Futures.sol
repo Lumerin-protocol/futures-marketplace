@@ -12,6 +12,7 @@ import { Versionable } from "./interfaces/Versionable.sol";
 import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
 import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/interfaces/IPortfolioMarginEngine.sol";
 import { IPointsHook } from "collateral-margin/contracts/contracts/interfaces/IPointsHook.sol";
+import { PriceLadderLib } from "./libs/PriceLadderLib.sol";
 
 /// @title Futures — cash-settled hashrate futures CLOB (v3: aggregate positions + qty-bearing orders)
 contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, Versionable {
@@ -492,71 +493,100 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         (, uint256 orderIdUint) = makerOrderQueue.getNextNode(0);
         while (_remainingQty != 0 && orderIdUint != 0) {
             bytes32 makerOrderId = bytes32(orderIdUint);
-            Order memory maker = orders[makerOrderId];
+            Order storage makerOrder = orders[makerOrderId];
 
-            uint256 makerAbs = _abs(maker.quantity);
-            uint256 remainingAbs = _abs(_remainingQty);
-
-            // Self-cross: net quantities; no trade, no fees.
-            if (maker.participant == _taker) {
-                uint256 cancelAmt = makerAbs < remainingAbs ? makerAbs : remainingAbs;
-                if (cancelAmt == makerAbs) {
-                    _removeRestingOrder(makerOrderId, maker);
-                    emit OrderCancelled(makerOrderId, _taker);
-                } else {
-                    uint256 reducedMakerAbs = makerAbs - cancelAmt;
-                    int256 newMakerQty = maker.quantity > 0 ? int256(reducedMakerAbs) : -int256(reducedMakerAbs);
-                    orders[makerOrderId].quantity = newMakerQty;
-                    emit OrderUpdated(makerOrderId, _taker, newMakerQty);
-                }
-                _remainingQty = _isBuy ? int256(remainingAbs - cancelAmt) : -int256(remainingAbs - cancelAmt);
+            if (makerOrder.participant == _taker) {
+                _remainingQty = _netSelfCross(_taker, makerOrderId, makerOrder, _remainingQty, _isBuy, _expirationAt);
                 (, orderIdUint) = makerOrderQueue.getNextNode(0);
                 continue;
             }
 
-            uint256 fill = makerAbs < remainingAbs ? makerAbs : remainingAbs;
-            int256 takerFillQty = _isBuy ? int256(fill) : -int256(fill);
-
-            _applyFill(maker.participant, -takerFillQty, _price, _expirationAt);
-            _applyFill(_taker, takerFillQty, _price, _expirationAt);
-
-            uint256 notional = _price * fill;
-            uint256 makerFeeAmt = notional * uint256(uint16(makerFeeBps)) / 10_000;
-            uint256 takerFeeAmt = notional * uint256(uint16(takerFeeBps)) / 10_000;
-            _chargeMatchFees(maker.participant, _taker, makerFeeAmt, takerFeeAmt);
-            _notifyFill(maker.participant, _taker, notional, int256(makerFeeAmt), takerFeeAmt, _price);
-
-            uint256 leftoverMakerAbs = makerAbs - fill;
-            if (leftoverMakerAbs == 0) {
-                _removeRestingOrder(makerOrderId, maker);
-                emit OrderUpdated(makerOrderId, maker.participant, 0);
-            } else {
-                int256 newMakerQty = maker.quantity > 0 ? int256(leftoverMakerAbs) : -int256(leftoverMakerAbs);
-                orders[makerOrderId].quantity = newMakerQty;
-                emit OrderUpdated(makerOrderId, maker.participant, newMakerQty);
-            }
-
-            emit OrderMatched(
-                makerOrderId,
-                maker.participant,
-                _taker,
-                _expirationAt,
-                _price,
-                takerFillQty,
-                int256(makerFeeAmt),
-                int256(takerFeeAmt),
-                participantExpirationAtNetDelta[maker.participant][_expirationAt],
-                participantExpirationAtNetDelta[_taker][_expirationAt],
-                _avgEntryPrice(maker.participant, _expirationAt),
-                _avgEntryPrice(_taker, _expirationAt)
-            );
-
-            _remainingQty = _isBuy ? int256(remainingAbs - fill) : -int256(remainingAbs - fill);
+            _remainingQty = _executeMatch(_taker, makerOrderId, makerOrder, _remainingQty, _isBuy, _price, _expirationAt);
             (, orderIdUint) = makerOrderQueue.getNextNode(0);
         }
 
         _removePriceLevelIfEmpty(_expirationAt, _price, !_isBuy);
         return _remainingQty;
+    }
+
+    /// @dev Cancel overlapping size against the taker's own resting order.
+    ///      No fill, no fees, no position change.
+    function _netSelfCross(
+        address _taker,
+        bytes32 _makerOrderId,
+        Order storage _makerOrder,
+        int256 _remainingQty,
+        bool _isBuy,
+        uint256 _expirationAt
+    ) private returns (int256) {
+        uint256 makerAbs = _abs(_makerOrder.quantity);
+        uint256 remainingAbs = _abs(_remainingQty);
+        uint256 cancelAmt = makerAbs < remainingAbs ? makerAbs : remainingAbs;
+        bool isBuy = _makerOrder.quantity > 0;
+
+        if (cancelAmt == makerAbs) {
+            _removeRestingOrder(_makerOrderId, _expirationAt, _makerOrder.price, _makerOrder.participant, isBuy);
+            emit OrderCancelled(_makerOrderId, _taker);
+        } else {
+            uint256 reducedMakerAbs = makerAbs - cancelAmt;
+            int256 newMakerQty = isBuy ? int256(reducedMakerAbs) : -int256(reducedMakerAbs);
+            _makerOrder.quantity = newMakerQty;
+            emit OrderUpdated(_makerOrderId, _taker, newMakerQty);
+        }
+        return _isBuy ? int256(remainingAbs - cancelAmt) : -int256(remainingAbs - cancelAmt);
+    }
+
+    /// @dev Execute a single match between taker and a maker resting order.
+    function _executeMatch(
+        address _taker,
+        bytes32 _makerOrderId,
+        Order storage _makerOrder,
+        int256 _remainingQty,
+        bool _isBuy,
+        uint256 _price,
+        uint256 _expirationAt
+    ) private returns (int256) {
+        uint256 makerAbs = _abs(_makerOrder.quantity);
+        uint256 remainingAbs = _abs(_remainingQty);
+        uint256 fill = makerAbs < remainingAbs ? makerAbs : remainingAbs;
+        int256 takerFillQty = _isBuy ? int256(fill) : -int256(fill);
+
+        _applyFill(_makerOrder.participant, -takerFillQty, _price, _expirationAt);
+        _applyFill(_taker, takerFillQty, _price, _expirationAt);
+
+        uint256 notional = _price * fill;
+        uint256 makerFeeAmt = notional * uint256(uint16(makerFeeBps)) / 10_000;
+        uint256 takerFeeAmt = notional * uint256(uint16(takerFeeBps)) / 10_000;
+        _chargeMatchFees(_makerOrder.participant, _taker, makerFeeAmt, takerFeeAmt);
+        _notifyFill(_makerOrder.participant, _taker, notional, int256(makerFeeAmt), takerFeeAmt, _price);
+
+        uint256 leftoverMakerAbs = makerAbs - fill;
+        bool isBuy = _makerOrder.quantity > 0;
+        if (leftoverMakerAbs == 0) {
+            _removeRestingOrder(_makerOrderId, _expirationAt, _makerOrder.price, _makerOrder.participant, isBuy);
+            emit OrderUpdated(_makerOrderId, _makerOrder.participant, 0);
+        } else {
+            int256 newMakerQty = isBuy ? int256(leftoverMakerAbs) : -int256(leftoverMakerAbs);
+            _makerOrder.quantity = newMakerQty;
+            emit OrderUpdated(_makerOrderId, _makerOrder.participant, newMakerQty);
+        }
+
+        emit OrderMatched(
+            _makerOrderId,
+            _makerOrder.participant,
+            _taker,
+            _expirationAt,
+            _price,
+            takerFillQty,
+            int256(makerFeeAmt),
+            int256(takerFeeAmt),
+            participantExpirationAtNetDelta[_makerOrder.participant][_expirationAt],
+            participantExpirationAtNetDelta[_taker][_expirationAt],
+            _avgEntryPrice(_makerOrder.participant, _expirationAt),
+            _avgEntryPrice(_taker, _expirationAt)
+        );
+
+        return _isBuy ? int256(remainingAbs - fill) : -int256(remainingAbs - fill);
     }
 
     function _chargeMatchFees(address _maker, address _taker, uint256 makerAmt, uint256 takerAmt) private {
@@ -636,10 +666,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     /// @dev Shared cancel body for `cancelOrder` / `updateOrders`.
     function _cancelOrderInternal(address _participant, bytes32 _orderId) private {
-        Order memory order = orders[_orderId];
+        Order storage order = orders[_orderId];
         if (order.participant != _participant) revert OrderNotBelongToSender();
         if (order.quantity == 0) revert OrderNotExists();
-        _removeRestingOrder(_orderId, order);
+        bool isBuy = order.quantity > 0;
+        _removeRestingOrder(_orderId, order.expirationAt, order.price, order.participant, isBuy);
         emit OrderCancelled(_orderId, order.participant);
     }
 
@@ -659,19 +690,25 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     /// @notice Permissionlessly close a resting order whose `expirationAt` is in the past.
     function removeOutdatedOrder(bytes32 _orderId) external {
-        Order memory order = orders[_orderId];
+        Order storage order = orders[_orderId];
         if (order.participant == address(0) || order.quantity == 0) revert OrderNotExists();
         if (order.expirationAt >= block.timestamp) revert OrderNotExpired();
-        _removeRestingOrder(_orderId, order);
+        bool isBuy = order.quantity > 0;
+        _removeRestingOrder(_orderId, order.expirationAt, order.price, order.participant, isBuy);
         emit OrderCancelled(_orderId, order.participant);
     }
 
-    function _removeRestingOrder(bytes32 orderId, Order memory order) private {
-        StructuredLinkedList.List storage orderIndexId =
-            _expirationAtPriceOrderIds(order.expirationAt, order.price, order.quantity > 0);
-        _removeOrderFromQueue(orderIndexId, orderId, order.expirationAt, order.price, order.quantity > 0);
-        participantOrderIdsIndex[order.participant].remove(orderId);
-        participantExpirationAtPriceOrderIdsIndex[order.participant][order.expirationAt][order.price].remove(orderId);
+    function _removeRestingOrder(
+        bytes32 orderId,
+        uint256 expirationAt,
+        uint256 price,
+        address participant,
+        bool isBuy
+    ) private {
+        StructuredLinkedList.List storage orderIndexId = _expirationAtPriceOrderIds(expirationAt, price, isBuy);
+        _removeOrderFromQueue(orderIndexId, orderId, expirationAt, price, isBuy);
+        participantOrderIdsIndex[participant].remove(orderId);
+        participantExpirationAtPriceOrderIdsIndex[participant][expirationAt][price].remove(orderId);
         delete orders[orderId];
     }
 
@@ -700,48 +737,14 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     /// @notice Insert `_price` into the sorted ladder for `_expirationAt` if absent.
     function _addPriceLevel(uint256 _expirationAt, uint256 _price, bool _isBid) private {
         StructuredLinkedList.List storage priceList = _isBid ? activeBidPrices[_expirationAt] : activeAskPrices[_expirationAt];
-
-        if (priceList.nodeExists(_price)) return;
-
-        uint256 size = priceList.sizeOf();
-        if (size >= MAX_PRICE_LEVELS_PER_SIDE) revert MaxPriceLevelsReached();
-
-        if (size == 0) {
-            priceList.pushFront(_price);
-            return;
-        }
-
-        (, uint256 current) = priceList.getNextNode(0);
-        uint256 prev = 0;
-
-        while (current != 0) {
-            if (_isBid) {
-                if (current < _price) {
-                    priceList.insertBefore(current, _price);
-                    return;
-                }
-            } else {
-                if (current > _price) {
-                    priceList.insertBefore(current, _price);
-                    return;
-                }
-            }
-            prev = current;
-            (, current) = priceList.getNextNode(current);
-        }
-
-        priceList.insertAfter(prev, _price);
+        PriceLadderLib.insertPrice(priceList, _price, _isBid, MAX_PRICE_LEVELS_PER_SIDE);
     }
 
     /// @notice Remove price level when its order queue is empty.
     function _removePriceLevelIfEmpty(uint256 _expirationAt, uint256 _price, bool _isBid) private {
         StructuredLinkedList.List storage orderQueue = _expirationAtPriceOrderIds(_expirationAt, _price, _isBid);
-        if (orderQueue.sizeOf() == 0) {
-            StructuredLinkedList.List storage priceList = _isBid ? activeBidPrices[_expirationAt] : activeAskPrices[_expirationAt];
-            if (priceList.nodeExists(_price)) {
-                priceList.remove(_price);
-            }
-        }
+        StructuredLinkedList.List storage priceList = _isBid ? activeBidPrices[_expirationAt] : activeAskPrices[_expirationAt];
+        PriceLadderLib.removeIfEmpty(orderQueue, priceList, _price);
     }
 
     // ── Admin ─────────────────────────────────────────────────────────────────
@@ -843,8 +846,9 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[participant];
             for (uint256 i = _orders.length(); i > 0; i--) {
                 bytes32 orderId = _orders.at(i - 1);
-                Order memory order = orders[orderId];
-                _removeRestingOrder(orderId, order);
+                Order storage order = orders[orderId];
+                bool isBuy = order.quantity > 0;
+                _removeRestingOrder(orderId, order.expirationAt, order.price, order.participant, isBuy);
                 emit OrderCancelled(orderId, participant);
             }
 
@@ -914,7 +918,8 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     function _doLiquidateOrder(address _user, bytes32 _orderId, Order memory _order) private {
         uint256 orderNotional = _order.price * _abs(_order.quantity);
-        _removeRestingOrder(_orderId, _order);
+        bool isBuy = _order.quantity > 0;
+        _removeRestingOrder(_orderId, _order.expirationAt, _order.price, _order.participant, isBuy);
 
         uint256 liqFee = _chargeLiquidationFee(_user, orderNotional);
 
