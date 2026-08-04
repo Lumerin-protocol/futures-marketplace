@@ -1,5 +1,6 @@
 import styled from "@mui/material/styles/styled";
 import { tokens } from "../styles/tokens";
+import { PAYMENT_TOKEN_SCALE_NUM } from "./units";
 
 /**
  * Shared liquidation surfacing helpers for the Trades / Orders / Positions
@@ -24,6 +25,43 @@ export const LiquidationChip = styled("span")`
   color: ${tokens.status.error};
   white-space: nowrap;
 `;
+
+const ACCOUNT_WIDE_NOTE =
+  "Account-wide: one collateral pool backs every futures and perps position, so this is the same level in both modes.";
+
+/**
+ * Spells out what each threshold from `solveLiquidationThresholds` means, for
+ * the header stat and the positions-table column. Both are plain strings, so
+ * this works equally in a MUI `Tooltip` and a native `title` attribute.
+ *
+ * Wording is "can be liquidated" rather than "is liquidated": crossing the
+ * level only makes `isLiquidatable` return true, the keeper still has to act.
+ */
+export function describeLiquidationLevels(opts: {
+  liqDown?: bigint;
+  liqUp?: bigint;
+  isUnderwater?: boolean;
+}): string {
+  const { liqDown, liqUp, isUnderwater } = opts;
+
+  if (isUnderwater) {
+    return `Balance is already below maintenance margin — the account can be liquidated on any tick. ${ACCOUNT_WIDE_NOTE}`;
+  }
+
+  const price = (value: bigint) => (Number(value) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+  const sentences: string[] = [];
+  if (liqDown !== undefined) {
+    sentences.push(`If the price falls to ${price(liqDown)} USDC, the account can be liquidated.`);
+  }
+  if (liqUp !== undefined) {
+    sentences.push(`If the price rises to ${price(liqUp)} USDC, the account can be liquidated.`);
+  }
+  if (sentences.length === 0) {
+    return `No liquidation level while the account carries no exposure. ${ACCOUNT_WIDE_NOTE}`;
+  }
+
+  return `${sentences.join(" ")} ${ACCOUNT_WIDE_NOTE}`;
+}
 
 type Qty = bigint | number;
 
