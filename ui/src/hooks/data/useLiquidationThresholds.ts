@@ -1,20 +1,23 @@
 import { useMemo } from "react";
 import {
+  pickLiquidationLevel,
   solveLiquidationThresholds,
-  type LiquidationThresholds,
+  type LiquidationLevel,
   type MarginParams,
 } from "../../lib/portfolioMargin";
 import { useGetMarketPrice } from "./useGetMarketPrice";
 import { useMarginEngineShocks } from "./useMarginEngineShocks";
 import { usePortfolioSnapshot } from "./usePortfolioSnapshot";
 
-/// Account-wide liquidation prices: the spot levels at which the Futures
+/// The account's liquidation price: the spot level at which the Futures
 /// contract starts reporting `balance < computePortfolioMM(user)`.
 ///
-/// Portfolio margin is cross-product, so this is one pair of thresholds per
-/// account rather than one per position. `liqDown` and `liqUp` are both
-/// possible because `MM(P)` is a tent — a hedged book can be liquidated by a
-/// move in either direction, and a flat book by neither.
+/// Cross-product and account-wide — futures and perps share one collateral
+/// pool, so this is a single number for the whole book rather than one per
+/// position, and it is the same in both contract modes.
+///
+/// `MM(P)` is a tent, so the solver finds a threshold on each side; which one
+/// is surfaced is decided by `pickLiquidationLevel` off the net exposure.
 ///
 /// The engine reads the perps mark for stress and each product's own mark for
 /// unrealized PnL. Both derive from the same hashrate oracle, so we solve on
@@ -36,15 +39,22 @@ export function useLiquidationThresholds(address: `0x${string}` | undefined) {
     };
   }, [shocks.imSpotShock, shocks.mmSpotShock, tokenDecimals, perpQuantityDecimals]);
 
-  const thresholds = useMemo<LiquidationThresholds | undefined>(() => {
+  const level = useMemo<
+    { level: LiquidationLevel | undefined; alreadyUnderwater: boolean } | undefined
+  >(() => {
     if (!snapshot || !params || !marketPrice) return undefined;
-    return solveLiquidationThresholds(snapshot, params, marketPrice as bigint);
+    const price = marketPrice as bigint;
+    const thresholds = solveLiquidationThresholds(snapshot, params, price);
+    return {
+      level: pickLiquidationLevel(snapshot, params, thresholds, price),
+      alreadyUnderwater: thresholds.alreadyUnderwater,
+    };
   }, [snapshot, params, marketPrice]);
 
   return {
-    liqDown: thresholds?.liqDown,
-    liqUp: thresholds?.liqUp,
-    alreadyUnderwater: thresholds?.alreadyUnderwater ?? false,
+    liqPrice: level?.level?.price,
+    liqDirection: level?.level?.direction,
+    alreadyUnderwater: level?.alreadyUnderwater ?? false,
     snapshot,
     params,
     isLoading: isLoading || shocks.isLoading,

@@ -4,6 +4,7 @@ import {
   marginRequired,
   mmSurplus,
   netDeltaWad,
+  pickLiquidationLevel,
   solveLiquidationThresholds,
   type FuturesAggregate,
   type MarginParams,
@@ -289,5 +290,94 @@ describe("solveLiquidationThresholds", () => {
     expect(alreadyUnderwater).toBe(false);
     expect(liqDown).toBeDefined();
     assertIsRoot(snap, liqDown as bigint, "down");
+  });
+});
+
+describe("pickLiquidationLevel chooses the side the book is exposed to", () => {
+  const at = usdc(100);
+  const pick = (snap: PortfolioSnapshot) =>
+    pickLiquidationLevel(snap, params, solveLiquidationThresholds(snap, params, at), at);
+
+  test("a net long reports the downside level", () => {
+    const snap = snapshot({ balance: 20n * USDC, positions: [future(2n, usdc(100))] });
+    const thresholds = solveLiquidationThresholds(snap, params, at);
+
+    // Both sides exist here, so this really is a choice and not a fallback.
+    expect(thresholds.liqDown).toBeDefined();
+    expect(thresholds.liqUp).toBeDefined();
+    expect(pick(snap)).toEqual({ price: thresholds.liqDown, direction: "down" });
+  });
+
+  test("a net short reports the upside level", () => {
+    const snap = snapshot({ balance: 20n * USDC, positions: [future(-2n, usdc(100))] });
+    expect(pick(snap)?.direction).toBe("up");
+  });
+
+  test("a net long perp behaves the same as a net long future", () => {
+    const snap = snapshot({
+      balance: 20n * USDC,
+      perp: { netQty: 2n * USDC, entryPrice: usdc(100) },
+    });
+    expect(pick(snap)?.direction).toBe("down");
+  });
+
+  test("net exposure decides, not the individual legs", () => {
+    // Long 3 perp contracts against short 2 futures: net +1, so downside.
+    const snap = snapshot({
+      balance: 20n * USDC,
+      perp: { netQty: 3n * USDC, entryPrice: usdc(100) },
+      positions: [future(-2n, usdc(100))],
+    });
+    expect(netDeltaWad(snap, params)).toBeGreaterThan(0n);
+    expect(pick(snap)?.direction).toBe("down");
+  });
+
+  test("falls back to the other side when the preferred one does not exist", () => {
+    // Collateral covers the worst case at P = 0, so a fall can never liquidate
+    // this long; only the stress charge on the way up can.
+    const snap = snapshot({ balance: 500n * USDC, positions: [future(2n, usdc(100))] });
+    const thresholds = solveLiquidationThresholds(snap, params, at);
+
+    expect(thresholds.liqDown).toBeUndefined();
+    expect(thresholds.liqUp).toBeDefined();
+    expect(pick(snap)).toEqual({ price: thresholds.liqUp, direction: "up" });
+  });
+
+  // With `netDelta == 0` the PnL slopes cancel, but the perp and futures losses
+  // are clamped independently, so `MM(P)` still moves and the book is not
+  // risk-free. There is no directional bias, so distance to the mark decides.
+  test("a delta-neutral book with equal gaps breaks the tie downwards", () => {
+    // MM(P) = 2|P - 100|, so the roots sit symmetrically at 94 and 106.
+    const snap = snapshot({
+      balance: 12n * USDC,
+      perp: { netQty: 2n * USDC, entryPrice: usdc(100) },
+      positions: [future(-2n, usdc(100))],
+    });
+    expect(netDeltaWad(snap, params)).toBe(0n);
+
+    const thresholds = solveLiquidationThresholds(snap, params, at);
+    expect(at - (thresholds.liqDown as bigint)).toBe((thresholds.liqUp as bigint) - at);
+    expect(pick(snap)).toEqual({ price: thresholds.liqDown, direction: "down" });
+  });
+
+  test("a delta-neutral book picks the upside when it is the nearer gap", () => {
+    // The perp long is far in profit while the futures short is far in loss, so
+    // the loss-free plateau sits below the mark: the upside root is much closer.
+    const snap = snapshot({
+      balance: 70n * USDC,
+      perp: { netQty: 2n * USDC, entryPrice: usdc(60) },
+      positions: [future(-2n, usdc(70))],
+    });
+    expect(netDeltaWad(snap, params)).toBe(0n);
+
+    const thresholds = solveLiquidationThresholds(snap, params, at);
+    const downGap = at - (thresholds.liqDown as bigint);
+    const upGap = (thresholds.liqUp as bigint) - at;
+    expect(upGap).toBeLessThan(downGap);
+    expect(pick(snap)).toEqual({ price: thresholds.liqUp, direction: "up" });
+  });
+
+  test("a flat account has no level", () => {
+    expect(pick(snapshot({ balance: 100n * USDC }))).toBeUndefined();
   });
 });

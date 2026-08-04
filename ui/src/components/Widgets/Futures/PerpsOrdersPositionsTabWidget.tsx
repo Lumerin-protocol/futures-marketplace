@@ -28,9 +28,10 @@ import { getTxUrl } from "../../../lib/indexer";
 import {
   LiquidationChip,
   formatLiquidatedQty,
-  describeLiquidationLevels,
+  describeLiquidationLevel,
   LIQUIDATION_ROW_BG,
 } from "../../../lib/liquidation";
+import type { LiquidationDirection } from "../../../lib/portfolioMargin";
 
 type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "POSITION_HISTORY" | "ORDER_HISTORY";
 
@@ -46,10 +47,10 @@ interface PerpsOrdersPositionsTabWidgetProps {
   marketPrice?: bigint;
   positionSessions: PositionSession[];
   positionSessionsLoading?: boolean;
-  /** Account-wide price at or below which the portfolio becomes liquidatable. */
-  liqDown?: bigint;
-  /** Account-wide price at or above which the portfolio becomes liquidatable. */
-  liqUp?: bigint;
+  /** Account-wide, cross-product price at which the portfolio becomes liquidatable. */
+  liqPrice?: bigint;
+  /** Which way spot has to move to reach `liqPrice`. */
+  liqDirection?: LiquidationDirection;
   /** Balance is already under maintenance margin at the current mark. */
   isUnderwater?: boolean;
   // Lifted from this widget into Futures.tsx so the parent can derive
@@ -71,8 +72,8 @@ export const PerpsOrdersPositionsTabWidget = ({
   marketPrice,
   positionSessions,
   positionSessionsLoading,
-  liqDown,
-  liqUp,
+  liqPrice,
+  liqDirection,
   isUnderwater,
   perpsOpenOrders,
   perpsOpenOrdersLoading,
@@ -181,8 +182,8 @@ export const PerpsOrdersPositionsTabWidget = ({
               positionSessions={positionSessions}
               isLoading={positionSessionsLoading}
               marketPrice={marketPrice}
-              liqDown={liqDown}
-              liqUp={liqUp}
+              liqPrice={liqPrice}
+              liqDirection={liqDirection}
               isUnderwater={isUnderwater}
               onClosePosition={setClosePositionSession}
             />
@@ -611,13 +612,13 @@ interface PerpsPositionsTableProps {
   positionSessions: PositionSession[];
   isLoading?: boolean;
   marketPrice?: bigint;
-  liqDown?: bigint;
-  liqUp?: bigint;
+  liqPrice?: bigint;
+  liqDirection?: LiquidationDirection;
   isUnderwater?: boolean;
   onClosePosition?: (session: PositionSession) => void;
 }
 
-const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, liqDown, liqUp, isUnderwater, onClosePosition }: PerpsPositionsTableProps) => {
+const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, liqPrice, liqDirection, isUnderwater, onClosePosition }: PerpsPositionsTableProps) => {
   const [selectedSession, setSelectedSession] = useState<PositionSession | null>(null);
 
   const formatPrice = (price: bigint) => {
@@ -646,16 +647,17 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, liqDown
   };
 
   // Margin is pooled across the whole account, so there is no per-position
-  // liquidation price — every row shows the same account-wide threshold(s).
+  // liquidation price — every row shows the same account-wide level.
   const liquidationPriceLabel = isUnderwater
     ? "Liquidatable"
-    : [
-        liqDown !== undefined ? `↓ ${formatPrice(liqDown)}` : null,
-        liqUp !== undefined ? `↑ ${formatPrice(liqUp)}` : null,
-      ]
-        .filter(Boolean)
-        .join("  ") || "N/A";
-  const liquidationTooltip = describeLiquidationLevels({ liqDown, liqUp, isUnderwater });
+    : liqPrice !== undefined
+    ? `${liqDirection === "up" ? "↑" : "↓"} ${formatPrice(liqPrice)}`
+    : "N/A";
+  const liquidationTooltip = describeLiquidationLevel({
+    price: liqPrice,
+    direction: liqDirection,
+    isUnderwater,
+  });
 
   const openPositions = [...positionSessions]
     .filter((session) => session.status === "OPEN")

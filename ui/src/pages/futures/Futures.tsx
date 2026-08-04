@@ -180,7 +180,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // Account-wide liquidation prices, solved off the same portfolio margin model
   // the Futures contract liquidates on. Cross-product, so there is one pair per
   // account (not per position) and a hedged book can have thresholds on both sides.
-  const { liqDown, liqUp, alreadyUnderwater } = useLiquidationThresholds(address);
+  const { liqPrice, liqDirection, alreadyUnderwater } = useLiquidationThresholds(address);
 
   const openPositionNetQuantity = useMemo(() => {
     if (contractMode !== "perpetual") return null;
@@ -213,13 +213,9 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     }
   }, [contractMode, positionSessionsQuery.data?.positionSessions, positionBookData?.data?.positions, address, selectedExpirationAt]);
 
-  const liquidationPriceDown = useMemo(
-    () => (liqDown !== undefined ? Number(liqDown) / PAYMENT_TOKEN_SCALE_NUM : null),
-    [liqDown],
-  );
-  const liquidationPriceUp = useMemo(
-    () => (liqUp !== undefined ? Number(liqUp) / PAYMENT_TOKEN_SCALE_NUM : null),
-    [liqUp],
+  const liquidationPrice = useMemo(
+    () => (liqPrice !== undefined ? Number(liqPrice) / PAYMENT_TOKEN_SCALE_NUM : null),
+    [liqPrice],
   );
 
   // Calculate total unrealized PnL based on contract mode
@@ -374,8 +370,8 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       fundingRate={fundingRateQuery.data?.formattedRate ?? "0%"}
       totalVolume={perpsCollectionQuery.data?.data?.totalVolume}
       selectedExpirationAt={selectedExpirationAt}
-      liqDown={liqDown}
-      liqUp={liqUp}
+      liqPrice={liqPrice}
+      liqDirection={liqDirection}
       isUnderwater={alreadyUnderwater}
       mobileActions={mobileActions}
     />
@@ -404,8 +400,8 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
         marketPrice={marketPrice}
         marketPriceFetchedAt={marketPriceFetchedAt}
         entryPrice={openPositionEntryPrice}
-        liquidationPriceDown={liquidationPriceDown}
-        liquidationPriceUp={liquidationPriceUp}
+        liquidationPrice={liquidationPrice}
+        liquidationDirection={liqDirection}
         timePeriod={chartTimePeriod}
         onTimePeriodChange={setChartTimePeriod}
       />
@@ -472,8 +468,8 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
         marketPrice={marketPrice}
         positionSessions={positionSessionsQuery.data?.positionSessions || []}
         positionSessionsLoading={positionSessionsQuery.isLoading}
-        liqDown={liqDown}
-        liqUp={liqUp}
+        liqPrice={liqPrice}
+        liqDirection={liqDirection}
         isUnderwater={alreadyUnderwater}
         perpsOpenOrders={perpsOpenOrdersQuery.data?.data?.orders || []}
         perpsOpenOrdersLoading={perpsOpenOrdersQuery.isLoading}

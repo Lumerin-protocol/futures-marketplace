@@ -1,5 +1,6 @@
 import styled from "@mui/material/styles/styled";
 import { tokens } from "../styles/tokens";
+import type { LiquidationDirection } from "./portfolioMargin";
 import { PAYMENT_TOKEN_SCALE_NUM } from "./units";
 
 /**
@@ -27,40 +28,33 @@ export const LiquidationChip = styled("span")`
 `;
 
 const ACCOUNT_WIDE_NOTE =
-  "Account-wide: one collateral pool backs every futures and perps position, so this is the same level in both modes.";
+  "Account-wide and cross-product: one collateral pool backs every futures and perps position, so this is the same level in both modes.";
 
 /**
- * Spells out what each threshold from `solveLiquidationThresholds` means, for
- * the header stat and the positions-table column. Both are plain strings, so
- * this works equally in a MUI `Tooltip` and a native `title` attribute.
+ * Spells out the level from `pickLiquidationLevel` for the header stat and the
+ * positions-table column. Returns a plain string, so it works equally in a MUI
+ * `Tooltip` and a native `title` attribute.
  *
  * Wording is "can be liquidated" rather than "is liquidated": crossing the
  * level only makes `isLiquidatable` return true, the keeper still has to act.
  */
-export function describeLiquidationLevels(opts: {
-  liqDown?: bigint;
-  liqUp?: bigint;
+export function describeLiquidationLevel(opts: {
+  price?: bigint;
+  direction?: LiquidationDirection;
   isUnderwater?: boolean;
 }): string {
-  const { liqDown, liqUp, isUnderwater } = opts;
+  const { price, direction, isUnderwater } = opts;
 
   if (isUnderwater) {
     return `Balance is already below maintenance margin — the account can be liquidated on any tick. ${ACCOUNT_WIDE_NOTE}`;
   }
-
-  const price = (value: bigint) => (Number(value) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-  const sentences: string[] = [];
-  if (liqDown !== undefined) {
-    sentences.push(`If the price falls to ${price(liqDown)} USDC, the account can be liquidated.`);
-  }
-  if (liqUp !== undefined) {
-    sentences.push(`If the price rises to ${price(liqUp)} USDC, the account can be liquidated.`);
-  }
-  if (sentences.length === 0) {
+  if (price === undefined || direction === undefined) {
     return `No liquidation level while the account carries no exposure. ${ACCOUNT_WIDE_NOTE}`;
   }
 
-  return `${sentences.join(" ")} ${ACCOUNT_WIDE_NOTE}`;
+  const formatted = (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+  const move = direction === "down" ? "falls" : "rises";
+  return `If the price ${move} to ${formatted} USDC, the account can be liquidated. ${ACCOUNT_WIDE_NOTE}`;
 }
 
 type Qty = bigint | number;

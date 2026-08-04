@@ -7,7 +7,8 @@ import { ModalItem } from "../../Modal";
 import { DetailedSpecsModal } from "./DetailedSpecsModal";
 import { useSettlementPrice } from "../../../hooks/data/useSettlementPrice";
 import { formatHashratePHPS, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
-import { describeLiquidationLevels } from "../../../lib/liquidation";
+import { describeLiquidationLevel } from "../../../lib/liquidation";
+import type { LiquidationDirection } from "../../../lib/portfolioMargin";
 import type { ReactNode } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
@@ -27,10 +28,10 @@ interface TradingHeaderProps {
   /// Currently-selected expiration (unix seconds). Used to surface the pinned
   /// cash-settlement price once that expiration has matured and been settled.
   selectedExpirationAt?: number;
-  /// Account-wide price at or below which the portfolio becomes liquidatable.
-  liqDown?: bigint;
-  /// Account-wide price at or above which the portfolio becomes liquidatable.
-  liqUp?: bigint;
+  /// Account-wide, cross-product price at which the portfolio becomes liquidatable.
+  liqPrice?: bigint;
+  /// Which way spot has to move to reach `liqPrice`.
+  liqDirection?: LiquidationDirection;
   /// Balance is already under maintenance margin at the current mark.
   isUnderwater?: boolean;
   /// MOBILE-ONLY (see FuturesMobileLayout): controls pinned to the right end of
@@ -55,8 +56,8 @@ export const TradingHeader = ({
   fundingRate = "0%",
   totalVolume,
   selectedExpirationAt,
-  liqDown,
-  liqUp,
+  liqPrice,
+  liqDirection,
   isUnderwater,
   mobileActions,
 }: TradingHeaderProps) => {
@@ -86,15 +87,17 @@ export const TradingHeader = ({
     </Tooltip>
   );
 
-  /// Account-wide liquidation levels, sitting next to Hash Price so the mark can
-  /// be read against them directly. Margin is pooled across every futures and
-  /// perps position, so these are the same numbers in both contract modes.
-  ///
-  /// `MM(P)` is a tent in price, so there can be a threshold below the mark,
-  /// above it, or both. A flat account has neither and the stat is dropped
+  /// The account's liquidation price, sitting next to Hash Price so the mark can
+  /// be read against it directly. Margin is pooled across every futures and
+  /// perps position, so this is one number for the whole book and it is the same
+  /// in both contract modes. A flat account has no level and the stat is dropped
   /// rather than rendered as a placeholder.
   const renderLiquidationStat = () => {
-    const tooltip = describeLiquidationLevels({ liqDown, liqUp, isUnderwater });
+    const tooltip = describeLiquidationLevel({
+      price: liqPrice,
+      direction: liqDirection,
+      isUnderwater,
+    });
 
     if (isUnderwater) {
       return (
@@ -110,17 +113,16 @@ export const TradingHeader = ({
       );
     }
 
-    if (liqDown === undefined && liqUp === undefined) return null;
+    if (liqPrice === undefined) return null;
 
-    const format = (value: bigint) => (Number(value) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
     return (
       <>
         <Divider />
         <Tooltip title={tooltip} arrow>
           <StatItem>
             <StatValue>
-              {liqDown !== undefined && <LiqLevel>↓ {format(liqDown)}</LiqLevel>}
-              {liqUp !== undefined && <LiqLevel>↑ {format(liqUp)}</LiqLevel>}
+              {liqDirection === "up" ? "↑" : "↓"}{" "}
+              {(Number(liqPrice) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)}
             </StatValue>
             <StatLabel>Liquidation (USDC)</StatLabel>
           </StatItem>
@@ -317,17 +319,6 @@ const StatValue = styled("span")`
   font-weight: 600;
   color: ${tokens.text.onDark};
   line-height: 1.2;
-`;
-
-// Deliberately inherits StatValue's neutral colour: a threshold applies equally
-// to longs and shorts, so it must not borrow the long/short or PnL-sign palette.
-// Red is reserved for the already-liquidatable state.
-const LiqLevel = styled("span")`
-  white-space: nowrap;
-
-  &:not(:last-of-type) {
-    margin-right: 0.5rem;
-  }
 `;
 
 const PriceChange = styled("span")<{ $up: boolean }>`

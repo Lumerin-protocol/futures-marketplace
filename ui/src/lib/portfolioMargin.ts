@@ -93,6 +93,14 @@ export interface LiquidationThresholds {
   alreadyUnderwater: boolean;
 }
 
+export type LiquidationDirection = "down" | "up";
+
+/** The one threshold surfaced to the user, plus which way price has to move. */
+export interface LiquidationLevel {
+  price: bigint;
+  direction: LiquidationDirection;
+}
+
 function abs(x: bigint): bigint {
   return x < 0n ? -x : x;
 }
@@ -219,6 +227,44 @@ export function solveLiquidationThresholds(
     mmSurplus(snap, params, p),
   );
   return { liqDown: down, liqUp: up, alreadyUnderwater: false };
+}
+
+/**
+ * The single threshold to present as "the" liquidation price.
+ *
+ * Net exposure picks the side: a net long is hurt by a fall, a net short by a
+ * rise. That is how a liquidation price reads on every other venue, and it
+ * keeps us from leading with the stress-driven level on the profitable side.
+ *
+ * Two cases need care, and in both we fall back rather than report no risk:
+ * - A delta-neutral book still has thresholds. `netDelta == 0` makes the perp
+ *   and futures PnL slopes cancel, but their unrealized losses are clamped
+ *   independently, so `MM(P)` still moves. With no directional bias, take
+ *   whichever level is nearer the mark.
+ * - The preferred side may simply not exist. An over-collateralised long can
+ *   survive all the way to `P = 0` and still breach the stress charge on the
+ *   way up, so the only real threshold is the one against the position.
+ */
+export function pickLiquidationLevel(
+  snap: PortfolioSnapshot,
+  params: MarginParams,
+  thresholds: LiquidationThresholds,
+  currentPrice: bigint,
+): LiquidationLevel | undefined {
+  const down: LiquidationLevel | undefined =
+    thresholds.liqDown !== undefined
+      ? { price: thresholds.liqDown, direction: "down" }
+      : undefined;
+  const up: LiquidationLevel | undefined =
+    thresholds.liqUp !== undefined ? { price: thresholds.liqUp, direction: "up" } : undefined;
+
+  if (down === undefined) return up;
+  if (up === undefined) return down;
+
+  const netDelta = netDeltaWad(snap, params);
+  if (netDelta > 0n) return down;
+  if (netDelta < 0n) return up;
+  return currentPrice - down.price <= up.price - currentPrice ? down : up;
 }
 
 /** Break-even of a single aggregate, `|netEntryValue| / |netQuantity|`. */
