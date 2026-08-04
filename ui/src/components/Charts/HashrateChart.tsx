@@ -75,10 +75,10 @@ interface HashrateChartProps {
   marketPrice?: bigint | null;
   marketPriceFetchedAt?: Date;
   entryPrice?: number | null;
-  /** Account-wide price at or below which the portfolio becomes liquidatable. */
-  liquidationPriceDown?: number | null;
-  /** Account-wide price at or above which the portfolio becomes liquidatable. */
-  liquidationPriceUp?: number | null;
+  /** Account-wide, cross-product price at which the portfolio becomes liquidatable. */
+  liquidationPrice?: number | null;
+  /** Which way spot has to move to reach `liquidationPrice`. */
+  liquidationDirection?: "down" | "up";
   timePeriod: TimePeriod;
   onTimePeriodChange: (period: TimePeriod) => void;
 }
@@ -93,8 +93,8 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   marketPrice,
   marketPriceFetchedAt,
   entryPrice,
-  liquidationPriceDown,
-  liquidationPriceUp,
+  liquidationPrice,
+  liquidationDirection,
   timePeriod,
   onTimePeriodChange,
 }) => {
@@ -233,15 +233,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
             });
           }
 
-          // Portfolio margin is a tent in price, so a hedged book can be
-          // liquidated by a move in either direction. Draw whichever
-          // thresholds exist, clamped into view when they sit off-chart.
-          const liquidationLevels = [
-            { value: liquidationPriceDown, name: "Liq↓" },
-            { value: liquidationPriceUp, name: "Liq↑" },
-          ].filter((level): level is { value: number; name: string } => level.value != null);
-
-          if (liquidationLevels.length > 0 && chartData.length > 0) {
+          if (liquidationPrice != null && chartData.length > 0) {
             const yValues = chartData.map((p) => (p as [number, number])[1]);
             const dataMin = Math.min(...yValues);
             const dataMax = Math.max(...yValues);
@@ -249,25 +241,24 @@ export const HashrateChart: FC<HashrateChartProps> = ({
             const visibleMin = dataMin - padding;
             const visibleMax = dataMax + padding;
 
-            for (const { value, name } of liquidationLevels) {
-              // Pin off-range thresholds to the edge of the axis. The label
-              // always carries the true price, so the arrow in `name` is the
-              // only direction marker needed.
-              const clampedValue = Math.min(Math.max(value, visibleMin), visibleMax);
+            // Pin an off-range threshold to the edge of the axis. The label
+            // carries the true price, and the arrow says which way spot has to
+            // move to reach it.
+            const clampedValue = Math.min(Math.max(liquidationPrice, visibleMin), visibleMax);
+            const arrow = liquidationDirection === "up" ? "↑" : "↓";
 
-              lines.push({
-                value: clampedValue,
-                color: tokens.trading.short,
-                dashStyle: "Dash",
-                width: 1,
-                zIndex: 5,
-                label: {
-                  text: `${name}: ${value.toFixed(2)}`,
-                  align: "right",
-                  style: { color: tokens.trading.short },
-                },
-              });
-            }
+            lines.push({
+              value: clampedValue,
+              color: tokens.trading.short,
+              dashStyle: "Dash",
+              width: 1,
+              zIndex: 5,
+              label: {
+                text: `Liq${arrow}: ${liquidationPrice.toFixed(2)}`,
+                align: "right",
+                style: { color: tokens.trading.short },
+              },
+            });
           }
 
           return lines;
