@@ -28,9 +28,8 @@ import { useFundingRate } from "../../hooks/data/perps/useFundingRate";
 import { usePerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
 import { useUserPositionSessions } from "../../hooks/data/perps/useUserPositionSessions";
 import { useUserPerpsOrders } from "../../hooks/data/perps/useUserPerpsOrders";
-import { useMaintenanceMarginPercent } from "../../hooks/data/perps/useMaintenanceMarginPercent";
+import { useLiquidationThresholds } from "../../hooks/data/useLiquidationThresholds";
 import { usePointsHookWeights } from "../../hooks/data/usePointsHookWeights";
-import { computeLiquidationState } from "../../hooks/data/perps/positionHelper";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
 import type { PositionBookPosition } from "../../hooks/data/getUserFuturesPositions";
 import type { ContractMode } from "../../types/types";
@@ -178,9 +177,10 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // modal's reward estimate.
   usePointsHookWeights();
 
-  // Read maintenanceMarginPercent from contract once (cached indefinitely)
-  const { data: maintenanceMarginPercentRaw } = useMaintenanceMarginPercent();
-  const maintenanceMarginPercent = maintenanceMarginPercentRaw !== undefined ? BigInt(maintenanceMarginPercentRaw) : undefined;
+  // Account-wide liquidation prices, solved off the same portfolio margin model
+  // the Futures contract liquidates on. Cross-product, so there is one pair per
+  // account (not per position) and a hedged book can have thresholds on both sides.
+  const { liqDown, liqUp, alreadyUnderwater } = useLiquidationThresholds(address);
 
   const openPositionNetQuantity = useMemo(() => {
     if (contractMode !== "perpetual") return null;
@@ -213,25 +213,14 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     }
   }, [contractMode, positionSessionsQuery.data?.positionSessions, positionBookData?.data?.positions, address, selectedExpirationAt]);
 
-  const openPositionLiquidationPrice = useMemo(() => {
-    if (contractMode !== "perpetual") return null;
-    if (maintenanceMarginPercent === undefined) return null;
-    const sessions = positionSessionsQuery.data?.positionSessions || [];
-    const openSession = sessions.find((s) => s.status === "OPEN");
-    if (!openSession || !marketPrice || openSession.user.netQuantity === 0n) return null;
-    const collateral = balanceQuery.data as bigint | undefined;
-    if (!collateral) return null;
-    const { liquidationPrice } = computeLiquidationState(
-      openSession.user.netQuantity,
-      openSession.entryPrice,
-      collateral,
-      minMargin ?? 0n,
-      marketPrice,
-      maintenanceMarginPercent,
-      6n,
-    );
-    return liquidationPrice > 0n ? Number(liquidationPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
-  }, [contractMode, positionSessionsQuery.data?.positionSessions, marketPrice, balanceQuery.data, minMargin, maintenanceMarginPercent]);
+  const liquidationPriceDown = useMemo(
+    () => (liqDown !== undefined ? Number(liqDown) / PAYMENT_TOKEN_SCALE_NUM : null),
+    [liqDown],
+  );
+  const liquidationPriceUp = useMemo(
+    () => (liqUp !== undefined ? Number(liqUp) / PAYMENT_TOKEN_SCALE_NUM : null),
+    [liqUp],
+  );
 
   // Calculate total unrealized PnL based on contract mode
   const totalUnrealizedPnL = useMemo(() => {
@@ -385,6 +374,9 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       fundingRate={fundingRateQuery.data?.formattedRate ?? "0%"}
       totalVolume={perpsCollectionQuery.data?.data?.totalVolume}
       selectedExpirationAt={selectedExpirationAt}
+      liqDown={liqDown}
+      liqUp={liqUp}
+      isUnderwater={alreadyUnderwater}
       mobileActions={mobileActions}
     />
   );
@@ -412,7 +404,8 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
         marketPrice={marketPrice}
         marketPriceFetchedAt={marketPriceFetchedAt}
         entryPrice={openPositionEntryPrice}
-        liquidationPrice={openPositionLiquidationPrice}
+        liquidationPriceDown={liquidationPriceDown}
+        liquidationPriceUp={liquidationPriceUp}
         timePeriod={chartTimePeriod}
         onTimePeriodChange={setChartTimePeriod}
       />
@@ -475,13 +468,13 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
         participantAddress={address}
         onClosePosition={closePositionModal.handleClosePosition}
         participantData={participantData?.data}
-        minMargin={minMargin}
         accountBalance={accountBalanceQuery}
         marketPrice={marketPrice}
         positionSessions={positionSessionsQuery.data?.positionSessions || []}
         positionSessionsLoading={positionSessionsQuery.isLoading}
-        perpsBalance={balanceQuery.data as bigint | undefined}
-        maintenanceMarginPercent={maintenanceMarginPercent}
+        liqDown={liqDown}
+        liqUp={liqUp}
+        isUnderwater={alreadyUnderwater}
         perpsOpenOrders={perpsOpenOrdersQuery.data?.data?.orders || []}
         perpsOpenOrdersLoading={perpsOpenOrdersQuery.isLoading}
         onPositionClosed={async () => {
