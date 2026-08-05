@@ -18,16 +18,20 @@ import { useUserTrades } from "../../../hooks/data/perps/useUserTrades";
 import type { UserTrade } from "../../../hooks/data/perps/useUserTrades";
 import { usePerpsOrderHistory } from "../../../hooks/data/perps/usePerpsOrderHistory";
 import { usePerpsPositionHistory } from "../../../hooks/data/perps/usePerpsPositionHistory";
-import { computeLiquidationPrice } from "../../../hooks/data/perps/positionHelper";
-import { useGetPerpsOrderMargin } from "../../../hooks/data/perps/useGetPerpsOrderMargin";
 import { ClosePerpsPositionModal } from "./ClosePerpsPositionModal";
 import { ModifyPerpsOrderModal } from "./ModifyPerpsOrderModal";
 import type { PerpsOrder } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { DateTimeCell } from "../../DateTimeCell";
 import { LoadMoreButton } from "../../LoadMoreButton";
-import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_DECIMALS_BIGINT, QUANTITY_SCALE } from "../../../lib/units";
+import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE } from "../../../lib/units";
 import { getTxUrl } from "../../../lib/indexer";
-import { LiquidationChip, formatLiquidatedQty, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
+import {
+  LiquidationChip,
+  formatLiquidatedQty,
+  describeLiquidationLevel,
+  LIQUIDATION_ROW_BG,
+} from "../../../lib/liquidation";
+import type { LiquidationDirection } from "../../../lib/portfolioMargin";
 
 type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "POSITION_HISTORY" | "ORDER_HISTORY";
 
@@ -43,8 +47,12 @@ interface PerpsOrdersPositionsTabWidgetProps {
   marketPrice?: bigint;
   positionSessions: PositionSession[];
   positionSessionsLoading?: boolean;
-  perpsBalance?: bigint;
-  maintenanceMarginPercent?: bigint;
+  /** Account-wide, cross-product price at which the portfolio becomes liquidatable. */
+  liqPrice?: bigint;
+  /** Which way spot has to move to reach `liqPrice`. */
+  liqDirection?: LiquidationDirection;
+  /** Balance is already under maintenance margin at the current mark. */
+  isUnderwater?: boolean;
   // Lifted from this widget into Futures.tsx so the parent can derive
   // `hasOpenPerpsOrders` and gate polling cadence for perps orders + positions.
   perpsOpenOrders: PerpsOrder[];
@@ -64,8 +72,9 @@ export const PerpsOrdersPositionsTabWidget = ({
   marketPrice,
   positionSessions,
   positionSessionsLoading,
-  perpsBalance,
-  maintenanceMarginPercent,
+  liqPrice,
+  liqDirection,
+  isUnderwater,
   perpsOpenOrders,
   perpsOpenOrdersLoading,
   onPositionClosed,
@@ -76,10 +85,6 @@ export const PerpsOrdersPositionsTabWidget = ({
   const [modifyOrder, setModifyOrder] = useState<PerpsOrder | null>(null);
   const queryClient = useQueryClient();
   const { cancelOrderAsync, isPending: isCancelling } = useCancelPerpsOrder();
-
-  // Price-independent margin held against resting orders, used to size the
-  // collateral available to a position when solving for its liquidation price.
-  const orderMarginQuery = useGetPerpsOrderMargin(participantAddress);
 
   // Paginated ("Load More") Order History — all non-ACTIVE perps orders.
   const orderHistoryQuery = usePerpsOrderHistory(participantAddress);
@@ -177,9 +182,9 @@ export const PerpsOrdersPositionsTabWidget = ({
               positionSessions={positionSessions}
               isLoading={positionSessionsLoading}
               marketPrice={marketPrice}
-              collateral={perpsBalance}
-              orderMargin={orderMarginQuery.data as bigint | undefined}
-              maintenanceMarginPercent={maintenanceMarginPercent}
+              liqPrice={liqPrice}
+              liqDirection={liqDirection}
+              isUnderwater={isUnderwater}
               onClosePosition={setClosePositionSession}
             />
           </PositionsWrapper>
@@ -607,13 +612,13 @@ interface PerpsPositionsTableProps {
   positionSessions: PositionSession[];
   isLoading?: boolean;
   marketPrice?: bigint;
-  collateral?: bigint;
-  orderMargin?: bigint;
-  maintenanceMarginPercent?: bigint;
+  liqPrice?: bigint;
+  liqDirection?: LiquidationDirection;
+  isUnderwater?: boolean;
   onClosePosition?: (session: PositionSession) => void;
 }
 
-const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collateral, orderMargin, maintenanceMarginPercent, onClosePosition }: PerpsPositionsTableProps) => {
+const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, liqPrice, liqDirection, isUnderwater, onClosePosition }: PerpsPositionsTableProps) => {
   const [selectedSession, setSelectedSession] = useState<PositionSession | null>(null);
 
   const formatPrice = (price: bigint) => {
@@ -641,18 +646,18 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
     return priceDiff * netQuantity / QUANTITY_SCALE; // Adjust for precision
   };
 
-  const calculateLiquidationPrice = (entryPrice: bigint, netQuantity: bigint): bigint | null => {
-    if (!marketPrice || !collateral || netQuantity === 0n || maintenanceMarginPercent === undefined) return null;
-
-    return computeLiquidationPrice(
-      netQuantity,
-      entryPrice,
-      collateral,
-      orderMargin ?? 0n,
-      maintenanceMarginPercent,
-      QUANTITY_DECIMALS_BIGINT,
-    );
-  };
+  // Margin is pooled across the whole account, so there is no per-position
+  // liquidation price — every row shows the same account-wide level.
+  const liquidationPriceLabel = isUnderwater
+    ? "Liquidatable"
+    : liqPrice !== undefined
+    ? `${liqDirection === "up" ? "↑" : "↓"} ${formatPrice(liqPrice)}`
+    : "N/A";
+  const liquidationTooltip = describeLiquidationLevel({
+    price: liqPrice,
+    direction: liqDirection,
+    isUnderwater,
+  });
 
   const openPositions = [...positionSessions]
     .filter((session) => session.status === "OPEN")
@@ -689,7 +694,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
               <th>Fees (F/T)</th>
               <th>Unrealized PnL</th>
               <th>Realized PnL</th>
-              <th>Liquidation Price</th>
+              <th title={liquidationTooltip}>Liquidation Price</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -701,7 +706,6 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
               const realizedPnlValue = Number(session.realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
               const unrealizedPnl = calculateUnrealizedPnL(session.entryPrice, displayQuantity);
               const unrealizedPnlValue = Number(unrealizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
-              const liquidationPrice = calculateLiquidationPrice(session.entryPrice, displayQuantity);
 
               return (
                 <TableRow key={session.id}>
@@ -748,10 +752,11 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
                       {realizedPnlValue >= 0 ? "+" : ""}{realizedPnlValue.toFixed(2)} USDC
                     </PnLText>
                   </td>
-                  <td>
-                    {liquidationPrice !== null && liquidationPrice > 0n
-                      ? formatPrice(liquidationPrice)
-                      : "N/A"}
+                  <td
+                    style={isUnderwater ? { color: tokens.trading.short } : undefined}
+                    title={liquidationTooltip}
+                  >
+                    {liquidationPriceLabel}
                   </td>
                   <td>
                     <ActionButtons>

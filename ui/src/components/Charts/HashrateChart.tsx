@@ -75,7 +75,10 @@ interface HashrateChartProps {
   marketPrice?: bigint | null;
   marketPriceFetchedAt?: Date;
   entryPrice?: number | null;
+  /** Account-wide, cross-product price at which the portfolio becomes liquidatable. */
   liquidationPrice?: number | null;
+  /** Which way spot has to move to reach `liquidationPrice`. */
+  liquidationDirection?: "down" | "up";
   timePeriod: TimePeriod;
   onTimePeriodChange: (period: TimePeriod) => void;
 }
@@ -91,6 +94,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   marketPriceFetchedAt,
   entryPrice,
   liquidationPrice,
+  liquidationDirection,
   timePeriod,
   onTimePeriodChange,
 }) => {
@@ -237,10 +241,11 @@ export const HashrateChart: FC<HashrateChartProps> = ({
             const visibleMin = dataMin - padding;
             const visibleMax = dataMax + padding;
 
-            const isAbove = liquidationPrice > visibleMax;
-            const isBelow = liquidationPrice < visibleMin;
-            const clampedValue = isAbove ? visibleMax : isBelow ? visibleMin : liquidationPrice;
-            const arrow = isAbove ? " ↑" : isBelow ? " ↓" : "";
+            // Pin an off-range threshold to the edge of the axis. The label
+            // carries the true price, and the arrow says which way spot has to
+            // move to reach it.
+            const clampedValue = Math.min(Math.max(liquidationPrice, visibleMin), visibleMax);
+            const arrow = liquidationDirection === "up" ? "↑" : "↓";
 
             lines.push({
               value: clampedValue,

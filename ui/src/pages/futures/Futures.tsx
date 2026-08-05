@@ -1,5 +1,5 @@
 import { tokens } from "../../styles/tokens";
-import { type FC, useState, useRef, useMemo, useEffect, useCallback } from "react";
+import { type FC, type ReactNode, useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { useAccount } from "wagmi";
 import { useLocation, useNavigate } from "react-router";
 import { FuturesBalanceWidget } from "../../components/Widgets/Futures/FuturesBalanceWidget";
@@ -10,6 +10,8 @@ import { PlaceOrderWidget } from "../../components/Widgets/Futures/PlaceOrderWid
 import { OrdersPositionsTabWidget } from "../../components/Widgets/Futures/OrdersPositionsTabWidget";
 import { PerpsOrdersPositionsTabWidget } from "../../components/Widgets/Futures/PerpsOrdersPositionsTabWidget";
 import { LiquidationToast } from "../../components/Widgets/Futures/LiquidationToast";
+import { FuturesMobileLayout } from "../../components/Widgets/Futures/mobile/FuturesMobileLayout";
+import { useIsMobileTradingLayout } from "../../components/Widgets/Futures/mobile/mobileTradingLayout";
 import { useLiquidationNotifications } from "../../hooks/data/useLiquidationNotifications";
 import { ClosePositionModal, useClosePositionModal } from "../../components/Widgets/Futures/ClosePositionModal";
 import { useHashrateIndexData, type TimePeriod } from "../../hooks/data/useHashRateIndexData";
@@ -26,10 +28,8 @@ import { useFundingRate } from "../../hooks/data/perps/useFundingRate";
 import { usePerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
 import { useUserPositionSessions } from "../../hooks/data/perps/useUserPositionSessions";
 import { useUserPerpsOrders } from "../../hooks/data/perps/useUserPerpsOrders";
-import { useMaintenanceMarginPercent } from "../../hooks/data/perps/useMaintenanceMarginPercent";
+import { useLiquidationThresholds } from "../../hooks/data/useLiquidationThresholds";
 import { usePointsHookWeights } from "../../hooks/data/usePointsHookWeights";
-import { computeLiquidationPrice } from "../../hooks/data/perps/positionHelper";
-import { useGetPerpsOrderMargin } from "../../hooks/data/perps/useGetPerpsOrderMargin";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
 import type { PositionBookPosition } from "../../hooks/data/getUserFuturesPositions";
 import type { ContractMode } from "../../types/types";
@@ -45,6 +45,9 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const previousAddressRef = useRef<string | undefined>(undefined);
+  // Below 768px the page renders the mobile-only compound layout (order book
+  // beside the place-order form, chart collapsed) instead of the desktop grid.
+  const isMobileTradingLayout = useIsMobileTradingLayout();
 
   // Infer initial contract mode from URL or use defaultMode prop
   const getInitialMode = (): ContractMode => {
@@ -118,7 +121,8 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
   // Single source of truth for the user's locked collateral: portfolio IM read
   // from the IPortfolioMarginEngine resolved via the Futures contract. This
-  // replaces the previous mode-toggle aggregation between per-venue margin views.
+  // replaces the previous mode-toggle aggregation between futures `getMinMargin`
+  // and perps `getMaintenanceMargin`/`getInitialMargin`.
   const minMarginQuery = useGetPortfolioIM(address);
 
   const minMargin = useMemo(() => {
@@ -173,13 +177,22 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // modal's reward estimate.
   usePointsHookWeights();
 
-  // Read maintenanceMarginPercent from contract once (cached indefinitely)
-  const { data: maintenanceMarginPercentRaw } = useMaintenanceMarginPercent();
-  const maintenanceMarginPercent = maintenanceMarginPercentRaw !== undefined ? BigInt(maintenanceMarginPercentRaw) : undefined;
+  // Account-wide liquidation prices, solved off the same portfolio margin model
+  // the Futures contract liquidates on. Cross-product, so there is one pair per
+  // account (not per position) and a hedged book can have thresholds on both sides.
+  const { liqPrice, liqDirection, alreadyUnderwater } = useLiquidationThresholds(address);
 
-  const perpsOrderMarginQuery = useGetPerpsOrderMargin(
-    contractMode === "perpetual" ? address : undefined,
-  );
+  const openPositionNetQuantity = useMemo(() => {
+    if (contractMode !== "perpetual") return null;
+    const sessions = positionSessionsQuery.data?.positionSessions || [];
+    const openSessions = sessions.filter((s) => s.status === "OPEN");
+    if (openSessions.length === 0) return null;
+    let sum = 0n;
+    for (const s of openSessions) {
+      sum += s.user.netQuantity;
+    }
+    return sum;
+  }, [contractMode, positionSessionsQuery.data?.positionSessions]);
 
   const openPositionEntryPrice = useMemo(() => {
     if (contractMode === "perpetual") {
@@ -200,24 +213,10 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     }
   }, [contractMode, positionSessionsQuery.data?.positionSessions, positionBookData?.data?.positions, address, selectedExpirationAt]);
 
-  const openPositionLiquidationPrice = useMemo(() => {
-    if (contractMode !== "perpetual") return null;
-    if (maintenanceMarginPercent === undefined) return null;
-    const sessions = positionSessionsQuery.data?.positionSessions || [];
-    const openSession = sessions.find((s) => s.status === "OPEN");
-    if (!openSession || !marketPrice || openSession.user.netQuantity === 0n) return null;
-    const collateral = balanceQuery.data as bigint | undefined;
-    if (!collateral) return null;
-    const liquidationPrice = computeLiquidationPrice(
-      openSession.user.netQuantity,
-      openSession.entryPrice,
-      collateral,
-      (perpsOrderMarginQuery.data as bigint | undefined) ?? 0n,
-      maintenanceMarginPercent,
-      6n,
-    );
-    return liquidationPrice > 0n ? Number(liquidationPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
-  }, [contractMode, positionSessionsQuery.data?.positionSessions, marketPrice, balanceQuery.data, perpsOrderMarginQuery.data, maintenanceMarginPercent]);
+  const liquidationPrice = useMemo(
+    () => (liqPrice !== undefined ? Number(liqPrice) / PAYMENT_TOKEN_SCALE_NUM : null),
+    [liqPrice],
+  );
 
   // Calculate total unrealized PnL based on contract mode
   const totalUnrealizedPnL = useMemo(() => {
@@ -356,141 +355,181 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     return () => clearTimeout(timer);
   }, [priceChange]);
 
+  // Each block is built once here and then placed by either the desktop grid
+  // below or the mobile-only layout, so the two layouts share one set of props,
+  // handlers and hook wiring.
+  // `mobileActions` is only supplied by FuturesMobileLayout (the chart toggle);
+  // the desktop branch calls this with nothing and renders the header unchanged.
+  const renderHeader = (mobileActions?: ReactNode) => (
+    <TradingHeader
+      contractMode={contractMode}
+      onContractModeChange={handleContractModeChange}
+      contractSpecsQuery={contractSpecsQuery}
+      currentPrice={currentPriceFormatted}
+      priceChange={visiblePriceChange}
+      fundingRate={fundingRateQuery.data?.formattedRate ?? "0%"}
+      totalVolume={perpsCollectionQuery.data?.data?.totalVolume}
+      selectedExpirationAt={selectedExpirationAt}
+      liqPrice={liqPrice}
+      liqDirection={liqDirection}
+      isUnderwater={alreadyUnderwater}
+      mobileActions={mobileActions}
+    />
+  );
+
+  const chartNode = (
+    <SmallWidget
+      className="w-full justify-start"
+      style={{
+        marginBottom: 0,
+        paddingLeft: 5,
+        paddingTop: "0.875rem",
+        paddingRight: 10,
+        height: "100%",
+        justifyContent: "start",
+        border: `1px solid ${tokens.border.muted04}`,
+      }}
+    >
+      <HashrateChart
+        data={hashrateQuery.data || []}
+        btcPriceData={btcPriceQuery.data || []}
+        isLoading={hashrateQuery.isLoading}
+        isBtcPriceLoading={btcPriceQuery.isLoading}
+        isFetching={hashrateQuery.isFetching}
+        isBtcPriceFetching={btcPriceQuery.isFetching}
+        marketPrice={marketPrice}
+        marketPriceFetchedAt={marketPriceFetchedAt}
+        entryPrice={openPositionEntryPrice}
+        liquidationPrice={liquidationPrice}
+        liquidationDirection={liqDirection}
+        timePeriod={chartTimePeriod}
+        onTimePeriodChange={setChartTimePeriod}
+      />
+    </SmallWidget>
+  );
+
+  const orderBookNode = (
+    <OrderBookTable
+      onRowClick={handleOrderBookClick}
+      onExpirationAtChange={handleExpirationAtChange}
+      contractSpecsQuery={contractSpecsQuery}
+      previousOrderBookStateRef={previousOrderBookStateRef}
+      contractMode={contractMode}
+      targetExpirationAt={selectedExpirationAt}
+    />
+  );
+
+  const balanceNode = (
+    <FuturesBalanceWidget
+      minMargin={minMargin}
+      isLoadingMinMargin={isLoadingMinMargin}
+      unrealizedPnL={totalUnrealizedPnL}
+      realizedPnL30D={totalRealizedPnL30D}
+      isLoadingRealizedPnL={isHistoricalPositionsLoading}
+      balanceQuery={balanceQuery}
+      accountBalance={accountBalanceQuery}
+    />
+  );
+
+  const placeOrderNode = (
+    <PlaceOrderWidget
+      externalPrice={selectedPrice}
+      externalAmount={selectedAmount}
+      externalExpirationAt={selectedExpirationAt}
+      externalIsBuy={selectedIsBuy}
+      highlightTrigger={highlightTrigger}
+      contractSpecsQuery={contractSpecsQuery}
+      participantData={participantData?.data}
+      highlightMode={highlightMode}
+      latestPrice={marketPrice ?? null}
+      minMargin={minMargin}
+      openPositionNetQuantity={openPositionNetQuantity}
+      contractMode={contractMode}
+      accountBalance={accountBalanceQuery}
+      balanceQuery={balanceQuery}
+      perpsCollection={perpsCollectionQuery.data?.data}
+      onOrderPlaced={async () => {
+        await minMarginQuery.refetch();
+      }}
+    />
+  );
+
+  const tablesNode = isConnected ? (
+    contractMode === "perpetual" ? (
+      <PerpsOrdersPositionsTabWidget
+        orders={participantData?.data?.orders || []}
+        positions={positionBookData?.data?.positions || []}
+        ordersLoading={isParticipantLoading}
+        positionsLoading={isPositionBookLoading}
+        participantAddress={address}
+        onClosePosition={closePositionModal.handleClosePosition}
+        participantData={participantData?.data}
+        accountBalance={accountBalanceQuery}
+        marketPrice={marketPrice}
+        positionSessions={positionSessionsQuery.data?.positionSessions || []}
+        positionSessionsLoading={positionSessionsQuery.isLoading}
+        liqPrice={liqPrice}
+        liqDirection={liqDirection}
+        isUnderwater={alreadyUnderwater}
+        perpsOpenOrders={perpsOpenOrdersQuery.data?.data?.orders || []}
+        perpsOpenOrdersLoading={perpsOpenOrdersQuery.isLoading}
+        onPositionClosed={async () => {
+          await minMarginQuery.refetch();
+        }}
+      />
+    ) : (
+      <OrdersPositionsTabWidget
+        orders={participantData?.data?.orders || []}
+        positions={positionBookData?.data?.positions || []}
+        ordersLoading={isParticipantLoading}
+        positionsLoading={isPositionBookLoading}
+        participantAddress={address}
+        onClosePosition={closePositionModal.handleClosePosition}
+        participantData={participantData?.data}
+        minMargin={minMargin}
+        accountBalance={accountBalanceQuery}
+        contractMode={contractMode}
+        balanceQuery={balanceQuery}
+      />
+    )
+  ) : null;
+
   return (
-    <FuturesContainer>
+    <>
       <LiquidationToast notifications={liquidationNotifications} onDismiss={dismissLiquidation} />
-      {/* Row 1: Compact Trading Header — full width */}
-      <TradingHeaderArea>
-        <TradingHeader
-          contractMode={contractMode}
-          onContractModeChange={handleContractModeChange}
-          contractSpecsQuery={contractSpecsQuery}
-          currentPrice={currentPriceFormatted}
-          priceChange={visiblePriceChange}
-          fundingRate={fundingRateQuery.data?.formattedRate ?? "0%"}
-          totalVolume={perpsCollectionQuery.data?.data?.totalVolume}
-          selectedExpirationAt={selectedExpirationAt}
-        />
-      </TradingHeaderArea>
 
-      {/* Row 2, Col 1: Chart */}
-      <ChartArea>
-        <SmallWidget
-          className="w-full justify-start"
-          style={{
-            marginBottom: 0,
-            paddingLeft: 5,
-            paddingTop: "0.875rem",
-            paddingRight: 10,
-            height: "100%",
-            justifyContent: "start",
-            border: `1px solid ${tokens.border.muted04}`,
-          }}
-        >
-          <HashrateChart
-            data={hashrateQuery.data || []}
-            btcPriceData={btcPriceQuery.data || []}
-            isLoading={hashrateQuery.isLoading}
-            isBtcPriceLoading={btcPriceQuery.isLoading}
-            isFetching={hashrateQuery.isFetching}
-            isBtcPriceFetching={btcPriceQuery.isFetching}
-            marketPrice={marketPrice}
-            marketPriceFetchedAt={marketPriceFetchedAt}
-            entryPrice={openPositionEntryPrice}
-            liquidationPrice={openPositionLiquidationPrice}
-            timePeriod={chartTimePeriod}
-            onTimePeriodChange={setChartTimePeriod}
-          />
-        </SmallWidget>
-      </ChartArea>
-
-      {/* Row 2, Col 2: Order Book */}
-      <OrderBookArea>
-        <OrderBookTable
-          onRowClick={handleOrderBookClick}
-          onExpirationAtChange={handleExpirationAtChange}
-          contractSpecsQuery={contractSpecsQuery}
-          previousOrderBookStateRef={previousOrderBookStateRef}
-          contractMode={contractMode}
-          targetExpirationAt={selectedExpirationAt}
+      {isMobileTradingLayout ? (
+        <FuturesMobileLayout
+          header={renderHeader}
+          chart={chartNode}
+          balance={balanceNode}
+          orderBook={orderBookNode}
+          placeOrder={placeOrderNode}
+          tables={tablesNode}
         />
-      </OrderBookArea>
+      ) : (
+        <FuturesContainer>
+          {/* Row 1: Compact Trading Header — full width */}
+          <TradingHeaderArea>{renderHeader()}</TradingHeaderArea>
 
-      {/* Col 3 (full height): Account Balance + Place Order + Order Information */}
-      <RightPanelArea>
-        <FuturesBalanceWidget
-          minMargin={minMargin}
-          isLoadingMinMargin={isLoadingMinMargin}
-          unrealizedPnL={totalUnrealizedPnL}
-          realizedPnL30D={totalRealizedPnL30D}
-          isLoadingRealizedPnL={isHistoricalPositionsLoading}
-          balanceQuery={balanceQuery}
-          accountBalance={accountBalanceQuery}
-        />
-        <PlaceOrderWidget
-          externalPrice={selectedPrice}
-          externalAmount={selectedAmount}
-          externalExpirationAt={selectedExpirationAt}
-          externalIsBuy={selectedIsBuy}
-          highlightTrigger={highlightTrigger}
-          contractSpecsQuery={contractSpecsQuery}
-          participantData={participantData?.data}
-          highlightMode={highlightMode}
-          latestPrice={marketPrice ?? null}
-          minMargin={minMargin}
-          contractMode={contractMode}
-          accountBalance={accountBalanceQuery}
-          balanceQuery={balanceQuery}
-          perpsCollection={perpsCollectionQuery.data?.data}
-          onOrderPlaced={async () => {
-            await minMarginQuery.refetch();
-          }}
-        />
-        {/* <OrderInfoSection>
-          <OrderInfoTitle>Order Information</OrderInfoTitle>
-        </OrderInfoSection> */}
-      </RightPanelArea>
+          {/* Row 2, Col 1: Chart */}
+          <ChartArea>{chartNode}</ChartArea>
 
-      {/* Row 3, Col 1+2: Orders and Positions — does NOT span right panel column */}
-      {isConnected && (
-        <OrdersPositionsArea>
-          {contractMode === "perpetual" ? (
-            <PerpsOrdersPositionsTabWidget
-              orders={participantData?.data?.orders || []}
-              positions={positionBookData?.data?.positions || []}
-              ordersLoading={isParticipantLoading}
-              positionsLoading={isPositionBookLoading}
-              participantAddress={address}
-              onClosePosition={closePositionModal.handleClosePosition}
-              participantData={participantData?.data}
-              accountBalance={accountBalanceQuery}
-              marketPrice={marketPrice}
-              positionSessions={positionSessionsQuery.data?.positionSessions || []}
-              positionSessionsLoading={positionSessionsQuery.isLoading}
-              perpsBalance={balanceQuery.data as bigint | undefined}
-              maintenanceMarginPercent={maintenanceMarginPercent}
-              perpsOpenOrders={perpsOpenOrdersQuery.data?.data?.orders || []}
-              perpsOpenOrdersLoading={perpsOpenOrdersQuery.isLoading}
-              onPositionClosed={async () => {
-                await minMarginQuery.refetch();
-              }}
-            />
-          ) : (
-            <OrdersPositionsTabWidget
-              orders={participantData?.data?.orders || []}
-              positions={positionBookData?.data?.positions || []}
-              ordersLoading={isParticipantLoading}
-              positionsLoading={isPositionBookLoading}
-              participantAddress={address}
-              onClosePosition={closePositionModal.handleClosePosition}
-              participantData={participantData?.data}
-              minMargin={minMargin}
-              accountBalance={accountBalanceQuery}
-              contractMode={contractMode}
-              balanceQuery={balanceQuery}
-            />
-          )}
-        </OrdersPositionsArea>
+          {/* Row 2, Col 2: Order Book */}
+          <OrderBookArea>{orderBookNode}</OrderBookArea>
+
+          {/* Col 3 (full height): Account Balance + Place Order + Order Information */}
+          <RightPanelArea>
+            {balanceNode}
+            {placeOrderNode}
+            {/* <OrderInfoSection>
+              <OrderInfoTitle>Order Information</OrderInfoTitle>
+            </OrderInfoSection> */}
+          </RightPanelArea>
+
+          {/* Row 3, Col 1+2: Orders and Positions — does NOT span right panel column */}
+          {tablesNode && <OrdersPositionsArea>{tablesNode}</OrdersPositionsArea>}
+        </FuturesContainer>
       )}
 
       {/* Close Position Info Modal */}
@@ -502,7 +541,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
         doNotShowAgain={closePositionModal.doNotShowAgain}
         onDoNotShowAgainChange={closePositionModal.setDoNotShowAgain}
       />
-    </FuturesContainer>
+    </>
   );
 };
 

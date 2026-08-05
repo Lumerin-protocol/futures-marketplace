@@ -1,5 +1,7 @@
 import styled from "@mui/material/styles/styled";
 import { tokens } from "../styles/tokens";
+import type { LiquidationDirection } from "./portfolioMargin";
+import { PAYMENT_TOKEN_SCALE_NUM } from "./units";
 
 /**
  * Shared liquidation surfacing helpers for the Trades / Orders / Positions
@@ -24,6 +26,36 @@ export const LiquidationChip = styled("span")`
   color: ${tokens.status.error};
   white-space: nowrap;
 `;
+
+const ACCOUNT_WIDE_NOTE =
+  "Account-wide and cross-product: one collateral pool backs every futures and perps position, so this is the same level in both modes.";
+
+/**
+ * Spells out the level from `pickLiquidationLevel` for the header stat and the
+ * positions-table column. Returns a plain string, so it works equally in a MUI
+ * `Tooltip` and a native `title` attribute.
+ *
+ * Wording is "can be liquidated" rather than "is liquidated": crossing the
+ * level only makes `isLiquidatable` return true, the keeper still has to act.
+ */
+export function describeLiquidationLevel(opts: {
+  price?: bigint;
+  direction?: LiquidationDirection;
+  isUnderwater?: boolean;
+}): string {
+  const { price, direction, isUnderwater } = opts;
+
+  if (isUnderwater) {
+    return `Balance is already below maintenance margin — the account can be liquidated on any tick. ${ACCOUNT_WIDE_NOTE}`;
+  }
+  if (price === undefined || direction === undefined) {
+    return `No liquidation level while the account carries no exposure. ${ACCOUNT_WIDE_NOTE}`;
+  }
+
+  const formatted = (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+  const move = direction === "down" ? "falls" : "rises";
+  return `If the price ${move} to ${formatted} USDC, the account can be liquidated. ${ACCOUNT_WIDE_NOTE}`;
+}
 
 type Qty = bigint | number;
 

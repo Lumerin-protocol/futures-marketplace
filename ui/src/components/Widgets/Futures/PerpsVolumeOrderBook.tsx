@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import styled from "@mui/material/styles/styled";
 import { tokens } from "../../../styles/tokens";
+import { useIsMobileTradingLayout } from "./mobile/mobileTradingLayout";
 import type { OrderBookRow } from "./ClassicOrderBook";
 import type { ContractMode } from "../../../types/types";
 
@@ -55,6 +56,9 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   // Separate hover tooltip for the center (market-price) row.
   const [centerTooltip, setCenterTooltip] = useState<{ x: number; y: number } | null>(null);
+  // The mobile layout gives the book only half the screen width, so the
+  // cumulative Total column is dropped there (its depth bar still shows it).
+  const isMobile = useIsMobileTradingLayout();
   // Compute cumulative totals once per order book update (not per row).
   const { askLevels, bidLevels, maxAskTotal, maxBidTotal, bestAsk, bestBid } = useMemo(() => {
     // Input rows are sorted high -> low price.
@@ -178,11 +182,12 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
           key={`${side}-${level.price}`}
           $side={side}
           $empty
+          $compact={isMobile}
           onClick={() => onRowClick?.(formatPrice(level.price), null)}
         >
           <PriceCol $side={side}>{formatPrice(level.price)}</PriceCol>
           <SizeCol>0</SizeCol>
-          <TotalCol />
+          {!isMobile && <TotalCol />}
         </Row>
       );
     }
@@ -195,6 +200,9 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
     const totalWidth = maxTotal > 0 ? Math.min(100, (level.total / maxTotal) * 100) : 0;
 
     const showTooltip = (e: React.MouseEvent) => {
+      // Touch taps fire mouseenter, which would leave the tooltip stuck over a
+      // narrow mobile book, so it is suppressed there (as in VolumeOrderBook).
+      if (isMobile) return;
       const distancePct =
         marketPrice != null && marketPrice !== 0
           ? ((level.price - marketPrice) / marketPrice) * 100
@@ -207,6 +215,7 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
         key={`${side}-${level.price}`}
         $side={side}
         $highlight={level.highlight}
+        $compact={isMobile}
         onClick={() => onRowClick?.(formatPrice(level.price), level.units)}
         onMouseEnter={showTooltip}
         onMouseMove={showTooltip}
@@ -216,7 +225,7 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
         <BrightLayer $side={side} $width={sizeWidth} />
         <PriceCol $side={side}>{formatPrice(level.price)}</PriceCol>
         <SizeCol>{formatVolume(level.size)}</SizeCol>
-        <TotalCol>{formatVolume(level.total)}</TotalCol>
+        {!isMobile && <TotalCol>{formatVolume(level.total)}</TotalCol>}
       </Row>
     );
   };
@@ -265,24 +274,25 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
 
   return (
     <Container
+      $compact={isMobile}
       ref={containerRef}
       onMouseLeave={() => {
         setTooltip(null);
         setCenterTooltip(null);
       }}
     >
-      <ColumnHeader>
+      <ColumnHeader $compact={isMobile}>
         <span>Price</span>
         <span>Size</span>
-        <span>Total</span>
+        {!isMobile && <span>Total</span>}
       </ColumnHeader>
 
       <AskSection>{askLevels.map((level) => renderRow(level, "ask"))}</AskSection>
 
       <CenterRow
         ref={centerRef}
-        onMouseEnter={(e) => setCenterTooltip({ x: e.clientX, y: e.clientY })}
-        onMouseMove={(e) => setCenterTooltip({ x: e.clientX, y: e.clientY })}
+        onMouseEnter={(e) => !isMobile && setCenterTooltip({ x: e.clientX, y: e.clientY })}
+        onMouseMove={(e) => !isMobile && setCenterTooltip({ x: e.clientX, y: e.clientY })}
         onMouseLeave={() => setCenterTooltip(null)}
       >
         <span className={`best ${isUp ? "up" : "down"}`}>
@@ -337,17 +347,20 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
   );
 };
 
-const Container = styled("div")`
+// The 437px floor matches the desktop OrderBookArea. The mobile layout sizes the
+// book from its own slot, so the floor is dropped there to avoid overflowing it.
+const Container = styled("div")<{ $compact?: boolean }>`
   width: 100%;
   height: 100%;
-  min-height: 437px;
+  min-height: ${(props) => (props.$compact ? "0" : "437px")};
   display: flex;
   flex-direction: column;
 `;
 
-const ColumnHeader = styled("div")`
+// `$compact` is the mobile-only two-column variant (Price / Size, no Total).
+const ColumnHeader = styled("div")<{ $compact?: boolean }>`
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: ${(props) => (props.$compact ? "1.2fr 1fr" : "1fr 1fr 1fr")};
   position: sticky;
   top: -1px;
   z-index: 2;
@@ -356,7 +369,7 @@ const ColumnHeader = styled("div")`
   padding: 0.3rem 0.5rem;
 
   span {
-    font-size: 0.65rem;
+    font-size: ${(props) => (props.$compact ? "0.6rem" : "0.65rem")};
     font-weight: 600;
     color: ${tokens.text.secondary};
     letter-spacing: 0.03em;
@@ -390,15 +403,15 @@ const BidSection = styled("div")`
   justify-content: flex-start;
 `;
 
-const Row = styled("div")<{ $side: "ask" | "bid"; $highlight?: boolean; $empty?: boolean }>`
+const Row = styled("div")<{ $side: "ask" | "bid"; $highlight?: boolean; $empty?: boolean; $compact?: boolean }>`
   position: relative;
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: ${(props) => (props.$compact ? "1.2fr 1fr" : "1fr 1fr 1fr")};
   align-items: center;
   height: 22px;
   padding: 0 0.5rem;
   cursor: pointer;
-  font-size: 0.75rem;
+  font-size: ${(props) => (props.$compact ? "0.65rem" : "0.75rem")};
   font-family: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
   border-bottom: 1px solid transparent;
   opacity: ${(props) => (props.$empty ? 0.35 : 1)};

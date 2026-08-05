@@ -7,6 +7,9 @@ import { ModalItem } from "../../Modal";
 import { DetailedSpecsModal } from "./DetailedSpecsModal";
 import { useSettlementPrice } from "../../../hooks/data/useSettlementPrice";
 import { formatHashratePHPS, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { describeLiquidationLevel } from "../../../lib/liquidation";
+import type { LiquidationDirection } from "../../../lib/portfolioMargin";
+import type { ReactNode } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
@@ -25,6 +28,16 @@ interface TradingHeaderProps {
   /// Currently-selected expiration (unix seconds). Used to surface the pinned
   /// cash-settlement price once that expiration has matured and been settled.
   selectedExpirationAt?: number;
+  /// Account-wide, cross-product price at which the portfolio becomes liquidatable.
+  liqPrice?: bigint;
+  /// Which way spot has to move to reach `liqPrice`.
+  liqDirection?: LiquidationDirection;
+  /// Balance is already under maintenance margin at the current mark.
+  isUnderwater?: boolean;
+  /// MOBILE-ONLY (see FuturesMobileLayout): controls pinned to the right end of
+  /// the contract-mode row, currently the chart show/hide toggle. Left undefined
+  /// by the desktop layout, which renders the header exactly as before.
+  mobileActions?: ReactNode;
 }
 
 const formatVolume = (raw: string): string => {
@@ -43,6 +56,10 @@ export const TradingHeader = ({
   fundingRate = "0%",
   totalVolume,
   selectedExpirationAt,
+  liqPrice,
+  liqDirection,
+  isUnderwater,
+  mobileActions,
 }: TradingHeaderProps) => {
   const detailedSpecsModal = useModal();
   const { data: contractSpecs } = contractSpecsQuery;
@@ -70,6 +87,50 @@ export const TradingHeader = ({
     </Tooltip>
   );
 
+  /// The account's liquidation price, sitting next to Hash Price so the mark can
+  /// be read against it directly. Margin is pooled across every futures and
+  /// perps position, so this is one number for the whole book and it is the same
+  /// in both contract modes. A flat account has no level and the stat is dropped
+  /// rather than rendered as a placeholder.
+  const renderLiquidationStat = () => {
+    const tooltip = describeLiquidationLevel({
+      price: liqPrice,
+      direction: liqDirection,
+      isUnderwater,
+    });
+
+    if (isUnderwater) {
+      return (
+        <>
+          <Divider />
+          <Tooltip title={tooltip} arrow>
+            <StatItem>
+              <StatValue style={{ color: tokens.trading.short }}>Liquidatable</StatValue>
+              <StatLabel>Liquidation</StatLabel>
+            </StatItem>
+          </Tooltip>
+        </>
+      );
+    }
+
+    if (liqPrice === undefined) return null;
+
+    return (
+      <>
+        <Divider />
+        <Tooltip title={tooltip} arrow>
+          <StatItem>
+            <StatValue>
+              {liqDirection === "up" ? "↑" : "↓"}{" "}
+              {(Number(liqPrice) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)}
+            </StatValue>
+            <StatLabel>Liquidation (USDC)</StatLabel>
+          </StatItem>
+        </Tooltip>
+      </>
+    );
+  };
+
   const renderPriceChange = () => {
     if (!priceChange) return null;
     const isUp = priceChange.delta >= 0;
@@ -84,30 +145,43 @@ export const TradingHeader = ({
     );
   };
 
+  const modeToggle = (
+    <ModeToggle>
+      <ModeButton
+        $active={contractMode === "futures"}
+        onClick={() => onContractModeChange("futures")}
+      >
+        Futures
+      </ModeButton>
+      <ModeButton
+        $active={contractMode === "perpetual"}
+        onClick={() => onContractModeChange("perpetual")}
+      >
+        Perpetuals
+      </ModeButton>
+    </ModeToggle>
+  );
+
   return (
     <>
       <HeaderBar>
-        {/* Left: contract mode toggle */}
-        <ModeToggle>
-          <ModeButton
-            $active={contractMode === "futures"}
-            onClick={() => onContractModeChange("futures")}
-          >
-            Futures
-          </ModeButton>
-          <ModeButton
-            $active={contractMode === "perpetual"}
-            onClick={() => onContractModeChange("perpetual")}
-          >
-            Perpetuals
-          </ModeButton>
-        </ModeToggle>
+        {/* Left: contract mode toggle. On mobile it shares a full-width row with
+            the layout's controls, which sit in the right corner. */}
+        {mobileActions ? (
+          <ModeRow>
+            {modeToggle}
+            {mobileActions}
+          </ModeRow>
+        ) : (
+          modeToggle
+        )}
 
         {/* Center: market stats */}
         <StatsRow>
           {contractMode === "perpetual" ? (
             <>
               {renderHashPriceStat()}
+              {renderLiquidationStat()}
               <Divider />
               <StatItem>
                 <StatValue>{fundingRate}</StatValue>
@@ -126,6 +200,7 @@ export const TradingHeader = ({
           ) : (
             <>
               {renderHashPriceStat()}
+              {renderLiquidationStat()}
               {contractSpecs?.data && (
                 <>
                   <Divider />
@@ -184,6 +259,17 @@ const HeaderBar = styled("div")`
   @media (max-width: 768px) {
     gap: 0.75rem;
   }
+`;
+
+// MOBILE-ONLY wrapper (only rendered when `mobileActions` is passed): claims a
+// full flex line so the contract-mode toggle and the layout controls sit on their
+// own row, with the controls pushed to the right corner and the stats below.
+const ModeRow = styled("div")`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex: 1 1 100%;
 `;
 
 const ModeToggle = styled("div")`
