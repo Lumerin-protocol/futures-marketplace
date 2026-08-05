@@ -1,7 +1,7 @@
 import { usePublicClient, useWalletClient, useWriteContract } from "wagmi";
 import { getContract } from "viem";
 import { useQueryClient } from "@tanstack/react-query";
-import { FuturesAbi } from "../../abi/Futures";
+import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
 import { waitForBlockNumberPositionBook } from "./getUserFuturesPositions";
 import { FUTURES_POSITION_HISTORY_QK } from "./useFuturesPositionHistory";
 

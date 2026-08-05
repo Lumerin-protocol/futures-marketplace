@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useReadContract } from "wagmi";
-import { FuturesAbi } from "../../abi/Futures";
-import { contractErrors } from "../../abi/contractErrors";
+import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
+import { contractErrors } from "futures-marketplace-abi/ContractErrors.ts";
 
 /**
  * Hook to get current market price from Futures contract

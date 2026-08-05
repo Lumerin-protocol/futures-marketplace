@@ -112,7 +112,7 @@ export const PlaceOrderWidget = ({
   const { data: marketPrice, isLoading: isMarketPriceLoading } = useGetMarketPrice();
   const { address } = useAccount();
   const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
-  const { worstCaseFee: worstCaseFeeRaw } = useMakerTakerFees();
+  const { feeFor } = useMakerTakerFees();
 
   // Calculate price step from contract specs
   const priceStep = contractSpecsQuery.data?.data?.minimumPriceIncrement
@@ -283,14 +283,6 @@ export const PlaceOrderWidget = ({
       return maxSize;
     }
 
-    // Reserve the larger of maker/taker fee for IM headroom — we don't yet
-    // know whether this order will match (taker) or rest and later fill (maker).
-    const reservedFee = worstCaseFeeRaw ?? 0n;
-
-    if (availableBalance <= reservedFee) return 0;
-
-    const balanceForMargin = availableBalance - reservedFee;
-
     // Binary search to find maximum quantity for futures mode
     let low = 0;
     let high = 50; // High upper bound for search
@@ -306,8 +298,11 @@ export const PlaceOrderWidget = ({
         latestPrice,
         marginPercent,
       );
+      // The fee scales with notional, so it has to be charged per candidate
+      // size rather than subtracted from the balance once up front.
+      const requiredTotal = requiredMargin + feeFor(priceInWei * BigInt(Math.ceil(mid)));
 
-      if (requiredMargin <= balanceForMargin) {
+      if (requiredTotal <= availableBalance) {
         maxQty = mid;
         low = mid;
       } else {
@@ -705,8 +700,8 @@ export const PlaceOrderWidget = ({
       marginPercent,
     );
 
-    // Reserve the larger of maker/taker fee — see comment on `useMakerTakerFees`.
-    const reservedFee = worstCaseFeeRaw ?? 0n;
+    // Reserve the worse of maker/taker fee — see comment on `useMakerTakerFees`.
+    const reservedFee = feeFor(priceInWei * BigInt(Math.ceil(numericAmount)));
     const totalRequired = requiredMargin + reservedFee;
 
     if (totalRequired > availableBalance) {
@@ -799,8 +794,8 @@ export const PlaceOrderWidget = ({
       marginPercent,
     );
 
-    // Reserve the larger of maker/taker fee — see comment on `useMakerTakerFees`.
-    const reservedFee = worstCaseFeeRaw ?? 0n;
+    // Reserve the worse of maker/taker fee — see comment on `useMakerTakerFees`.
+    const reservedFee = feeFor(priceInWei * BigInt(Math.ceil(numericAmount)));
     const totalRequired = requiredMargin + reservedFee;
 
     if (totalRequired > availableBalance) {

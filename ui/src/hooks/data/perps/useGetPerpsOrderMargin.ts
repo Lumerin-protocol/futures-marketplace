@@ -1,5 +1,5 @@
 import { useReadContract } from "wagmi";
-import { IPortfolioMarginEngineAbi } from "../../../abi/IPortfolioMarginEngine";
+import { IPortfolioMarginEngineAbi } from "collateral-margin-abi/IPortfolioMarginEngine.ts";
 import { useFuturesMarginEngine } from "../useFuturesMarginEngine";
 
 /**
@@ -14,8 +14,8 @@ import { useFuturesMarginEngine } from "../useFuturesMarginEngine";
  * for, and summing per-venue numbers would both double-count the stress and miss the
  * netting.
  *
- * The engine address is resolved from the Futures contract's immutable `marginEngine`,
- * the same source `useGetPortfolioIM` uses.
+ * The engine address is resolved from the Futures contract's `portfolioMargin`, the
+ * same source `useGetPortfolioIM` uses.
  */
 export function useGetPerpsOrderMargin(address: `0x${string}` | undefined) {
   const { data: engine } = useFuturesMarginEngine();

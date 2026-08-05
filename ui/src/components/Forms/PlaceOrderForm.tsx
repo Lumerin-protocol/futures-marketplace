@@ -80,7 +80,7 @@ export const PlaceOrderForm: FC<Props> = ({
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const contractSpecsQuery = useFuturesContractSpecs();
-  const { makerFeeUSDC, takerFeeUSDC, isLoading: isFeesLoading } = useMakerTakerFees();
+  const { makerFeePercent, takerFeePercent, isLoading: isFeesLoading } = useMakerTakerFees();
   const { wMaker, wTaker, weightScale, isLoading: isWeightsLoading } = usePointsHookWeights();
 
   // Determine order type from quantity sign
@@ -244,8 +244,8 @@ export const PlaceOrderForm: FC<Props> = ({
                 <div className="flex justify-between">
                   <span className="text-gray-300">Maker / Taker Fee:</span>
                   <span className="text-white">
-                    {makerFeeUSDC !== null && takerFeeUSDC !== null
-                      ? `${makerFeeUSDC.toFixed(2)} / ${takerFeeUSDC.toFixed(2)} USDC`
+                    {makerFeePercent !== null && takerFeePercent !== null
+                      ? `${makerFeePercent.toFixed(2)}% / ${takerFeePercent.toFixed(2)}%`
                       : isFeesLoading
                       ? "Loading..."
                       : "N/A"}

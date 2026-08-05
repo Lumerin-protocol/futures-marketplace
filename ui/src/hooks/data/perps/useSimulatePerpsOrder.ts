@@ -1,5 +1,5 @@
 import { useReadContract } from "wagmi";
-import { HashPowerPerpsDEXAbi } from "../../../abi/Perps";
+import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
 import { QUANTITY_SCALE_NUM } from "../../../lib/units";
 
 interface SimulatePerpsOrderProps {

@@ -1,5 +1,5 @@
 import { useReadContract } from "wagmi";
-import { FuturesAbi } from "../../abi/Futures";
+import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
 
 /**
  * Reads the on-chain pinned cash-settlement price for one expiration (`expirationAt`).

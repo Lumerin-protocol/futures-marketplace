@@ -1,20 +1,24 @@
 import { useReadContracts } from "wagmi";
-import { FuturesAbi } from "../../abi/Futures";
-import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
+import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
 
 const futuresAddress = process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}` | undefined;
 
+/** Basis-point denominator, matching `BPS` in the contracts. */
+const BPS = 10_000n;
+
 /**
- * Reads the current flat maker and taker fees from the Futures contract.
+ * Reads the maker and taker fee rates from the Futures contract.
  *
- * - `makerFee` is paid by the resting order's owner when their order is filled.
- * - `takerFee` is paid by the incoming caller on a matching fill.
- * - `worstCaseFee` is `max(makerFee, takerFee)` — the safest amount to reserve
- *   for IM headroom at order-submit time, since at that moment we don't yet
- *   know whether the order will match (taker) or rest (eventual maker).
+ * Both are signed basis points of the filled notional — `notional * bps / 10000`,
+ * where notional is `price * contracts`. Signed because a maker rebate is
+ * expressed as a negative rate, which is why `worstCaseFeeBps` is a max rather
+ * than an absolute value: a rebate costs the trader nothing to reserve.
  *
- * Replaces the legacy per-participant `useOrderFee` (the `addressFeeDiscountPercent`
- * discount was removed alongside the maker/taker upgrade — fees are flat for all).
+ * - `makerFeeBps` is paid by the resting order's owner when their order is filled.
+ * - `takerFeeBps` is paid by the incoming caller on a matching fill.
+ * - `feeFor(notional)` reserves the worse of the two. At submit time we don't yet
+ *   know whether the order will match (taker) or rest and later fill (maker), so
+ *   the larger rate is the only safe amount to hold back from IM headroom.
  */
 export function useMakerTakerFees() {
   const result = useReadContracts({
@@ -22,12 +26,12 @@ export function useMakerTakerFees() {
       {
         address: futuresAddress,
         abi: FuturesAbi,
-        functionName: "makerFee",
+        functionName: "makerFeeBps",
       },
       {
         address: futuresAddress,
         abi: FuturesAbi,
-        functionName: "takerFee",
+        functionName: "takerFeeBps",
       },
     ],
     query: {
@@ -39,24 +43,28 @@ export function useMakerTakerFees() {
     },
   });
 
-  const makerFee = result.data?.[0]?.result as bigint | undefined;
-  const takerFee = result.data?.[1]?.result as bigint | undefined;
-  const worstCaseFee =
-    makerFee !== undefined && takerFee !== undefined
-      ? makerFee > takerFee
-        ? makerFee
-        : takerFee
+  const makerFeeBps = result.data?.[0]?.result as number | undefined;
+  const takerFeeBps = result.data?.[1]?.result as number | undefined;
+  const worstCaseFeeBps =
+    makerFeeBps !== undefined && takerFeeBps !== undefined
+      ? Math.max(makerFeeBps, takerFeeBps)
       : undefined;
+
+  /// Fee to reserve against a notional (token decimals). Zero while the rates
+  /// are still loading, and never negative — a rebate is not spendable headroom.
+  const feeFor = (notional: bigint): bigint => {
+    if (worstCaseFeeBps === undefined || worstCaseFeeBps <= 0) return 0n;
+    return (notional * BigInt(worstCaseFeeBps)) / BPS;
+  };
 
   return {
     ...result,
-    makerFee,
-    takerFee,
-    worstCaseFee,
-    makerFeeUSDC: makerFee !== undefined ? Number(makerFee) / PAYMENT_TOKEN_SCALE_NUM : null,
-    takerFeeUSDC: takerFee !== undefined ? Number(takerFee) / PAYMENT_TOKEN_SCALE_NUM : null,
-    worstCaseFeeUSDC:
-      worstCaseFee !== undefined ? Number(worstCaseFee) / PAYMENT_TOKEN_SCALE_NUM : null,
+    makerFeeBps,
+    takerFeeBps,
+    worstCaseFeeBps,
+    feeFor,
+    makerFeePercent: makerFeeBps !== undefined ? makerFeeBps / 100 : null,
+    takerFeePercent: takerFeeBps !== undefined ? takerFeeBps / 100 : null,
     dataFetchedAt: result.dataUpdatedAt ? new Date(result.dataUpdatedAt) : undefined,
   };
 }

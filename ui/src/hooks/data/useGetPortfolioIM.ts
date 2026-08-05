@@ -1,5 +1,5 @@
 import { useReadContract } from "wagmi";
-import { IPortfolioMarginEngineAbi } from "../../abi/IPortfolioMarginEngine";
+import { IPortfolioMarginEngineAbi } from "collateral-margin-abi/IPortfolioMarginEngine.ts";
 import { useFuturesMarginEngine } from "./useFuturesMarginEngine";
 
 /// Reads the user's portfolio Initial Margin (IM) from the

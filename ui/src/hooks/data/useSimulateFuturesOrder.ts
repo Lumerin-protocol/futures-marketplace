@@ -1,5 +1,5 @@
 import { useReadContract } from "wagmi";
-import { FuturesAbi } from "../../abi/Futures";
+import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
 
 interface SimulateFuturesOrderProps {
   expirationAt: bigint | undefined;

@@ -66,7 +66,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
     const qc = useQueryClient();
     const { address } = useAccount();
     const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
-    const { worstCaseFee: worstCaseFeeRaw } = useMakerTakerFees();
+    const { feeFor } = useMakerTakerFees();
 
     // Determine order type from quantity sign
     const isBuy = order.isBuy;
@@ -127,8 +127,8 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
         marginPercent,
       );
 
-      // Reserve the larger of maker/taker fee — see comment on `useMakerTakerFees`.
-      const reservedFee = worstCaseFeeRaw ?? 0n;
+      // Reserve the worse of maker/taker fee — see comment on `useMakerTakerFees`.
+      const reservedFee = feeFor(newPriceInWei * BigInt(Math.ceil(newQuantity)));
       const totalRequired = requiredMargin + reservedFee;
 
       if (totalRequired > availableBalance) {

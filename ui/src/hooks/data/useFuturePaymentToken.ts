@@ -1,5 +1,5 @@
 import { useReadContract } from "wagmi";
-import { CollateralVaultAbi } from "../../abi/ICollateralVault";
+import { CollateralVaultAbi } from "collateral-margin-abi/CollateralVault.ts";
 import { useFuturesCollateralVault } from "./useFuturesCollateralVault";
 
 /// Resolves the futures payment (collateral) token address.

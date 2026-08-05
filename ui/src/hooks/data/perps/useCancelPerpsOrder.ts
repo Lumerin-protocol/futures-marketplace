@@ -1,6 +1,6 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { getContract } from "viem";
-import { HashPowerPerpsDEXAbi } from "../../../abi/Perps";
+import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
 
 interface CancelPerpsOrderProps {
   orderId: `0x${string}`;

@@ -1,6 +1,6 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { getContract } from "viem";
-import { FuturesAbi } from "../../abi/Futures";
+import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
 import { TimeInForce } from "../../types/timeInForce";
 
 interface ModifyOrderProps {

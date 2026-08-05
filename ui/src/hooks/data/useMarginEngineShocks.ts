@@ -1,20 +1,24 @@
 import { useReadContracts } from "wagmi";
-import { IPortfolioMarginEngineAbi } from "../../abi/IPortfolioMarginEngine";
+import { PortfolioMarginEngineAbi } from "collateral-margin-abi/PortfolioMarginEngine.ts";
 import { useFuturesMarginEngine } from "./useFuturesMarginEngine";
 
-/// Reads the four risk-shock parameters from the `IPortfolioMarginEngine`
-/// contract resolved via the Futures contract's immutable `marginEngine`
-/// address. Values are WAD-scaled (1e18) fractions used by the portfolio
-/// margin stress model (spot shocks and vol shocks for IM and MM).
+/// Reads the four risk-shock parameters from the `PortfolioMarginEngine`
+/// contract resolved via the Futures contract's `portfolioMargin` address.
+/// Values are WAD-scaled (1e18) fractions used by the portfolio margin stress
+/// model (spot shocks and vol shocks for IM and MM).
+///
+/// Read against the concrete engine rather than `IPortfolioMarginEngine`: the
+/// interface carries only what the venues call, and the vol shocks are surfaced
+/// for the shared risk-parameters panel, which covers options too.
 export function useMarginEngineShocks() {
   const { data: engine } = useFuturesMarginEngine();
 
   const result = useReadContracts({
     contracts: [
-      { address: engine, abi: IPortfolioMarginEngineAbi, functionName: "imSpotShock" },
-      { address: engine, abi: IPortfolioMarginEngineAbi, functionName: "mmSpotShock" },
-      { address: engine, abi: IPortfolioMarginEngineAbi, functionName: "imVolShock" },
-      { address: engine, abi: IPortfolioMarginEngineAbi, functionName: "mmVolShock" },
+      { address: engine, abi: PortfolioMarginEngineAbi, functionName: "imSpotShock" },
+      { address: engine, abi: PortfolioMarginEngineAbi, functionName: "mmSpotShock" },
+      { address: engine, abi: PortfolioMarginEngineAbi, functionName: "imVolShock" },
+      { address: engine, abi: PortfolioMarginEngineAbi, functionName: "mmVolShock" },
     ],
     query: {
       enabled: !!engine,

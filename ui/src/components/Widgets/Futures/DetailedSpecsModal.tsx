@@ -183,15 +183,11 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
         <SectionTitle>FEES & LIMITS</SectionTitle>
         <SpecItem>
           <SpecLabel>Maker Fee</SpecLabel>
-          <SpecValue>
-            {contractConstants.makerFeeFormatted?.toFixed(2) ?? "..."} {tokenSymbol}
-          </SpecValue>
+          <SpecValue>{contractConstants.makerFeeBps ?? "..."} bps</SpecValue>
         </SpecItem>
         <SpecItem>
           <SpecLabel>Taker Fee</SpecLabel>
-          <SpecValue>
-            {contractConstants.takerFeeFormatted?.toFixed(2) ?? "..."} {tokenSymbol}
-          </SpecValue>
+          <SpecValue>{contractConstants.takerFeeBps ?? "..."} bps</SpecValue>
         </SpecItem>
 
         <SpecItem>
@@ -411,12 +407,10 @@ const PerpetualStatistics = () => {
           </SpecItem>
         )}
 
-        {perpsConstants.liquidationFeeFormatted !== null && (
+        {perpsConstants.liquidationFeeBps !== undefined && (
           <SpecItem>
             <SpecLabel>Liquidation Fee</SpecLabel>
-            <SpecValue>
-              {perpsConstants.liquidationFeeFormatted.toFixed(2)} {tokenSymbol}
-            </SpecValue>
+            <SpecValue>{perpsConstants.liquidationFeeBps} bps</SpecValue>
           </SpecItem>
         )}
 

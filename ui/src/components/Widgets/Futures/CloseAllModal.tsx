@@ -8,7 +8,7 @@ import { ModalCard } from "../../Modal.styled";
 import { ModalActions, ModalCancelButton, ModalConfirmButton } from "./PerpsOrderFormFields";
 import type { PositionSession } from "../../../hooks/data/perps/useUserPositionSessions";
 import { readContract } from "@wagmi/core";
-import { HashPowerPerpsDEXAbi } from "../../../abi/Perps";
+import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
 import { useConfig } from "wagmi";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 

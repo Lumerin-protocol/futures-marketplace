@@ -1,6 +1,6 @@
 import { useWriteContract, useWalletClient } from "wagmi";
 import { getContract } from "viem";
-import { CollateralVaultAbi } from "../../abi/ICollateralVault";
+import { CollateralVaultAbi } from "collateral-margin-abi/CollateralVault.ts";
 import { useFuturesCollateralVault } from "./useFuturesCollateralVault";
 
 interface RemoveMarginProps {
