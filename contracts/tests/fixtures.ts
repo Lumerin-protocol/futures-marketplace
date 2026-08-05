@@ -2,6 +2,7 @@ import type { NetworkConnection } from "hardhat/types/network";
 import type { ArtifactMap } from "hardhat/types/artifacts";
 import { parseUnits, maxUint256, encodeFunctionData, getContract } from "viem";
 import type { Abi, Address, PublicClient, WalletClient, GetContractReturnType } from "viem";
+import { TimeInForce } from "./timeInForce.ts";
 
 // Contract ABIs mapping from Hardhat's artifact map
 type ContractAbis = {
@@ -220,7 +221,7 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
           hashpriceUsd.address,
           liquidationMarginPercent,
           0n, // was minimumPriceIncrement — now constant
-          0,  // was expirationIntervalDays — now constant
+          0, // was expirationIntervalDays — now constant
           futureExpirationDatesCount,
           firstFutureExpirationDate,
         ],
@@ -262,7 +263,7 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
       encodeFunctionData({
         abi: portfolioMarginEngineImpl.abi,
         functionName: "initialize",
-        args: [collateralVault.address],
+        args: [],
       }),
     ],
   );
@@ -272,21 +273,16 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
     client: { public: pc, wallet: walletClient },
   });
 
-  // Seed the perps mock's market price for any test that opts in to perps add-ons.
-  // The mock is intentionally NOT registered on the PME by default: registering it
-  // would make PME's `_getSpotPriceWad` source spot from the static mock price
-  // (perps takes precedence over futures), which would then desync from the
-  // hashprice oracle the futures tests move around. Tests that need a perps leg
-  // can call `pme.setPerps(perpsDEXMock.address)` themselves.
-  const marketPrice = await futures.read.getMarketPrice();
-  await perpsDEXMock.write.setMarketPrice([marketPrice], {
-    account: walletClient.account,
-    chain: walletClient.chain,
-  });
+  await portfolioMarginEngine.write.setVault([collateralVault.address]);
+  // Point the PME's own spot source at the same hashprice feed the futures
+  // contract uses — oracle moves then flow into PME stress math automatically.
+  // The perps mock is NOT registered on the PME by default — tests that need a
+  // perps leg call `pme.addLinearMarket(perpsDEXMock.address)` themselves.
+  await portfolioMarginEngine.write.setOracle([hashpriceUsd.address]);
 
   // Register futures so PME picks up the cross-product margin path used by
   // `liquidate*` / `computePortfolioMM`.
-  await portfolioMarginEngine.write.setFutures([futures.address]);
+  await portfolioMarginEngine.write.addLinearMarket([futures.address]);
 
   // Align the PME stress shocks with the legacy futures `liquidationMarginPercent`
   // so test fixtures that previously calibrated deposits/moves around the
@@ -383,16 +379,24 @@ export async function deployOnlyFuturesWithDummyData(
   const d = config.deliveryDates[0];
   const dst = "//shev8.contract:anything@stratum.braiins.com:3333";
 
-  await futures.write.createOrder([mp + inc, d, -1n], { account: seller.account });
-  await futures.write.createOrder([mp + 2n * inc, d, -1n], { account: seller.account });
-  await futures.write.createOrder([mp + 3n * inc, d, -1n], { account: seller.account });
+  await futures.write.createOrder([mp + inc, d, -1n, TimeInForce.GTC], { account: seller.account });
+  await futures.write.createOrder([mp + 2n * inc, d, -1n, TimeInForce.GTC], {
+    account: seller.account,
+  });
+  await futures.write.createOrder([mp + 3n * inc, d, -1n, TimeInForce.GTC], {
+    account: seller.account,
+  });
 
-  await futures.write.createOrder([mp - inc, d, 1n], { account: buyer.account });
-  await futures.write.createOrder([mp - 2n * inc, d, 1n], { account: buyer.account });
-  await futures.write.createOrder([mp - 3n * inc, d, 1n], { account: buyer.account });
+  await futures.write.createOrder([mp - inc, d, 1n, TimeInForce.GTC], { account: buyer.account });
+  await futures.write.createOrder([mp - 2n * inc, d, 1n, TimeInForce.GTC], {
+    account: buyer.account,
+  });
+  await futures.write.createOrder([mp - 3n * inc, d, 1n, TimeInForce.GTC], {
+    account: buyer.account,
+  });
 
-  await futures.write.createOrder([mp, d, -1n], { account: seller.account });
-  await futures.write.createOrder([mp, d, 1n], { account: buyer.account });
+  await futures.write.createOrder([mp, d, -1n, TimeInForce.GTC], { account: seller.account });
+  await futures.write.createOrder([mp, d, 1n, TimeInForce.GTC], { account: buyer.account });
 
   // Physical-delivery escrow is disabled; futures cash-settle at maturity via
   // `settlePosition`, so no delivery payment is deposited for the seeded position.

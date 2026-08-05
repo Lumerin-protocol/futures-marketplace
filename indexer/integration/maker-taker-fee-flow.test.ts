@@ -12,6 +12,7 @@ import { parseUnits } from "viem";
 import { read, type EntityFields } from "matchstick-ts";
 import { deployFuturesFixture } from "../../contracts/tests/fixtures.ts";
 import { quantizePrice } from "../../contracts/tests/utils.ts";
+import { TimeInForce } from "../../contracts/tests/timeInForce.ts";
 
 const conn = await network.getOrCreate();
 
@@ -169,8 +170,8 @@ describe("Trade.tradingFee and PositionSession.tradingFees reflect makerFee/take
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
-    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n], {
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
+    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buyTx });
@@ -225,8 +226,8 @@ describe("Trade.tradingFee and PositionSession.tradingFees reflect makerFee/take
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
-    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n], {
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
+    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buyTx });

@@ -35,8 +35,8 @@ importers:
         specifier: ^4.0.1
         version: 4.0.1(typescript@5.9.3)(zod@3.25.76)
       collateral-margin:
-        specifier: github:Lumerin-protocol/collateral-margin#feat/futures-3-keeper-mm
-        version: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/f952ac6a4d4b765e17f11d25f000f82a8d2db456
+        specifier: link:../../collateral-margin
+        version: link:../../collateral-margin
       multicall3:
         specifier: github:mds1/multicall3
         version: https://codeload.github.com/mds1/multicall3/tar.gz/b667d67ecfa5361a81e8f110234ce242613b0012(patch_hash=f161cbee6da2788494364d99cafb2d9c802738f56fb89426eebbc0a14a4f4a8f)
@@ -977,10 +977,6 @@ packages:
 
   ci-info@2.0.0:
     resolution: {integrity: sha512-5tK7EtrZ0N+OLFMthtqOj4fI2Jeb88C4CAZPu25LDVUgXJ0A3Js4PMGqrn0JU1W0Mh1/Z8wZzYPxqUrXeBboCQ==}
-
-  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/f952ac6a4d4b765e17f11d25f000f82a8d2db456:
-    resolution: {tarball: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/f952ac6a4d4b765e17f11d25f000f82a8d2db456}
-    version: 1.0.0
 
   color-convert@2.0.1:
     resolution: {integrity: sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==}
@@ -2843,8 +2839,6 @@ snapshots:
       readdirp: 4.1.2
 
   ci-info@2.0.0: {}
-
-  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/f952ac6a4d4b765e17f11d25f000f82a8d2db456: {}
 
   color-convert@2.0.1:
     dependencies:

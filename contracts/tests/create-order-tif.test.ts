@@ -9,7 +9,7 @@ const { viem, networkHelpers } = await network.getOrCreate();
 /** Mirrors `Futures.TimeInForce`. */
 const TimeInForce = { GTC: 0, IOC: 1, FOK: 2 } as const;
 
-describe("Futures - createOrderV2 time-in-force", () => {
+describe("Futures - createOrder time-in-force", () => {
   it("IOC fills available size and does not rest the remainder", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
@@ -20,9 +20,9 @@ describe("Futures - createOrderV2 time-in-force", () => {
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
 
-    await futures.write.createOrder([price, dd, -2n], { account: seller.account });
+    await futures.write.createOrder([price, dd, -2n, TimeInForce.GTC], { account: seller.account });
 
-    const tx = await futures.write.createOrderV2([price, dd, 5n, TimeInForce.IOC], {
+    const tx = await futures.write.createOrder([price, dd, 5n, TimeInForce.IOC], {
       account: buyer.account,
     });
     const receipt = await pc.waitForTransactionReceipt({ hash: tx });
@@ -60,7 +60,7 @@ describe("Futures - createOrderV2 time-in-force", () => {
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
 
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrderV2([price, dd, 1n, TimeInForce.IOC], { account: buyer.account }),
+      futures.write.createOrder([price, dd, 1n, TimeInForce.IOC], { account: buyer.account }),
       futures,
       "TimeInForceNotFilled",
     );
@@ -77,10 +77,10 @@ describe("Futures - createOrderV2 time-in-force", () => {
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
 
-    await futures.write.createOrder([price, dd, -1n], { account: seller.account });
+    await futures.write.createOrder([price, dd, -1n, TimeInForce.GTC], { account: seller.account });
 
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrderV2([price, dd, 2n, TimeInForce.FOK], { account: buyer.account }),
+      futures.write.createOrder([price, dd, 2n, TimeInForce.FOK], { account: buyer.account }),
       futures,
       "TimeInForceNotFilled",
     );
@@ -99,9 +99,9 @@ describe("Futures - createOrderV2 time-in-force", () => {
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
 
-    await futures.write.createOrder([price, dd, -3n], { account: seller.account });
+    await futures.write.createOrder([price, dd, -3n, TimeInForce.GTC], { account: seller.account });
 
-    const tx = await futures.write.createOrderV2([price, dd, 3n, TimeInForce.FOK], {
+    const tx = await futures.write.createOrder([price, dd, 3n, TimeInForce.FOK], {
       account: buyer.account,
     });
     const receipt = await pc.waitForTransactionReceipt({ hash: tx });
@@ -127,8 +127,8 @@ describe("Futures - createOrderV2 time-in-force", () => {
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
 
-    await futures.write.createOrder([price, dd, -1n], { account: seller.account });
-    await futures.write.createOrder([price, dd, 3n], { account: buyer.account });
+    await futures.write.createOrder([price, dd, -1n, TimeInForce.GTC], { account: seller.account });
+    await futures.write.createOrder([price, dd, 3n, TimeInForce.GTC], { account: buyer.account });
 
     assert.equal(await futures.read.getQuantityAtPrice([dd, price, true]), 2n);
     assert.equal((await futures.read.getUserOrders([buyer.account.address])).length, 1);

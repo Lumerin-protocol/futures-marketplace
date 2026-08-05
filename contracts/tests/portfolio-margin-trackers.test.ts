@@ -4,6 +4,7 @@ import { network } from "hardhat";
 import { parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { quantizePrice, refreshHashprice } from "./utils.ts";
+import { TimeInForce } from "./timeInForce.ts";
 
 const { networkHelpers } = await network.getOrCreate();
 
@@ -35,8 +36,10 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
       await collateralVault.write.deposit([margin], { account: w.account });
     }
 
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
-    await futures.write.createOrder([price, deliveryDate, 1n], {
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
+    await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
 
@@ -71,16 +74,14 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     // post-state is the *sum* of both — so a leak shows up as a doubled
     // magnitude.
     const laterDeliveryDate = config.deliveryDates[2];
-    await futures.write.createOrder([price, laterDeliveryDate, -1n], {
+    await futures.write.createOrder([price, laterDeliveryDate, -1n, TimeInForce.GTC], {
       account: seller.account,
     });
-    await futures.write.createOrder([price, laterDeliveryDate, 1n], {
+    await futures.write.createOrder([price, laterDeliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
 
-    const sellerDeltaAfterReopen = await futures.read.getNetPositionDelta([
-      seller.account.address,
-    ]);
+    const sellerDeltaAfterReopen = await futures.read.getNetPositionDelta([seller.account.address]);
     const buyerDeltaAfterReopen = await futures.read.getNetPositionDelta([buyer.account.address]);
 
     assert.equal(
@@ -111,8 +112,10 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     await collateralVault.write.deposit([sellerMargin], { account: seller.account });
     await collateralVault.write.deposit([buyerMargin], { account: buyer.account });
 
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
-    await futures.write.createOrder([price, deliveryDate, 1n], {
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
+    await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
 
@@ -151,7 +154,11 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
     assert.equal(sellerDeltaAfter, 0n, "seller delta tracker cleared after liquidation");
     assert.equal(sellerPnlAfter, 0n, "seller PnL tracker cleared after liquidation");
     // Unilateral liquidation: buyer's aggregate remains open.
-    assert.equal(buyerDeltaAfter, buyerDeltaBefore, "buyer delta unchanged after seller liquidation");
+    assert.equal(
+      buyerDeltaAfter,
+      buyerDeltaBefore,
+      "buyer delta unchanged after seller liquidation",
+    );
     assert.ok(buyerPnlAfter !== 0n, "buyer still has unrealized PnL on the open long");
   });
 });

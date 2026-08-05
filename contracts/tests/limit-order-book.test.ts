@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { getAddress, parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
+import { TimeInForce } from "./timeInForce.ts";
 
 const { networkHelpers } = await network.getOrCreate();
 
@@ -22,11 +23,15 @@ describe("Futures - limit order book", () => {
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
 
-    await futures.write.createOrder([askLo, dd, -1n], { account: seller.account });
-    await futures.write.createOrder([askMid, dd, -1n], { account: seller.account });
-    await futures.write.createOrder([askHi, dd, -1n], { account: seller.account });
+    await futures.write.createOrder([askLo, dd, -1n, TimeInForce.GTC], { account: seller.account });
+    await futures.write.createOrder([askMid, dd, -1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
+    await futures.write.createOrder([askHi, dd, -1n, TimeInForce.GTC], { account: seller.account });
 
-    const tx = await futures.write.createOrder([buyLimit, dd, 2n], { account: buyer.account });
+    const tx = await futures.write.createOrder([buyLimit, dd, 2n, TimeInForce.GTC], {
+      account: buyer.account,
+    });
     const receipt = await pc.waitForTransactionReceipt({ hash: tx });
     const matches = parseEventLogs({
       logs: receipt.logs,
@@ -61,11 +66,13 @@ describe("Futures - limit order book", () => {
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
 
-    await futures.write.createOrder([bidHi, dd, 1n], { account: buyer.account });
-    await futures.write.createOrder([bidMid, dd, 1n], { account: buyer.account });
-    await futures.write.createOrder([bidLo, dd, 1n], { account: buyer.account });
+    await futures.write.createOrder([bidHi, dd, 1n, TimeInForce.GTC], { account: buyer.account });
+    await futures.write.createOrder([bidMid, dd, 1n, TimeInForce.GTC], { account: buyer.account });
+    await futures.write.createOrder([bidLo, dd, 1n, TimeInForce.GTC], { account: buyer.account });
 
-    const tx = await futures.write.createOrder([sellLimit, dd, -2n], { account: seller.account });
+    const tx = await futures.write.createOrder([sellLimit, dd, -2n, TimeInForce.GTC], {
+      account: seller.account,
+    });
     const receipt = await pc.waitForTransactionReceipt({ hash: tx });
     const matches = parseEventLogs({
       logs: receipt.logs,
@@ -96,9 +103,11 @@ describe("Futures - limit order book", () => {
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
 
-    await futures.write.createOrder([askLo, dd, -1n], { account: seller.account });
+    await futures.write.createOrder([askLo, dd, -1n, TimeInForce.GTC], { account: seller.account });
 
-    const tx = await futures.write.createOrder([buyLimit, dd, 3n], { account: buyer.account });
+    const tx = await futures.write.createOrder([buyLimit, dd, 3n, TimeInForce.GTC], {
+      account: buyer.account,
+    });
     const receipt = await pc.waitForTransactionReceipt({ hash: tx });
 
     const matches = parseEventLogs({
@@ -138,7 +147,9 @@ describe("Futures - limit order book", () => {
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     const balBefore = await collateralVault.read.balanceOf([seller.account.address]);
 
-    const askTx = await futures.write.createOrder([askLo, dd, -2n], { account: seller.account });
+    const askTx = await futures.write.createOrder([askLo, dd, -2n, TimeInForce.GTC], {
+      account: seller.account,
+    });
     const askReceipt = await pc.waitForTransactionReceipt({ hash: askTx });
     const [askCreated] = parseEventLogs({
       logs: askReceipt.logs,
@@ -146,7 +157,9 @@ describe("Futures - limit order book", () => {
       eventName: "OrderCreated",
     });
 
-    const buyTx = await futures.write.createOrder([buyLimit, dd, 2n], { account: seller.account });
+    const buyTx = await futures.write.createOrder([buyLimit, dd, 2n, TimeInForce.GTC], {
+      account: seller.account,
+    });
     const buyReceipt = await pc.waitForTransactionReceipt({ hash: buyTx });
 
     const matches = parseEventLogs({
@@ -186,12 +199,12 @@ describe("Futures - limit order book", () => {
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
 
-    await futures.write.createOrder([ask2, dd, -1n], { account: seller.account });
-    await futures.write.createOrder([ask0, dd, -1n], { account: seller.account });
-    await futures.write.createOrder([ask1, dd, -1n], { account: seller.account });
-    await futures.write.createOrder([bid2, dd, 1n], { account: buyer.account });
-    await futures.write.createOrder([bid0, dd, 1n], { account: buyer.account });
-    await futures.write.createOrder([bid1, dd, 1n], { account: buyer.account });
+    await futures.write.createOrder([ask2, dd, -1n, TimeInForce.GTC], { account: seller.account });
+    await futures.write.createOrder([ask0, dd, -1n, TimeInForce.GTC], { account: seller.account });
+    await futures.write.createOrder([ask1, dd, -1n, TimeInForce.GTC], { account: seller.account });
+    await futures.write.createOrder([bid2, dd, 1n, TimeInForce.GTC], { account: buyer.account });
+    await futures.write.createOrder([bid0, dd, 1n, TimeInForce.GTC], { account: buyer.account });
+    await futures.write.createOrder([bid1, dd, 1n, TimeInForce.GTC], { account: buyer.account });
 
     const [bids, asks] = await futures.read.getOrderBookPrices([dd, 50n]);
     assert.deepEqual([...asks], [ask0, ask1, ask2]);
@@ -214,8 +227,8 @@ describe("Futures - limit order book", () => {
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
 
-    await futures.write.createOrder([askLo, dd, -1n], { account: seller.account });
-    await futures.write.createOrder([askHi, dd, -1n], { account: seller.account });
+    await futures.write.createOrder([askLo, dd, -1n, TimeInForce.GTC], { account: seller.account });
+    await futures.write.createOrder([askHi, dd, -1n, TimeInForce.GTC], { account: seller.account });
 
     const [filled, avg, remaining] = await futures.read.simulateOrder([dd, buyLimit, 3n], {
       account: buyer.account,

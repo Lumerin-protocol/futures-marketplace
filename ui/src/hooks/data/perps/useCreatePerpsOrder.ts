@@ -33,7 +33,7 @@ export function useCreatePerpsOrder() {
 
     const tif = props.timeInForce ?? TimeInForce.GTC;
 
-    const req = await perpsContract.simulate.createOrderV2(
+    const req = await perpsContract.simulate.createOrder(
       [props.price, quantityBigInt, tif],
       { account: walletClient.account.address },
     );

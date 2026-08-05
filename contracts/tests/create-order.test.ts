@@ -4,6 +4,7 @@ import { network } from "hardhat";
 import { getAddress, parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { warpPastDeliveryWithFreshOracle } from "./utils.ts";
+import { TimeInForce } from "./timeInForce.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -18,7 +19,9 @@ describe("Order Creation", () => {
     const pastDate = block.timestamp - 86400n;
 
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price, pastDate, 1n], { account: seller.account }),
+      futures.write.createOrder([price, pastDate, 1n, TimeInForce.GTC], {
+        account: seller.account,
+      }),
       futures,
       "ExpirationDateShouldBeInTheFuture",
     );
@@ -34,7 +37,9 @@ describe("Order Creation", () => {
     const dateBeforeFirst = firstFutureExpirationDate - 86400n;
 
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price, dateBeforeFirst, 1n], { account: seller.account }),
+      futures.write.createOrder([price, dateBeforeFirst, 1n, TimeInForce.GTC], {
+        account: seller.account,
+      }),
       futures,
       "ExpirationDateNotAvailable",
     );
@@ -53,7 +58,9 @@ describe("Order Creation", () => {
     const misalignedDate = firstFutureExpirationDate + expirationIntervalSeconds / 2n;
 
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price, misalignedDate, 1n], { account: seller.account }),
+      futures.write.createOrder([price, misalignedDate, 1n, TimeInForce.GTC], {
+        account: seller.account,
+      }),
       futures,
       "ExpirationDateNotAvailable",
     );
@@ -73,7 +80,9 @@ describe("Order Creation", () => {
     const dateBeyondRange = lastAvailableDate + expirationIntervalSeconds;
 
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price, dateBeyondRange, 1n], { account: seller.account }),
+      futures.write.createOrder([price, dateBeyondRange, 1n, TimeInForce.GTC], {
+        account: seller.account,
+      }),
       futures,
       "ExpirationDateNotAvailable",
     );
@@ -90,7 +99,7 @@ describe("Order Creation", () => {
     await collateralVault.write.deposit([margin], { account: seller.account });
 
     for (const deliveryDate of config.deliveryDates) {
-      const txHash = await futures.write.createOrder([price, deliveryDate, 1n], {
+      const txHash = await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
         account: seller.account,
       });
 
@@ -120,7 +129,7 @@ describe("Order Creation", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    const txHash = await futures.write.createOrder([price, deliveryDate, qty], {
+    const txHash = await futures.write.createOrder([price, deliveryDate, qty, TimeInForce.GTC], {
       account: seller.account,
     });
 
@@ -155,7 +164,7 @@ describe("Order Creation", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    const txHash = await futures.write.createOrder([price, deliveryDate, qty], {
+    const txHash = await futures.write.createOrder([price, deliveryDate, qty, TimeInForce.GTC], {
       account: seller.account,
     });
 
@@ -192,7 +201,7 @@ describe("Order Creation", () => {
     const initialSellerBalance = await collateralVault.read.balanceOf([seller.account.address]);
     const initialContractBalance = await collateralVault.read.balanceOf([futures.address]);
 
-    const txHash = await futures.write.createOrder([price, deliveryDate, 5n], {
+    const txHash = await futures.write.createOrder([price, deliveryDate, 5n, TimeInForce.GTC], {
       account: seller.account,
     });
     assert.equal((await pc.waitForTransactionReceipt({ hash: txHash })).status, "success");
@@ -203,13 +212,13 @@ describe("Order Creation", () => {
     );
     assert.equal(await collateralVault.read.balanceOf([futures.address]), initialContractBalance);
 
-    const sellOrderTxHash = await futures.write.createOrder([price, deliveryDate, -5n], {
-      account: seller.account,
-    });
-    assert.equal(
-      (await pc.waitForTransactionReceipt({ hash: sellOrderTxHash })).status,
-      "success",
+    const sellOrderTxHash = await futures.write.createOrder(
+      [price, deliveryDate, -5n, TimeInForce.GTC],
+      {
+        account: seller.account,
+      },
     );
+    assert.equal((await pc.waitForTransactionReceipt({ hash: sellOrderTxHash })).status, "success");
 
     assert.equal(
       await collateralVault.read.balanceOf([seller.account.address]),
@@ -226,7 +235,9 @@ describe("Order Creation", () => {
     const deliveryDate = config.deliveryDates[0];
 
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([0n, deliveryDate, 1n], { account: seller.account }),
+      futures.write.createOrder([0n, deliveryDate, 1n, TimeInForce.GTC], {
+        account: seller.account,
+      }),
       futures,
       "InvalidPrice",
     );
@@ -241,7 +252,9 @@ describe("Order Creation", () => {
     const deliveryDate = config.deliveryDates[0];
 
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price, deliveryDate, 1n], { account: seller.account }),
+      futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
+        account: seller.account,
+      }),
       futures,
       "InvalidPrice",
     );
@@ -257,7 +270,9 @@ describe("Order Creation", () => {
     const pastDate = block.timestamp - 86400n;
 
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price, pastDate, 1n], { account: seller.account }),
+      futures.write.createOrder([price, pastDate, 1n, TimeInForce.GTC], {
+        account: seller.account,
+      }),
       futures,
       "ExpirationDateShouldBeInTheFuture",
     );
@@ -274,7 +289,7 @@ describe("Order Creation", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    const txHash = await futures.write.createOrder([price, deliveryDate, 1n], {
+    const txHash = await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
       account: seller.account,
     });
 
@@ -307,7 +322,7 @@ describe("Order Creation", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    const txHash = await futures.write.createOrder([price, deliveryDate, -1n], {
+    const txHash = await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], {
       account: seller.account,
     });
 
@@ -338,9 +353,12 @@ describe("Order Creation", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    const buyOrderTxHash = await futures.write.createOrder([price, deliveryDate, 1n], {
-      account: seller.account,
-    });
+    const buyOrderTxHash = await futures.write.createOrder(
+      [price, deliveryDate, 1n, TimeInForce.GTC],
+      {
+        account: seller.account,
+      },
+    );
 
     const buyOrderReceipt = await pc.waitForTransactionReceipt({ hash: buyOrderTxHash });
     assert.equal(buyOrderReceipt.status, "success");
@@ -353,9 +371,12 @@ describe("Order Creation", () => {
 
     const buyOrderId = buyOrderCreatedEvent.args.orderId;
 
-    const sellOrderTxHash = await futures.write.createOrder([price, deliveryDate, -1n], {
-      account: seller.account,
-    });
+    const sellOrderTxHash = await futures.write.createOrder(
+      [price, deliveryDate, -1n, TimeInForce.GTC],
+      {
+        account: seller.account,
+      },
+    );
 
     const sellOrderReceipt = await pc.waitForTransactionReceipt({ hash: sellOrderTxHash });
     assert.equal(sellOrderReceipt.status, "success");
@@ -398,9 +419,12 @@ describe("Order Creation", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    const sellOrderTxHash = await futures.write.createOrder([price, deliveryDate, -3n], {
-      account: seller.account,
-    });
+    const sellOrderTxHash = await futures.write.createOrder(
+      [price, deliveryDate, -3n, TimeInForce.GTC],
+      {
+        account: seller.account,
+      },
+    );
 
     const sellOrderReceipt = await pc.waitForTransactionReceipt({ hash: sellOrderTxHash });
     assert.equal(sellOrderReceipt.status, "success");
@@ -412,9 +436,12 @@ describe("Order Creation", () => {
     });
     const sellOrderId = sellOrderCreated.args.orderId;
 
-    const buyOrderTxHash = await futures.write.createOrder([price, deliveryDate, 5n], {
-      account: seller.account,
-    });
+    const buyOrderTxHash = await futures.write.createOrder(
+      [price, deliveryDate, 5n, TimeInForce.GTC],
+      {
+        account: seller.account,
+      },
+    );
 
     const buyOrderReceipt = await pc.waitForTransactionReceipt({ hash: buyOrderTxHash });
     assert.equal(buyOrderReceipt.status, "success");
@@ -465,14 +492,18 @@ describe("Order Creation", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    await futures.write.createOrder([price, deliveryDate, 1n], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
 
     const sellerAddr = seller.account.address;
     const im = await contracts.portfolioMarginEngine.read.computePortfolioIM([sellerAddr]);
     const balance = await collateralVault.read.balanceOf([sellerAddr]);
     assert.ok(balance > im, "seller has surplus collateral above portfolio IM");
 
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
   });
 
   it("does not auto-sweep expired orders when creating a new order", async () => {
@@ -486,9 +517,12 @@ describe("Order Creation", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    const oldOrderTxHash = await futures.write.createOrder([price, oldDeliveryDate, 1n], {
-      account: seller.account,
-    });
+    const oldOrderTxHash = await futures.write.createOrder(
+      [price, oldDeliveryDate, 1n, TimeInForce.GTC],
+      {
+        account: seller.account,
+      },
+    );
 
     const oldOrderReceipt = await pc.waitForTransactionReceipt({ hash: oldOrderTxHash });
     const oldOrderEvents = parseEventLogs({
@@ -511,9 +545,12 @@ describe("Order Creation", () => {
     const futureDates = await futures.read.getExpirationDates();
     const newDeliveryDate = futureDates[futureDates.length - 1];
 
-    const newOrderTxHash = await futures.write.createOrder([price, newDeliveryDate, 1n], {
-      account: seller.account,
-    });
+    const newOrderTxHash = await futures.write.createOrder(
+      [price, newDeliveryDate, 1n, TimeInForce.GTC],
+      {
+        account: seller.account,
+      },
+    );
 
     const newOrderReceipt = await pc.waitForTransactionReceipt({ hash: newOrderTxHash });
 
@@ -522,7 +559,11 @@ describe("Order Creation", () => {
       abi: futures.abi,
       eventName: "OrderCancelled",
     });
-    assert.equal(orderClosedEvents.length, 0, "createOrder must not implicitly close expired orders");
+    assert.equal(
+      orderClosedEvents.length,
+      0,
+      "createOrder must not implicitly close expired orders",
+    );
 
     oldOrder = await futures.read.getOrder([oldOrderId]);
     assert.equal(getAddress(oldOrder.participant), getAddress(seller.account.address));
@@ -553,15 +594,18 @@ describe("Order Creation", () => {
 
     for (let i = 0; i < numOrders; i++) {
       await futures.write.createOrder(
-        [price + BigInt(i) * config.priceLadderStep, deliveryDate, 1n],
+        [price + BigInt(i) * config.priceLadderStep, deliveryDate, 1n, TimeInForce.GTC],
         { account: seller.account },
       );
     }
 
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([price + 50n * config.priceLadderStep, deliveryDate, 1n], {
-        account: seller.account,
-      }),
+      futures.write.createOrder(
+        [price + 50n * config.priceLadderStep, deliveryDate, 1n, TimeInForce.GTC],
+        {
+          account: seller.account,
+        },
+      ),
       futures,
       "MaxOrdersPerParticipantReached",
     );

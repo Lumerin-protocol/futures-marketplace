@@ -5,6 +5,7 @@ import { parseUnits, parseEventLogs, zeroHash } from "viem";
 import type { NetworkConnection } from "hardhat/types/network";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { scaleHashprice } from "./utils.ts";
+import { TimeInForce } from "./timeInForce.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -16,7 +17,7 @@ const { viem, networkHelpers } = await network.getOrCreate();
  *   - liquidateOrder(participant, id)
  *   - liquidateOrders(participant, orderIds)    — keeper-chosen ids, stop-on-failure
  *   - liquidatePosition(participant, expirationAt, closeQty) — reverts OrdersStillOpen if any orders remain
- *   - setLiquidationFee — single flat fee charged per cancelled order and per closed position
+ *   - setLiquidationFeeBps — bps fee on notional, charged per cancelled order and per closed position
  */
 async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
   const data = await networkHelpers.loadFixture(deployFuturesFixture);
@@ -42,20 +43,21 @@ async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
   await collateralVault.write.deposit([positionMargin], { account: buyer2.account });
 
   // Open a matched position: seller short, buyer long.
-  await futures.write.createOrder([entryPricePerDay, deliveryDate, -1n], {
+  await futures.write.createOrder([entryPricePerDay, deliveryDate, -1n, TimeInForce.GTC], {
     account: seller.account,
   });
-  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1n], {
+  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1n, TimeInForce.GTC], {
     account: buyer.account,
   });
 
   // Two extra resting BUY orders for buyer at the matched price. Same-side as the
-  // position so they aren't auto-offset; once the hashprice drops they go deeply
-  // negative-PnL and blow up `getOrderMargin`, breaking MM.
-  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1n], {
+  // position, so the engine adds their delta to it on the buy stress leg rather than
+  // netting them off; once the hashprice drops, that leg plus their growing fill loss
+  // breaks MM.
+  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1n, TimeInForce.GTC], {
     account: buyer.account,
   });
-  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1n], {
+  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1n, TimeInForce.GTC], {
     account: buyer.account,
   });
 
@@ -82,9 +84,7 @@ describe("Futures - permissionless liquidation entry points", function () {
       const { futures } = contracts;
       const { buyer } = accounts;
 
-      await assert.rejects(
-        futures.write.setLiquidationFeeBps([50], { account: buyer.account }),
-      );
+      await assert.rejects(futures.write.setLiquidationFeeBps([50], { account: buyer.account }));
     });
 
     it("emits LiquidationFeeBpsUpdated and persists the value", async function () {
@@ -302,10 +302,9 @@ describe("Futures - permissionless liquidation entry points", function () {
 
       // buyer2 has no position at this delivery — only buyer/seller matched.
       await viem.assertions.revertWithCustomError(
-        futures.write.liquidatePosition(
-          [buyer2.account.address, config.deliveryDate, 1n],
-          { account: buyer2.account },
-        ),
+        futures.write.liquidatePosition([buyer2.account.address, config.deliveryDate, 1n], {
+          account: buyer2.account,
+        }),
         futures,
         "NotLiquidatable",
       );
@@ -323,10 +322,9 @@ describe("Futures - permissionless liquidation entry points", function () {
       assert.ok(ordersBefore.length > 0);
 
       await viem.assertions.revertWithCustomError(
-        futures.write.liquidatePosition(
-          [buyer.account.address, config.deliveryDate, 1n],
-          { account: buyer2.account },
-        ),
+        futures.write.liquidatePosition([buyer.account.address, config.deliveryDate, 1n], {
+          account: buyer2.account,
+        }),
         futures,
         "OrdersStillOpen",
       );
@@ -347,10 +345,9 @@ describe("Futures - permissionless liquidation entry points", function () {
 
       // No price move — buyer remains healthy.
       await viem.assertions.revertWithCustomError(
-        futures.write.liquidatePosition(
-          [buyer.account.address, config.deliveryDate, 1n],
-          { account: buyer2.account },
-        ),
+        futures.write.liquidatePosition([buyer.account.address, config.deliveryDate, 1n], {
+          account: buyer2.account,
+        }),
         futures,
         "NotLiquidatable",
       );

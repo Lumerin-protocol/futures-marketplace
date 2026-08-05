@@ -25,6 +25,7 @@ import { read, type EntityFields } from "matchstick-ts";
 import { deployFuturesFixture } from "../../contracts/tests/fixtures.ts";
 import { quantizePrice } from "../../contracts/tests/utils.ts";
 import { assertBlockNumberMonotonic, pointerId } from "./helpers.ts";
+import { TimeInForce } from "../../contracts/tests/timeInForce.ts";
 
 const conn = await network.getOrCreate();
 
@@ -49,20 +50,20 @@ describe("PositionSession ID rotation: close → re-open on same (user, expirati
     await conn.matchstick.anchor();
 
     // 1. Open position (seller short, buyer long).
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
-    const openTx1 = await futures.write.createOrder([price, deliveryDate, 1n], {
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
+    const openTx1 = await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: openTx1 });
 
     // 2. Mutual exit: seller buys back, buyer sells back.
-    await futures.write.createOrder([price, deliveryDate, 1n], { account: seller.account });
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], { account: buyer.account });
 
     // 3. Re-open on the same (user, expirationAt) — must produce a NEW
     // PositionSession with a distinct ID (different blockNumber + logIndex).
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
-    const openTx2 = await futures.write.createOrder([price, deliveryDate, 1n], {
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
+    const openTx2 = await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: openTx2 });
@@ -145,15 +146,15 @@ describe("Trade.id is per-tx: two trade txs by one user", () => {
     await conn.matchstick.anchor();
 
     // Trade 1: seller sells at `price`, buyer fills.
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
-    const buyTx1 = await futures.write.createOrder([price, deliveryDate, 1n], {
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
+    const buyTx1 = await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buyTx1 });
 
     // Trade 2: seller sells at `price2`, buyer fills.
-    await futures.write.createOrder([price2, deliveryDate, -1n], { account: seller.account });
-    const buyTx2 = await futures.write.createOrder([price2, deliveryDate, 1n], {
+    await futures.write.createOrder([price2, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
+    const buyTx2 = await futures.write.createOrder([price2, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buyTx2 });
@@ -216,12 +217,12 @@ describe("Order.id is per-tx: identical-shape orders in different txs", () => {
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
-    const tx1 = await futures.write.createOrder([price, deliveryDate, -1n], {
+    const tx1 = await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], {
       account: seller.account,
     });
     await pc.waitForTransactionReceipt({ hash: tx1 });
 
-    const tx2 = await futures.write.createOrder([price, deliveryDate, -1n], {
+    const tx2 = await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], {
       account: seller.account,
     });
     await pc.waitForTransactionReceipt({ hash: tx2 });

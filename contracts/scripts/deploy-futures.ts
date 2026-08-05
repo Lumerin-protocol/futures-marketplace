@@ -42,7 +42,7 @@ async function main() {
   const hashpriceUsdAddress = requireAddress("HASHPRICE_USD_ADDRESS");
   const SAFE_OWNER_ADDRESS = readOptionalAddress("SAFE_OWNER_ADDRESS");
   // Optional: when set, wire the Futures contract into the cross-product
-  // PortfolioMarginEngine end-to-end (Futures.setPortfolioMargin + PME.setFutures
+  // PortfolioMarginEngine end-to-end (Futures.setPortfolioMargin + PME.addLinearMarket
   // + Vault.setAuthorizedCaller). When the deployer doesn't own the PME or the
   // vault, the script logs the required calldata for the current owner Safe
   // instead of executing the call.
@@ -163,19 +163,31 @@ async function main() {
     }
 
     if (deployerIsPmeOwner) {
-      logInfo("PME.setFutures", { futures: futures.address });
+      logInfo("PME.addLinearMarket (futures)", { market: futures.address });
       await logPrompt("Proceed?");
-      const sim = await pme.simulate.setFutures([futures.address]);
+      const sim = await pme.simulate.addLinearMarket([futures.address]);
       const receipt = await writeAndWait(deployer, sim);
       logStep("Done", txUrl(pc, receipt.transactionHash));
+
+      logInfo("PME.setOracle", { oracle: hashpriceUsdAddress });
+      await logPrompt("Proceed?");
+      const oracleSim = await pme.simulate.setOracle([hashpriceUsdAddress]);
+      const oracleReceipt = await writeAndWait(deployer, oracleSim);
+      logStep("Done", txUrl(pc, oracleReceipt.transactionHash));
     } else {
       const data = encodeFunctionData({
         abi: pme.abi,
-        functionName: "setFutures",
+        functionName: "addLinearMarket",
         args: [futures.address],
       });
+      const oracleData = encodeFunctionData({
+        abi: pme.abi,
+        functionName: "setOracle",
+        args: [hashpriceUsdAddress],
+      });
       logInfo("PME wiring (run as PME owner)", { "PME address": pme.address, "PME owner": pmeOwner });
-      logStep(`PME.setFutures(${futures.address})`, data);
+      logStep(`PME.addLinearMarket(${futures.address})`, data);
+      logStep(`PME.setOracle(${hashpriceUsdAddress})`, oracleData);
     }
 
     if (deployerIsVaultOwner) {

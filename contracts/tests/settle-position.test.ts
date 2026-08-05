@@ -4,6 +4,7 @@ import { network } from "hardhat";
 import { getAddress, parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture, type FuturesFixture } from "./fixtures.ts";
 import { quantizePrice, refreshHashprice, scaleHashprice } from "./utils.ts";
+import { TimeInForce } from "./timeInForce.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -21,8 +22,10 @@ async function openPosition() {
   await collateralVault.write.deposit([marginAmount], { account: seller.account });
   await collateralVault.write.deposit([marginAmount], { account: buyer.account });
 
-  await futures.write.createOrder([entryPrice, deliveryDate, -1n], { account: seller.account });
-  const txHash = await futures.write.createOrder([entryPrice, deliveryDate, 1n], {
+  await futures.write.createOrder([entryPrice, deliveryDate, -1n, TimeInForce.GTC], {
+    account: seller.account,
+  });
+  const txHash = await futures.write.createOrder([entryPrice, deliveryDate, 1n, TimeInForce.GTC], {
     account: buyer.account,
   });
   await pc.waitForTransactionReceipt({ hash: txHash });
@@ -84,8 +87,14 @@ describe("Futures settlePosition", () => {
     // Seller PnL is opposite direction at same entry; magnitudes match.
     assert.equal(sellerBefore - sellerAfter, buyerSettled.args.pnl);
 
-    assert.equal((await futures.read.getUserPosition([buyer.account.address, deliveryDate])).netQuantity, 0n);
-    assert.equal((await futures.read.getUserPosition([seller.account.address, deliveryDate])).netQuantity, 0n);
+    assert.equal(
+      (await futures.read.getUserPosition([buyer.account.address, deliveryDate])).netQuantity,
+      0n,
+    );
+    assert.equal(
+      (await futures.read.getUserPosition([seller.account.address, deliveryDate])).netQuantity,
+      0n,
+    );
   });
 
   it("reverts before maturity", async () => {
@@ -94,7 +103,9 @@ describe("Futures settlePosition", () => {
     const { buyer } = accounts;
 
     await viem.assertions.revertWithCustomError(
-      futures.write.settlePosition([buyer.account.address, deliveryDate], { account: buyer.account }),
+      futures.write.settlePosition([buyer.account.address, deliveryDate], {
+        account: buyer.account,
+      }),
       futures,
       "PositionExpirationNotStartedYet",
     );
@@ -133,7 +144,13 @@ describe("Futures settlePosition", () => {
       { account: buyer2.account },
     );
 
-    assert.equal((await futures.read.getUserPosition([buyer.account.address, deliveryDate])).netQuantity, 0n);
-    assert.equal((await futures.read.getUserPosition([seller.account.address, deliveryDate])).netQuantity, 0n);
+    assert.equal(
+      (await futures.read.getUserPosition([buyer.account.address, deliveryDate])).netQuantity,
+      0n,
+    );
+    assert.equal(
+      (await futures.read.getUserPosition([seller.account.address, deliveryDate])).netQuantity,
+      0n,
+    );
   });
 });

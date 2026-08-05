@@ -1,6 +1,7 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { getContract } from "viem";
 import { FuturesAbi } from "../../abi/Futures";
+import { TimeInForce } from "../../types/timeInForce";
 
 interface ModifyOrderProps {
   /** Resting order ids to cancel before placing the replacement. */
@@ -43,6 +44,7 @@ export function useModifyOrder() {
             price: props.newPrice,
             expirationAt: props.expirationAt,
             quantity,
+            timeInForce: TimeInForce.GTC,
           },
         ],
       ],

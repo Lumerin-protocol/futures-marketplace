@@ -28,7 +28,8 @@ import { useUserPositionSessions } from "../../hooks/data/perps/useUserPositionS
 import { useUserPerpsOrders } from "../../hooks/data/perps/useUserPerpsOrders";
 import { useMaintenanceMarginPercent } from "../../hooks/data/perps/useMaintenanceMarginPercent";
 import { usePointsHookWeights } from "../../hooks/data/usePointsHookWeights";
-import { computeLiquidationState } from "../../hooks/data/perps/positionHelper";
+import { computeLiquidationPrice } from "../../hooks/data/perps/positionHelper";
+import { useGetPerpsOrderMargin } from "../../hooks/data/perps/useGetPerpsOrderMargin";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
 import type { PositionBookPosition } from "../../hooks/data/getUserFuturesPositions";
 import type { ContractMode } from "../../types/types";
@@ -117,8 +118,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
   // Single source of truth for the user's locked collateral: portfolio IM read
   // from the IPortfolioMarginEngine resolved via the Futures contract. This
-  // replaces the previous mode-toggle aggregation between futures `getMinMargin`
-  // and perps `getMaintenanceMargin`/`getInitialMargin`.
+  // replaces the previous mode-toggle aggregation between per-venue margin views.
   const minMarginQuery = useGetPortfolioIM(address);
 
   const minMargin = useMemo(() => {
@@ -177,17 +177,9 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const { data: maintenanceMarginPercentRaw } = useMaintenanceMarginPercent();
   const maintenanceMarginPercent = maintenanceMarginPercentRaw !== undefined ? BigInt(maintenanceMarginPercentRaw) : undefined;
 
-  const openPositionNetQuantity = useMemo(() => {
-    if (contractMode !== "perpetual") return null;
-    const sessions = positionSessionsQuery.data?.positionSessions || [];
-    const openSessions = sessions.filter((s) => s.status === "OPEN");
-    if (openSessions.length === 0) return null;
-    let sum = 0n;
-    for (const s of openSessions) {
-      sum += s.user.netQuantity;
-    }
-    return sum;
-  }, [contractMode, positionSessionsQuery.data?.positionSessions]);
+  const perpsOrderMarginQuery = useGetPerpsOrderMargin(
+    contractMode === "perpetual" ? address : undefined,
+  );
 
   const openPositionEntryPrice = useMemo(() => {
     if (contractMode === "perpetual") {
@@ -216,17 +208,16 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     if (!openSession || !marketPrice || openSession.user.netQuantity === 0n) return null;
     const collateral = balanceQuery.data as bigint | undefined;
     if (!collateral) return null;
-    const { liquidationPrice } = computeLiquidationState(
+    const liquidationPrice = computeLiquidationPrice(
       openSession.user.netQuantity,
       openSession.entryPrice,
       collateral,
-      minMargin ?? 0n,
-      marketPrice,
+      (perpsOrderMarginQuery.data as bigint | undefined) ?? 0n,
       maintenanceMarginPercent,
       6n,
     );
     return liquidationPrice > 0n ? Number(liquidationPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
-  }, [contractMode, positionSessionsQuery.data?.positionSessions, marketPrice, balanceQuery.data, minMargin, maintenanceMarginPercent]);
+  }, [contractMode, positionSessionsQuery.data?.positionSessions, marketPrice, balanceQuery.data, perpsOrderMarginQuery.data, maintenanceMarginPercent]);
 
   // Calculate total unrealized PnL based on contract mode
   const totalUnrealizedPnL = useMemo(() => {
@@ -447,7 +438,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
           highlightMode={highlightMode}
           latestPrice={marketPrice ?? null}
           minMargin={minMargin}
-          openPositionNetQuantity={openPositionNetQuantity}
           contractMode={contractMode}
           accountBalance={accountBalanceQuery}
           balanceQuery={balanceQuery}
@@ -473,7 +463,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
               participantAddress={address}
               onClosePosition={closePositionModal.handleClosePosition}
               participantData={participantData?.data}
-              minMargin={minMargin}
               accountBalance={accountBalanceQuery}
               marketPrice={marketPrice}
               positionSessions={positionSessionsQuery.data?.positionSessions || []}

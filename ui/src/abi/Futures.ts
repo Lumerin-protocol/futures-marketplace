@@ -842,29 +842,6 @@ export const FuturesAbi = [
         "internalType": "int256",
         "name": "_quantity",
         "type": "int256"
-      }
-    ],
-    "name": "createOrder",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_price",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_expirationAt",
-        "type": "uint256"
-      },
-      {
-        "internalType": "int256",
-        "name": "_quantity",
-        "type": "int256"
       },
       {
         "internalType": "enum Futures.TimeInForce",
@@ -872,37 +849,7 @@ export const FuturesAbi = [
         "type": "uint8"
       }
     ],
-    "name": "createOrderV2",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "components": [
-          {
-            "internalType": "uint256",
-            "name": "price",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "expirationAt",
-            "type": "uint256"
-          },
-          {
-            "internalType": "int256",
-            "name": "quantity",
-            "type": "int256"
-          }
-        ],
-        "internalType": "struct Futures.OrderIntent[]",
-        "name": "_intents",
-        "type": "tuple[]"
-      }
-    ],
-    "name": "createOrders",
+    "name": "createOrder",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -932,12 +879,12 @@ export const FuturesAbi = [
             "type": "uint8"
           }
         ],
-        "internalType": "struct Futures.OrderIntentV2[]",
+        "internalType": "struct Futures.OrderIntent[]",
         "name": "_intents",
         "type": "tuple[]"
       }
     ],
-    "name": "createOrdersV2",
+    "name": "createOrders",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1161,25 +1108,6 @@ export const FuturesAbi = [
         "internalType": "uint256[]",
         "name": "asks",
         "type": "uint256[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_participant",
-        "type": "address"
-      }
-    ],
-    "name": "getOrderMargin",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -1910,6 +1838,11 @@ export const FuturesAbi = [
             "internalType": "int256",
             "name": "quantity",
             "type": "int256"
+          },
+          {
+            "internalType": "enum Futures.TimeInForce",
+            "name": "timeInForce",
+            "type": "uint8"
           }
         ],
         "internalType": "struct Futures.OrderIntent[]",
@@ -1946,5 +1879,90 @@ export const FuturesAbi = [
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      }
+    ],
+    "name": "getRiskView",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "int256",
+            "name": "netPositionDelta",
+            "type": "int256"
+          },
+          {
+            "internalType": "int256",
+            "name": "unrealizedPnl",
+            "type": "int256"
+          },
+          {
+            "internalType": "int256",
+            "name": "pendingFunding",
+            "type": "int256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "buyOrderDelta",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "sellOrderDelta",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "buyOrderFillLoss",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "sellOrderFillLoss",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct ILinearMarket.RiskView",
+        "name": "view_",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      }
+    ],
+    "name": "getOrderValues",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "buyValue",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "sellValue",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidFee",
+    "type": "error"
   }
 ] as const;

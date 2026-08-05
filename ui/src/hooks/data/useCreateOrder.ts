@@ -34,7 +34,7 @@ export function useCreateOrder() {
 
     const tif = props.timeInForce ?? TimeInForce.GTC;
 
-    const req = await futuresContract.simulate.createOrderV2(
+    const req = await futuresContract.simulate.createOrder(
       [props.price, props.expirationAt, quantity, tif],
       { account: walletClient.account.address },
     );

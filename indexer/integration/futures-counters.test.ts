@@ -22,6 +22,7 @@ import { parseEventLogs, parseUnits } from "viem";
 import { read, type EntityFields } from "matchstick-ts";
 import { deployFuturesFixture } from "../../contracts/tests/fixtures.ts";
 import { quantizePrice } from "../../contracts/tests/utils.ts";
+import { TimeInForce } from "../../contracts/tests/timeInForce.ts";
 
 const conn = await network.getOrCreate();
 
@@ -48,7 +49,7 @@ describe("Futures singleton counters: stepwise consistency through a trade flow"
     await conn.matchstick.anchor();
 
     // --- Step 1: seller rests an ask (no match). ---
-    const askTx = await futures.write.createOrder([askPrice, deliveryDate, -1n], {
+    const askTx = await futures.write.createOrder([askPrice, deliveryDate, -1n, TimeInForce.GTC], {
       account: seller.account,
     });
     const askReceipt = await pc.waitForTransactionReceipt({ hash: askTx });
@@ -79,8 +80,8 @@ describe("Futures singleton counters: stepwise consistency through a trade flow"
     assert.equal(String(f.totalOrders), "1", "totalOrders is monotonic across cancels");
 
     // --- Step 3: matched trade — buyer takes seller's order. ---
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
-    await futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], { account: buyer.account });
 
     snap = await conn.matchstick.indexSnapshot([read("Futures", "0")]);
     f = snap.entity("Futures", "0");
@@ -127,11 +128,11 @@ describe("User.tradeCount vs User.fillCount: per-tx aggregation semantics", () =
     await conn.matchstick.anchor();
 
     // Two MAKERS rest sell orders at the same price.
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: buyer.account });
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: buyer2.account });
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], { account: buyer2.account });
 
     // ONE taker buys qty=2 → matches both makers in a single tx.
-    const takeTx = await futures.write.createOrder([price, deliveryDate, 2n], {
+    const takeTx = await futures.write.createOrder([price, deliveryDate, 2n, TimeInForce.GTC], {
       account: seller.account,
     });
     const takeReceipt = await pc.waitForTransactionReceipt({ hash: takeTx });

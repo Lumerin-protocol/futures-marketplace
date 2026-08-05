@@ -4,6 +4,7 @@ import { network } from "hardhat";
 import { getAddress, parseEventLogs, parseUnits, zeroAddress } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { scaleHashprice } from "./utils.ts";
+import { TimeInForce } from "./timeInForce.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -24,7 +25,13 @@ async function deployPointsStack(
 ) {
   const admin = owner.account.address;
   const points = await viem.deployContract("Points", [admin]);
-  const hook = await viem.deployContract("PointsHook", [points.address, admin, WAD, WAD, KEEPER_POINTS]);
+  const hook = await viem.deployContract("PointsHook", [
+    points.address,
+    admin,
+    WAD,
+    WAD,
+    KEEPER_POINTS,
+  ]);
 
   const minterRole = await points.read.MINTER_ROLE();
   await points.write.grantRole([minterRole, hook.address], { account: owner.account.address });
@@ -42,14 +49,32 @@ describe("Futures - points hook wiring", function () {
     it("allows the owner to set the hook and emits HookUpdated", async function () {
       const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
       const { futures } = contracts;
-      const { owner, buyer, pc } = accounts;
+      const { owner, pc } = accounts;
 
-      const tx = await futures.write.setHook([buyer.account.address], { account: owner.account });
+      const { hook } = await deployPointsStack(futures.address, owner);
+
+      const tx = await futures.write.setHook([hook.address], { account: owner.account });
       const receipt = await pc.waitForTransactionReceipt({ hash: tx });
-      const [{ args }] = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "HookUpdated" });
+      const [{ args }] = parseEventLogs({
+        logs: receipt.logs,
+        abi: futures.abi,
+        eventName: "HookUpdated",
+      });
 
-      assert.equal(args.hook, getAddress(buyer.account.address));
-      assert.equal(await futures.read.hook(), getAddress(buyer.account.address));
+      assert.equal(args.hook, getAddress(hook.address));
+      assert.equal(await futures.read.hook(), getAddress(hook.address));
+    });
+
+    it("rejects an address holding no code", async function () {
+      const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures } = contracts;
+      const { owner, buyer } = accounts;
+
+      await viem.assertions.revertWithCustomError(
+        futures.write.setHook([buyer.account.address], { account: owner.account }),
+        futures,
+        "InvalidDependency",
+      );
     });
 
     it("reverts when a non-owner sets the hook", async function () {
@@ -57,13 +82,16 @@ describe("Futures - points hook wiring", function () {
       const { futures } = contracts;
       const { buyer } = accounts;
 
-      await assert.rejects(futures.write.setHook([buyer.account.address], { account: buyer.account }));
+      await assert.rejects(
+        futures.write.setHook([buyer.account.address], { account: buyer.account }),
+      );
     });
   });
 
   describe("onFill", function () {
     it("mints points to the taker on a match (maker earns nothing when makerFee is 0)", async function () {
-      const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
       const { futures, collateralVault } = contracts;
       const { owner, seller, buyer } = accounts;
 
@@ -76,18 +104,31 @@ describe("Futures - points hook wiring", function () {
       await collateralVault.write.deposit([margin], { account: seller.account });
       await collateralVault.write.deposit([margin], { account: buyer.account });
 
-      await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
-      await futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account });
+      await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], {
+        account: seller.account,
+      });
+      await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
+        account: buyer.account,
+      });
 
       const notional = price;
 
       // wTaker == 1 WAD, so taker points == notional. makerFee is 0, so the maker earns nothing.
-      assert.equal(await points.read.balanceOf([buyer.account.address]), notional, "taker earns notional");
-      assert.equal(await points.read.balanceOf([seller.account.address]), 0n, "maker earns nothing");
+      assert.equal(
+        await points.read.balanceOf([buyer.account.address]),
+        notional,
+        "taker earns notional",
+      );
+      assert.equal(
+        await points.read.balanceOf([seller.account.address]),
+        0n,
+        "maker earns nothing",
+      );
     });
 
     it("does not mint (or revert) when no hook is configured", async function () {
-      const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
       const { futures, collateralVault } = contracts;
       const { seller, buyer } = accounts;
 
@@ -97,13 +138,18 @@ describe("Futures - points hook wiring", function () {
       await collateralVault.write.deposit([margin], { account: seller.account });
       await collateralVault.write.deposit([margin], { account: buyer.account });
 
-      await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
-      await futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account });
+      await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], {
+        account: seller.account,
+      });
+      await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
+        account: buyer.account,
+      });
       assert.equal(await futures.read.hook(), zeroAddress);
     });
 
     it("reverts the fill when the venue lacks HOOK_CALLER_ROLE (no try/catch isolation)", async function () {
-      const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
       const { futures, collateralVault } = contracts;
       const { owner, seller, buyer } = accounts;
 
@@ -116,16 +162,21 @@ describe("Futures - points hook wiring", function () {
       await collateralVault.write.deposit([margin], { account: seller.account });
       await collateralVault.write.deposit([margin], { account: buyer.account });
 
-      await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
+      await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], {
+        account: seller.account,
+      });
       await assert.rejects(
-        futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account }),
+        futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
+          account: buyer.account,
+        }),
       );
     });
   });
 
   describe("maker price-improvement multiplier", function () {
     it("boosts maker points when the resting quote sits at the oracle price", async function () {
-      const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
       const { futures, collateralVault } = contracts;
       const { owner, seller, buyer } = accounts;
 
@@ -143,8 +194,12 @@ describe("Futures - points hook wiring", function () {
       await collateralVault.write.deposit([margin], { account: buyer.account });
 
       // Seller rests at the oracle price (spread 0 → full 3x), buyer takes.
-      await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
-      await futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account });
+      await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], {
+        account: seller.account,
+      });
+      await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
+        account: buyer.account,
+      });
 
       const notional = price;
 
@@ -155,7 +210,11 @@ describe("Futures - points hook wiring", function () {
         "maker earns 3x at zero spread",
       );
       // The taker is unaffected by the maker multiplier.
-      assert.equal(await points.read.balanceOf([buyer.account.address]), notional, "taker earns notional");
+      assert.equal(
+        await points.read.balanceOf([buyer.account.address]),
+        notional,
+        "taker earns notional",
+      );
     });
   });
 
@@ -179,8 +238,12 @@ describe("Futures - points hook wiring", function () {
 
       // Open the matched position BEFORE plugging in the hook, so the fill path is unaffected
       // and only the liquidation path exercises the hook.
-      await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
-      await futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account });
+      await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], {
+        account: seller.account,
+      });
+      await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
+        account: buyer.account,
+      });
 
       const { points, hook } = await deployPointsStack(futures.address, owner, grantCaller);
       await futures.write.setHook([hook.address], { account: owner.account });
@@ -203,10 +266,9 @@ describe("Futures - points hook wiring", function () {
       const { buyer, buyer2 } = accounts;
 
       await data.makeUnderwater();
-      await futures.write.liquidatePosition(
-        [buyer.account.address, deliveryDate, 1n],
-        { account: buyer2.account },
-      );
+      await futures.write.liquidatePosition([buyer.account.address, deliveryDate, 1n], {
+        account: buyer2.account,
+      });
 
       assert.equal(await points.read.balanceOf([buyer2.account.address]), KEEPER_POINTS);
     });
@@ -219,10 +281,9 @@ describe("Futures - points hook wiring", function () {
 
       await data.makeUnderwater();
       await assert.rejects(
-        futures.write.liquidatePosition(
-          [buyer.account.address, deliveryDate, 1n],
-          { account: buyer2.account },
-        ),
+        futures.write.liquidatePosition([buyer.account.address, deliveryDate, 1n], {
+          account: buyer2.account,
+        }),
       );
     });
   });

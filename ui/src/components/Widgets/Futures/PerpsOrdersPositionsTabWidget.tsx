@@ -18,7 +18,8 @@ import { useUserTrades } from "../../../hooks/data/perps/useUserTrades";
 import type { UserTrade } from "../../../hooks/data/perps/useUserTrades";
 import { usePerpsOrderHistory } from "../../../hooks/data/perps/usePerpsOrderHistory";
 import { usePerpsPositionHistory } from "../../../hooks/data/perps/usePerpsPositionHistory";
-import { computeLiquidationState } from "../../../hooks/data/perps/positionHelper";
+import { computeLiquidationPrice } from "../../../hooks/data/perps/positionHelper";
+import { useGetPerpsOrderMargin } from "../../../hooks/data/perps/useGetPerpsOrderMargin";
 import { ClosePerpsPositionModal } from "./ClosePerpsPositionModal";
 import { ModifyPerpsOrderModal } from "./ModifyPerpsOrderModal";
 import type { PerpsOrder } from "../../../hooks/data/perps/useUserPerpsOrders";
@@ -38,7 +39,6 @@ interface PerpsOrdersPositionsTabWidgetProps {
   participantAddress?: `0x${string}`;
   onClosePosition?: (price: string, amount: number, isBuy: boolean, expirationAt?: number) => void;
   participantData?: any;
-  minMargin?: bigint | null;
   accountBalance?: AccountBalance;
   marketPrice?: bigint;
   positionSessions: PositionSession[];
@@ -60,7 +60,6 @@ export const PerpsOrdersPositionsTabWidget = ({
   participantAddress,
   onClosePosition,
   participantData,
-  minMargin,
   accountBalance,
   marketPrice,
   positionSessions,
@@ -77,6 +76,10 @@ export const PerpsOrdersPositionsTabWidget = ({
   const [modifyOrder, setModifyOrder] = useState<PerpsOrder | null>(null);
   const queryClient = useQueryClient();
   const { cancelOrderAsync, isPending: isCancelling } = useCancelPerpsOrder();
+
+  // Price-independent margin held against resting orders, used to size the
+  // collateral available to a position when solving for its liquidation price.
+  const orderMarginQuery = useGetPerpsOrderMargin(participantAddress);
 
   // Paginated ("Load More") Order History — all non-ACTIVE perps orders.
   const orderHistoryQuery = usePerpsOrderHistory(participantAddress);
@@ -175,7 +178,7 @@ export const PerpsOrdersPositionsTabWidget = ({
               isLoading={positionSessionsLoading}
               marketPrice={marketPrice}
               collateral={perpsBalance}
-              totalMaintenanceMargin={minMargin ?? undefined}
+              orderMargin={orderMarginQuery.data as bigint | undefined}
               maintenanceMarginPercent={maintenanceMarginPercent}
               onClosePosition={setClosePositionSession}
             />
@@ -605,12 +608,12 @@ interface PerpsPositionsTableProps {
   isLoading?: boolean;
   marketPrice?: bigint;
   collateral?: bigint;
-  totalMaintenanceMargin?: bigint;
+  orderMargin?: bigint;
   maintenanceMarginPercent?: bigint;
   onClosePosition?: (session: PositionSession) => void;
 }
 
-const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collateral, totalMaintenanceMargin, maintenanceMarginPercent, onClosePosition }: PerpsPositionsTableProps) => {
+const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collateral, orderMargin, maintenanceMarginPercent, onClosePosition }: PerpsPositionsTableProps) => {
   const [selectedSession, setSelectedSession] = useState<PositionSession | null>(null);
 
   const formatPrice = (price: bigint) => {
@@ -641,16 +644,14 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
   const calculateLiquidationPrice = (entryPrice: bigint, netQuantity: bigint): bigint | null => {
     if (!marketPrice || !collateral || netQuantity === 0n || maintenanceMarginPercent === undefined) return null;
 
-    const { liquidationPrice } = computeLiquidationState(
+    return computeLiquidationPrice(
       netQuantity,
       entryPrice,
       collateral,
-      totalMaintenanceMargin ?? 0n,
-      marketPrice,
+      orderMargin ?? 0n,
       maintenanceMarginPercent,
       QUANTITY_DECIMALS_BIGINT,
     );
-    return liquidationPrice;
   };
 
   const openPositions = [...positionSessions]

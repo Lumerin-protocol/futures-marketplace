@@ -1,285 +1,25 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import { MulticallUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/MulticallUpgradeable.sol";
-import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import { StructuredLinkedList } from "solidity-linked-list/contracts/StructuredLinkedList.sol";
-import { Versionable } from "./interfaces/Versionable.sol";
 import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
-import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/interfaces/IPortfolioMarginEngine.sol";
-import { IPointsHook } from "collateral-margin/contracts/contracts/interfaces/IPointsHook.sol";
-import { PriceLadderLib } from "./libs/PriceLadderLib.sol";
+import { ILinearMarket } from "collateral-margin/contracts/contracts/interfaces/ILinearMarket.sol";
 import { MathLib as M } from "./libs/MathLib.sol";
+import { FuturesBase } from "./FuturesBase.sol";
+import { FuturesAdmin } from "./FuturesAdmin.sol";
 
 /// @title Futures — cash-settled hashrate futures CLOB (v3: aggregate positions + qty-bearing orders)
-contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, Versionable {
+/// @dev The permissionless surface: trading, liquidation and views. Storage and internal
+///      helpers live in {FuturesBase}; the owner-only surface lives in {FuturesAdmin}.
+contract Futures is FuturesAdmin {
     using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableSet for EnumerableSet.Bytes32Set;
     using StructuredLinkedList for StructuredLinkedList.List;
 
-    // ── Storage (declaration order is part of the UUPS layout — do not reorder) ──
-
-    mapping(bytes32 => Order) private orders;
-    /// @dev Dead after v3 reset: former bilateral lot mapping. Slot retained for upgrade safety.
-    mapping(bytes32 => LegacyLot) private positions;
-    mapping(uint256 => mapping(uint256 => StructuredLinkedList.List)) private expirationAtPriceOrdersLongIdQueue;
-    mapping(uint256 => mapping(uint256 => StructuredLinkedList.List)) private expirationAtPriceOrdersShortIdQueue;
-    /// @dev Dead after v3: former bilateral lot index. Slot retained.
-    mapping(address => EnumerableSet.Bytes32Set) private participantPositionIdsIndex;
-    mapping(address => EnumerableSet.Bytes32Set) private participantOrderIdsIndex;
-    /// @dev Dead after v3: former per-(user, expiry) lot index. Slot retained.
-    mapping(address => mapping(uint256 => EnumerableSet.Bytes32Set)) private participantExpirationAtPositionIdsIndex;
-    mapping(address => mapping(uint256 => mapping(uint256 => EnumerableSet.Bytes32Set))) private
-        participantExpirationAtPriceOrderIdsIndex;
-
-    uint256 private __gap0;
-    uint256 public firstFutureExpirationDate;
-    /// @dev Reserved — formerly `contractSizeHpsDay` / `speedHps`.
-    uint256 private __gap1;
-    uint256 private __gap2;
-    /// @dev Dead — former takerFee (flat). Now bps-based, appended at end of storage.
-    uint256 private __gap3;
-    uint256 private nonce = 0;
-
-    address private __gap4;
-    /// @notice Hashprice oracle (price of 1 PH/s per day in `token` currency).
-    AggregatorV3Interface public priceOracle;
-    address private __gap5;
-
-    /// @dev Reserved — formerly `deliveryDurationDays`.
-    uint8 private __gap6;
-    /// @dev Reserved — formerly `expirationIntervalDays` (now `EXPIRATION_INTERVAL_DAYS` constant).
-    uint8 private __gap7;
-    uint8 public futureExpirationDatesCount;
-    uint8 public liquidationMarginPercent;
-    uint8 private __gap8;
-    string private __gap9;
-    uint256 public collectedFeesBalance;
-    uint256 private __gap10;
-    /// @dev Reserved — formerly `addressFeeDiscountPercent`.
-    mapping(address => uint8) private __gap11;
-    /// @dev Dead — former hashpriceScalingDivisor. Oracle scaling now via M.scaleDecimals.
-    uint256 private __gap12;
-
-    IPortfolioMarginEngine public portfolioMargin;
-    /// @notice Canonical net position quantity per (participant, expirationAt). +long / -short.
-    mapping(address => mapping(uint256 => int256)) private participantExpirationAtNetDelta;
-    /// @notice Canonical Σ qty_i * entryPrice_i per (participant, expirationAt), token decimals.
-    mapping(address => mapping(uint256 => int256)) private participantExpirationAtNetEntryValue;
-
-    /// @dev Sorted bid prices per expiration (highest first).
-    mapping(uint256 => StructuredLinkedList.List) private activeBidPrices;
-    /// @dev Sorted ask prices per expiration (lowest first).
-    mapping(uint256 => StructuredLinkedList.List) private activeAskPrices;
-
-    /// @dev Dead — former liquidationFee (flat). Now bps-based via liquidationFeeBps.
-    uint256 private __gap13;
-
-    /// @dev Dead — former makerFee (flat). Now bps-based, appended at end of storage.
-    uint256 private __gap14;
-
-    IPointsHook public hook;
-
-    /// @notice Pinned cash-settlement price per expiration (`0` = unset).
-    mapping(uint256 => uint256) public settlementPrice;
-
-    /// @dev Expiration timestamps at which a participant holds a non-zero aggregate position.
-    mapping(address => EnumerableSet.UintSet) private participantActiveExpirationAts;
-
-    /// @notice Liquidation fee in basis points on the liquidated notional.
-    ///         e.g., 50 = 0.5% of the closed position or cancelled order value.
-    /// @dev Appended at end of storage to preserve the upgradeable layout.
-    uint16 public liquidationFeeBps;
-    /// @notice Share of the liquidation fee paid to the keeper (msg.sender).
-    ///         In basis points: 10_000 = 100% to liquidator, 5_000 = 50/50 split.
-    ///         The remainder goes to the insurance fund.
-    /// @dev Appended at end of storage to preserve the upgradeable layout.
-    uint16 public liquidatorShareBps;
-
-    /// @notice Taker fee in basis points (e.g., 5 = 0.05% of notional).
-    /// @dev Appended at end of storage to preserve the upgradeable layout.
-    int16 public takerFeeBps;
-    /// @notice Maker fee in basis points (e.g., 0 = 0% of notional).
-    /// @dev Appended at end of storage to preserve the upgradeable layout.
-    int16 public makerFeeBps;
-
-    /// @notice Decimals of the oracle feed (cached for gas).
-    /// @dev Appended at end of storage to preserve the upgradeable layout.
-    uint8 private oracleDecimals;
-
-    /// @dev Dead — former vault. Moved to immutable.
-    address private __gap15;
-
-    // immutable
-    ICollateralVault public immutable vault;
-    uint8 private immutable collateralDecimals;
-
-    // constants
-    string public constant VERSION = "3.8.0";
-    /// @notice One contract settles 1 PH/s/day (hashes/s·day). Matches the hashprice oracle quote basis.
-    uint256 public constant CONTRACT_SIZE_HPS_DAY = 1e15;
-    uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
-    uint256 public constant MAX_PRICE_LEVELS_PER_SIDE = 200;
-    uint256 private constant BPS = 10_000; // Basis points denominator
-    uint32 private constant SECONDS_PER_DAY = 3600 * 24;
-    uint256 public constant MAX_ORACLE_STALENESS = 3600; // 1 hour
-    uint8 public constant EXPIRATION_INTERVAL_DAYS = 30;
-    /// @notice Minimum price increment for orders: $0.01 in USDC (6 decimals).
-    uint256 public constant minimumPriceIncrement = 0.01e6;
-
-    // ── Structs ───────────────────────────────────────────────────────────────
-
-    /// @notice Resting order (also the public `getOrder` return type). Signed remaining qty; 0 = empty.
-    struct Order {
-        address participant;
-        uint256 price;
-        int256 quantity; // >0 bid/long, <0 ask/short
-        uint256 expirationAt;
-    }
-
-    /// @notice One placement in a `createOrders` batch (GTC).
-    struct OrderIntent {
-        uint256 price;
-        uint256 expirationAt;
-        int256 quantity;
-    }
-
-    /// @notice One placement in a `createOrdersV2` batch.
-    struct OrderIntentV2 {
-        uint256 price;
-        uint256 expirationAt;
-        int256 quantity;
-        TimeInForce timeInForce;
-    }
-
-    /// @notice Shrink a resting order in place (FIFO position preserved).
-    struct ReduceIntent {
-        bytes32 orderId;
-        int256 newQuantity; // same sign as resting; 0 < |new| < |old|
-    }
-
-    /// @notice Order lifetime / fill policy. GTD is not supported.
-    enum TimeInForce {
-        GTC, // rest unfilled size on the book
-        IOC, // fill what is available now; cancel remainder; revert if nothing fills
-        FOK // fill entire size now or revert
-    }
-
-    /// @notice Unilateral aggregate position for a (user, expirationAt).
-    /// @dev Prefer `netEntryValue` over an averaged entry price: exact on scale-in
-    ///      (no integer-division dust) and matches margin math
-    ///      `pnl = mark * netQty - netEntryValue`. UI/MM can derive
-    ///      `avgEntry = abs(netEntryValue) / abs(netQuantity)` when netQty != 0.
-    struct Position {
-        int256 netQuantity;
-        int256 netEntryValue;
-    }
-
-    /// @dev Former bilateral lot — dead after reset; kept so the `positions` mapping slot stays typed.
-    /// @dev Dead after v3 — slot retained for upgrade safety.
-    struct LegacyLot {
-        address _0; address _1; string _2;
-        uint256 _3; uint256 _4; uint256 _5; uint256 _6;
-        bool _7;
-    }
-
-    // ── Events ────────────────────────────────────────────────────────────────
-
-    event OrderCreated(
-        bytes32 indexed orderId, address indexed participant, uint256 price, int256 quantity, uint256 expirationAt
-    );
-    /// @notice Resting size changed (partial fill, IOC remainder close, or reduce-only amend).
-    /// @dev Indexers must attribute fills only when paired with `OrderMatched` in the same tx;
-    ///      a lone shrink is a reduce-only amend (FIFO kept, not a trade).
-    event OrderUpdated(bytes32 indexed orderId, address indexed participant, int256 newQuantity);
-    event OrderCancelled(bytes32 indexed orderId, address indexed participant);
-    event OrderMatched(
-        bytes32 indexed makerOrderId,
-        address indexed maker,
-        address indexed taker,
-        uint256 expirationAt,
-        uint256 tradePrice,
-        int256 takerQuantity,
-        int256 makerFee,
-        int256 takerFee,
-        int256 makerNetQtyAfter,
-        int256 takerNetQtyAfter,
-        uint256 makerEntryPriceAfter,
-        uint256 takerEntryPriceAfter
-    );
-    event OrderLiquidated(bytes32 indexed orderId, address indexed user, address indexed liquidator, uint256 fee);
-    event PositionLiquidated(
-        address indexed user,
-        address indexed liquidator,
-        uint256 expirationAt,
-        int256 closedQuantity,
-        int256 pnl,
-        uint256 liquidatorFee
-    );
-    event PositionSettled(
-        address indexed user,
-        uint256 indexed expirationAt,
-        int256 closedQuantity,
-        int256 pnl,
-        uint256 settlementPrice,
-        address settledBy
-    );
-    event BadDebt(address indexed user, uint256 amount);
-    event SettlementPriceRecorded(uint256 indexed expirationAt, uint256 price, address recordedBy);
-    event LiquidationMarginPercentUpdated(uint8 newLiquidationMarginPercent);
-    event FutureExpirationDatesCountUpdated(uint8 newFutureExpirationDatesCount);
-    event MakerFeeBpsUpdated(int16 newMakerFeeBps);
-    event TakerFeeBpsUpdated(int16 newTakerFeeBps);
-    event LiquidationFeeBpsUpdated(uint16 newLiquidationFeeBps);
-    event LiquidatorShareBpsUpdated(uint16 newLiquidatorShareBps);
-    event OracleUpdated(address newOracle);
-    event PortfolioMarginUpdated(address newPortfolioMargin);
-    event HookUpdated(address indexed hook);
-
-    // ── Errors ────────────────────────────────────────────────────────────────
-
-    error InvalidPrice();
-    error InvalidQty();
-    error ExpirationDateShouldBeInTheFuture();
-    error ExpirationDateNotAvailable();
-    error OrderNotBelongToSender();
-    error InsufficientMarginBalance();
-    error PositionNotExists();
-    error PositionExpirationNotStartedYet();
-    error MaxOrdersPerParticipantReached();
-    error ValueOutOfRange(int256 min, int256 max);
-    error ZeroAddress();
-    error InsuranceFundNotConfigured();
-    error UnsupportedTokenDecimals();
-    error OracleStale();
-    error SettlementDateNotReached();
-    error InvalidOracle();
-    error NotLiquidatable();
-    error OrdersStillOpen();
-    /// @notice Partial liquidation left balance above IM while a real IM>MM buffer remains.
-    error OverLiquidation();
-    error OrderNotBelongToUser();
-    error OrderNotExists();
-    error OrderNotExpired();
-    error ArrayLengthMismatch();
-    error MaxPriceLevelsReached();
-    /// @notice FOK could not fill entirely, or IOC matched nothing.
-    error TimeInForceNotFilled();
-    error InvalidTimeInForce();
-    error InvalidReduceQuantity();
-
-    /// @param _vault The shared collateral vault. Its `collateralToken()` provides the underlying ERC20.
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(ICollateralVault _vault) {
-        if (address(_vault) == address(0)) revert ZeroAddress();
-        vault = _vault;
-        collateralDecimals = IERC20Metadata(address(_vault.collateralToken())).decimals();
-        _disableInitializers();
-    }
+    constructor(ICollateralVault _vault) FuturesBase(_vault) { }
 
     function initialize(
         AggregatorV3Interface _priceOracle,
@@ -289,63 +29,43 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         uint8 _futureExpirationDatesCount,
         uint256 _firstFutureExpirationDate
     ) public initializer {
-        __Ownable_init(_msgSender());
-        __UUPSUpgradeable_init();
-        _setPriceOracle(_priceOracle);
-        liquidationMarginPercent = _liquidationMarginPercent;
         if (_futureExpirationDatesCount < 1) {
             revert ValueOutOfRange(1, int256(uint256(type(uint8).max)));
         }
+
+        __Ownable_init(_msgSender());
+        __UUPSUpgradeable_init();
+        setOracle(_priceOracle);
+        liquidationMarginPercent = _liquidationMarginPercent;
         futureExpirationDatesCount = _futureExpirationDatesCount;
         firstFutureExpirationDate = _firstFutureExpirationDate;
         emit LiquidationMarginPercentUpdated(_liquidationMarginPercent);
         emit FutureExpirationDatesCountUpdated(_futureExpirationDatesCount);
-        emit OracleUpdated(address(_priceOracle));
     }
-
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner { }
 
     // ── Order placement ───────────────────────────────────────────────────────
 
-    /// @notice Place a GTC limit order. `quantity` > 0 = buy/long, < 0 = sell/short.
-    /// @dev Reduce-only legs (opposite side, size ≤ position at `expirationAt`) skip the IM check.
-    function createOrder(uint256 _price, uint256 _expirationAt, int256 _quantity) external {
-        address sender = _msgSender();
-        bool skipMargin = _createOrderInternal(sender, _price, _expirationAt, _quantity, TimeInForce.GTC);
-        if (!skipMargin) ensureNoCollateralDeficit(sender);
-    }
-
     /// @notice Place a limit order with explicit time-in-force (GTC / IOC / FOK).
-    /// @dev Reduce-only legs skip the IM check (same rule as `createOrder`).
-    function createOrderV2(uint256 _price, uint256 _expirationAt, int256 _quantity, TimeInForce _tif) external {
+    ///         `quantity` > 0 = buy/long, < 0 = sell/short.
+    /// @dev Reduce-only legs (opposite side, size ≤ position at `expirationAt`) skip the IM check.
+    function createOrder(uint256 _price, uint256 _expirationAt, int256 _quantity, TimeInForce _tif) external {
         address sender = _msgSender();
-        bool skipMargin = _createOrderInternal(sender, _price, _expirationAt, _quantity, _tif);
-        if (!skipMargin) ensureNoCollateralDeficit(sender);
+        bool skipMargin = _createOrder(sender, _price, _expirationAt, _quantity, _tif);
+        if (!skipMargin) _ensureNoCollateralDeficit(sender);
     }
 
-    /// @notice Batched GTC placement — IM check once at the end.
+    /// @notice Batched placement with per-leg time-in-force — IM check once at the end.
     function createOrders(OrderIntent[] calldata _intents) external {
         address sender = _msgSender();
         uint256 len = _intents.length;
         for (uint256 i = 0; i < len; i++) {
             OrderIntent calldata intent = _intents[i];
-            _createOrderInternal(sender, intent.price, intent.expirationAt, intent.quantity, TimeInForce.GTC);
+            _createOrder(sender, intent.price, intent.expirationAt, intent.quantity, intent.timeInForce);
         }
-        ensureNoCollateralDeficit(sender);
+        _ensureNoCollateralDeficit(sender);
     }
 
-    /// @notice Batched placement with per-leg time-in-force — IM check once at the end.
-    function createOrdersV2(OrderIntentV2[] calldata _intents) external {
-        address sender = _msgSender();
-        uint256 len = _intents.length;
-        for (uint256 i = 0; i < len; i++) {
-            OrderIntentV2 calldata intent = _intents[i];
-            _createOrderInternal(sender, intent.price, intent.expirationAt, intent.quantity, intent.timeInForce);
-        }
-        ensureNoCollateralDeficit(sender);
-    }
-
-    /// @notice Cancel, reduce-in-place, then place GTC orders — IM check once at the end.
+    /// @notice Cancel, reduce-in-place, then place orders — IM check once at the end.
     /// @dev Cancels/reduces run first so freed margin is available to the creates.
     ///      Reduces keep FIFO queue position; creates always join the back.
     function updateOrders(
@@ -356,47 +76,62 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         address sender = _msgSender();
         uint256 cancelLen = _cancelIds.length;
         for (uint256 i = 0; i < cancelLen; i++) {
-            _cancelOrderInternal(sender, _cancelIds[i]);
+            _cancelOrder(sender, _cancelIds[i]);
         }
         uint256 reduceLen = _reduces.length;
         for (uint256 r = 0; r < reduceLen; r++) {
-            _reduceOrderSizeInternal(sender, _reduces[r].orderId, _reduces[r].newQuantity);
+            _reduceOrderSize(sender, _reduces[r].orderId, _reduces[r].newQuantity);
         }
         uint256 createLen = _intents.length;
         for (uint256 j = 0; j < createLen; j++) {
             OrderIntent calldata intent = _intents[j];
-            _createOrderInternal(sender, intent.price, intent.expirationAt, intent.quantity, TimeInForce.GTC);
+            _createOrder(sender, intent.price, intent.expirationAt, intent.quantity, intent.timeInForce);
         }
-        ensureNoCollateralDeficit(sender);
+        _ensureNoCollateralDeficit(sender);
     }
 
     /// @notice Shrink a resting order owned by the caller without losing FIFO priority.
     /// @dev Rejects grow / sign flip / zero (use `cancelOrder` to remove entirely).
     function reduceOrderSize(bytes32 _orderId, int256 _newQuantity) external {
-        _reduceOrderSizeInternal(_msgSender(), _orderId, _newQuantity);
+        _reduceOrderSize(_msgSender(), _orderId, _newQuantity);
     }
 
-    /// @dev Per-leg body of `createOrder` / `createOrderV2` without the IM-check epilogue.
+    /// @notice Cancel a resting order owned by the caller.
+    function cancelOrder(bytes32 _orderId) external {
+        _cancelOrder(_msgSender(), _orderId);
+    }
+
+    /// @notice Permissionlessly close a resting order whose `expirationAt` is in the past.
+    /// @dev Anyone may call: a matured order can no longer fill (`_validateExpirationAt`
+    ///      rejects new orders at that expiry, so nothing can cross it), and leaving it
+    ///      resting only wastes the owner's `MAX_ORDERS_PER_PARTICIPANT` budget.
+    function removeOutdatedOrder(bytes32 _orderId) external {
+        Order memory order = orders[_orderId];
+        if (order.participant == address(0) || order.quantity == 0) revert OrderNotExists();
+        if (order.expirationAt >= block.timestamp) revert OrderNotExpired();
+        _dropRestingOrder(_orderId, order);
+    }
+
+    /// @dev Per-leg body of `createOrder` / `createOrders` without the IM-check epilogue.
     ///      Returns true when the leg is reduce-only (single-order callers may skip IM);
     ///      batch callers always check once at the end.
-    function _createOrderInternal(
+    function _createOrder(
         address _participant,
         uint256 _price,
         uint256 _expirationAt,
         int256 _quantity,
         TimeInForce _tif
-    ) private returns (bool isReduceOnly) {
-        if (uint8(_tif) > uint8(TimeInForce.FOK)) revert InvalidTimeInForce();
-        validatePrice(_price);
-        validateExpirationAt(_expirationAt);
-        if (_quantity == 0) revert InvalidQty();
+    ) internal returns (bool isReduceOnly) {
+        _validateTIF(_tif);
+        _validatePrice(_price);
+        _validateExpirationAt(_expirationAt);
+        _validateQty(_quantity);
 
         // Snapshot before matching — reduce-only vs position minus already-resting reduces.
         int256 positionBefore = participantExpirationAtNetDelta[_participant][_expirationAt];
         uint256 reducingBefore = _restingReduceAbs(_participant, _expirationAt, positionBefore);
 
-        bool isBuy = _quantity > 0;
-        bytes32 orderId = bytes32(++nonce);
+        bytes32 orderId = _nextOrderId();
         emit OrderCreated(orderId, _participant, _price, _quantity, _expirationAt);
 
         int256 remainingQty = _matchWithOppositeOrders(_participant, _price, _expirationAt, _quantity);
@@ -404,7 +139,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         bool partiallyOrFullyFilled = remainingAbs != M.abs(_quantity);
 
         if (_tif == TimeInForce.FOK && remainingAbs > 0) revert TimeInForceNotFilled();
-        // IOC with zero fill is a noop — revert rather than emit a closed empty order.
         if (_tif == TimeInForce.IOC && !partiallyOrFullyFilled) revert TimeInForceNotFilled();
 
         if (_tif == TimeInForce.GTC) {
@@ -422,10 +156,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
                     quantity: remainingQty,
                     expirationAt: _expirationAt
                 });
-                StructuredLinkedList.List storage orderQueue = _expirationAtPriceOrderIds(_expirationAt, _price, isBuy);
-                _addOrderToQueue(orderQueue, orderId, _expirationAt, _price, isBuy);
+                StructuredLinkedList.List storage orderQueue =
+                    _expirationAtPriceOrderIds(_expirationAt, _price, _quantity > 0);
+                _addOrderToQueue(orderQueue, orderId, _expirationAt, _price, _quantity > 0);
                 participantOrders.add(orderId);
-                participantExpirationAtPriceOrderIdsIndex[_participant][_expirationAt][_price].add(orderId);
+                _indexRestingOrder(_participant, _expirationAt, _price, orderId);
             }
         } else {
             // IOC (or FOK after a full fill): never rest; close the taker order id at 0.
@@ -439,241 +174,23 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             && M.abs(_quantity) + reducingBefore <= M.abs(positionBefore);
     }
 
-    /// @dev Absolute qty of resting orders that reduce `_net` at `_expirationAt`.
-    function _restingReduceAbs(address _user, uint256 _expirationAt, int256 _net)
-        private
-        view
-        returns (uint256 total)
-    {
-        if (_net == 0) return 0;
-        EnumerableSet.Bytes32Set storage ids = participantOrderIdsIndex[_user];
-        uint256 len = ids.length();
-        for (uint256 i = 0; i < len; i++) {
-            Order memory order = orders[ids.at(i)];
-            if (order.expirationAt != _expirationAt || order.quantity == 0) continue;
-            if (_net > 0 ? order.quantity < 0 : order.quantity > 0) {
-                total += M.abs(order.quantity);
-            }
-        }
-    }
-
-    /// @notice Walk opposite sorted book from best price toward the taker limit; fill at maker price.
-    function _matchWithOppositeOrders(
-        address _taker,
-        uint256 _limitPrice,
-        uint256 _expirationAt,
-        int256 _quantity
-    ) private returns (int256 remainingQuantity) {
-        remainingQuantity = _quantity;
-        bool isBuy = _quantity > 0;
-        StructuredLinkedList.List storage oppositePrices = isBuy ? activeAskPrices[_expirationAt] : activeBidPrices[_expirationAt];
-
-        if (oppositePrices.sizeOf() == 0) return remainingQuantity;
-
-        (, uint256 currentPrice) = oppositePrices.getNextNode(0);
-
-        while (currentPrice != 0 && remainingQuantity != 0) {
-            if (isBuy && currentPrice > _limitPrice) break;
-            if (!isBuy && currentPrice < _limitPrice) break;
-
-            (, uint256 nextPrice) = oppositePrices.getNextNode(currentPrice);
-            remainingQuantity = _matchOrdersAtPrice(_taker, currentPrice, _expirationAt, remainingQuantity, isBuy);
-            currentPrice = nextPrice;
-        }
-    }
-
-    /// @notice FIFO-match at one maker price level. Self-cross nets out (no fill/fees).
-    function _matchOrdersAtPrice(
-        address _taker,
-        uint256 _price,
-        uint256 _expirationAt,
-        int256 _remainingQty,
-        bool _isBuy
-    ) private returns (int256) {
-        StructuredLinkedList.List storage makerOrderQueue = _expirationAtPriceOrderIds(_expirationAt, _price, !_isBuy);
-
-        (, uint256 orderIdUint) = makerOrderQueue.getNextNode(0);
-        while (_remainingQty != 0 && orderIdUint != 0) {
-            bytes32 makerOrderId = bytes32(orderIdUint);
-            Order storage makerOrder = orders[makerOrderId];
-
-            if (makerOrder.participant == _taker) {
-                _remainingQty = _netSelfCross(_taker, makerOrderId, makerOrder, _remainingQty, _isBuy, _expirationAt);
-                (, orderIdUint) = makerOrderQueue.getNextNode(0);
-                continue;
-            }
-
-            _remainingQty = _executeMatch(_taker, makerOrderId, makerOrder, _remainingQty, _isBuy, _price, _expirationAt);
-            (, orderIdUint) = makerOrderQueue.getNextNode(0);
-        }
-
-        _removePriceLevelIfEmpty(makerOrderQueue, _expirationAt, _price, !_isBuy);
-        return _remainingQty;
-    }
-
-    /// @dev Cancel overlapping size against the taker's own resting order.
-    ///      No fill, no fees, no position change.
-    function _netSelfCross(
-        address _taker,
-        bytes32 _makerOrderId,
-        Order storage _makerOrder,
-        int256 _remainingQty,
-        bool _isBuy,
-        uint256 _expirationAt
-    ) private returns (int256) {
-        uint256 makerAbs = M.abs(_makerOrder.quantity);
-        uint256 remainingAbs = M.abs(_remainingQty);
-        uint256 cancelAmt = M.min(makerAbs, remainingAbs);
-        bool isBuy = _makerOrder.quantity > 0;
-
-        if (cancelAmt == makerAbs) {
-            _removeRestingOrder(_makerOrderId, _expirationAt, _makerOrder.price, _makerOrder.participant, isBuy);
-            emit OrderCancelled(_makerOrderId, _taker);
-        } else {
-            uint256 reducedMakerAbs = makerAbs - cancelAmt;
-            int256 newMakerQty = M.toSigned(isBuy, reducedMakerAbs);
-            _makerOrder.quantity = newMakerQty;
-            emit OrderUpdated(_makerOrderId, _taker, newMakerQty);
-        }
-        return M.toSigned(_isBuy, remainingAbs - cancelAmt);
-    }
-
-    /// @dev Execute a single match between taker and a maker resting order.
-    function _executeMatch(
-        address _taker,
-        bytes32 _makerOrderId,
-        Order storage _makerOrder,
-        int256 _remainingQty,
-        bool _isBuy,
-        uint256 _price,
-        uint256 _expirationAt
-    ) private returns (int256) {
-        uint256 makerAbs = M.abs(_makerOrder.quantity);
-        uint256 remainingAbs = M.abs(_remainingQty);
-        uint256 fill = M.min(makerAbs, remainingAbs);
-        int256 takerFillQty = M.toSigned(_isBuy, fill);
-
-        _applyFill(_makerOrder.participant, -takerFillQty, _price, _expirationAt);
-        _applyFill(_taker, takerFillQty, _price, _expirationAt);
-
-        uint256 notional = _price * fill;
-        uint256 makerFeeAmt = notional * uint256(uint16(makerFeeBps)) / BPS;
-        uint256 takerFeeAmt = notional * uint256(uint16(takerFeeBps)) / BPS;
-        _chargeMatchFees(_makerOrder.participant, _taker, makerFeeAmt, takerFeeAmt);
-        _notifyFill(_makerOrder.participant, _taker, notional, int256(makerFeeAmt), takerFeeAmt, _price);
-
-        uint256 leftoverMakerAbs = makerAbs - fill;
-        bool isBuy = _makerOrder.quantity > 0;
-        if (leftoverMakerAbs == 0) {
-            _removeRestingOrder(_makerOrderId, _expirationAt, _makerOrder.price, _makerOrder.participant, isBuy);
-            emit OrderUpdated(_makerOrderId, _makerOrder.participant, 0);
-        } else {
-            int256 newMakerQty = M.toSigned(isBuy, leftoverMakerAbs);
-            _makerOrder.quantity = newMakerQty;
-            emit OrderUpdated(_makerOrderId, _makerOrder.participant, newMakerQty);
-        }
-
-        emit OrderMatched(
-            _makerOrderId,
-            _makerOrder.participant,
-            _taker,
-            _expirationAt,
-            _price,
-            takerFillQty,
-            int256(makerFeeAmt),
-            int256(takerFeeAmt),
-            participantExpirationAtNetDelta[_makerOrder.participant][_expirationAt],
-            participantExpirationAtNetDelta[_taker][_expirationAt],
-            _avgEntryPrice(_makerOrder.participant, _expirationAt),
-            _avgEntryPrice(_taker, _expirationAt)
-        );
-
-        return M.toSigned(_isBuy, remainingAbs - fill);
-    }
-
-    function _chargeMatchFees(address _maker, address _taker, uint256 makerAmt, uint256 takerAmt) private {
-        collectedFeesBalance += makerAmt;
-        _internalTransfer(_maker, address(this), makerAmt);
-        collectedFeesBalance += takerAmt;
-        _internalTransfer(_taker, address(this), takerAmt);
-    }
-
-    /// @dev Average entry price derived from aggregates; 0 if flat.
-    function _avgEntryPrice(address _user, uint256 _expirationAt) private view returns (uint256) {
-        int256 netQty = participantExpirationAtNetDelta[_user][_expirationAt];
-        if (netQty == 0) return 0;
-        return M.abs(participantExpirationAtNetEntryValue[_user][_expirationAt]) / M.abs(netQty);
-    }
-
-    // ── Position accounting ───────────────────────────────────────────────────
-
-    /// @notice Apply a signed fill to a user's aggregate at `expirationAt`.
-    /// @dev Scale-in / reduce / flip with exact `netEntryValue` accounting; realizes PnL via insurance fund.
-    function _applyFill(address _user, int256 _signedQty, uint256 _tradePrice, uint256 _expirationAt) private {
-        if (_signedQty == 0) return;
-
-        int256 netQty = participantExpirationAtNetDelta[_user][_expirationAt];
-        int256 netEntry = participantExpirationAtNetEntryValue[_user][_expirationAt];
-
-        if (netQty == 0) {
-            participantExpirationAtNetDelta[_user][_expirationAt] = _signedQty;
-            participantExpirationAtNetEntryValue[_user][_expirationAt] = _signedQty * int256(_tradePrice);
-            participantActiveExpirationAts[_user].add(_expirationAt);
-            return;
-        }
-
-        if (M.isSameSign(netQty, _signedQty)) {
-            participantExpirationAtNetDelta[_user][_expirationAt] = netQty + _signedQty;
-            participantExpirationAtNetEntryValue[_user][_expirationAt] = netEntry + _signedQty * int256(_tradePrice);
-            return;
-        }
-
-        // Opposite direction: reduce / close / flip
-        uint256 absDq = M.abs(_signedQty);
-        uint256 absNet = M.abs(netQty);
-        uint256 closedAbs = M.min(absDq, absNet);
-        uint256 avgEntry = M.abs(netEntry) / absNet;
-
-        int256 signedClosed = M.toSigned(netQty > 0, closedAbs);
-        int256 pnl = (int256(_tradePrice) - int256(avgEntry)) * signedClosed;
-        _transferPnl(_insuranceFundAccount(), _user, pnl);
-
-        if (absDq < absNet) {
-            // Partial reduce
-            participantExpirationAtNetDelta[_user][_expirationAt] = netQty + _signedQty;
-            participantExpirationAtNetEntryValue[_user][_expirationAt] =
-                netEntry * int256(absNet - closedAbs) / int256(absNet);
-        } else if (absDq == absNet) {
-            // Flat
-            participantExpirationAtNetDelta[_user][_expirationAt] = 0;
-            participantExpirationAtNetEntryValue[_user][_expirationAt] = 0;
-            participantActiveExpirationAts[_user].remove(_expirationAt);
-        } else {
-            // Flip: open remainder at trade price
-            int256 openQty = _signedQty + netQty; // leftover in dq's direction
-            participantExpirationAtNetDelta[_user][_expirationAt] = openQty;
-            participantExpirationAtNetEntryValue[_user][_expirationAt] = openQty * int256(_tradePrice);
-            // still active (non-zero)
-        }
-    }
-
-    /// @notice Cancel a resting order owned by the caller.
-    function cancelOrder(bytes32 _orderId) external {
-        _cancelOrderInternal(_msgSender(), _orderId);
-    }
-
     /// @dev Shared cancel body for `cancelOrder` / `updateOrders`.
-    function _cancelOrderInternal(address _participant, bytes32 _orderId) private {
-        Order storage order = orders[_orderId];
+    function _cancelOrder(address _participant, bytes32 _orderId) internal {
+        Order memory order = orders[_orderId];
         if (order.participant != _participant) revert OrderNotBelongToSender();
         if (order.quantity == 0) revert OrderNotExists();
-        bool isBuy = order.quantity > 0;
-        _removeRestingOrder(_orderId, order.expirationAt, order.price, order.participant, isBuy);
-        emit OrderCancelled(_orderId, order.participant);
+        _dropRestingOrder(_orderId, order);
+    }
+
+    /// @dev Unindex a resting order and announce it cancelled. Callers own the authorization
+    ///      decision; this only performs the removal.
+    function _dropRestingOrder(bytes32 _orderId, Order memory _order) private {
+        _removeRestingOrder(_orderId, _order.expirationAt, _order.price, _order.participant, _order.quantity > 0);
+        emit OrderCancelled(_orderId, _order.participant);
     }
 
     /// @dev In-place size shrink. Keeps the order id in its price/expiry queue slot.
-    function _reduceOrderSizeInternal(address _participant, bytes32 _orderId, int256 _newQuantity) private {
+    function _reduceOrderSize(address _participant, bytes32 _orderId, int256 _newQuantity) internal {
         Order storage order = orders[_orderId];
         if (order.participant == address(0) || order.quantity == 0) revert OrderNotExists();
         if (order.participant != _participant) revert OrderNotBelongToSender();
@@ -686,212 +203,18 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         emit OrderUpdated(_orderId, order.participant, _newQuantity);
     }
 
-    /// @notice Permissionlessly close a resting order whose `expirationAt` is in the past.
-    function removeOutdatedOrder(bytes32 _orderId) external {
-        Order storage order = orders[_orderId];
-        if (order.participant == address(0) || order.quantity == 0) revert OrderNotExists();
-        if (order.expirationAt >= block.timestamp) revert OrderNotExpired();
-        bool isBuy = order.quantity > 0;
-        _removeRestingOrder(_orderId, order.expirationAt, order.price, order.participant, isBuy);
-        emit OrderCancelled(_orderId, order.participant);
-    }
-
-    function _removeRestingOrder(
-        bytes32 orderId,
-        uint256 expirationAt,
-        uint256 price,
-        address participant,
-        bool isBuy
-    ) private {
-        StructuredLinkedList.List storage orderIndexId = _expirationAtPriceOrderIds(expirationAt, price, isBuy);
-        _removeOrderFromQueue(orderIndexId, orderId, expirationAt, price, isBuy);
-        participantOrderIdsIndex[participant].remove(orderId);
-        participantExpirationAtPriceOrderIdsIndex[participant][expirationAt][price].remove(orderId);
-        delete orders[orderId];
-    }
-
-    function _addOrderToQueue(
-        StructuredLinkedList.List storage orderIndexId,
-        bytes32 _orderId,
-        uint256 _expirationAt,
-        uint256 _price,
-        bool _isBuy
-    ) private {
-        orderIndexId.pushBack(uint256(_orderId));
-        _addPriceLevel(_expirationAt, _price, _isBuy);
-    }
-
-    function _removeOrderFromQueue(
-        StructuredLinkedList.List storage orderIndexId,
-        bytes32 _orderId,
-        uint256 _expirationAt,
-        uint256 _price,
-        bool _isBuy
-    ) private {
-        orderIndexId.remove(uint256(_orderId));
-        _removePriceLevelIfEmpty(orderIndexId, _expirationAt, _price, _isBuy);
-    }
-
-    /// @notice Insert `_price` into the sorted ladder for `_expirationAt` if absent.
-    function _addPriceLevel(uint256 _expirationAt, uint256 _price, bool _isBid) private {
-        StructuredLinkedList.List storage priceList = _isBid ? activeBidPrices[_expirationAt] : activeAskPrices[_expirationAt];
-        PriceLadderLib.insertPrice(priceList, _price, _isBid, MAX_PRICE_LEVELS_PER_SIDE);
-    }
-
-    /// @notice Remove price level when its order queue is empty.
-    function _removePriceLevelIfEmpty(
-        StructuredLinkedList.List storage orderQueue,
-        uint256 _expirationAt,
-        uint256 _price,
-        bool _isBid
-    ) private {
-        StructuredLinkedList.List storage priceList = _isBid ? activeBidPrices[_expirationAt] : activeAskPrices[_expirationAt];
-        PriceLadderLib.removeIfEmpty(orderQueue, priceList, _price);
-    }
-
-    // ── Admin ─────────────────────────────────────────────────────────────────
-
-    function setLiquidationMarginPercent(uint8 _liquidationMarginPercent) external onlyOwner {
-        liquidationMarginPercent = _liquidationMarginPercent;
-        emit LiquidationMarginPercentUpdated(_liquidationMarginPercent);
-    }
-
-    function setFutureExpirationDatesCount(uint8 _futureExpirationDatesCount) public onlyOwner {
-        if (_futureExpirationDatesCount < 1) {
-            revert ValueOutOfRange(1, int256(uint256(type(uint8).max)));
-        }
-        futureExpirationDatesCount = _futureExpirationDatesCount;
-        emit FutureExpirationDatesCountUpdated(_futureExpirationDatesCount);
-    }
-
-    function setMakerFeeBps(int16 _makerFeeBps) external onlyOwner {
-        makerFeeBps = _makerFeeBps;
-        emit MakerFeeBpsUpdated(_makerFeeBps);
-    }
-
-    function setTakerFeeBps(int16 _takerFeeBps) external onlyOwner {
-        takerFeeBps = _takerFeeBps;
-        emit TakerFeeBpsUpdated(_takerFeeBps);
-    }
-
-    function setLiquidationFeeBps(uint16 _bps) external onlyOwner {
-        liquidationFeeBps = _bps;
-        emit LiquidationFeeBpsUpdated(_bps);
-    }
-
-    function setLiquidatorShareBps(uint16 _bps) external onlyOwner {
-        if (_bps > BPS) revert ValueOutOfRange(0, int256(BPS));
-        liquidatorShareBps = _bps;
-        emit LiquidatorShareBpsUpdated(_bps);
-    }
-
-    function setOracle(address addr) external onlyOwner {
-        _setPriceOracle(AggregatorV3Interface(addr));
-        emit OracleUpdated(addr);
-    }
-
-    function _setPriceOracle(AggregatorV3Interface _oracle) private {
-        if (address(_oracle) == address(0)) {
-            revert InvalidOracle();
-        }
-        priceOracle = _oracle;
-        oracleDecimals = _oracle.decimals();
-        if (collateralDecimals > oracleDecimals) {
-            revert UnsupportedTokenDecimals();
-        }
-    }
-
-    function setPortfolioMargin(IPortfolioMarginEngine _portfolioMargin) external onlyOwner {
-        portfolioMargin = _portfolioMargin;
-        emit PortfolioMarginUpdated(address(_portfolioMargin));
-    }
-
-    function setHook(address _hook) external onlyOwner {
-        hook = IPointsHook(_hook);
-        emit HookUpdated(_hook);
-    }
-
-    function _notifyFill(
-        address _maker,
-        address _taker,
-        uint256 _notional,
-        int256 _makerFee,
-        uint256 _takerFee,
-        uint256 _makerPrice
-    ) private {
-        IPointsHook _hook = hook;
-        if (address(_hook) == address(0)) return;
-        _hook.onFill(_maker, _taker, _notional, _makerFee, _takerFee, _makerPrice, _refPriceForPoints());
-    }
-
-    function _refPriceForPoints() private view returns (uint256) {
-        (, int256 answer,, uint256 updatedAt,) = priceOracle.latestRoundData();
-        if (answer <= 0) return 0;
-        if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) return 0;
-        return _getMarketPrice(uint256(answer));
-    }
-
-    function _notifyLiquidation(address _liquidator, uint256 _fee) private {
-        IPointsHook _hook = hook;
-        if (address(_hook) == address(0)) return;
-        _hook.onLiquidation(_liquidator, _fee);
-    }
-
-    /// @notice Admin escape hatch: clear orders + aggregate positions for the given participants.
-    /// @dev Does not walk legacy lots for economics — zeros `netDelta` / `netEntryValue` /
-    ///      `activeExpirationAts` directly. Also purges dead lot indexes and order queues.
-    function resetState(address[] calldata _participants) external onlyOwner {
-        for (uint256 p = 0; p < _participants.length; p++) {
-            address participant = _participants[p];
-
-            EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[participant];
-            for (uint256 i = _orders.length(); i > 0; i--) {
-                bytes32 orderId = _orders.at(i - 1);
-                Order storage order = orders[orderId];
-                bool isBuy = order.quantity > 0;
-                _removeRestingOrder(orderId, order.expirationAt, order.price, order.participant, isBuy);
-                emit OrderCancelled(orderId, participant);
-            }
-
-            // Clear aggregates + active dates directly (no lot iteration for economics).
-            EnumerableSet.UintSet storage dates = participantActiveExpirationAts[participant];
-            while (dates.length() > 0) {
-                uint256 date = dates.at(0);
-                delete participantExpirationAtNetDelta[participant][date];
-                delete participantExpirationAtNetEntryValue[participant][date];
-
-                // Purge dead per-date lot index entries.
-                EnumerableSet.Bytes32Set storage dateLots = participantExpirationAtPositionIdsIndex[participant][date];
-                while (dateLots.length() > 0) {
-                    dateLots.remove(dateLots.at(0));
-                }
-                dates.remove(date);
-            }
-
-            // Purge dead global lot index + LegacyLot storage.
-            EnumerableSet.Bytes32Set storage _positions = participantPositionIdsIndex[participant];
-            while (_positions.length() > 0) {
-                bytes32 positionId = _positions.at(0);
-                delete positions[positionId];
-                _positions.remove(positionId);
-            }
-        }
-    }
+    // ── Order liquidation ─────────────────────────────────────────────────────
 
     /// @notice True when the participant has resting orders or an active position and is below portfolio MM.
+    /// @dev The state check is what separates this from `_underwater`: an account holding
+    ///      nothing has an MM of zero, so it is never "liquidatable" even at a zero balance.
     function isLiquidatable(address _participant) public view returns (bool) {
         bool hasState = participantOrderIdsIndex[_participant].length() > 0
             || participantActiveExpirationAts[_participant].length() > 0;
-        if (!hasState) return false;
-        return vault.balanceOf(_participant) < portfolioMargin.computePortfolioMM(_participant);
+        return hasState && _underwater(_participant);
     }
 
-    function _underwater(address _participant) internal view returns (bool) {
-        return vault.balanceOf(_participant) < portfolioMargin.computePortfolioMM(_participant);
-    }
-
-    // ── Order liquidation ─────────────────────────────────────────────────────
-
+    /// @notice Cancel one resting order of an underwater participant, charging the liquidation fee.
     function liquidateOrder(address _user, bytes32 _orderId) external {
         if (!_underwater(_user)) revert NotLiquidatable();
         Order memory order = orders[_orderId];
@@ -917,7 +240,11 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         if (cancelled == 0) revert NotLiquidatable();
     }
 
-    function _doLiquidateOrder(address _user, bytes32 _orderId, Order memory _order) private {
+    function _underwater(address _participant) internal view returns (bool) {
+        return vault.balanceOf(_participant) < portfolioMargin.computePortfolioMM(_participant);
+    }
+
+    function _doLiquidateOrder(address _user, bytes32 _orderId, Order memory _order) internal {
         uint256 orderNotional = _order.price * M.abs(_order.quantity);
         bool isBuy = _order.quantity > 0;
         _removeRestingOrder(_orderId, _order.expirationAt, _order.price, _order.participant, isBuy);
@@ -932,11 +259,12 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     // ── Position liquidation ──────────────────────────────────────────────────
 
     /// @notice Force-close up to `closeQty` contracts of an underwater user's net at `expirationAt`.
-    /// @dev Orders-first. Keeper sizes `closeQty` off-chain; partial closes revert `OverLiquidation`
+    /// @dev Orders-first, portfolio-wide: any resting order delta at any venue gates this call,
+    ///      not just this book's. Keeper sizes `closeQty` off-chain; partial closes revert `OverLiquidation`
     ///      if leftover balance sits above IM when a real IM>MM buffer exists. Full closes skip
     ///      that guard (bad-debt / deep-underwater path).
     function liquidatePosition(address _user, uint256 _expirationAt, uint256 _closeQty) external {
-        if (participantOrderIdsIndex[_user].length() != 0) revert OrdersStillOpen();
+        if (portfolioMargin.hasRestingOrderDelta(_user)) revert OrdersStillOpen();
         if (!_underwater(_user)) revert NotLiquidatable();
         if (_closeQty == 0) revert InvalidQty();
 
@@ -953,7 +281,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         external
     {
         if (_expirationAts.length != _closeQtys.length) revert ArrayLengthMismatch();
-        if (participantOrderIdsIndex[_user].length() != 0) revert OrdersStillOpen();
+        if (portfolioMargin.hasRestingOrderDelta(_user)) revert OrdersStillOpen();
 
         uint256 closed = 0;
         for (uint256 i = 0; i < _expirationAts.length; i++) {
@@ -973,7 +301,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
     /// @dev Close up to `_closeQty` at `_expirationAt`. Returns false when no positive close.
     function _closePosition(address _user, uint256 _expirationAt, int256 _netQty, uint256 _closeQty)
-        private
+        internal
         returns (bool)
     {
         uint256 absNet = M.abs(_netQty);
@@ -987,7 +315,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
 
         (int256 pnl, int256 signedClose) = _doPartialLiquidatePosition(_user, _expirationAt, _netQty, closeAbs);
 
-        uint256 mark = getMarketPrice();
+        uint256 mark = _getMarketPrice(_getPrice());
         uint256 closedNotional = mark * closeAbs;
         uint256 liqFee = _chargeLiquidationFee(_user, closedNotional);
 
@@ -997,65 +325,18 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     /// @dev With remaining portfolio risk and a real IM>MM buffer, balance must be ≤ IM.
-    function _revertIfOverLiquidated(address _user) private view {
+    function _revertIfOverLiquidated(address _user) internal view {
         uint256 im = portfolioMargin.computePortfolioIM(_user);
         uint256 mm = portfolioMargin.computePortfolioMM(_user);
         if (im > mm && vault.balanceOf(_user) > im) revert OverLiquidation();
     }
 
-    function _doLiquidateFullPosition(address _user, uint256 _expirationAt, int256 _netQty) private {
-        uint256 mark = getMarketPrice();
-        int256 netEntry = participantExpirationAtNetEntryValue[_user][_expirationAt];
-        int256 pnl = int256(mark) * _netQty - netEntry;
-
-        _transferPnl(_insuranceFundAccount(), _user, pnl);
-
-        uint256 closedNotional = mark * M.abs(_netQty);
-        uint256 liqFee = _chargeLiquidationFee(_user, closedNotional);
-
-        participantExpirationAtNetDelta[_user][_expirationAt] = 0;
-        participantExpirationAtNetEntryValue[_user][_expirationAt] = 0;
-        participantActiveExpirationAts[_user].remove(_expirationAt);
-
-        emit PositionLiquidated(_user, _msgSender(), _expirationAt, _netQty, pnl, liqFee);
-        _notifyLiquidation(_msgSender(), liqFee);
-    }
-
-    function _doPartialLiquidatePosition(address _user, uint256 _expirationAt, int256 _netQty, uint256 _closeAbs)
-        private
-        returns (int256 pnl, int256 signedClose)
-    {
-        uint256 mark = getMarketPrice();
-        int256 netEntry = participantExpirationAtNetEntryValue[_user][_expirationAt];
-        uint256 absNet = M.abs(_netQty);
-        uint256 avgEntry = M.abs(netEntry) / absNet;
-        signedClose = M.toSigned(_netQty > 0, _closeAbs);
-        pnl = (int256(mark) - int256(avgEntry)) * signedClose;
-        _transferPnl(_insuranceFundAccount(), _user, pnl);
-
-        // Reduce toward zero; scale netEntryValue proportionally.
-        participantExpirationAtNetDelta[_user][_expirationAt] =
-            _netQty - M.toSigned(_netQty > 0, _closeAbs);
-        participantExpirationAtNetEntryValue[_user][_expirationAt] =
-            netEntry * int256(absNet - _closeAbs) / int256(absNet);
-    }
-
     // ── Settlement ────────────────────────────────────────────────────────────
 
+    /// @notice Permissionlessly pin the settlement price for a matured expiry.
     function recordSettlementPrice(uint256 expirationAt) external returns (uint256 price) {
         if (block.timestamp < expirationAt) revert SettlementDateNotReached();
         return _ensureSettlementPrice(expirationAt);
-    }
-
-    function _ensureSettlementPrice(uint256 expirationAt) private returns (uint256) {
-        uint256 price = settlementPrice[expirationAt];
-        if (price == 0) {
-            price = _getMarketPrice(_getPrice());
-            if (price == 0) revert InvalidPrice();
-            settlementPrice[expirationAt] = price;
-            emit SettlementPriceRecorded(expirationAt, price, _msgSender());
-        }
-        return price;
     }
 
     /// @notice Cash-settle a matured aggregate position at the pinned settlement price.
@@ -1077,6 +358,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         emit PositionSettled(_user, _expirationAt, netQty, pnl, price, _msgSender());
     }
 
+    /// @notice Cash-settle a batch of (user, expiry) pairs. Reverts if any leg is unsettleable.
     function settlePositions(address[] calldata _users, uint256[] calldata _expirationAts) external {
         if (_users.length != _expirationAts.length) revert ArrayLengthMismatch();
         for (uint256 i = 0; i < _users.length; i++) {
@@ -1084,19 +366,22 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         }
     }
 
+    /// @dev Pins the settlement price for `expirationAt` on first call; idempotent thereafter.
+    function _ensureSettlementPrice(uint256 expirationAt) internal returns (uint256) {
+        uint256 price = settlementPrice[expirationAt];
+        if (price == 0) {
+            price = _getMarketPrice(_getPrice());
+            if (price == 0) revert InvalidPrice();
+            settlementPrice[expirationAt] = price;
+            emit SettlementPriceRecorded(expirationAt, price, _msgSender());
+        }
+        return price;
+    }
+
     // ── Views ─────────────────────────────────────────────────────────────────
 
     function getMarketPrice() public view returns (uint256) {
         return _getMarketPrice(_getPrice());
-    }
-
-    function decimals() external view returns (uint8) {
-        return collateralDecimals;
-    }
-
-    function _getMarketPrice(uint256 _hashpriceUsd) private view returns (uint256) {
-        uint256 scaled = M.scaleDecimals(_hashpriceUsd, oracleDecimals, collateralDecimals);
-        return M.roundToNearest(scaled, minimumPriceIncrement);
     }
 
     function getOrder(bytes32 _orderId) external view returns (Order memory) {
@@ -1118,6 +403,12 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         return participantActiveExpirationAts[_user].values();
     }
 
+    /// @notice Net linear delta across active positions, signed and scaled by
+    ///         10^collateralDecimals: one unit per contract.
+    /// @dev Deliberately does not share `_positionAggregate`: delta needs no mark, so this
+    ///      view never reads the oracle and keeps answering while the feed is stale. That
+    ///      matters for matured-but-unpriced expiries, where the price is stale by
+    ///      construction yet the exposure still has to be reported.
     function getNetPositionDelta(address _participant) external view returns (int256) {
         EnumerableSet.UintSet storage dates = participantActiveExpirationAts[_participant];
         uint256 len = dates.length();
@@ -1127,78 +418,113 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             if (settlementPrice[date] != 0) continue;
             netDelta += participantExpirationAtNetDelta[_participant][date];
         }
-        return netDelta * 1e18;
+        return netDelta * int256(10 ** collateralDecimals);
     }
 
-    /// @notice Minimum margin locked by resting orders (token decimals).
-    /// @dev Per order: maintenance × |qty| − mark PnL. A reducing-side order at an
-    ///      expiry with an open position is offset up to that position's remaining
-    ///      margin cap (same spirit as perps `reducingVal`). No calendar scan —
-    ///      position is read via `participantExpirationAtNetDelta[user][expiry]`.
-    function getOrderMargin(address _participant) public view returns (uint256) {
-        EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[_participant];
-        uint256 len = _orders.length();
-        if (len == 0) return 0;
-
-        uint256 marketPrice = getMarketPrice();
-        uint256 marginPct = liquidationMarginPercent;
-
-        // Remaining reduce-credit per expiry we've seen (at most one entry per
-        // distinct resting-order expiry, ≤ len).
-        uint256[] memory redExpiries = new uint256[](len);
-        uint256[] memory redRemaining = new uint256[](len);
-        uint256 nRed = 0;
-
-        uint256 total = 0;
-        for (uint256 i = 0; i < len; i++) {
-            Order memory order = orders[_orders.at(i)];
-            if (order.expirationAt < block.timestamp || order.quantity == 0) continue;
-
-            uint256 absQty = M.abs(order.quantity);
-            uint256 maintenanceMargin = order.price * marginPct / 100 * absQty;
-            int256 pnl = (int256(marketPrice) - int256(order.price)) * order.quantity;
-            uint256 contrib = M.clamp(int256(maintenanceMargin) - pnl);
-
-            int256 net = participantExpirationAtNetDelta[_participant][order.expirationAt];
-            bool isReducing = net != 0 && (net > 0 ? order.quantity < 0 : order.quantity > 0);
-            if (!isReducing) {
-                total += contrib;
-                continue;
-            }
-
-            // Lazy-init remaining cap for this expiry on first reducing order.
-            uint256 slot = nRed;
-            bool found = false;
-            for (uint256 s = 0; s < nRed; s++) {
-                if (redExpiries[s] == order.expirationAt) {
-                    slot = s;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                redExpiries[nRed] = order.expirationAt;
-                redRemaining[nRed] = marketPrice * marginPct / 100 * M.abs(net);
-                slot = nRed;
-                nRed++;
-            }
-
-            uint256 credit = M.min(contrib, redRemaining[slot]);
-            redRemaining[slot] -= credit;
-            total += contrib - credit;
-        }
-        return total;
-    }
-
-    function getUnrealizedPnl(address _participant) external view returns (int256) {
+    /// @dev One pass over the participant's active expiries, yielding both figures the
+    ///      three position views need. Settled expiries stop contributing delta — the
+    ///      exposure is gone once the price is pinned — but keep contributing PnL, frozen
+    ///      at that pinned price until `settlePosition` pays it out.
+    ///
+    ///      The live index is read lazily, and that is load-bearing: a participant whose
+    ///      expiries have all settled never touches the oracle, so these views keep working
+    ///      (rather than reverting `OracleStale`) when the feed is down. Hoisting the read
+    ///      above the loop would quietly break that.
+    function _positionAggregate(address _participant)
+        private
+        view
+        returns (int256 netPositionDelta, int256 unrealizedPnl)
+    {
         EnumerableSet.UintSet storage dates = participantActiveExpirationAts[_participant];
         uint256 len = dates.length();
-        int256 totalPnl = 0;
+        int256 netDelta = 0;
         uint256 livePrice = 0;
         bool livePriceLoaded = false;
         for (uint256 i = 0; i < len; i++) {
             uint256 date = dates.at(i);
+            int256 dateDelta = participantExpirationAtNetDelta[_participant][date];
             uint256 markPrice = settlementPrice[date];
+            if (markPrice == 0) {
+                netDelta += dateDelta;
+                if (!livePriceLoaded) {
+                    livePrice = getMarketPrice();
+                    livePriceLoaded = true;
+                }
+                markPrice = livePrice;
+            }
+            unrealizedPnl += int256(markPrice) * dateDelta - participantExpirationAtNetEntryValue[_participant][date];
+        }
+        netPositionDelta = netDelta * int256(10 ** collateralDecimals);
+    }
+
+    /// @notice ILinearMarket: all per-user margin inputs in a single call (saves the
+    ///         portfolio margin engine external-call gas). One loop computes both the
+    ///         live-position delta and the mark-to-market PnL; a second aggregates the
+    ///         resting book into per-side delta and instant fill loss.
+    /// @dev Resting orders no longer carry their own margin figure sized off
+    ///      `liquidationMarginPercent`. The engine's `imSpotShock` sizes them, applied to
+    ///      order delta netted into portfolio net delta — the parameterization change
+    ///      accepted when both venues migrated together. The per-expiry reduce credits are
+    ///      gone with it: netting at the engine is exact and cross-product, and covers the
+    ///      case a venue-local credit cannot, where the offsetting position sits elsewhere.
+    function getRiskView(address _participant) external view returns (ILinearMarket.RiskView memory view_) {
+        (view_.netPositionDelta, view_.unrealizedPnl) = _positionAggregate(_participant);
+        view_.pendingFunding = 0;
+
+        (uint256 buyQty, uint256 sellQty, uint256 buyValue, uint256 sellValue, uint256 buyMark, uint256 sellMark) =
+            _restingAggregate(_participant);
+        view_.buyOrderDelta = buyQty * (10 ** collateralDecimals);
+        view_.sellOrderDelta = sellQty * (10 ** collateralDecimals);
+        if (buyValue > buyMark) view_.buyOrderFillLoss = buyValue - buyMark;
+        if (sellMark > sellValue) view_.sellOrderFillLoss = sellMark - sellValue;
+    }
+
+    /// @notice Always 0 — futures have no funding mechanism. Kept as a standalone read so
+    ///         off-chain consumers can treat both venues uniformly.
+    function getPendingFunding(address) external pure returns (int256) {
+        return 0;
+    }
+
+    /// @notice Total resting order notional per side at the orders' own limit prices
+    ///         (token decimals).
+    /// @dev Book state, not a margin figure. Exposed for off-chain consumers that need to
+    ///      re-evaluate fill loss at a hypothetical spot: `RiskView` reports the loss only
+    ///      at the current mark, and the clamp makes it non-invertible once it reads zero.
+    function getOrderValues(address _participant) external view returns (uint256 buyValue, uint256 sellValue) {
+        (,, buyValue, sellValue,,) = _restingAggregate(_participant);
+    }
+
+    /// @dev One pass over the participant's resting book. Expired orders are skipped as
+    ///      they cannot fill; each order is marked at its own expiry's settlement price,
+    ///      falling back to the live index, matching `getRiskView`'s position loop.
+    ///
+    ///      The fill-loss clamp is applied per side across all expiries rather than per
+    ///      expiry — the less conservative of the two, and consistent with this venue
+    ///      already collapsing every expiry into a single `netPositionDelta` and ignoring
+    ///      calendar-spread risk.
+    function _restingAggregate(address _participant)
+        private
+        view
+        returns (
+            uint256 buyQty,
+            uint256 sellQty,
+            uint256 buyValue,
+            uint256 sellValue,
+            uint256 buyMark,
+            uint256 sellMark
+        )
+    {
+        EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[_participant];
+        uint256 len = _orders.length();
+        if (len == 0) return (0, 0, 0, 0, 0, 0);
+
+        uint256 livePrice = 0;
+        bool livePriceLoaded = false;
+        for (uint256 i = 0; i < len; i++) {
+            Order memory order = orders[_orders.at(i)];
+            if (order.expirationAt < block.timestamp || order.quantity == 0) continue;
+
+            uint256 markPrice = settlementPrice[order.expirationAt];
             if (markPrice == 0) {
                 if (!livePriceLoaded) {
                     livePrice = getMarketPrice();
@@ -1206,12 +532,28 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
                 }
                 markPrice = livePrice;
             }
-            totalPnl += int256(markPrice) * participantExpirationAtNetDelta[_participant][date]
-                - participantExpirationAtNetEntryValue[_participant][date];
+
+            uint256 absQty = M.abs(order.quantity);
+            if (order.quantity > 0) {
+                buyQty += absQty;
+                buyValue += order.price * absQty;
+                buyMark += markPrice * absQty;
+            } else {
+                sellQty += absQty;
+                sellValue += order.price * absQty;
+                sellMark += markPrice * absQty;
+            }
         }
-        return totalPnl;
     }
 
+    /// @notice Mark-to-market PnL across active expiries, in collateral token units.
+    ///         Settled-but-unswept expiries are marked at their pinned settlement price.
+    function getUnrealizedPnl(address _participant) external view returns (int256) {
+        (, int256 unrealizedPnl) = _positionAggregate(_participant);
+        return unrealizedPnl;
+    }
+
+    /// @notice The currently tradable expiration timestamps, earliest first.
     function getExpirationDates() external view returns (uint256[] memory) {
         uint256 currentExpirationDateIndex = _getCurrentExpirationAtIndex();
         uint256[] memory expirationDatesArray = new uint256[](futureExpirationDatesCount);
@@ -1232,22 +574,6 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         asks = _activePricesSlice(activeAskPrices[_expirationAt], _maxLevels);
     }
 
-    function _activePricesSlice(StructuredLinkedList.List storage priceList, uint256 _maxLevels)
-        private
-        view
-        returns (uint256[] memory)
-    {
-        uint256 total = priceList.sizeOf();
-        uint256 count = M.min(total, _maxLevels);
-        uint256[] memory out = new uint256[](count);
-        (, uint256 current) = priceList.getNextNode(0);
-        for (uint256 i = 0; i < count && current != 0; i++) {
-            out[i] = current;
-            (, current) = priceList.getNextNode(current);
-        }
-        return out;
-    }
-
     /// @notice Best (highest) bid for `expirationAt`, or 0 if empty.
     function getBestBidPrice(uint256 _expirationAt) public view returns (uint256) {
         StructuredLinkedList.List storage bids = activeBidPrices[_expirationAt];
@@ -1265,7 +591,9 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
     }
 
     /// @notice Simulate a limit order: filled qty, VWAP, and remainder (view, no state change).
-    /// @dev Skips own resting liquidity (matches on-match STP net-out).
+    /// @dev Skips own resting liquidity (matches on-match STP net-out). Self-trade is judged
+    ///      against the caller, so simulating for another account requires setting the
+    ///      `eth_call` `from` field to that account.
     function simulateOrder(uint256 _expirationAt, uint256 _price, int256 _quantity)
         external
         view
@@ -1292,14 +620,14 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
             while (orderIdUint != 0 && remaining != 0) {
                 Order storage makerOrder = orders[bytes32(orderIdUint)];
                 // STP: own resting size would net out, not fill.
-                if (makerOrder.participant != msg.sender && makerOrder.quantity != 0) {
+                if (makerOrder.participant != _msgSender() && makerOrder.quantity != 0) {
                     uint256 matchAmt = M.min(M.abs(makerOrder.quantity), M.abs(remaining));
                     if (matchAmt > 0) {
                         totalNotional += currentPrice * matchAmt;
                         totalFilledAbs += matchAmt;
                         remaining -= M.toSigned(isBuy, matchAmt);
                     }
-                } else if (makerOrder.participant == msg.sender && makerOrder.quantity != 0) {
+                } else if (makerOrder.participant == _msgSender() && makerOrder.quantity != 0) {
                     uint256 cancelAmt = M.min(M.abs(makerOrder.quantity), M.abs(remaining));
                     remaining -= M.toSigned(isBuy, cancelAmt);
                 }
@@ -1332,141 +660,7 @@ contract Futures is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, V
         return total;
     }
 
-    function _getCurrentExpirationAtIndex() private view returns (uint256) {
-        if (block.timestamp > firstFutureExpirationDate) {
-            return (block.timestamp - firstFutureExpirationDate) / expirationIntervalSeconds() + 1;
-        }
-        return 0;
-    }
-
     function expirationIntervalDays() external pure returns (uint8) {
         return EXPIRATION_INTERVAL_DAYS;
-    }
-
-    function expirationIntervalSeconds() private pure returns (uint256) {
-        return EXPIRATION_INTERVAL_DAYS * SECONDS_PER_DAY;
-    }
-
-    function _expirationAtPriceOrderIds(uint256 _expirationAt, uint256 _price, bool _isBuy)
-        private
-        view
-        returns (StructuredLinkedList.List storage)
-    {
-        if (_isBuy) {
-            return expirationAtPriceOrdersLongIdQueue[_expirationAt][_price];
-        } else {
-            return expirationAtPriceOrdersShortIdQueue[_expirationAt][_price];
-        }
-    }
-
-    function _getPrice() private view returns (uint256) {
-        (, int256 answer,, uint256 updatedAt,) = priceOracle.latestRoundData();
-        if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) {
-            revert OracleStale();
-        }
-        if (answer <= 0) {
-            revert InvalidOracle();
-        }
-        return uint256(answer);
-    }
-
-    function validatePrice(uint256 _price) private view {
-        if (_price == 0) revert InvalidPrice();
-        if (_price % minimumPriceIncrement != 0) revert InvalidPrice();
-    }
-
-    function validateExpirationAt(uint256 _expirationAt) private view {
-        if (_expirationAt <= block.timestamp) {
-            revert ExpirationDateShouldBeInTheFuture();
-        }
-        if (_expirationAt < firstFutureExpirationDate) {
-            revert ExpirationDateNotAvailable();
-        }
-        uint256 elapsedFromFirst = _expirationAt - firstFutureExpirationDate;
-        if (elapsedFromFirst % expirationIntervalSeconds() != 0) {
-            revert ExpirationDateNotAvailable();
-        }
-        uint256 currentIndex = _getCurrentExpirationAtIndex();
-        if (elapsedFromFirst > (futureExpirationDatesCount - 1 + currentIndex) * expirationIntervalSeconds()) {
-            revert ExpirationDateNotAvailable();
-        }
-    }
-
-    function ensureNoCollateralDeficit(address _participant) private view {
-        uint256 required = portfolioMargin.computePortfolioIM(_participant);
-        if (vault.balanceOf(_participant) < required) revert InsufficientMarginBalance();
-    }
-
-    function withdrawCollectedFees() external onlyOwner {
-        uint256 amount = collectedFeesBalance;
-        collectedFeesBalance = 0;
-        vault.withdrawTo(owner(), amount);
-    }
-
-    function _transferPnl(address _from, address _to, int256 _pnl) private {
-        if (_pnl == 0) return;
-        address payer;
-        address receiver;
-        uint256 amount;
-        if (_pnl > 0) {
-            payer = _from;
-            receiver = _to;
-            amount = uint256(_pnl);
-        } else {
-            payer = _to;
-            receiver = _from;
-            amount = uint256(-_pnl);
-        }
-
-        uint256 available = vault.balanceOf(payer);
-        if (available >= amount) {
-            vault.internalTransfer(payer, receiver, amount);
-            return;
-        }
-
-        if (available > 0) {
-            vault.internalTransfer(payer, receiver, available);
-        }
-        emit BadDebt(payer, amount - available);
-    }
-
-    /// @notice Charge a liquidation fee on the closed notional value, split between
-    ///         liquidator (msg.sender) and insurance fund according to `liquidatorShareBps`.
-    /// @dev Fee is `_notionalValue * liquidationFeeBps / 10000`, capped at the user's
-    ///      actual vault balance. The liquidator receives `fee * liquidatorShareBps / 10000`
-    ///      (also capped at available balance), and the remainder goes to the insurance fund.
-    /// @param _user The liquidated user (fee source)
-    /// @param _notionalValue Notional value of the liquidated position/order
-    /// @return totalFee Total fee actually collected (may be less than computed if balance insufficient)
-    function _chargeLiquidationFee(address _user, uint256 _notionalValue) private returns (uint256 totalFee) {
-        uint16 feeBps = liquidationFeeBps;
-        if (feeBps == 0) return 0;
-
-        uint256 computedFee = _notionalValue * uint256(feeBps) / BPS;
-        if (computedFee == 0) return 0;
-
-        uint256 userBal = vault.balanceOf(_user);
-        totalFee = M.min(computedFee, userBal);
-        if (totalFee == 0) return 0;
-
-        address liquidator = _msgSender();
-        address insurance = _insuranceFundAccount();
-
-        uint16 liqShareBps = liquidatorShareBps;
-        uint256 liquidatorShare = totalFee * uint256(liqShareBps) / BPS;
-        uint256 insuranceShare = totalFee - liquidatorShare;
-
-        _internalTransfer(_user, liquidator, liquidatorShare);
-        _internalTransfer(_user, insurance, insuranceShare);
-    }
-
-    function _insuranceFundAccount() private view returns (address) {
-        address fund = vault.INSURANCE_FUND_ADDR();
-        if (fund == address(0)) revert InsuranceFundNotConfigured();
-        return fund;
-    }
-
-    function _internalTransfer(address from, address to, uint256 amount) private {
-        vault.internalTransfer(from, to, amount);
     }
 }
