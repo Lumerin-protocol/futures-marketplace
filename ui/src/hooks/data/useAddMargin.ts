@@ -4,6 +4,7 @@ import { CollateralVaultAbi } from "collateral-margin-abi/CollateralVault.ts";
 import { useApproveERC20 } from "./useApproveERC20";
 import { useFuturePaymentToken } from "./useFuturePaymentToken";
 import { useFuturesCollateralVault } from "./useFuturesCollateralVault";
+import { withErrors } from "../../lib/withErrors";
 
 interface AddMarginProps {
   amount: bigint;
@@ -31,7 +32,7 @@ export function useAddMargin() {
 
     const vault = getContract({
       address: collateralVaultAddress,
-      abi: CollateralVaultAbi,
+      abi: withErrors(CollateralVaultAbi),
       client: walletClient,
     });
 

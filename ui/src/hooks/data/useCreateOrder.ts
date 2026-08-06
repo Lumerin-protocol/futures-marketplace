@@ -3,6 +3,7 @@ import { getContract } from "viem";
 import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
 import { contractErrors } from "futures-marketplace-abi/ContractErrors.ts";
 import { TimeInForce, type TimeInForceValue } from "../../types/timeInForce";
+import { withErrors } from "../../lib/withErrors";
 
 interface CreateOrderProps {
   price: bigint;

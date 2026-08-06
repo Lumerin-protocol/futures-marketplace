@@ -1,6 +1,7 @@
 import { useReadContract } from "wagmi";
 import { IPortfolioMarginEngineAbi } from "collateral-margin-abi/IPortfolioMarginEngine.ts";
 import { useFuturesMarginEngine } from "./useFuturesMarginEngine";
+import { withErrors } from "../../lib/withErrors";
 
 /// Reads the user's portfolio Initial Margin (IM) from the
 /// `IPortfolioMarginEngine` contract resolved via the Futures contract's
@@ -11,7 +12,7 @@ export function useGetPortfolioIM(address: `0x${string}` | undefined) {
   const { data: engine } = useFuturesMarginEngine();
   return useReadContract({
     address: engine,
-    abi: IPortfolioMarginEngineAbi,
+    abi: withErrors(IPortfolioMarginEngineAbi),
     functionName: "computePortfolioIM",
     args: address ? [address] : undefined,
     query: {

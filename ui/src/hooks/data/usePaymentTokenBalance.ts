@@ -2,6 +2,7 @@ import { usdcMockAbi } from "contracts-js/dist/abi/abi";
 import { useReadContract } from "wagmi";
 import { backgroundRefetchOpts } from "./config";
 import { useFuturePaymentToken } from "./useFuturePaymentToken";
+import { withErrors } from "../../lib/withErrors";
 
 /// Wallet (ERC20) balance of the futures payment token.
 ///
@@ -13,7 +14,7 @@ export function useFuturesPaymentTokenBalance(address: `0x${string}` | undefined
 
   return useReadContract({
     address: paymentTokenAddress,
-    abi: usdcMockAbi,
+    abi: withErrors(usdcMockAbi),
     functionName: "balanceOf",
     args: [address!],
     query: {
