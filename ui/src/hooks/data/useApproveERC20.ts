@@ -1,21 +1,28 @@
-import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
+import { useWriteContract, useWalletClient } from "wagmi";
 import { erc20Abi, getContract } from "viem";
 import { useCallback } from "react";
 import { withErrors } from "../../lib/withErrors";
+import { retryUntilBlockAvailable } from "../../lib/retryUntilBlockAvailable";
 
 interface ApproveProps {
   spender: `0x${string}`;
   amount: bigint;
+  /**
+   * Block a prior step's tx was mined in. When set, the allowance read and
+   * approve simulation are pinned to this block (with retries while the node
+   * catches up) instead of `latest`, which otherwise can race the just-mined
+   * tx — see `retryUntilBlockAvailable`.
+   */
+  minBlockNumber?: bigint;
 }
 
 export function useApproveERC20(tokenAddress: `0x${string}`) {
   const { writeContractAsync, ...rest } = useWriteContract();
-  const pc = usePublicClient();
   const { data: wc } = useWalletClient();
 
   const approveAsync = useCallback(
     async (props: ApproveProps) => {
-      if (!writeContractAsync || !pc || !wc) return;
+      if (!writeContractAsync || !wc) return;
 
       const token = getContract({
         address: tokenAddress,
@@ -23,21 +30,28 @@ export function useApproveERC20(tokenAddress: `0x${string}`) {
         client: wc,
       });
 
+      const readOpts = props.minBlockNumber !== undefined ? { blockNumber: props.minBlockNumber } : {};
+
       // Check current allowance
-      const currentAllowance = await token.read.allowance([wc.account.address, props.spender]);
+      const currentAllowance = await retryUntilBlockAvailable(() =>
+        token.read.allowance([wc.account.address, props.spender], readOpts),
+      );
 
       // If current allowance is sufficient, return undefined
       if (currentAllowance >= props.amount) {
         return undefined;
       }
 
-      const req = await token.simulate.approve([props.spender, props.amount], {
-        account: wc.account.address,
-      });
+      const req = await retryUntilBlockAvailable(() =>
+        token.simulate.approve([props.spender, props.amount], {
+          account: wc.account.address,
+          ...readOpts,
+        }),
+      );
 
       return writeContractAsync(req.request);
     },
-    [writeContractAsync, pc, wc, tokenAddress],
+    [writeContractAsync, wc, tokenAddress],
   );
 
   return {
