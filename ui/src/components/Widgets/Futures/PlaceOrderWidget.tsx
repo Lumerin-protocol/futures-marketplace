@@ -30,6 +30,7 @@ import { PlaceOrderForm } from "../../Forms/PlaceOrderForm";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
+import { useMarginEngineShocks } from "../../../hooks/data/useMarginEngineShocks";
 import type { Participant } from "../../../hooks/data/getUserFuturesOrders";
 import type { ContractMode, AccountBalance } from "../../../types/types";
 import type { PerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
@@ -119,7 +120,9 @@ export const PlaceOrderWidget = ({
     ? Number(contractSpecsQuery.data.data.minimumPriceIncrement) / PAYMENT_TOKEN_SCALE_NUM
     : null;
 
-  const marginPercent = contractSpecsQuery.data?.data?.liquidationMarginPercent ?? 20;
+  // Maintenance shock from the PortfolioMarginEngine (WAD): margin is a
+  // cross-account figure, so this only previews a single leg.
+  const { mmSpotShock } = useMarginEngineShocks();
 
 
   // Get market price for validation and default price
@@ -263,7 +266,7 @@ export const PlaceOrderWidget = ({
   // Calculate maximum available quantity based on current price
   const calculateMaxQuantity = (): number => {
     const currentPrice = parseFloat(price) || 0;
-    if (currentPrice <= 0 || !latestPrice) return 0;
+    if (currentPrice <= 0 || !latestPrice || mmSpotShock === undefined) return 0;
 
     const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
     const totalBalance = balanceQuery.data ?? 0n;
@@ -296,7 +299,7 @@ export const PlaceOrderWidget = ({
         priceInWei,
         mid,
         latestPrice,
-        marginPercent,
+        mmSpotShock,
       );
       // The fee scales with notional, so it has to be charged per candidate
       // size rather than subtracted from the balance once up front.
@@ -688,8 +691,8 @@ export const PlaceOrderWidget = ({
     const lockedBalance = minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
-    if (!latestPrice) {
-      alert("Unable to fetch market price. Please try again.");
+    if (!latestPrice || mmSpotShock === undefined) {
+      alert("Unable to fetch market data. Please try again.");
       return;
     }
 
@@ -697,7 +700,7 @@ export const PlaceOrderWidget = ({
       priceInWei,
       numericAmount, // Positive quantity for Buy
       latestPrice,
-      marginPercent,
+      mmSpotShock,
     );
 
     // Reserve the worse of maker/taker fee — see comment on `useMakerTakerFees`.
@@ -782,8 +785,8 @@ export const PlaceOrderWidget = ({
     const lockedBalance = minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
-    if (!latestPrice) {
-      alert("Unable to fetch market price. Please try again.");
+    if (!latestPrice || mmSpotShock === undefined) {
+      alert("Unable to fetch market data. Please try again.");
       return;
     }
 
@@ -791,7 +794,7 @@ export const PlaceOrderWidget = ({
       priceInWei,
       -numericAmount, // Negative quantity for Sell
       latestPrice,
-      marginPercent,
+      mmSpotShock,
     );
 
     // Reserve the worse of maker/taker fee — see comment on `useMakerTakerFees`.

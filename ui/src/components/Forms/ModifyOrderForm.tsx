@@ -34,7 +34,8 @@ interface ModifyOrderFormProps {
   closeForm: () => void;
   participantData?: Participant | null;
   latestPrice: bigint | null;
-  marginPercent: number;
+  /// Maintenance spot shock from the PortfolioMarginEngine, WAD-scaled.
+  mmSpotShock: bigint | undefined;
   minMargin?: bigint | null;
   newestItemPrice: number | null;
   accountBalance?: AccountBalance;
@@ -55,7 +56,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
     closeForm,
     participantData,
     latestPrice,
-    marginPercent,
+    mmSpotShock,
     minMargin,
     newestItemPrice,
     accountBalance,
@@ -113,8 +114,8 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
       const lockedBalance = minMargin ?? 0n;
       const availableBalance = totalBalance - lockedBalance;
 
-      if (!latestPrice) {
-        alert("Unable to fetch market price. Please try again.");
+      if (!latestPrice || mmSpotShock === undefined) {
+        alert("Unable to fetch market data. Please try again.");
         return false;
       }
 
@@ -124,7 +125,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
         newPriceInWei,
         newSignedQuantity,
         latestPrice,
-        marginPercent,
+        mmSpotShock,
       );
 
       // Reserve the worse of maker/taker fee — see comment on `useMakerTakerFees`.
@@ -310,7 +311,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
       prevProps.orderIds.length === nextProps.orderIds.length &&
       prevProps.currentQuantity === nextProps.currentQuantity &&
       prevProps.latestPrice === nextProps.latestPrice &&
-      prevProps.marginPercent === nextProps.marginPercent &&
+      prevProps.mmSpotShock === nextProps.mmSpotShock &&
       prevProps.minMargin === nextProps.minMargin &&
       prevProps.newestItemPrice === nextProps.newestItemPrice
     );

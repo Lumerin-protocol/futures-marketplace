@@ -9,7 +9,7 @@ import { ModifyOrderForm } from "../../Forms/ModifyOrderForm";
 import { CloseOrderForm } from "../../Forms/CloseOrderForm";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
-import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
+import { useMarginEngineShocks } from "../../../hooks/data/useMarginEngineShocks";
 import type { AccountBalance, ContractMode } from "../../../types/types";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
@@ -35,7 +35,6 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   const modifyModal = useModal();
   const closeModal = useModal();
   const { data: marketPrice } = useGetMarketPrice();
-  const contractSpecsQuery = useFuturesContractSpecs();
   const [selectedOrder, setSelectedOrder] = useState<{
     order: ParticipantOrder;
     orderIds: string[];
@@ -73,17 +72,18 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   // Get latest price from market price hook
   const latestPrice = marketPrice ?? null;
 
-  // Get contract specs
-  const marginPercent = contractSpecsQuery.data?.data?.liquidationMarginPercent ?? 20;
+  // Maintenance shock from the PortfolioMarginEngine (WAD). Margin is
+  // cross-account, so this per-leg figure is a preview, not the requirement.
+  const { mmSpotShock } = useMarginEngineShocks();
 
   // Get newest item price for high price validation
   const newestItemPrice = marketPrice ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
 
   // Calculate margin for an order
   const calculateMargin = (pricePerDay: bigint, amount: number, isBuy: boolean): bigint | null => {
-    if (!latestPrice) return null;
+    if (!latestPrice || mmSpotShock === undefined) return null;
     const qty = isBuy ? amount : -amount;
-    return getMinMarginForPositionManual(pricePerDay, qty, latestPrice, marginPercent);
+    return getMinMarginForPositionManual(pricePerDay, qty, latestPrice, mmSpotShock);
   };
 
   const formatMargin = (margin: bigint | null): string => {
@@ -241,7 +241,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
             currentQuantity={selectedOrder.currentQuantity}
             participantData={participantData}
             latestPrice={latestPrice}
-            marginPercent={marginPercent}
+            mmSpotShock={mmSpotShock}
             minMargin={minMargin}
             newestItemPrice={newestItemPrice}
             accountBalance={accountBalance}

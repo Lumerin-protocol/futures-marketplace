@@ -277,8 +277,6 @@ export const PerpsCollectionQuery = gql`
       takerFeeBps
       minimumMarginPerOrder
       minimumPriceIncrement
-      marginPercent
-      maintenanceMarginPercent
       totalVolume
     }
   }

@@ -21,12 +21,10 @@ export function getOrCreateFutures(): Futures {
     futures.portfolioMarginAddress = Bytes.empty();
     futures.startBlock = readStartBlockFromContext();
     futures.minimumPriceIncrement = BigInt.zero();
-    futures.makerFee = BigInt.zero();
-    futures.takerFee = BigInt.zero();
-    futures.liquidationFee = BigInt.zero();
+    futures.makerFeeBps = 0;
+    futures.takerFeeBps = 0;
     futures.liquidationFeeBps = 0;
     futures.liquidatorShareBps = 0;
-    futures.liquidationMarginPercent = 0;
     futures.contractSizeHpsDay = BigInt.zero();
     futures.expirationIntervalDays = 0;
     futures.futureExpirationDatesCount = 0;
@@ -62,22 +60,17 @@ function readStartBlockFromContext(): BigInt {
 export function loadFuturesFromContract(futures: Futures): void {
   const contract = FuturesContract.bind(dataSource.address());
 
-  const collateralVault = contract.try_collateralVault();
-
-  const hashrate = contract.try_hashrateOracle();
-  if (!hashrate.reverted) futures.hashrateOracleAddress = hashrate.value;
+  const oracle = contract.try_priceOracle();
+  if (!oracle.reverted) futures.hashrateOracleAddress = oracle.value;
 
   const minPx = contract.try_minimumPriceIncrement();
   if (!minPx.reverted) futures.minimumPriceIncrement = minPx.value;
 
-  const makerFee = contract.try_makerFee();
-  if (!makerFee.reverted) futures.makerFee = makerFee.value;
+  const makerFeeBps = contract.try_makerFeeBps();
+  if (!makerFeeBps.reverted) futures.makerFeeBps = makerFeeBps.value;
 
-  const takerFee = contract.try_takerFee();
-  if (!takerFee.reverted) futures.takerFee = takerFee.value;
-
-  const liquidationFee = contract.try_liquidationFee();
-  if (!liquidationFee.reverted) futures.liquidationFee = liquidationFee.value;
+  const takerFeeBps = contract.try_takerFeeBps();
+  if (!takerFeeBps.reverted) futures.takerFeeBps = takerFeeBps.value;
 
   const liquidationFeeBps = contract.try_liquidationFeeBps();
   if (!liquidationFeeBps.reverted) futures.liquidationFeeBps = liquidationFeeBps.value;
@@ -87,9 +80,6 @@ export function loadFuturesFromContract(futures: Futures): void {
 
   const portfolioMargin = contract.try_portfolioMargin();
   if (!portfolioMargin.reverted) futures.portfolioMarginAddress = portfolioMargin.value;
-
-  const liqMargin = contract.try_liquidationMarginPercent();
-  if (!liqMargin.reverted) futures.liquidationMarginPercent = liqMargin.value;
 
   const contractSizeHpsDay = contract.try_CONTRACT_SIZE_HPS_DAY();
   if (!contractSizeHpsDay.reverted) futures.contractSizeHpsDay = contractSizeHpsDay.value;

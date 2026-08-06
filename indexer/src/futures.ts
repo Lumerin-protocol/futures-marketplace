@@ -5,11 +5,9 @@
 export {
   handleInitialized,
   handleUpgraded,
-  handleLiquidationMarginPercentUpdated,
   handleFutureExpirationDatesCountUpdated,
-  handleMakerFeeUpdated,
-  handleTakerFeeUpdated,
-  handleLiquidationFeeUpdated,
+  handleMakerFeeBpsUpdated,
+  handleTakerFeeBpsUpdated,
   handleLiquidationFeeBpsUpdated,
   handleLiquidatorShareBpsUpdated,
   handleOracleUpdated,

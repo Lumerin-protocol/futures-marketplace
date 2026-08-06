@@ -13,12 +13,12 @@ type Futures @entity(immutable: false) {
 
   # Configuration
   minimumPriceIncrement: BigInt!
-  makerFee: BigInt!
-  takerFee: BigInt!
-  liquidationFee: BigInt!
+  "Maker fee in basis points of notional; negative means a rebate."
+  makerFeeBps: Int!
+  "Taker fee in basis points of notional."
+  takerFeeBps: Int!
   liquidationFeeBps: Int!
   liquidatorShareBps: Int!
-  liquidationMarginPercent: Int!
   "Contract size in hashes/s\u00b7day (hashrate sustained over one day), read from the on-chain constant CONTRACT_SIZE_HPS_DAY. Oracle answers are rebased by CONTRACT_SIZE_HPS_DAY / (100 TH/s\u00b7day). Fixed at 1e15 (1 PH/s over a day), so one unit = 1 PH/s/day."
   contractSizeHpsDay: BigInt!
   expirationIntervalDays: Int!

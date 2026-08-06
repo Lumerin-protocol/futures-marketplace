@@ -7,8 +7,24 @@ import {
 } from "matchstick-as/assembly/index";
 import { newTypedMockEventWithParams } from "matchstick-as/assembly/defaults";
 import { Address, BigInt, ethereum } from "@graphprotocol/graph-ts";
-import { ConfigUpdated } from "../generated/Futures/Futures";
-import { handleConfigUpdated } from "../src/handlers/admin";
+import {
+  FutureExpirationDatesCountUpdated,
+  LiquidationFeeBpsUpdated,
+  LiquidatorShareBpsUpdated,
+  MakerFeeBpsUpdated,
+  OracleUpdated,
+  PortfolioMarginUpdated,
+  TakerFeeBpsUpdated,
+} from "../generated/Futures/Futures";
+import {
+  handleFutureExpirationDatesCountUpdated,
+  handleLiquidationFeeBpsUpdated,
+  handleLiquidatorShareBpsUpdated,
+  handleMakerFeeBpsUpdated,
+  handleOracleUpdated,
+  handlePortfolioMarginUpdated,
+  handleTakerFeeBpsUpdated,
+} from "../src/handlers/admin";
 import {
   mockFuturesContractCallsAsReverted,
   setupDataSourceMock,
@@ -16,62 +32,82 @@ import {
   userAddress,
 } from "./helpers";
 
-function buildConfigParam(
-  makerFee: BigInt,
-  takerFee: BigInt,
-  liquidationFee: BigInt,
-  minimumPriceIncrement: BigInt,
-  liquidationMarginPercent: i32,
-  futureExpirationDatesCount: i32,
-  hashrateOracle: Address,
-  marginEngine: Address,
-): ethereum.EventParam {
-  // Tuple field order MUST mirror the Solidity `Config` struct definition in
-  // Futures.sol; matchstick decodes by position, not by name. Contract size is a
-  // compile-time constant (CONTRACT_SIZE_HPS_DAY) and is not part of the config snapshot.
-  const tuple = changetype<ethereum.Tuple>([
-    ethereum.Value.fromUnsignedBigInt(makerFee),
-    ethereum.Value.fromUnsignedBigInt(takerFee),
-    ethereum.Value.fromUnsignedBigInt(liquidationFee),
-    ethereum.Value.fromUnsignedBigInt(minimumPriceIncrement),
-    ethereum.Value.fromI32(liquidationMarginPercent),
-    ethereum.Value.fromI32(futureExpirationDatesCount),
-    ethereum.Value.fromAddress(hashrateOracle),
-    ethereum.Value.fromAddress(marginEngine),
-  ]);
-  return new ethereum.EventParam("config", ethereum.Value.fromTuple(tuple));
+function paramI32(name: string, value: i32): ethereum.EventParam {
+  return new ethereum.EventParam(name, ethereum.Value.fromI32(value));
 }
 
-describe("handleConfigUpdated", () => {
+function paramAddress(name: string, value: Address): ethereum.EventParam {
+  return new ethereum.EventParam(name, ethereum.Value.fromAddress(value));
+}
+
+describe("per-field admin config handlers", () => {
   beforeEach(() => {
     clearStore();
     setupDataSourceMock();
     setupFutures();
   });
 
-  test("overwrites every config field with the event snapshot", () => {
-    const ev = newTypedMockEventWithParams<ConfigUpdated>([
-      buildConfigParam(
-        BigInt.fromI64(42),
-        BigInt.fromI64(7),
-        BigInt.fromI64(99),
-        BigInt.fromI64(100),
-        80,
-        4,
-        userAddress(12),
-        userAddress(13),
-      ),
+  test("handleMakerFeeBpsUpdated writes makerFeeBps", () => {
+    const ev = newTypedMockEventWithParams<MakerFeeBpsUpdated>([
+      paramI32("newMakerFeeBps", -5),
     ]);
+    handleMakerFeeBpsUpdated(ev);
 
-    handleConfigUpdated(ev);
+    assert.fieldEquals("Futures", "0", "makerFeeBps", "-5");
+    assert.fieldEquals("Futures", "0", "lastUpdatedAt", ev.block.timestamp.toString());
+  });
 
-    assert.fieldEquals("Futures", "0", "makerFee", "42");
-    assert.fieldEquals("Futures", "0", "takerFee", "7");
-    assert.fieldEquals("Futures", "0", "liquidationFee", "99");
-    assert.fieldEquals("Futures", "0", "minimumPriceIncrement", "100");
-    assert.fieldEquals("Futures", "0", "liquidationMarginPercent", "80");
+  test("handleTakerFeeBpsUpdated writes takerFeeBps", () => {
+    const ev = newTypedMockEventWithParams<TakerFeeBpsUpdated>([
+      paramI32("newTakerFeeBps", 25),
+    ]);
+    handleTakerFeeBpsUpdated(ev);
+
+    assert.fieldEquals("Futures", "0", "takerFeeBps", "25");
+  });
+
+  test("handleLiquidationFeeBpsUpdated writes liquidationFeeBps", () => {
+    const ev = newTypedMockEventWithParams<LiquidationFeeBpsUpdated>([
+      paramI32("newLiquidationFeeBps", 50),
+    ]);
+    handleLiquidationFeeBpsUpdated(ev);
+
+    assert.fieldEquals("Futures", "0", "liquidationFeeBps", "50");
+  });
+
+  test("handleLiquidatorShareBpsUpdated writes liquidatorShareBps", () => {
+    const ev = newTypedMockEventWithParams<LiquidatorShareBpsUpdated>([
+      paramI32("newLiquidatorShareBps", 2500),
+    ]);
+    handleLiquidatorShareBpsUpdated(ev);
+
+    assert.fieldEquals("Futures", "0", "liquidatorShareBps", "2500");
+  });
+
+  test("handleFutureExpirationDatesCountUpdated writes futureExpirationDatesCount", () => {
+    const ev = newTypedMockEventWithParams<FutureExpirationDatesCountUpdated>([
+      paramI32("newFutureExpirationDatesCount", 4),
+    ]);
+    handleFutureExpirationDatesCountUpdated(ev);
+
     assert.fieldEquals("Futures", "0", "futureExpirationDatesCount", "4");
+  });
+
+  test("handleOracleUpdated writes hashrateOracleAddress", () => {
+    const ev = newTypedMockEventWithParams<OracleUpdated>([
+      paramAddress("newOracle", userAddress(12)),
+    ]);
+    handleOracleUpdated(ev);
+
     assert.fieldEquals("Futures", "0", "hashrateOracleAddress", userAddress(12).toHexString());
+  });
+
+  test("handlePortfolioMarginUpdated writes portfolioMarginAddress", () => {
+    const ev = newTypedMockEventWithParams<PortfolioMarginUpdated>([
+      paramAddress("newPortfolioMargin", userAddress(13)),
+    ]);
+    handlePortfolioMarginUpdated(ev);
+
     assert.fieldEquals("Futures", "0", "portfolioMarginAddress", userAddress(13).toHexString());
   });
 });
@@ -85,19 +121,11 @@ describe("Futures.startBlock from data source context", () => {
     mockFuturesContractCallsAsReverted();
     // No setupFutures() — first handler invocation creates the singleton and
     // must read startBlock from the mocked data source context.
-    const ev = newTypedMockEventWithParams<ConfigUpdated>([
-      buildConfigParam(
-        BigInt.zero(),
-        BigInt.zero(),
-        BigInt.zero(),
-        BigInt.zero(),
-        0,
-        1,
-        Address.zero(),
-        Address.zero(),
-      ),
+    const ev = newTypedMockEventWithParams<MakerFeeBpsUpdated>([
+      paramI32("newMakerFeeBps", 0),
     ]);
-    handleConfigUpdated(ev);
+    handleMakerFeeBpsUpdated(ev);
+
     assert.fieldEquals("Futures", "0", "startBlock", startBlock.toString());
   });
 });

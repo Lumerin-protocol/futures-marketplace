@@ -2,11 +2,9 @@ import { log } from "@graphprotocol/graph-ts";
 import {
   Initialized,
   Upgraded,
-  LiquidationMarginPercentUpdated,
   FutureExpirationDatesCountUpdated,
-  MakerFeeUpdated,
-  TakerFeeUpdated,
-  LiquidationFeeUpdated,
+  MakerFeeBpsUpdated,
+  TakerFeeBpsUpdated,
   LiquidationFeeBpsUpdated,
   LiquidatorShareBpsUpdated,
   OracleUpdated,
@@ -37,33 +35,13 @@ export function handleUpgraded(event: Upgraded): void {
   futures.save();
 }
 
-/// Individual per-field handlers replacing the former monolithic ConfigUpdated path.
-/// Each setter now emits its own event; on every change we reload the full snapshot
-/// from chain so the local Futures entity stays consistent.
-
-function _reloadAndSave(): void {
-  const futures = getOrCreateFutures();
-  flushFuturesCounters(futures);
-  futures.lastUpdatedAt = _blockTimestamp();
-  loadFuturesFromContract(futures);
-  futures.save();
-}
-
-function _blockTimestamp(): i32 {
-  // Provided by the host at handler invocation time via event.block.timestamp.
-  // We don't have access to the raw event here, so the caller must set it.
-  // This is set by each handler below.
-  return 0; // replaced inline
-}
-
-export function handleLiquidationMarginPercentUpdated(event: LiquidationMarginPercentUpdated): void {
-  log.info("LiquidationMarginPercentUpdated: {}", [event.params.newLiquidationMarginPercent.toString()]);
-  const futures = getOrCreateFutures();
-  flushFuturesCounters(futures);
-  futures.liquidationMarginPercent = event.params.newLiquidationMarginPercent;
-  futures.lastUpdatedAt = event.block.timestamp;
-  futures.save();
-}
+/// Individual per-field handlers replacing the former monolithic ConfigUpdated
+/// path: every admin setter now emits its own event carrying the new value, so
+/// each handler writes just that field rather than re-reading the whole config.
+///
+/// `LiquidationMarginPercentUpdated` is deliberately not indexed: margin is a
+/// cross-account figure owned by the PortfolioMarginEngine (spot shocks), and
+/// the per-venue percent it carries no longer drives anything.
 
 export function handleFutureExpirationDatesCountUpdated(event: FutureExpirationDatesCountUpdated): void {
   log.info("FutureExpirationDatesCountUpdated: {}", [event.params.newFutureExpirationDatesCount.toString()]);
@@ -74,29 +52,20 @@ export function handleFutureExpirationDatesCountUpdated(event: FutureExpirationD
   futures.save();
 }
 
-export function handleMakerFeeUpdated(event: MakerFeeUpdated): void {
-  log.info("MakerFeeUpdated: {}", [event.params.newMakerFee.toString()]);
+export function handleMakerFeeBpsUpdated(event: MakerFeeBpsUpdated): void {
+  log.info("MakerFeeBpsUpdated: {}", [event.params.newMakerFeeBps.toString()]);
   const futures = getOrCreateFutures();
   flushFuturesCounters(futures);
-  futures.makerFee = event.params.newMakerFee;
+  futures.makerFeeBps = event.params.newMakerFeeBps;
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
 }
 
-export function handleTakerFeeUpdated(event: TakerFeeUpdated): void {
-  log.info("TakerFeeUpdated: {}", [event.params.newTakerFee.toString()]);
+export function handleTakerFeeBpsUpdated(event: TakerFeeBpsUpdated): void {
+  log.info("TakerFeeBpsUpdated: {}", [event.params.newTakerFeeBps.toString()]);
   const futures = getOrCreateFutures();
   flushFuturesCounters(futures);
-  futures.takerFee = event.params.newTakerFee;
-  futures.lastUpdatedAt = event.block.timestamp;
-  futures.save();
-}
-
-export function handleLiquidationFeeUpdated(event: LiquidationFeeUpdated): void {
-  log.info("LiquidationFeeUpdated: {}", [event.params.newLiquidationFee.toString()]);
-  const futures = getOrCreateFutures();
-  flushFuturesCounters(futures);
-  futures.liquidationFee = event.params.newLiquidationFee;
+  futures.takerFeeBps = event.params.newTakerFeeBps;
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
 }

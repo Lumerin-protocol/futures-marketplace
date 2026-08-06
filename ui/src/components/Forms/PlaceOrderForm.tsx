@@ -23,6 +23,7 @@ import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import type { Participant } from "../../hooks/data/getUserFuturesOrders";
 import type { ContractMode } from "../../types/types";
 import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpecs";
+import { useMarginEngineShocks } from "../../hooks/data/useMarginEngineShocks";
 import { getMinMarginForPositionManual } from "../../hooks/data/getMinMarginForPositionManual";
 import { predefinedPools } from "./BuyerForms/predefinedPools";
 import MenuItem from "@mui/material/MenuItem";
@@ -106,7 +107,9 @@ export const PlaceOrderForm: FC<Props> = ({
     wMaker !== undefined && weightScale ? (Number(wMaker) * sizeUSDC) / Number(weightScale) : null;
   const takerReward =
     wTaker !== undefined && weightScale ? (Number(wTaker) * sizeUSDC) / Number(weightScale) : null;
-  const marginPersent = contractSpecsQuery.data?.data?.liquidationMarginPercent ?? 20;
+  // Maintenance shock from the PortfolioMarginEngine (WAD): margin is a
+  // cross-account figure, so this only previews a single leg.
+  const { mmSpotShock } = useMarginEngineShocks();
 
   // State for required margin
   const [requiredMargin, setRequiredMargin] = useState<bigint | null>(null);
@@ -114,7 +117,7 @@ export const PlaceOrderForm: FC<Props> = ({
 
   // Calculate required margin when price or quantity changes
   useEffect(() => {
-    if (!latestPrice) return;
+    if (!latestPrice || mmSpotShock === undefined) return;
     setIsLoadingMargin(true);
 
     let margin: bigint;
@@ -132,7 +135,7 @@ export const PlaceOrderForm: FC<Props> = ({
         price,
         quantity,
         latestPrice,
-        marginPersent,
+        mmSpotShock,
       );
     }
 
@@ -144,7 +147,7 @@ export const PlaceOrderForm: FC<Props> = ({
     quantity,
     contractMode,
     absoluteQuantity,
-    marginPersent,
+    mmSpotShock,
     leverage,
   ]);
 
