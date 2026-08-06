@@ -6,8 +6,9 @@ import { withErrors } from "../../lib/withErrors";
 /// This is the IPortfolioMarginEngine contract used for margin calculations
 /// and risk management.
 export function useFuturesMarginEngine() {
-  return useReadContract({
-    address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`,
+  const futures = process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`;
+  const result = useReadContract({
+    address: futures,
     abi: withErrors(FuturesAbi),
     functionName: "portfolioMargin",
     query: {
@@ -18,4 +19,6 @@ export function useFuturesMarginEngine() {
       refetchOnReconnect: false,
     },
   });
+
+  return result;
 }
