@@ -15,6 +15,7 @@ import { read } from "matchstick-ts";
 import { deployFuturesFixture } from "../../contracts/tests/fixtures.ts";
 import { quantizePrice } from "../../contracts/tests/utils.ts";
 import { futuresExpirationId, priceLevelId } from "./helpers.ts";
+import { TimeInForce } from "../../contracts/tests/timeInForce.ts";
 
 const conn = await network.getOrCreate();
 
@@ -45,12 +46,12 @@ describe("FuturesExpiration relation wiring", () => {
 
     // Seller rests an ask (Order + PriceLevel + FuturesExpiration), buyer crosses it
     // (PositionSession + Trade).
-    const askTx = await futures.write.createOrder([entry, deliveryDate, -1n], {
+    const askTx = await futures.write.createOrder([entry, deliveryDate, -1n, TimeInForce.GTC], {
       account: seller.account,
     });
     await pc.waitForTransactionReceipt({ hash: askTx });
 
-    const buyTx = await futures.write.createOrder([entry, deliveryDate, 1n], {
+    const buyTx = await futures.write.createOrder([entry, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     const buyReceipt = await pc.waitForTransactionReceipt({ hash: buyTx });

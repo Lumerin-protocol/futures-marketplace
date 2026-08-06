@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { encodeFunctionData, getAddress, parseEventLogs } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
+import { TimeInForce } from "./timeInForce.ts";
 
 const { networkHelpers } = await network.getOrCreate();
 
@@ -19,12 +20,12 @@ describe("Futures - multicall write", () => {
       encodeFunctionData({
         abi: futures.abi,
         functionName: "createOrder",
-        args: [price, deliveryDate, -1n],
+        args: [price, deliveryDate, -1n, TimeInForce.GTC],
       }),
       encodeFunctionData({
         abi: futures.abi,
         functionName: "createOrder",
-        args: [price, deliveryDate, -1n],
+        args: [price, deliveryDate, -1n, TimeInForce.GTC],
       }),
     ];
 
@@ -45,12 +46,12 @@ describe("Futures - multicall write", () => {
       encodeFunctionData({
         abi: futures.abi,
         functionName: "createOrder",
-        args: [price, deliveryDate, 1n],
+        args: [price, deliveryDate, 1n, TimeInForce.GTC],
       }),
       encodeFunctionData({
         abi: futures.abi,
         functionName: "createOrder",
-        args: [price, deliveryDate, 1n],
+        args: [price, deliveryDate, 1n, TimeInForce.GTC],
       }),
     ];
 

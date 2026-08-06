@@ -4,6 +4,7 @@ import { network } from "hardhat";
 import { getAddress, parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture, type FuturesFixture } from "./fixtures.ts";
 import { quantizePrice, refreshHashprice, scaleHashprice } from "./utils.ts";
+import { TimeInForce } from "./timeInForce.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -18,12 +19,18 @@ async function openLotBetween(
 ) {
   const { futures } = data.contracts;
   const { pc } = data.accounts;
-  await futures.write.createOrder([entryPrice, expirationAt, -1n], { account: short.account });
-  const txHash = await futures.write.createOrder([entryPrice, expirationAt, 1n], {
+  await futures.write.createOrder([entryPrice, expirationAt, -1n, TimeInForce.GTC], {
+    account: short.account,
+  });
+  const txHash = await futures.write.createOrder([entryPrice, expirationAt, 1n, TimeInForce.GTC], {
     account: long.account,
   });
   const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
-  const [matched] = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "OrderMatched" });
+  const [matched] = parseEventLogs({
+    logs: receipt.logs,
+    abi: futures.abi,
+    eventName: "OrderMatched",
+  });
   return matched.args.expirationAt as bigint;
 }
 
@@ -113,8 +120,12 @@ describe("Futures settlement price (pinned)", () => {
     const deliveryDate = config.deliveryDates[0];
     const entryPrice = quantizePrice(parseUnits("100", 6), config.priceLadderStep);
 
-    await contracts.collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
-    await contracts.collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
+    await contracts.collateralVault.write.deposit([parseUnits("10000", 6)], {
+      account: seller.account,
+    });
+    await contracts.collateralVault.write.deposit([parseUnits("10000", 6)], {
+      account: buyer.account,
+    });
     await openLotBetween(data, seller, buyer, entryPrice, deliveryDate);
 
     await refreshHashprice(hashpriceUsd, deliveryDate);
@@ -171,7 +182,11 @@ describe("Futures settlement price (pinned)", () => {
         account: buyer.account,
       }),
     });
-    const [closedA] = parseEventLogs({ logs: rA.logs, abi: futures.abi, eventName: "PositionSettled" });
+    const [closedA] = parseEventLogs({
+      logs: rA.logs,
+      abi: futures.abi,
+      eventName: "PositionSettled",
+    });
 
     // Move the oracle again, then settle buyer2.
     await scaleHashprice(hashpriceUsd, 8n, 10n);
@@ -181,7 +196,11 @@ describe("Futures settlement price (pinned)", () => {
         account: buyer.account,
       }),
     });
-    const [closedB] = parseEventLogs({ logs: rB.logs, abi: futures.abi, eventName: "PositionSettled" });
+    const [closedB] = parseEventLogs({
+      logs: rB.logs,
+      abi: futures.abi,
+      eventName: "PositionSettled",
+    });
 
     // Both longs realize identical PnL at the pinned price, not the moving live mark.
     const expectedLongPnl = pinned - entryPrice;

@@ -9,7 +9,7 @@ import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { useSettlePositions } from "../../../hooks/data/useSettlePositions";
 import { useState } from "react";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
-import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
+import { useMarginEngineShocks } from "../../../hooks/data/useMarginEngineShocks";
 import type { ContractMode } from "../../../types/types";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
@@ -44,7 +44,6 @@ export const PositionsListWidget = ({
   const isPending =
     contractMode === "perpetual" ? perpsCreateOrder.isPending : futuresCreateOrder.isPending;
   const { data: marketPrice } = useGetMarketPrice();
-  const contractSpecsQuery = useFuturesContractSpecs();
   const [tradesSelection, setTradesSelection] = useState<FuturesTradesModalSelection | null>(null);
   const { settlePositionsAsync, isPending: isSettling } = useSettlePositions();
   // expirationAt currently being claimed, plus any per-expiration claim error message.
@@ -99,14 +98,15 @@ export const PositionsListWidget = ({
   const latestPrice = marketPrice ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
   const latestPriceBigInt = marketPrice ?? null;
 
-  // Get contract specs
-  const marginPercent = contractSpecsQuery.data?.data?.liquidationMarginPercent ?? 20;
+  // Maintenance shock from the PortfolioMarginEngine (WAD). Margin is
+  // cross-account, so this per-leg figure is a preview, not the requirement.
+  const { mmSpotShock } = useMarginEngineShocks();
 
   // Calculate margin for a position
   const calculateMargin = (pricePerDay: bigint, amount: number, positionType: string): bigint | null => {
-    if (!latestPriceBigInt) return null;
+    if (!latestPriceBigInt || mmSpotShock === undefined) return null;
     const qty = positionType === "Long" ? amount : -amount;
-    return getMinMarginForPositionManual(pricePerDay, qty, latestPriceBigInt, marginPercent);
+    return getMinMarginForPositionManual(pricePerDay, qty, latestPriceBigInt, mmSpotShock);
   };
 
   const formatMargin = (margin: bigint | null): string => {

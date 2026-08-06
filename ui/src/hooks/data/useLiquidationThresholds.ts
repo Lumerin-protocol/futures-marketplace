@@ -1,9 +1,9 @@
 import { useMemo } from "react";
+import type { MMParams } from "@hashpower/portfolio-margin";
 import {
   pickLiquidationLevel,
   solveLiquidationThresholds,
   type LiquidationLevel,
-  type MarginParams,
 } from "../../lib/portfolioMargin";
 import { useGetMarketPrice } from "./useGetMarketPrice";
 import { useMarginEngineShocks } from "./useMarginEngineShocks";
@@ -28,7 +28,7 @@ export function useLiquidationThresholds(address: `0x${string}` | undefined) {
   const shocks = useMarginEngineShocks();
   const { data: marketPrice } = useGetMarketPrice();
 
-  const params = useMemo<MarginParams | undefined>(() => {
+  const params = useMemo<MMParams | undefined>(() => {
     if (shocks.imSpotShock === undefined || shocks.mmSpotShock === undefined) return undefined;
     if (tokenDecimals === undefined || perpQuantityDecimals === undefined) return undefined;
     return {

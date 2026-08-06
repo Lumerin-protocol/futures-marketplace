@@ -1,5 +1,5 @@
 import type { NetworkConnection } from "hardhat/types/network";
-import type { Hex, TestClient } from "viem";
+import type { Hex, } from "viem";
 
 /**
  * Viem-native re-implementation of Hardhat's `loadFixture`.

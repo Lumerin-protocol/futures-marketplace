@@ -35,8 +35,8 @@ importers:
         specifier: ^4.0.1
         version: 4.0.1(typescript@5.9.3)(zod@3.25.76)
       collateral-margin:
-        specifier: github:Lumerin-protocol/collateral-margin#feat/futures-3-keeper-mm
-        version: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/f952ac6a4d4b765e17f11d25f000f82a8d2db456
+        specifier: github:Lumerin-protocol/collateral-margin#9372f537a57682bb126aede41aac51be004828a6
+        version: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/9372f537a57682bb126aede41aac51be004828a6
       multicall3:
         specifier: github:mds1/multicall3
         version: https://codeload.github.com/mds1/multicall3/tar.gz/b667d67ecfa5361a81e8f110234ce242613b0012(patch_hash=f161cbee6da2788494364d99cafb2d9c802738f56fb89426eebbc0a14a4f4a8f)
@@ -71,6 +71,9 @@ importers:
       hardhat:
         specifier: ^3.9.1
         version: 3.9.1
+      hardhat-viem-abi:
+        specifier: https://github.com/lsheva/hardhat-viem-abi.git#v1.0.0-alpha.2&path:packages/hardhat-viem-abi
+        version: https://codeload.github.com/lsheva/hardhat-viem-abi/tar.gz/54198ea8c9ad9b05c0c23a057ae3b1c7ab82a93a#path:packages/hardhat-viem-abi(hardhat@3.9.1)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76))
       typescript:
         specifier: ^5.8.0
         version: 5.9.3
@@ -978,8 +981,8 @@ packages:
   ci-info@2.0.0:
     resolution: {integrity: sha512-5tK7EtrZ0N+OLFMthtqOj4fI2Jeb88C4CAZPu25LDVUgXJ0A3Js4PMGqrn0JU1W0Mh1/Z8wZzYPxqUrXeBboCQ==}
 
-  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/f952ac6a4d4b765e17f11d25f000f82a8d2db456:
-    resolution: {tarball: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/f952ac6a4d4b765e17f11d25f000f82a8d2db456}
+  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/9372f537a57682bb126aede41aac51be004828a6:
+    resolution: {tarball: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/9372f537a57682bb126aede41aac51be004828a6}
     version: 1.0.0
 
   color-convert@2.0.1:
@@ -1143,6 +1146,14 @@ packages:
 
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
+
+  hardhat-viem-abi@https://codeload.github.com/lsheva/hardhat-viem-abi/tar.gz/54198ea8c9ad9b05c0c23a057ae3b1c7ab82a93a#path:packages/hardhat-viem-abi:
+    resolution: {path: packages/hardhat-viem-abi, tarball: https://codeload.github.com/lsheva/hardhat-viem-abi/tar.gz/54198ea8c9ad9b05c0c23a057ae3b1c7ab82a93a}
+    version: 1.0.0-alpha.2
+    engines: {node: '>=22'}
+    peerDependencies:
+      hardhat: ^3.0.0
+      viem: ^2.0.0
 
   hardhat@3.9.1:
     resolution: {integrity: sha512-yg+0oH5tWqdsxITh6fAJjAWOSHOkC2VPlsJDJwoifs2QS1t7kyRciMy5O2F846qzH+4iqRn1rbv/5voykX3RSQ==}
@@ -2844,7 +2855,7 @@ snapshots:
 
   ci-info@2.0.0: {}
 
-  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/f952ac6a4d4b765e17f11d25f000f82a8d2db456: {}
+  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/9372f537a57682bb126aede41aac51be004828a6: {}
 
   color-convert@2.0.1:
     dependencies:
@@ -3050,6 +3061,11 @@ snapshots:
       slash: 3.0.0
 
   graceful-fs@4.2.11: {}
+
+  hardhat-viem-abi@https://codeload.github.com/lsheva/hardhat-viem-abi/tar.gz/54198ea8c9ad9b05c0c23a057ae3b1c7ab82a93a#path:packages/hardhat-viem-abi(hardhat@3.9.1)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76)):
+    dependencies:
+      hardhat: 3.9.1
+      viem: 2.54.6(typescript@5.9.3)(zod@3.25.76)
 
   hardhat@3.9.1:
     dependencies:

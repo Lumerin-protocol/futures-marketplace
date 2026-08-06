@@ -103,14 +103,13 @@ export function pointerKey(user: Address, expirationAt: BigInt): string {
 export function mockFuturesContractCallsAsReverted(): void {
   const addr = contractAddress();
   const getters: string[][] = [
-    ["collateralVault", "collateralVault():(address)"],
-    ["hashrateOracle", "hashrateOracle():(address)"],
+    ["priceOracle", "priceOracle():(address)"],
     ["minimumPriceIncrement", "minimumPriceIncrement():(uint256)"],
-    ["makerFee", "makerFee():(uint256)"],
-    ["takerFee", "takerFee():(uint256)"],
-    ["liquidationFee", "liquidationFee():(uint256)"],
-    ["marginEngine", "marginEngine():(address)"],
-    ["liquidationMarginPercent", "liquidationMarginPercent():(uint8)"],
+    ["makerFeeBps", "makerFeeBps():(int16)"],
+    ["takerFeeBps", "takerFeeBps():(int16)"],
+    ["liquidationFeeBps", "liquidationFeeBps():(uint16)"],
+    ["liquidatorShareBps", "liquidatorShareBps():(uint16)"],
+    ["portfolioMargin", "portfolioMargin():(address)"],
     ["CONTRACT_SIZE_HPS_DAY", "CONTRACT_SIZE_HPS_DAY():(uint256)"],
     ["expirationIntervalDays", "expirationIntervalDays():(uint8)"],
     ["futureExpirationDatesCount", "futureExpirationDatesCount():(uint8)"],
@@ -127,15 +126,14 @@ export function mockFuturesContractCallsAsReverted(): void {
 export function setupFutures(): void {
   const f = new Futures(0);
   f.contractAddress = changetype<Bytes>(contractAddress());
-  f.collateralToken = Bytes.empty();
   f.hashrateOracleAddress = Bytes.empty();
-  f.marginEngineAddress = Bytes.empty();
+  f.portfolioMarginAddress = Bytes.empty();
   f.startBlock = BigInt.zero();
   f.minimumPriceIncrement = BigInt.zero();
-  f.makerFee = BigInt.zero();
-  f.takerFee = BigInt.zero();
-  f.liquidationFee = BigInt.zero();
-  f.liquidationMarginPercent = 0;
+  f.makerFeeBps = 0;
+  f.takerFeeBps = 0;
+  f.liquidationFeeBps = 0;
+  f.liquidatorShareBps = 0;
   f.contractSizeHpsDay = BigInt.zero();
   f.expirationIntervalDays = 0;
   f.futureExpirationDatesCount = 0;

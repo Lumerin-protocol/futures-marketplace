@@ -3,9 +3,15 @@
 // is split into `handlers/` (per-event) and `internal/` (shared helpers).
 
 export {
-  handleConfigUpdated,
   handleInitialized,
   handleUpgraded,
+  handleFutureExpirationDatesCountUpdated,
+  handleMakerFeeBpsUpdated,
+  handleTakerFeeBpsUpdated,
+  handleLiquidationFeeBpsUpdated,
+  handleLiquidatorShareBpsUpdated,
+  handleOracleUpdated,
+  handlePortfolioMarginUpdated,
 } from "./handlers/admin";
 
 export {

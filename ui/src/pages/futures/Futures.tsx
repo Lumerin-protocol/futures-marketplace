@@ -443,7 +443,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       highlightMode={highlightMode}
       latestPrice={marketPrice ?? null}
       minMargin={minMargin}
-      openPositionNetQuantity={openPositionNetQuantity}
       contractMode={contractMode}
       accountBalance={accountBalanceQuery}
       balanceQuery={balanceQuery}

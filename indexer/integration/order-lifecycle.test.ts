@@ -13,6 +13,7 @@ import { read } from "matchstick-ts";
 import { deployFuturesFixture } from "../../contracts/tests/fixtures.ts";
 import { quantizePrice } from "../../contracts/tests/utils.ts";
 import { assertHexHash, priceLevelId } from "./helpers.ts";
+import { TimeInForce } from "../../contracts/tests/timeInForce.ts";
 
 const conn = await network.getOrCreate();
 
@@ -41,7 +42,7 @@ describe("qty=3 single sell order: Order aggregate and OrderEntry promotion", ()
     await conn.matchstick.anchor();
 
     // Seller places qty=-3 in one call → 1 OrderCreated event, 1 OrderEntry with remainingQuantity=3
-    const sellerTx = await futures.write.createOrder([price, deliveryDate, -3n], {
+    const sellerTx = await futures.write.createOrder([price, deliveryDate, -3n, TimeInForce.GTC], {
       account: seller.account,
     });
     const sellerReceipt = await pc.waitForTransactionReceipt({ hash: sellerTx });
@@ -112,7 +113,7 @@ describe("qty=3 single sell order: Order aggregate and OrderEntry promotion", ()
     assert.equal(String(snap1.entity("Futures", "0")?.totalOrders), "1");
 
     // --- Buyer matches all 3 in one call ---
-    const buyTx = await futures.write.createOrder([price, deliveryDate, 3n], {
+    const buyTx = await futures.write.createOrder([price, deliveryDate, 3n, TimeInForce.GTC], {
       account: buyer.account,
     });
     const buyReceipt = await pc.waitForTransactionReceipt({ hash: buyTx });
@@ -196,7 +197,7 @@ describe("order cancellation: OrderEntry CANCELLED, PriceLevel and Futures decre
     await conn.matchstick.anchor();
 
     // Seller places qty=-2 → 1 OrderCreated event, 1 OrderEntry with remainingQuantity=2
-    const sellerTx = await futures.write.createOrder([price, deliveryDate, -2n], {
+    const sellerTx = await futures.write.createOrder([price, deliveryDate, -2n, TimeInForce.GTC], {
       account: seller.account,
     });
     const sellerReceipt = await pc.waitForTransactionReceipt({ hash: sellerTx });
@@ -272,7 +273,7 @@ describe("partial fill: Order PARTIAL, unfilled quantity stays ACTIVE", () => {
     await conn.matchstick.anchor();
 
     // Seller rests 3 units in one order
-    const sellerTx = await futures.write.createOrder([price, deliveryDate, -3n], {
+    const sellerTx = await futures.write.createOrder([price, deliveryDate, -3n, TimeInForce.GTC], {
       account: seller.account,
     });
     const sellerReceipt = await pc.waitForTransactionReceipt({ hash: sellerTx });
@@ -284,7 +285,7 @@ describe("partial fill: Order PARTIAL, unfilled quantity stays ACTIVE", () => {
     const makerOrderId = orderEvents[0].args.orderId.toLowerCase() as `0x${string}`;
 
     // Buyer takes only 1
-    await futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], { account: buyer.account });
 
     const levelId = priceLevelId(deliveryDate, price, false);
 

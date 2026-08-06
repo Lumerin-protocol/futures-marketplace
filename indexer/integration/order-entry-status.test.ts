@@ -17,6 +17,7 @@ import { read } from "matchstick-ts";
 import { deployFuturesFixture } from "../../contracts/tests/fixtures.ts";
 import { quantizePrice, scaleHashprice } from "../../contracts/tests/utils.ts";
 import { assertHexHash, priceLevelId } from "./helpers.ts";
+import { TimeInForce } from "../../contracts/tests/timeInForce.ts";
 
 const conn = await network.create({ override: { loggingEnabled: true } });
 const { matchstick } = conn;
@@ -41,7 +42,7 @@ describe("OrderEntryStatus.EXPIRED: removeOutdatedOrder", () => {
     await matchstick.captureViewMocks();
     await matchstick.anchor();
 
-    const restTx = await futures.write.createOrder([price, deliveryDate, -1n], {
+    const restTx = await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], {
       account: seller.account,
     });
     const restReceipt = await pc.waitForTransactionReceipt({ hash: restTx });
@@ -132,11 +133,11 @@ describe("OrderEntryStatus.LIQUIDATED: liquidateOrders force-cancels resting ord
     await matchstick.captureViewMocks();
 
     // 1. Seller opens an underwater short position (to be liquidatable).
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
-    await futures.write.createOrder([price, deliveryDate, 1n], { account: buyer.account });
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
+    await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], { account: buyer.account });
 
     // 2. Seller rests a second order (no match — it stays in the book).
-    const restTx = await futures.write.createOrder([restingPrice, deliveryDate, -1n], {
+    const restTx = await futures.write.createOrder([restingPrice, deliveryDate, -1n, TimeInForce.GTC], {
       account: seller.account,
     });
     const restReceipt = await pc.waitForTransactionReceipt({ hash: restTx });

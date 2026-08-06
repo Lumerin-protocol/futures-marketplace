@@ -4,23 +4,26 @@ import { network } from "hardhat";
 import { parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture, type FuturesFixture } from "./fixtures.ts";
 import { quantizePrice, refreshHashprice } from "./utils.ts";
+import { TimeInForce } from "./timeInForce.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
 // Opens a matched lot (seller short / buyer long) at `entryPrice` on the first expiration date.
-async function openLot(
-  data: FuturesFixture,
-  entryPrice: bigint,
-  expirationAt: bigint,
-) {
+async function openLot(data: FuturesFixture, entryPrice: bigint, expirationAt: bigint) {
   const { futures } = data.contracts;
   const { seller, buyer, pc } = data.accounts;
-  await futures.write.createOrder([entryPrice, expirationAt, -1n], { account: seller.account });
-  const txHash = await futures.write.createOrder([entryPrice, expirationAt, 1n], {
+  await futures.write.createOrder([entryPrice, expirationAt, -1n, TimeInForce.GTC], {
+    account: seller.account,
+  });
+  const txHash = await futures.write.createOrder([entryPrice, expirationAt, 1n, TimeInForce.GTC], {
     account: buyer.account,
   });
   const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
-  const [matched] = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "OrderMatched" });
+  const [matched] = parseEventLogs({
+    logs: receipt.logs,
+    abi: futures.abi,
+    eventName: "OrderMatched",
+  });
   return matched.args.expirationAt as bigint;
 }
 
@@ -53,7 +56,10 @@ describe("Futures collateral hold until settlement", () => {
     // The matured position still imposes IM equal to the pinned loss, with no stress delta
     // (the priced date carries no remaining market risk).
     assert.equal(await futures.read.getNetPositionDelta([buyer.account.address]), 0n);
-    assert.equal(await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]), expectedLoss);
+    assert.equal(
+      await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]),
+      expectedLoss,
+    );
 
     // Loser cannot withdraw the collateral that backs the winner's payout.
     const balance = await collateralVault.read.balanceOf([buyer.account.address]);

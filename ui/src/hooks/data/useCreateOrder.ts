@@ -1,7 +1,7 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { getContract } from "viem";
-import { FuturesAbi } from "../../abi/Futures";
-import { contractErrors } from "../../abi/contractErrors";
+import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
+import { contractErrors } from "futures-marketplace-abi/ContractErrors.ts";
 import { TimeInForce, type TimeInForceValue } from "../../types/timeInForce";
 
 interface CreateOrderProps {
@@ -34,7 +34,7 @@ export function useCreateOrder() {
 
     const tif = props.timeInForce ?? TimeInForce.GTC;
 
-    const req = await futuresContract.simulate.createOrderV2(
+    const req = await futuresContract.simulate.createOrder(
       [props.price, props.expirationAt, quantity, tif],
       { account: walletClient.account.address },
     );

@@ -4,6 +4,7 @@ import { network } from "hardhat";
 import { parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture, type FuturesFixture } from "./fixtures.ts";
 import { quantizePrice, refreshHashprice, scaleHashprice } from "./utils.ts";
+import { TimeInForce } from "./timeInForce.ts";
 
 const { networkHelpers } = await network.getOrCreate();
 
@@ -31,10 +32,13 @@ describe("Futures - Offset & Cash Settlement", () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts, config } = data;
     const { futures, collateralVault } = contracts;
-    const { seller, buyer, buyer2, validator, tc, pc } = accounts;
+    const { owner, seller, buyer, buyer2, validator, tc, pc } = accounts;
 
     const marginAmount = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
+    const takerFeeBps = 100n; // 1%
+
+    await futures.write.setTakerFeeBps([Number(takerFeeBps)], { account: owner.account });
 
     await collateralVault.write.deposit([marginAmount], { account: seller.account });
     await collateralVault.write.deposit([marginAmount], { account: buyer.account });
@@ -46,14 +50,23 @@ describe("Futures - Offset & Cash Settlement", () => {
     const initialPrice = quantizePrice(parseUnits("100", 6), config.priceLadderStep);
     const exitPrice = quantizePrice(parseUnits("120", 6), config.priceLadderStep);
 
-    await futures.write.createOrder([initialPrice, deliveryDate, -1n], { account: seller.account });
-    await futures.write.createOrder([initialPrice, deliveryDate, 1n], { account: buyer.account });
-
-    await futures.write.createOrder([exitPrice, deliveryDate, -1n], { account: buyer.account });
-
-    const offsetTxHash = await futures.write.createOrder([exitPrice, deliveryDate, 1n], {
-      account: buyer2.account,
+    await futures.write.createOrder([initialPrice, deliveryDate, -1n, TimeInForce.GTC], {
+      account: seller.account,
     });
+    await futures.write.createOrder([initialPrice, deliveryDate, 1n, TimeInForce.GTC], {
+      account: buyer.account,
+    });
+
+    await futures.write.createOrder([exitPrice, deliveryDate, -1n, TimeInForce.GTC], {
+      account: buyer.account,
+    });
+
+    const offsetTxHash = await futures.write.createOrder(
+      [exitPrice, deliveryDate, 1n, TimeInForce.GTC],
+      {
+        account: buyer2.account,
+      },
+    );
     const offsetReceipt = await pc.waitForTransactionReceipt({ hash: offsetTxHash });
 
     const matches = parseEventLogs({
@@ -80,11 +93,14 @@ describe("Futures - Offset & Cash Settlement", () => {
     const contractBalanceAfterOffset = await totalContractBalance(contracts);
 
     const expectedPnL = exitPrice - initialPrice;
-    const takerFee = await futures.read.takerFee();
-    const expectedBuyerBalanceChange = expectedPnL - takerFee;
+    // Taker fee per fill: notional (qty=1, so the fill price) × bps. Buyer paid
+    // it on the entry fill; buyer2 paid it on the offset fill at exitPrice.
+    const entryFee = (initialPrice * takerFeeBps) / 10_000n;
+    const exitFee = (exitPrice * takerFeeBps) / 10_000n;
+    const expectedBuyerBalanceChange = expectedPnL - entryFee;
     assert.equal(buyerBalanceAfterOffset - buyerBalanceBefore, expectedBuyerBalanceChange);
 
-    const totalFees = takerFee * 2n;
+    const totalFees = entryFee + exitFee;
     const expectedContractBalanceChange = expectedPnL - totalFees;
     assert.equal(contractBalanceBefore - contractBalanceAfterOffset, expectedContractBalanceChange);
 
@@ -114,10 +130,13 @@ describe("Futures - Offset & Cash Settlement", () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts, config } = data;
     const { futures, collateralVault } = contracts;
-    const { seller, buyer, buyer2, validator, tc, pc } = accounts;
+    const { owner, seller, buyer, buyer2, validator, tc, pc } = accounts;
 
     const marginAmount = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
+    const takerFeeBps = 100n; // 1%
+
+    await futures.write.setTakerFeeBps([Number(takerFeeBps)], { account: owner.account });
 
     await collateralVault.write.deposit([marginAmount], { account: seller.account });
     await collateralVault.write.deposit([marginAmount], { account: buyer.account });
@@ -129,14 +148,23 @@ describe("Futures - Offset & Cash Settlement", () => {
     const initialPrice = quantizePrice(parseUnits("100", 6), config.priceLadderStep);
     const exitPrice = quantizePrice(parseUnits("90", 6), config.priceLadderStep);
 
-    await futures.write.createOrder([initialPrice, deliveryDate, -1n], { account: seller.account });
-    await futures.write.createOrder([initialPrice, deliveryDate, 1n], { account: buyer.account });
-
-    await futures.write.createOrder([exitPrice, deliveryDate, -1n], { account: buyer.account });
-
-    const offsetTxHash = await futures.write.createOrder([exitPrice, deliveryDate, 1n], {
-      account: buyer2.account,
+    await futures.write.createOrder([initialPrice, deliveryDate, -1n, TimeInForce.GTC], {
+      account: seller.account,
     });
+    await futures.write.createOrder([initialPrice, deliveryDate, 1n, TimeInForce.GTC], {
+      account: buyer.account,
+    });
+
+    await futures.write.createOrder([exitPrice, deliveryDate, -1n, TimeInForce.GTC], {
+      account: buyer.account,
+    });
+
+    const offsetTxHash = await futures.write.createOrder(
+      [exitPrice, deliveryDate, 1n, TimeInForce.GTC],
+      {
+        account: buyer2.account,
+      },
+    );
     const offsetReceipt = await pc.waitForTransactionReceipt({ hash: offsetTxHash });
 
     const matches = parseEventLogs({
@@ -163,11 +191,14 @@ describe("Futures - Offset & Cash Settlement", () => {
     const contractBalanceAfterOffset = await totalContractBalance(contracts);
 
     const expectedPnL = exitPrice - initialPrice;
-    const takerFee = await futures.read.takerFee();
-    const expectedBuyerBalanceChange = expectedPnL - takerFee;
+    // Taker fee per fill: notional (qty=1, so the fill price) × bps. Buyer paid
+    // it on the entry fill; buyer2 paid it on the offset fill at exitPrice.
+    const entryFee = (initialPrice * takerFeeBps) / 10_000n;
+    const exitFee = (exitPrice * takerFeeBps) / 10_000n;
+    const expectedBuyerBalanceChange = expectedPnL - entryFee;
     assert.equal(buyerBalanceAfterOffset - buyerBalanceBefore, expectedBuyerBalanceChange);
 
-    const totalFees = takerFee * 2n;
+    const totalFees = entryFee + exitFee;
     const expectedContractBalanceChange = expectedPnL - totalFees;
     assert.equal(contractBalanceBefore - contractBalanceAfterOffset, expectedContractBalanceChange);
 

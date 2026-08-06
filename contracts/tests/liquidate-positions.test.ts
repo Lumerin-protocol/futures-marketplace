@@ -5,6 +5,7 @@ import { getAddress, parseEventLogs, parseUnits } from "viem";
 import type { NetworkConnection } from "hardhat/types/network";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { scaleHashprice } from "./utils.ts";
+import { TimeInForce } from "./timeInForce.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -25,7 +26,7 @@ const { viem, networkHelpers } = await network.getOrCreate();
  *     closing almost ALL contracts overshoots IM, closing EVERY contract is a
  *     full close.
  */
-async function partialLiquidationFixture(conn: NetworkConnection) {
+async function partialLiquidationFixture(_conn: NetworkConnection) {
   const data = await networkHelpers.loadFixture(deployFuturesFixture);
   const { contracts, accounts, config } = data;
   const { futures, portfolioMarginEngine, collateralVault } = contracts;
@@ -39,8 +40,8 @@ async function partialLiquidationFixture(conn: NetworkConnection) {
   });
   // Zero trading fees so the deposit math is purely margin-driven (fees are
   // exercised by the dedicated fee/liquidation suites, not here).
-  await futures.write.setMakerFee([0n], { account: owner.account });
-  await futures.write.setTakerFee([0n], { account: owner.account });
+  await futures.write.setMakerFeeBps([0], { account: owner.account });
+  await futures.write.setTakerFeeBps([0], { account: owner.account });
 
   const entry = await futures.read.getMarketPrice();
   const deliveryDate = config.deliveryDates[0];
@@ -58,18 +59,23 @@ async function partialLiquidationFixture(conn: NetworkConnection) {
   await collateralVault.write.deposit([bigDeposit], { account: buyer2.account });
 
   // Open 10 matched long contracts for buyer (seller short).
-  await futures.write.createOrder([entry, deliveryDate, -lotCount], {
+  await futures.write.createOrder([entry, deliveryDate, -lotCount, TimeInForce.GTC], {
     account: seller.account,
   });
-  const matchTx = await futures.write.createOrder([entry, deliveryDate, lotCount], {
-    account: buyer.account,
-  });
+  const matchTx = await futures.write.createOrder(
+    [entry, deliveryDate, lotCount, TimeInForce.GTC],
+    {
+      account: buyer.account,
+    },
+  );
   await pc.waitForTransactionReceipt({ hash: matchTx });
 
   // A foreign position (buyer2 long vs seller) — used to prove partial liquidation
   // only reduces the target user's aggregate.
-  await futures.write.createOrder([entry, deliveryDate, -1n], { account: seller.account });
-  await futures.write.createOrder([entry, deliveryDate, 1n], {
+  await futures.write.createOrder([entry, deliveryDate, -1n, TimeInForce.GTC], {
+    account: seller.account,
+  });
+  await futures.write.createOrder([entry, deliveryDate, 1n, TimeInForce.GTC], {
     account: buyer2.account,
   });
 
@@ -111,7 +117,7 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
     const { buyer, buyer2 } = accounts;
 
     // A stale far-out-of-market resting buy order that never matches.
-    await futures.write.createOrder([config.entry / 2n, config.deliveryDate, 1n], {
+    await futures.write.createOrder([config.entry / 2n, config.deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
 
@@ -220,10 +226,9 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
     const tooMany = config.lotCount - 1n;
 
     await viem.assertions.revertWithCustomError(
-      futures.write.liquidatePositions(
-        [buyer.account.address, [config.deliveryDate], [tooMany]],
-        { account: buyer2.account },
-      ),
+      futures.write.liquidatePositions([buyer.account.address, [config.deliveryDate], [tooMany]], {
+        account: buyer2.account,
+      }),
       futures,
       "OverLiquidation",
     );
@@ -306,7 +311,11 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
 
     // Seller is not paid until they close their own aggregate.
     const sellerBalanceAfter = await collateralVault.read.balanceOf([seller.account.address]);
-    assert.equal(sellerBalanceAfter, sellerBalanceBefore, "seller balance unchanged on buyer liquidation");
+    assert.equal(
+      sellerBalanceAfter,
+      sellerBalanceBefore,
+      "seller balance unchanged on buyer liquidation",
+    );
 
     const sellerPos = await futures.read.getUserPosition([
       seller.account.address,

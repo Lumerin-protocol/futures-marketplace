@@ -2,6 +2,7 @@ import type { NetworkConnection } from "hardhat/types/network";
 import type { ArtifactMap } from "hardhat/types/artifacts";
 import { parseUnits, maxUint256, encodeFunctionData, getContract } from "viem";
 import type { Abi, Address, PublicClient, WalletClient, GetContractReturnType } from "viem";
+import { TimeInForce } from "./timeInForce.ts";
 
 // Contract ABIs mapping from Hardhat's artifact map
 type ContractAbis = {
@@ -66,9 +67,9 @@ export async function deployContract<ContractName extends keyof ContractAbis>(
   }) as unknown as ContractInstance<ContractName>;
 }
 
-const BITCOIN_DECIMALS = 8;
+const _BITCOIN_DECIMALS = 8;
 const USDC_DECIMALS = 6;
-const DIFFICULTY_TO_HASHRATE_FACTOR = 2n ** 32n;
+const _DIFFICULTY_TO_HASHRATE_FACTOR = 2n ** 32n;
 const HASHPRICE_DECIMALS = 8; // matches HashpriceUSD.decimals()
 
 const TOP_UP_BALANCE_USDC = parseUnits("10000", USDC_DECIMALS);
@@ -162,8 +163,8 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
   const expirationIntervalDays = 30;
   const expirationIntervalSeconds = expirationIntervalDays * 24 * 3600;
   const priceLadderStep = parseUnits("0.01", USDC_DECIMALS);
-  const makerFee = 0n;
-  const takerFee = parseUnits("1", USDC_DECIMALS);
+  const makerFeeBps = 0;
+  const takerFeeBps = 0; // 0 bps — tests that need fees set them explicitly
   const { timestamp: now } = await pc.getBlock({ blockTag: "latest" });
   const futureExpirationDatesCount = 10;
   const firstFutureExpirationDate = now + BigInt(expirationIntervalSeconds);
@@ -219,8 +220,8 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
         args: [
           hashpriceUsd.address,
           liquidationMarginPercent,
-          priceLadderStep,
-          expirationIntervalDays,
+          0n, // was minimumPriceIncrement — now constant
+          0, // was expirationIntervalDays — now constant
           futureExpirationDatesCount,
           firstFutureExpirationDate,
         ],
@@ -232,9 +233,7 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
     address: futuresProxy.address,
     client: { public: pc, wallet: walletClient },
   });
-  await collateralVault.write.setAuthorizedCaller([futures.address, true], {
-    account: owner.account,
-  });
+  await collateralVault.write.setAuthorizedCaller([futures.address, true]);
 
   // PME stack with stub mocks for the non-futures products.
   const perpsDEXMock = await deployContract<"PerpsDEXMock">(
@@ -264,7 +263,7 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
       encodeFunctionData({
         abi: portfolioMarginEngineImpl.abi,
         functionName: "initialize",
-        args: [collateralVault.address],
+        args: [],
       }),
     ],
   );
@@ -274,21 +273,16 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
     client: { public: pc, wallet: walletClient },
   });
 
-  // Seed the perps mock's market price for any test that opts in to perps add-ons.
-  // The mock is intentionally NOT registered on the PME by default: registering it
-  // would make PME's `_getSpotPriceWad` source spot from the static mock price
-  // (perps takes precedence over futures), which would then desync from the
-  // hashprice oracle the futures tests move around. Tests that need a perps leg
-  // can call `pme.setPerps(perpsDEXMock.address)` themselves.
-  const marketPrice = await futures.read.getMarketPrice();
-  await perpsDEXMock.write.setMarketPrice([marketPrice], {
-    account: walletClient.account,
-    chain: walletClient.chain,
-  });
+  await portfolioMarginEngine.write.setVault([collateralVault.address]);
+  // Point the PME's own spot source at the same hashprice feed the futures
+  // contract uses — oracle moves then flow into PME stress math automatically.
+  // The perps mock is NOT registered on the PME by default — tests that need a
+  // perps leg call `pme.addLinearMarket(perpsDEXMock.address)` themselves.
+  await portfolioMarginEngine.write.setOracle([hashpriceUsd.address]);
 
   // Register futures so PME picks up the cross-product margin path used by
   // `liquidate*` / `computePortfolioMM`.
-  await portfolioMarginEngine.write.setFutures([futures.address], { account: owner.account });
+  await portfolioMarginEngine.write.addLinearMarket([futures.address]);
 
   // Align the PME stress shocks with the legacy futures `liquidationMarginPercent`
   // so test fixtures that previously calibrated deposits/moves around the
@@ -297,17 +291,13 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
   // tuned for perps and would otherwise let the futures-only test cases stay
   // healthy through moves the legacy contract treated as liquidatable.
   const liqShockWad = (BigInt(liquidationMarginPercent) * 10n ** 18n) / 100n;
-  await portfolioMarginEngine.write.setShocks([liqShockWad, liqShockWad, 0n, 0n], {
-    account: owner.account,
-  });
+  await portfolioMarginEngine.write.setShocks([liqShockWad, liqShockWad, 0n, 0n]);
 
-  await futures.write.setMarginEngine([portfolioMarginEngine.address], { account: owner.account });
-  await collateralVault.write.setMarginEngine([portfolioMarginEngine.address], {
-    account: owner.account,
-  });
+  await futures.write.setPortfolioMargin([portfolioMarginEngine.address]);
+  await collateralVault.write.setMarginEngine([portfolioMarginEngine.address]);
 
-  await futures.write.setMakerFee([makerFee], { account: owner.account });
-  await futures.write.setTakerFee([takerFee], { account: owner.account });
+  await futures.write.setMakerFeeBps([makerFeeBps]);
+  await futures.write.setTakerFeeBps([takerFeeBps]);
   const deliveryDates = await futures.read.getExpirationDates();
 
   // `depositFor` pulls USDC via the vault — approve the vault, not Futures.
@@ -329,8 +319,8 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
       liquidationMarginPercent,
       expirationIntervalSeconds,
       priceLadderStep,
-      makerFee,
-      takerFee,
+      makerFeeBps,
+      takerFeeBps,
       deliveryDates,
       futureExpirationDatesCount,
       firstFutureExpirationDate,
@@ -387,18 +377,26 @@ export async function deployOnlyFuturesWithDummyData(
 
   // create positions
   const d = config.deliveryDates[0];
-  const dst = "//shev8.contract:anything@stratum.braiins.com:3333";
+  const _dst = "//shev8.contract:anything@stratum.braiins.com:3333";
 
-  await futures.write.createOrder([mp + inc, d, -1n], { account: seller.account });
-  await futures.write.createOrder([mp + 2n * inc, d, -1n], { account: seller.account });
-  await futures.write.createOrder([mp + 3n * inc, d, -1n], { account: seller.account });
+  await futures.write.createOrder([mp + inc, d, -1n, TimeInForce.GTC], { account: seller.account });
+  await futures.write.createOrder([mp + 2n * inc, d, -1n, TimeInForce.GTC], {
+    account: seller.account,
+  });
+  await futures.write.createOrder([mp + 3n * inc, d, -1n, TimeInForce.GTC], {
+    account: seller.account,
+  });
 
-  await futures.write.createOrder([mp - inc, d, 1n], { account: buyer.account });
-  await futures.write.createOrder([mp - 2n * inc, d, 1n], { account: buyer.account });
-  await futures.write.createOrder([mp - 3n * inc, d, 1n], { account: buyer.account });
+  await futures.write.createOrder([mp - inc, d, 1n, TimeInForce.GTC], { account: buyer.account });
+  await futures.write.createOrder([mp - 2n * inc, d, 1n, TimeInForce.GTC], {
+    account: buyer.account,
+  });
+  await futures.write.createOrder([mp - 3n * inc, d, 1n, TimeInForce.GTC], {
+    account: buyer.account,
+  });
 
-  await futures.write.createOrder([mp, d, -1n], { account: seller.account });
-  await futures.write.createOrder([mp, d, 1n], { account: buyer.account });
+  await futures.write.createOrder([mp, d, -1n, TimeInForce.GTC], { account: seller.account });
+  await futures.write.createOrder([mp, d, 1n, TimeInForce.GTC], { account: buyer.account });
 
   // Physical-delivery escrow is disabled; futures cash-settle at maturity via
   // `settlePosition`, so no delivery payment is deposited for the seeded position.

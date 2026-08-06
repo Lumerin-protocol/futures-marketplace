@@ -4,6 +4,7 @@ import { network } from "hardhat";
 import { encodeFunctionData, getAddress, parseEventLogs, parseUnits, zeroHash } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { warpPastDeliveryWithFreshOracle } from "./utils.ts";
+import { TimeInForce } from "./timeInForce.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -11,6 +12,7 @@ type OrderIntent = {
   price: bigint;
   expirationAt: bigint;
   quantity: bigint;
+  timeInForce: number;
 };
 
 describe("Futures.removeOutdatedOrder", () => {
@@ -24,7 +26,9 @@ describe("Futures.removeOutdatedOrder", () => {
     const mp = await futures.read.getMarketPrice();
     const dd = config.deliveryDates[0];
 
-    const restTx = await futures.write.createOrder([mp, dd, -1n], { account: seller.account });
+    const restTx = await futures.write.createOrder([mp, dd, -1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
     const [created] = parseEventLogs({
       logs: (await pc.waitForTransactionReceipt({ hash: restTx })).logs,
       abi: futures.abi,
@@ -73,7 +77,9 @@ describe("Futures.removeOutdatedOrder", () => {
     const mp = await futures.read.getMarketPrice();
     const dd = config.deliveryDates[0];
 
-    const restTx = await futures.write.createOrder([mp, dd, -1n], { account: seller.account });
+    const restTx = await futures.write.createOrder([mp, dd, -1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
     const [created] = parseEventLogs({
       logs: (await pc.waitForTransactionReceipt({ hash: restTx })).logs,
       abi: futures.abi,
@@ -97,7 +103,9 @@ describe("Futures.removeOutdatedOrder", () => {
     const mp = await futures.read.getMarketPrice();
     const dd = config.deliveryDates[0];
 
-    const restTx = await futures.write.createOrder([mp, dd, -1n], { account: seller.account });
+    const restTx = await futures.write.createOrder([mp, dd, -1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
     const [created] = parseEventLogs({
       logs: (await pc.waitForTransactionReceipt({ hash: restTx })).logs,
       abi: futures.abi,
@@ -134,9 +142,12 @@ describe("Futures.removeOutdatedOrder", () => {
     // Rest N orders at the soon-to-expire date.
     const restingIds: `0x${string}`[] = [];
     for (let i = 0; i < N; i++) {
-      const tx = await futures.write.createOrder([mp + BigInt(i) * step, expiringDd, -1n], {
-        account: seller.account,
-      });
+      const tx = await futures.write.createOrder(
+        [mp + BigInt(i) * step, expiringDd, -1n, TimeInForce.GTC],
+        {
+          account: seller.account,
+        },
+      );
       const [ev] = parseEventLogs({
         logs: (await pc.waitForTransactionReceipt({ hash: tx })).logs,
         abi: futures.abi,
@@ -175,6 +186,7 @@ describe("Futures.removeOutdatedOrder", () => {
               price: mp,
               expirationAt: freshDd,
               quantity: -1n,
+              timeInForce: TimeInForce.GTC,
             } satisfies OrderIntent,
           ],
         ],

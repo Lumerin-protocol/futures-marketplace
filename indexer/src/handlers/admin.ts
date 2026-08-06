@@ -1,5 +1,15 @@
 import { log } from "@graphprotocol/graph-ts";
-import { ConfigUpdated, Initialized, Upgraded } from "../../generated/Futures/Futures";
+import {
+  Initialized,
+  Upgraded,
+  FutureExpirationDatesCountUpdated,
+  MakerFeeBpsUpdated,
+  TakerFeeBpsUpdated,
+  LiquidationFeeBpsUpdated,
+  LiquidatorShareBpsUpdated,
+  OracleUpdated,
+  PortfolioMarginUpdated,
+} from "../../generated/Futures/Futures";
 import { flushFuturesCounters } from "../internal/match";
 import { getOrCreateFutures, loadFuturesFromContract } from "../internal/store";
 import { stringifyParameters } from "../internal/utils";
@@ -25,23 +35,73 @@ export function handleUpgraded(event: Upgraded): void {
   futures.save();
 }
 
-/// Single-event refresh path for the entire owner-settable config surface. Replaces
-/// the per-field `MakerFeeUpdated`/`TakerFeeUpdated`/`ValidatorURLUpdated`/`LiquidationFeeUpdated`
-/// handlers. The contract emits this event on every setter (and once from `initialize`),
-/// so we can always overwrite local state with the snapshot.
-export function handleConfigUpdated(event: ConfigUpdated): void {
-  log.debug("config updated event ", [stringifyParameters(event)]);
+/// Individual per-field handlers replacing the former monolithic ConfigUpdated
+/// path: every admin setter now emits its own event carrying the new value, so
+/// each handler writes just that field rather than re-reading the whole config.
+///
+/// `LiquidationMarginPercentUpdated` is deliberately not indexed: margin is a
+/// cross-account figure owned by the PortfolioMarginEngine (spot shocks), and
+/// the per-venue percent it carries no longer drives anything.
+
+export function handleFutureExpirationDatesCountUpdated(event: FutureExpirationDatesCountUpdated): void {
+  log.info("FutureExpirationDatesCountUpdated: {}", [event.params.newFutureExpirationDatesCount.toString()]);
   const futures = getOrCreateFutures();
   flushFuturesCounters(futures);
-  const cfg = event.params.config;
-  futures.makerFee = cfg.makerFee;
-  futures.takerFee = cfg.takerFee;
-  futures.liquidationFee = cfg.liquidationFee;
-  futures.minimumPriceIncrement = cfg.minimumPriceIncrement;
-  futures.liquidationMarginPercent = cfg.liquidationMarginPercent;
-  futures.futureExpirationDatesCount = cfg.futureExpirationDatesCount;
-  futures.hashrateOracleAddress = cfg.hashrateOracle;
-  futures.marginEngineAddress = cfg.marginEngine;
+  futures.futureExpirationDatesCount = event.params.newFutureExpirationDatesCount;
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+export function handleMakerFeeBpsUpdated(event: MakerFeeBpsUpdated): void {
+  log.info("MakerFeeBpsUpdated: {}", [event.params.newMakerFeeBps.toString()]);
+  const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
+  futures.makerFeeBps = event.params.newMakerFeeBps;
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+export function handleTakerFeeBpsUpdated(event: TakerFeeBpsUpdated): void {
+  log.info("TakerFeeBpsUpdated: {}", [event.params.newTakerFeeBps.toString()]);
+  const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
+  futures.takerFeeBps = event.params.newTakerFeeBps;
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+export function handleLiquidationFeeBpsUpdated(event: LiquidationFeeBpsUpdated): void {
+  log.info("LiquidationFeeBpsUpdated: {}", [event.params.newLiquidationFeeBps.toString()]);
+  const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
+  futures.liquidationFeeBps = event.params.newLiquidationFeeBps;
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+export function handleLiquidatorShareBpsUpdated(event: LiquidatorShareBpsUpdated): void {
+  log.info("LiquidatorShareBpsUpdated: {}", [event.params.newLiquidatorShareBps.toString()]);
+  const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
+  futures.liquidatorShareBps = event.params.newLiquidatorShareBps;
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+export function handleOracleUpdated(event: OracleUpdated): void {
+  log.info("OracleUpdated: {}", [event.params.newOracle.toHexString()]);
+  const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
+  futures.hashrateOracleAddress = event.params.newOracle;
+  futures.lastUpdatedAt = event.block.timestamp;
+  futures.save();
+}
+
+export function handlePortfolioMarginUpdated(event: PortfolioMarginUpdated): void {
+  log.info("PortfolioMarginUpdated: {}", [event.params.newPortfolioMargin.toHexString()]);
+  const futures = getOrCreateFutures();
+  flushFuturesCounters(futures);
+  futures.portfolioMarginAddress = event.params.newPortfolioMargin;
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
 }

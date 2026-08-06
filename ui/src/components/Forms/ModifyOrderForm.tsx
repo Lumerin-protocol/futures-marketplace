@@ -34,7 +34,8 @@ interface ModifyOrderFormProps {
   closeForm: () => void;
   participantData?: Participant | null;
   latestPrice: bigint | null;
-  marginPercent: number;
+  /// Maintenance spot shock from the PortfolioMarginEngine, WAD-scaled.
+  mmSpotShock: bigint | undefined;
   minMargin?: bigint | null;
   newestItemPrice: number | null;
   accountBalance?: AccountBalance;
@@ -55,7 +56,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
     closeForm,
     participantData,
     latestPrice,
-    marginPercent,
+    mmSpotShock,
     minMargin,
     newestItemPrice,
     accountBalance,
@@ -66,7 +67,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
     const qc = useQueryClient();
     const { address } = useAccount();
     const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
-    const { worstCaseFee: worstCaseFeeRaw } = useMakerTakerFees();
+    const { feeFor } = useMakerTakerFees();
 
     // Determine order type from quantity sign
     const isBuy = order.isBuy;
@@ -113,8 +114,8 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
       const lockedBalance = minMargin ?? 0n;
       const availableBalance = totalBalance - lockedBalance;
 
-      if (!latestPrice) {
-        alert("Unable to fetch market price. Please try again.");
+      if (!latestPrice || mmSpotShock === undefined) {
+        alert("Unable to fetch market data. Please try again.");
         return false;
       }
 
@@ -124,11 +125,11 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
         newPriceInWei,
         newSignedQuantity,
         latestPrice,
-        marginPercent,
+        mmSpotShock,
       );
 
-      // Reserve the larger of maker/taker fee — see comment on `useMakerTakerFees`.
-      const reservedFee = worstCaseFeeRaw ?? 0n;
+      // Reserve the worse of maker/taker fee — see comment on `useMakerTakerFees`.
+      const reservedFee = feeFor(newPriceInWei * BigInt(Math.ceil(newQuantity)));
       const totalRequired = requiredMargin + reservedFee;
 
       if (totalRequired > availableBalance) {
@@ -310,7 +311,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
       prevProps.orderIds.length === nextProps.orderIds.length &&
       prevProps.currentQuantity === nextProps.currentQuantity &&
       prevProps.latestPrice === nextProps.latestPrice &&
-      prevProps.marginPercent === nextProps.marginPercent &&
+      prevProps.mmSpotShock === nextProps.mmSpotShock &&
       prevProps.minMargin === nextProps.minMargin &&
       prevProps.newestItemPrice === nextProps.newestItemPrice
     );

@@ -22,7 +22,6 @@ const fetchContractSpecsAsync = async (): Promise<GetResponse<FuturesContractSpe
   const data: FuturesContractSpecs = {
     hashrateOracleAddress: response.futures.hashrateOracleAddress,
     minimumPriceIncrement: BigInt(response.futures.minimumPriceIncrement),
-    liquidationMarginPercent: response.futures.liquidationMarginPercent,
     contractSizeHpsDay: BigInt(+response.futures.contractSizeHpsDay),
     tokenAddress: response.futures.contractAddress,
   };
@@ -35,7 +34,6 @@ const fetchContractSpecsAsync = async (): Promise<GetResponse<FuturesContractSpe
 export type FuturesContractSpecs = {
   hashrateOracleAddress: `0x${string}`;
   minimumPriceIncrement: bigint;
-  liquidationMarginPercent: number;
   contractSizeHpsDay: bigint;
   tokenAddress: `0x${string}`;
 };
@@ -48,8 +46,7 @@ type ContractSpecsResponse = {
     };
   };
   futures: {
-    liquidationMarginPercent: number;
-    hashrateOracleAddress: `0x${string}`;
+      hashrateOracleAddress: `0x${string}`;
     minimumPriceIncrement: string;
     contractSizeHpsDay: string;
     contractAddress: `0x${string}`;

@@ -1,6 +1,5 @@
 import { useReadContracts } from "wagmi";
-import { HashPowerPerpsDEXAbi } from "../../../abi/Perps";
-import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
 
 export function usePerpsContractConstants() {
   const perpsAddress = process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`;
@@ -25,7 +24,7 @@ export function usePerpsContractConstants() {
       {
         address: perpsAddress,
         abi: HashPowerPerpsDEXAbi,
-        functionName: "liquidationFee",
+        functionName: "liquidationFeeBps",
       },
       {
         address: perpsAddress,
@@ -49,7 +48,7 @@ export function usePerpsContractConstants() {
   const fundingPeriod = result.data?.[0]?.result as bigint | undefined;
   const fundingRateMaxBps = result.data?.[1]?.result as bigint | undefined;
   const maxOrdersPerParticipant = result.data?.[2]?.result as number | undefined;
-  const liquidationFee = result.data?.[3]?.result as bigint | undefined;
+  const liquidationFeeBps = result.data?.[3]?.result as number | undefined;
   const maxPriceLevelsPerSide = result.data?.[4]?.result as bigint | undefined;
   const lastFundingUpdateTime = result.data?.[5]?.result as bigint | undefined;
 
@@ -60,8 +59,9 @@ export function usePerpsContractConstants() {
     fundingRateMaxBps,
     fundingRateMaxBpsFormatted: fundingRateMaxBps ? Number(fundingRateMaxBps) : null,
     maxOrdersPerParticipant,
-    liquidationFee,
-    liquidationFeeFormatted: liquidationFee ? Number(liquidationFee) / PAYMENT_TOKEN_SCALE_NUM : null,
+    liquidationFeeBps,
+    // Basis points of the liquidated notional, not a flat charge.
+    liquidationFeePercent: liquidationFeeBps !== undefined ? liquidationFeeBps / 100 : null,
     maxPriceLevelsPerSide: maxPriceLevelsPerSide ? Number(maxPriceLevelsPerSide) : null,
     lastFundingUpdateTime: lastFundingUpdateTime ? Number(lastFundingUpdateTime) : null,
   };

@@ -30,7 +30,7 @@ async function main() {
 
   const futures = await viem.getContractAt("Futures", futuresAddress);
   const owner = await futures.read.owner();
-  const current = await futures.read.hashrateOracle();
+  const current = await futures.read.priceOracle();
   const version = await futures.read.VERSION().catch(() => "unknown");
   logInfo("setOracle", {
     Futures: addrUrl(pc, futuresAddress),

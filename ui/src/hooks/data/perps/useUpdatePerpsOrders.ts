@@ -1,7 +1,8 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { getContract } from "viem";
-import { HashPowerPerpsDEXAbi } from "../../../abi/Perps";
+import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
 import { QUANTITY_SCALE_NUM } from "../../../lib/units";
+import { TimeInForce } from "../../../types/timeInForce";
 
 interface UpdatePerpsOrdersProps {
   cancelIds: `0x${string}`[];
@@ -27,6 +28,7 @@ export function useUpdatePerpsOrders() {
     const intents = (props.creates ?? []).map((c) => ({
       price: c.price,
       quantity: BigInt(Math.round(c.quantity * QUANTITY_SCALE_NUM)),
+      timeInForce: TimeInForce.GTC,
     }));
 
     const req = await perpsContract.simulate.updateOrders([props.cancelIds, [], intents], {

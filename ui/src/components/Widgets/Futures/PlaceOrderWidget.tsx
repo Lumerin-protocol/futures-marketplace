@@ -30,6 +30,7 @@ import { PlaceOrderForm } from "../../Forms/PlaceOrderForm";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
+import { useMarginEngineShocks } from "../../../hooks/data/useMarginEngineShocks";
 import type { Participant } from "../../../hooks/data/getUserFuturesOrders";
 import type { ContractMode, AccountBalance } from "../../../types/types";
 import type { PerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
@@ -45,7 +46,6 @@ import { ModeToggle, ModeButton, type AmountMode } from "./PerpsOrderFormFields"
 import { MOBILE_TOGGLE_METRICS } from "./mobile/mobileTradingLayout";
 import { useSimulatePerpsOrder } from "../../../hooks/data/perps/useSimulatePerpsOrder";
 import { useSimulateFuturesOrder } from "../../../hooks/data/useSimulateFuturesOrder";
-import { useGetPerpsInitialMargin } from "../../../hooks/data/perps/useGetPerpsInitialMargin";
 import {
   formatHashratePHPS,
   PAYMENT_TOKEN_SCALE,
@@ -81,8 +81,6 @@ interface PlaceOrderWidgetProps {
   highlightMode: "inputs" | "buttons" | undefined;
   onOrderPlaced?: () => void | Promise<void>;
   minMargin?: bigint | null;
-  /** Aggregated net quantity across OPEN perps sessions; used with getInitialMargin when adding to the same side. */
-  openPositionNetQuantity?: bigint | null;
   contractMode?: ContractMode;
   accountBalance?: AccountBalance;
   balanceQuery: BalanceQueryResult;
@@ -93,21 +91,6 @@ interface PlaceOrderWidgetProps {
 // Slippage applied to market orders so the order crosses the spread.
 // Buy orders are priced this much above market; sell orders this much below.
 const MARKET_SLIPPAGE = 0.05;
-
-/** Locked collateral for max-withdraw style math: initial margin when adding to an existing position on the same side (Bid/long, Ask/short), else maintenance. */
-function getPerpsLockedBalanceForSide(
-  minMargin: bigint | null | undefined,
-  initialMargin: bigint | null | undefined,
-  netQty: bigint | null | undefined,
-  side: "buy" | "sell",
-): bigint {
-  const maintenance = minMargin && minMargin > 0n ? minMargin : 0n;
-  const initial =
-    initialMargin !== null && initialMargin !== undefined && initialMargin > 0n ? initialMargin : maintenance;
-  if (!netQty || netQty === 0n) return maintenance;
-  const sameSide = (netQty > 0n && side === "buy") || (netQty < 0n && side === "sell");
-  return sameSide ? initial : maintenance;
-}
 
 export const PlaceOrderWidget = ({
   externalPrice,
@@ -121,7 +104,6 @@ export const PlaceOrderWidget = ({
   highlightMode,
   onOrderPlaced,
   minMargin,
-  openPositionNetQuantity = null,
   contractMode = "futures",
   accountBalance,
   balanceQuery,
@@ -130,22 +112,17 @@ export const PlaceOrderWidget = ({
 }: PlaceOrderWidgetProps) => {
   const { data: marketPrice, isLoading: isMarketPriceLoading } = useGetMarketPrice();
   const { address } = useAccount();
-  const initialMarginQuery = useGetPerpsInitialMargin(address, {
-    enabled: contractMode === "perpetual" && !!address,
-  });
-  const initialMargin =
-    initialMarginQuery.data !== undefined ? (initialMarginQuery.data as bigint) : null;
-
-  const [perpsMarginSide, setPerpsMarginSide] = useState<"buy" | "sell">("buy");
   const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
-  const { worstCaseFee: worstCaseFeeRaw } = useMakerTakerFees();
+  const { feeFor } = useMakerTakerFees();
 
   // Calculate price step from contract specs
   const priceStep = contractSpecsQuery.data?.data?.minimumPriceIncrement
     ? Number(contractSpecsQuery.data.data.minimumPriceIncrement) / PAYMENT_TOKEN_SCALE_NUM
     : null;
 
-  const marginPercent = contractSpecsQuery.data?.data?.liquidationMarginPercent ?? 20;
+  // Maintenance shock from the PortfolioMarginEngine (WAD): margin is a
+  // cross-account figure, so this only previews a single leg.
+  const { mmSpotShock } = useMarginEngineShocks();
 
 
   // Get market price for validation and default price
@@ -200,14 +177,6 @@ export const PlaceOrderWidget = ({
     }
   }, [externalAmount]);
 
-  // Default margin side for max-size math: align with open position (Bid if long, Ask if short).
-  useEffect(() => {
-    if (contractMode !== "perpetual") return;
-    if (openPositionNetQuantity === null || openPositionNetQuantity === undefined) return;
-    if (openPositionNetQuantity > 0n) setPerpsMarginSide("buy");
-    else if (openPositionNetQuantity < 0n) setPerpsMarginSide("sell");
-  }, [contractMode, openPositionNetQuantity]);
-
   const handleOrderTypeChange = (type: "limit" | "market") => {
     setOrderType(type);
     // Market orders should not rest: default IOC. Limit defaults to GTC.
@@ -232,9 +201,6 @@ export const PlaceOrderWidget = ({
     latestPrice,
     amount,
     contractMode,
-    openPositionNetQuantity,
-    perpsMarginSide,
-    initialMargin,
   ]);
 
   // Helper to get numeric amount value for calculations
@@ -300,14 +266,12 @@ export const PlaceOrderWidget = ({
   // Calculate maximum available quantity based on current price
   const calculateMaxQuantity = (): number => {
     const currentPrice = parseFloat(price) || 0;
-    if (currentPrice <= 0 || !latestPrice) return 0;
+    if (currentPrice <= 0 || !latestPrice || mmSpotShock === undefined) return 0;
 
     const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
     const totalBalance = balanceQuery.data ?? 0n;
-    const lockedBalance =
-      contractMode === "perpetual"
-        ? getPerpsLockedBalanceForSide(minMargin, initialMargin, openPositionNetQuantity, perpsMarginSide)
-        : minMargin ?? 0n;
+    // Portfolio IM already nets futures and perps legs, so it is the locked amount in both modes.
+    const lockedBalance = minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
     // For perpetual mode, return max size (notional) or max quantity depending on amountMode
@@ -322,14 +286,6 @@ export const PlaceOrderWidget = ({
       return maxSize;
     }
 
-    // Reserve the larger of maker/taker fee for IM headroom — we don't yet
-    // know whether this order will match (taker) or rest and later fill (maker).
-    const reservedFee = worstCaseFeeRaw ?? 0n;
-
-    if (availableBalance <= reservedFee) return 0;
-
-    const balanceForMargin = availableBalance - reservedFee;
-
     // Binary search to find maximum quantity for futures mode
     let low = 0;
     let high = 50; // High upper bound for search
@@ -343,10 +299,13 @@ export const PlaceOrderWidget = ({
         priceInWei,
         mid,
         latestPrice,
-        marginPercent,
+        mmSpotShock,
       );
+      // The fee scales with notional, so it has to be charged per candidate
+      // size rather than subtracted from the balance once up front.
+      const requiredTotal = requiredMargin + feeFor(priceInWei * BigInt(Math.ceil(mid)));
 
-      if (requiredMargin <= balanceForMargin) {
+      if (requiredTotal <= availableBalance) {
         maxQty = mid;
         low = mid;
       } else {
@@ -589,7 +548,6 @@ export const PlaceOrderWidget = ({
 
   // Perps mode buy handler - uses amount as margin
   const handleBuyPerps = async () => {
-    setPerpsMarginSide("buy");
     const numericAmount = getNumericAmount();
     if (numericAmount <= 0) {
       alert("Amount must be greater than 0");
@@ -602,12 +560,7 @@ export const PlaceOrderWidget = ({
     const currentPrice = getEffectivePrice("buy");
     const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
     const totalBalance = balanceQuery.data ?? 0n;
-    const lockedBalance = getPerpsLockedBalanceForSide(
-      minMargin,
-      initialMargin,
-      openPositionNetQuantity,
-      "buy",
-    );
+    const lockedBalance = minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
     // Required margin = effectiveSize / leverage (effectiveSize accounts for amountMode)
@@ -657,7 +610,6 @@ export const PlaceOrderWidget = ({
 
   // Perps mode sell handler - uses amount as margin
   const handleSellPerps = async () => {
-    setPerpsMarginSide("sell");
     const numericAmount = getNumericAmount();
     if (numericAmount <= 0) {
       alert("Amount must be greater than 0");
@@ -669,12 +621,7 @@ export const PlaceOrderWidget = ({
     const currentPrice = getEffectivePrice("sell");
     const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
     const totalBalance = balanceQuery.data ?? 0n;
-    const lockedBalance = getPerpsLockedBalanceForSide(
-      minMargin,
-      initialMargin,
-      openPositionNetQuantity,
-      "sell",
-    );
+    const lockedBalance = minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
     // Required margin = effectiveSize / leverage (effectiveSize accounts for amountMode)
@@ -744,8 +691,8 @@ export const PlaceOrderWidget = ({
     const lockedBalance = minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
-    if (!latestPrice) {
-      alert("Unable to fetch market price. Please try again.");
+    if (!latestPrice || mmSpotShock === undefined) {
+      alert("Unable to fetch market data. Please try again.");
       return;
     }
 
@@ -753,11 +700,11 @@ export const PlaceOrderWidget = ({
       priceInWei,
       numericAmount, // Positive quantity for Buy
       latestPrice,
-      marginPercent,
+      mmSpotShock,
     );
 
-    // Reserve the larger of maker/taker fee — see comment on `useMakerTakerFees`.
-    const reservedFee = worstCaseFeeRaw ?? 0n;
+    // Reserve the worse of maker/taker fee — see comment on `useMakerTakerFees`.
+    const reservedFee = feeFor(priceInWei * BigInt(Math.ceil(numericAmount)));
     const totalRequired = requiredMargin + reservedFee;
 
     if (totalRequired > availableBalance) {
@@ -838,8 +785,8 @@ export const PlaceOrderWidget = ({
     const lockedBalance = minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
-    if (!latestPrice) {
-      alert("Unable to fetch market price. Please try again.");
+    if (!latestPrice || mmSpotShock === undefined) {
+      alert("Unable to fetch market data. Please try again.");
       return;
     }
 
@@ -847,11 +794,11 @@ export const PlaceOrderWidget = ({
       priceInWei,
       -numericAmount, // Negative quantity for Sell
       latestPrice,
-      marginPercent,
+      mmSpotShock,
     );
 
-    // Reserve the larger of maker/taker fee — see comment on `useMakerTakerFees`.
-    const reservedFee = worstCaseFeeRaw ?? 0n;
+    // Reserve the worse of maker/taker fee — see comment on `useMakerTakerFees`.
+    const reservedFee = feeFor(priceInWei * BigInt(Math.ceil(numericAmount)));
     const totalRequired = requiredMargin + reservedFee;
 
     if (totalRequired > availableBalance) {
@@ -1143,9 +1090,6 @@ export const PlaceOrderWidget = ({
 
           <ButtonSection>
             <BuyButton
-              onMouseDown={() => {
-                if (contractMode === "perpetual") setPerpsMarginSide("buy");
-              }}
               onClick={handleBuy}
               disabled={showOrderForm}
               $isHighlighted={highlightedButton === "buy"}
@@ -1153,9 +1097,6 @@ export const PlaceOrderWidget = ({
               Bid
             </BuyButton>
             <SellButton
-              onMouseDown={() => {
-                if (contractMode === "perpetual") setPerpsMarginSide("sell");
-              }}
               onClick={handleSell}
               disabled={showOrderForm}
               $isHighlighted={highlightedButton === "sell"}
@@ -1219,9 +1160,6 @@ export const PlaceOrderWidget = ({
             participantData={participantData}
             latestPrice={latestPrice}
             onOrderPlaced={async () => {
-              if (contractMode === "perpetual") {
-                await initialMarginQuery.refetch();
-              }
               await onOrderPlaced?.();
             }}
             bypassConflictCheck={bypassConflictCheck}

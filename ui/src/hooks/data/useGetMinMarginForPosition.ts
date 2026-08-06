@@ -5,7 +5,8 @@ interface CalculateMinMarginProps {
   entryPricePerDay: bigint;
   quantity: number;
   marketPricePerDay: bigint;
-  marginPercent: number;
+  /// Maintenance spot shock from the PortfolioMarginEngine, WAD-scaled.
+  mmSpotShock: bigint;
 }
 
 /**
@@ -21,6 +22,6 @@ export async function calculateMinMargin(
     props.entryPricePerDay,
     props.quantity,
     props.marketPricePerDay,
-    props.marginPercent,
+    props.mmSpotShock,
   );
 }

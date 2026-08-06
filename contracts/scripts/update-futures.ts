@@ -31,7 +31,7 @@ async function main() {
     Address: addrUrl(pc, futuresProxy.address),
     Owner: await futuresProxy.read.owner(),
     Version: currentVersion,
-    HASHPRICE_USD: await futuresProxy.read.hashrateOracle(),
+    HASHPRICE_USD: await futuresProxy.read.priceOracle(),
   });
 
   // 3.x cutover: order/position semantics change; 3.1+ also breaks Order storage layout
@@ -96,7 +96,7 @@ async function main() {
       await logPrompt("Proceed?");
       const setMarginEngineData = encodeFunctionData({
         abi: futuresProxy.abi,
-        functionName: "setMarginEngine",
+        functionName: "setPortfolioMargin",
         args: [marginEngineAddress],
       });
       const setMarginEngineTxHash = await safe.proposeTransaction({
@@ -142,9 +142,9 @@ async function main() {
     const upgraded = await viem.getContractAt("Futures", futuresAddress);
     const upgradedVersion = await upgraded.read.VERSION(atUpgradeBlock);
     logInfo("upgraded futures", {
-      Vault: await upgraded.read.collateralVault(atUpgradeBlock),
-      MarginEngine: await upgraded.read.marginEngine(atUpgradeBlock),
-      HASHPRICE_USD: await upgraded.read.hashrateOracle(atUpgradeBlock),
+      Vault: await upgraded.read.vault(atUpgradeBlock),
+      MarginEngine: await upgraded.read.portfolioMargin(atUpgradeBlock),
+      HASHPRICE_USD: await upgraded.read.priceOracle(atUpgradeBlock),
       Hook: await upgraded.read.hook(atUpgradeBlock),
       Owner: await upgraded.read.owner(atUpgradeBlock),
       Version: upgradedVersion,
@@ -158,16 +158,16 @@ async function main() {
 
     // ── 3. Post-upgrade config ──────────────────────────────────────────
     if (marginEngineAddress) {
-      const currentMarginEngine = await upgraded.read.marginEngine();
+      const currentMarginEngine = await upgraded.read.portfolioMargin();
       if (currentMarginEngine.toLowerCase() === marginEngineAddress.toLowerCase()) {
         logStep("setMarginEngine", `skipped (already set to ${marginEngineAddress})`);
       } else {
         logInfo("setMarginEngine", { current: currentMarginEngine, new: marginEngineAddress });
         await logPrompt("Proceed?");
-        const setTx = await upgraded.write.setMarginEngine([marginEngineAddress]);
+        const setTx = await upgraded.write.setPortfolioMargin([marginEngineAddress]);
         const setReceipt = await pc.waitForTransactionReceipt({ hash: setTx });
         logStep("setMarginEngine", txUrl(pc, setReceipt.transactionHash));
-        logStep("MarginEngine", await upgraded.read.marginEngine());
+        logStep("MarginEngine", await upgraded.read.portfolioMargin());
       }
     }
 

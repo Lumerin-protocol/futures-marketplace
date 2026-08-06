@@ -4,6 +4,7 @@ import { network } from "hardhat";
 import { parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { refreshHashprice, scaleHashprice } from "./utils.ts";
+import { TimeInForce } from "./timeInForce.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -20,10 +21,10 @@ async function positionWithMarginFixture() {
   await collateralVault.write.deposit([margin], { account: seller.account });
   await collateralVault.write.deposit([margin], { account: buyer.account });
 
-  await futures.write.createOrder([entryPricePerDay, deliveryDate, -1n], {
+  await futures.write.createOrder([entryPricePerDay, deliveryDate, -1n, TimeInForce.GTC], {
     account: seller.account,
   });
-  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1n], {
+  await futures.write.createOrder([entryPricePerDay, deliveryDate, 1n, TimeInForce.GTC], {
     account: buyer.account,
   });
 
@@ -98,7 +99,7 @@ describe("Futures - portfolio margin (PME)", () => {
 
     const imBefore = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
     // Same-side bid (long + resting buy) — not reduce-only, must lock order margin.
-    await futures.write.createOrder([marketPricePerDay - step, deliveryDate, 1n], {
+    await futures.write.createOrder([marketPricePerDay - step, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     const imAfter = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
@@ -112,18 +113,40 @@ describe("Futures - portfolio margin (PME)", () => {
 
     const marketPricePerDay = await futures.read.getMarketPrice();
     const step = config.priceLadderStep;
-    const orderMarginBefore = await futures.read.getOrderMargin([buyer.account.address]);
     const imBefore = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
+    assert.equal(
+      await portfolioMarginEngine.read.orderMarginOf([buyer.account.address]),
+      0n,
+      "no resting orders yet",
+    );
 
     // Buyer is long 1 — a resting sell of size 1 is fully reduce-only.
-    await futures.write.createOrder([marketPricePerDay + step, deliveryDate, -1n], {
-      account: buyer.account,
-    });
+    await futures.write.createOrder(
+      [marketPricePerDay + step, deliveryDate, -1n, TimeInForce.GTC],
+      {
+        account: buyer.account,
+      },
+    );
 
-    const orderMarginAfter = await futures.read.getOrderMargin([buyer.account.address]);
+    // The venue no longer credits the order itself. The engine nets the sell-side order
+    // delta into portfolio net delta, so the "all asks fill" leg lands at flat and the
+    // (empty) buy leg — the position on its own — stays the binding one.
+    const risk = await futures.read.getRiskView([buyer.account.address]);
+    assert.equal(risk.sellOrderDelta, 10n ** 6n, "one contract of resting ask delta");
+    assert.equal(risk.buyOrderDelta, 0n);
+    assert.equal(risk.sellOrderFillLoss, 0n, "an ask above the mark fills at a gain, not a loss");
+
     const imAfter = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
-    assert.equal(orderMarginAfter, orderMarginBefore, "reduce-only order margin is netted to zero");
-    assert.equal(imAfter, imBefore, "portfolio IM unchanged by a fully offsetting reduce-only order");
+    assert.equal(
+      imAfter,
+      imBefore,
+      "portfolio IM unchanged by a fully offsetting reduce-only order",
+    );
+    assert.equal(
+      await portfolioMarginEngine.read.orderMarginOf([buyer.account.address]),
+      0n,
+      "an order that only moves the portfolio toward flat costs nothing",
+    );
   });
 
   it("allows a reduce-only order when margin is tight", async () => {
@@ -156,14 +179,14 @@ describe("Futures - portfolio margin (PME)", () => {
 
     const step = config.priceLadderStep;
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([entryPricePerDay - step, deliveryDate, 1n], {
+      futures.write.createOrder([entryPricePerDay - step, deliveryDate, 1n, TimeInForce.GTC], {
         account: buyer.account,
       }),
       futures,
       "InsufficientMarginBalance",
     );
 
-    await futures.write.createOrder([entryPricePerDay + step, deliveryDate, -1n], {
+    await futures.write.createOrder([entryPricePerDay + step, deliveryDate, -1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     const orders = await futures.read.getUserOrders([buyer.account.address]);
@@ -188,14 +211,17 @@ describe("Futures - portfolio margin (PME)", () => {
 
     const step = config.priceLadderStep;
     // First full-size reduce-only is allowed.
-    await futures.write.createOrder([entryPricePerDay + step, deliveryDate, -1n], {
+    await futures.write.createOrder([entryPricePerDay + step, deliveryDate, -1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     // Second would stack past the position — must not skip IM.
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([entryPricePerDay + 2n * step, deliveryDate, -1n], {
-        account: buyer.account,
-      }),
+      futures.write.createOrder(
+        [entryPricePerDay + 2n * step, deliveryDate, -1n, TimeInForce.GTC],
+        {
+          account: buyer.account,
+        },
+      ),
       futures,
       "InsufficientMarginBalance",
     );
@@ -220,7 +246,7 @@ describe("Futures - portfolio margin (PME)", () => {
     const step = config.priceLadderStep;
     // Sell 2 while long 1 — would flip, not reduce-only.
     await viem.assertions.revertWithCustomError(
-      futures.write.createOrder([entryPricePerDay + step, deliveryDate, -2n], {
+      futures.write.createOrder([entryPricePerDay + step, deliveryDate, -2n, TimeInForce.GTC], {
         account: buyer.account,
       }),
       futures,
@@ -237,9 +263,12 @@ describe("Futures - portfolio margin (PME)", () => {
     const futureDeliveryDate = config.deliveryDates[1];
     await collateralVault.write.deposit([marketPricePerDay * 10n], { account: buyer.account });
 
-    const txHash = await futures.write.createOrder([marketPricePerDay, futureDeliveryDate, 1n], {
-      account: buyer.account,
-    });
+    const txHash = await futures.write.createOrder(
+      [marketPricePerDay, futureDeliveryDate, 1n, TimeInForce.GTC],
+      {
+        account: buyer.account,
+      },
+    );
     const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
     parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "OrderCreated" });
 
@@ -325,4 +354,3 @@ describe("Futures - margin management", () => {
     );
   });
 });
-

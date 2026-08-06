@@ -6,6 +6,7 @@ import { read } from "matchstick-ts";
 import { deployFuturesFixture } from "../../contracts/tests/fixtures.ts";
 import { quantizePrice } from "../../contracts/tests/utils.ts";
 import { pointerId } from "./helpers.ts";
+import { TimeInForce } from "../../contracts/tests/timeInForce.ts";
 
 const conn = await network.getOrCreate();
 
@@ -30,7 +31,7 @@ describe("single match session state", () => {
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
-    const sellTx = await futures.write.createOrder([price, deliveryDate, -1n], {
+    const sellTx = await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], {
       account: seller.account,
     });
     const sellReceipt = await pc.waitForTransactionReceipt({ hash: sellTx });
@@ -39,7 +40,7 @@ describe("single match session state", () => {
       abi: futures.abi,
       eventName: "OrderCreated",
     });
-    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n], {
+    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     const buyReceipt = await pc.waitForTransactionReceipt({ hash: buyTx });
@@ -129,8 +130,8 @@ describe("same tx qty=3 aggregation", () => {
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
-    await futures.write.createOrder([price, deliveryDate, -3n], { account: seller.account });
-    const buyTx = await futures.write.createOrder([price, deliveryDate, 3n], {
+    await futures.write.createOrder([price, deliveryDate, -3n, TimeInForce.GTC], { account: seller.account });
+    const buyTx = await futures.write.createOrder([price, deliveryDate, 3n, TimeInForce.GTC], {
       account: buyer.account,
     });
     const buyReceipt = await pc.waitForTransactionReceipt({ hash: buyTx });
@@ -223,15 +224,15 @@ describe("scaling into a position at two different prices: qty-weighted entry pr
     await conn.matchstick.anchor();
 
     // tx1: A sells 1 at p1, B buys 1 at p1.
-    await futures.write.createOrder([p1, deliveryDate, -1n], { account: seller.account });
-    const buy1 = await futures.write.createOrder([p1, deliveryDate, 1n], {
+    await futures.write.createOrder([p1, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
+    const buy1 = await futures.write.createOrder([p1, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buy1 });
 
     // tx2: A sells another 1 at p2, B buys another 1 at p2.
-    await futures.write.createOrder([p2, deliveryDate, -1n], { account: seller.account });
-    const buy2 = await futures.write.createOrder([p2, deliveryDate, 1n], {
+    await futures.write.createOrder([p2, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
+    const buy2 = await futures.write.createOrder([p2, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buy2 });

@@ -14,6 +14,7 @@ import { read } from "matchstick-ts";
 import { deployFuturesFixture } from "../../contracts/tests/fixtures.ts";
 import { quantizePrice, refreshHashprice } from "../../contracts/tests/utils.ts";
 import { futuresExpirationId } from "./helpers.ts";
+import { TimeInForce } from "../../contracts/tests/timeInForce.ts";
 
 const conn = await network.getOrCreate();
 
@@ -35,8 +36,8 @@ async function openMatchedPosition() {
   await conn.matchstick.captureViewMocks();
   await conn.matchstick.anchor();
 
-  await futures.write.createOrder([entry, deliveryDate, -1n], { account: seller.account });
-  const tx = await futures.write.createOrder([entry, deliveryDate, 1n], {
+  await futures.write.createOrder([entry, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
+  const tx = await futures.write.createOrder([entry, deliveryDate, 1n, TimeInForce.GTC], {
     account: buyer.account,
   });
   const receipt = await pc.waitForTransactionReceipt({ hash: tx });

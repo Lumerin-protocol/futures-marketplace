@@ -4,6 +4,7 @@ import { network } from "hardhat";
 import { parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { refreshHashprice } from "./utils.ts";
+import { TimeInForce } from "./timeInForce.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -39,9 +40,9 @@ describe("MM views", () => {
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await refreshHashprice(contracts.hashpriceUsd);
     // Two separate placements (qty does not merge across createOrder calls).
-    await futures.write.createOrder([p1, dd, 1n], { account: seller.account });
+    await futures.write.createOrder([p1, dd, 1n, TimeInForce.GTC], { account: seller.account });
     await refreshHashprice(contracts.hashpriceUsd);
-    await futures.write.createOrder([p2, dd, 2n], { account: seller.account });
+    await futures.write.createOrder([p2, dd, 2n, TimeInForce.GTC], { account: seller.account });
 
     const ids = await futures.read.getUserOrders([seller.account.address]);
     assert.equal(ids.length, 2, "two resting orders");
@@ -58,9 +59,9 @@ describe("MM views", () => {
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
     await refreshHashprice(contracts.hashpriceUsd);
-    await futures.write.createOrder([price, dd, -1n], { account: seller.account });
+    await futures.write.createOrder([price, dd, -1n, TimeInForce.GTC], { account: seller.account });
     await refreshHashprice(contracts.hashpriceUsd);
-    await futures.write.createOrder([price, dd, 1n], { account: buyer.account });
+    await futures.write.createOrder([price, dd, 1n, TimeInForce.GTC], { account: buyer.account });
 
     const sellerIds = await futures.read.getActiveExpirationDates([seller.account.address]);
     const buyerIds = await futures.read.getActiveExpirationDates([buyer.account.address]);
@@ -82,13 +83,13 @@ describe("MM views", () => {
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: buyer.account });
     await refreshHashprice(contracts.hashpriceUsd);
-    await futures.write.createOrder([ask1, dd, -1n], { account: seller.account });
+    await futures.write.createOrder([ask1, dd, -1n, TimeInForce.GTC], { account: seller.account });
     await refreshHashprice(contracts.hashpriceUsd);
-    await futures.write.createOrder([ask1, dd, -1n], { account: seller.account });
+    await futures.write.createOrder([ask1, dd, -1n, TimeInForce.GTC], { account: seller.account });
     await refreshHashprice(contracts.hashpriceUsd);
-    await futures.write.createOrder([ask2, dd, -1n], { account: seller.account });
+    await futures.write.createOrder([ask2, dd, -1n, TimeInForce.GTC], { account: seller.account });
     await refreshHashprice(contracts.hashpriceUsd);
-    await futures.write.createOrder([bid1, dd, 1n], { account: buyer.account });
+    await futures.write.createOrder([bid1, dd, 1n, TimeInForce.GTC], { account: buyer.account });
 
     const [bookBids, bookAsks] = await futures.read.getOrderBookPrices([dd, 50n]);
     // Asks low→high, bids high→low (sorted ladder).
@@ -109,9 +110,9 @@ describe("MM views", () => {
 
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await refreshHashprice(contracts.hashpriceUsd);
-    await futures.write.createOrder([price, dd, -1n], { account: seller.account });
+    await futures.write.createOrder([price, dd, -1n, TimeInForce.GTC], { account: seller.account });
     await refreshHashprice(contracts.hashpriceUsd);
-    await futures.write.createOrder([price, dd, -1n], { account: seller.account });
+    await futures.write.createOrder([price, dd, -1n, TimeInForce.GTC], { account: seller.account });
 
     let [, asks] = await futures.read.getOrderBookPrices([dd, 50n]);
     assert.equal(asks.length, 1);
@@ -131,24 +132,27 @@ describe("MM views", () => {
     assert.equal(await futures.read.getQuantityAtPrice([dd, price, false]), 0n);
   });
 
-  it("getNetPositionDelta reports ±1×WAD per contract (no duration multiplier)", async () => {
+  it("getNetPositionDelta reports ±1×10^collateralDecimals per contract (no duration multiplier)", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, buyer } = accounts;
-    const WAD = 10n ** 18n;
+    const DELTA_SCALE = 10n ** 6n; // USDC 6 decimals (ILinearMarket token-decimal scale)
     const dd = (await futures.read.getExpirationDates())[0];
     const price = await futures.read.getMarketPrice();
 
     await collateralVault.write.deposit([price * 10n], { account: seller.account });
     await collateralVault.write.deposit([price * 10n], { account: buyer.account });
 
-    await futures.write.createOrder([price, dd, -3n], { account: seller.account });
-    await futures.write.createOrder([price, dd, 3n], { account: buyer.account });
+    await futures.write.createOrder([price, dd, -3n, TimeInForce.GTC], { account: seller.account });
+    await futures.write.createOrder([price, dd, 3n, TimeInForce.GTC], { account: buyer.account });
 
-    // 3 matched contracts → long buyer +3·WAD, short seller −3·WAD, independent
+    // 3 matched contracts → long buyer +3·10^6, short seller −3·10^6, independent
     // of the (now-removed) delivery-duration multiplier.
-    assert.equal(await futures.read.getNetPositionDelta([buyer.account.address]), 3n * WAD);
-    assert.equal(await futures.read.getNetPositionDelta([seller.account.address]), -3n * WAD);
+    assert.equal(await futures.read.getNetPositionDelta([buyer.account.address]), 3n * DELTA_SCALE);
+    assert.equal(
+      await futures.read.getNetPositionDelta([seller.account.address]),
+      -3n * DELTA_SCALE,
+    );
   });
 
   it("cancelOrder rejects callers that don't own the order", async () => {
@@ -159,7 +163,9 @@ describe("MM views", () => {
 
     await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
     await refreshHashprice(contracts.hashpriceUsd);
-    await futures.write.createOrder([parseUnits("100", 6), dd, -1n], { account: seller.account });
+    await futures.write.createOrder([parseUnits("100", 6), dd, -1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
     const ids = await futures.read.getUserOrders([seller.account.address]);
 
     await viem.assertions.revertWithCustomError(

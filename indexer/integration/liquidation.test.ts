@@ -16,6 +16,7 @@ import { read, type EntityFields } from "matchstick-ts";
 import { deployFuturesFixture } from "../../contracts/tests/fixtures.ts";
 import { quantizePrice, scaleHashprice } from "../../contracts/tests/utils.ts";
 import { pointerId } from "./helpers.ts";
+import { TimeInForce } from "../../contracts/tests/timeInForce.ts";
 
 const conn = await network.create({ override: { loggingEnabled: true } });
 const { matchstick } = conn;
@@ -42,8 +43,8 @@ describe("liquidatePosition: PositionLiquidated, seller netQty=0", () => {
     matchstick.bind("Futures", futures.address, futures.abi);
     await matchstick.captureViewMocks();
 
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
-    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n], {
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
+    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buyTx });
@@ -182,8 +183,8 @@ describe("BadDebt: BadDebtEvent when losses exceed participant balance + insuran
     await matchstick.captureViewMocks();
     await matchstick.anchor();
 
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
-    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n], {
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
+    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buyTx });
@@ -300,14 +301,14 @@ describe("multi-position permissionless liquidation: per-tx dedup", () => {
     matchstick.bind("Futures", futures.address, futures.abi);
     await matchstick.captureViewMocks();
 
-    await futures.write.createOrder([price1, deliveryDate, -1n], { account: seller.account });
-    const buy1 = await futures.write.createOrder([price1, deliveryDate, 1n], {
+    await futures.write.createOrder([price1, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
+    const buy1 = await futures.write.createOrder([price1, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buy1 });
 
-    await futures.write.createOrder([price2, deliveryDate, -1n], { account: seller.account });
-    const buy2 = await futures.write.createOrder([price2, deliveryDate, 1n], {
+    await futures.write.createOrder([price2, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
+    const buy2 = await futures.write.createOrder([price2, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buy2 });
@@ -387,14 +388,14 @@ describe("multi-leg liquidation in one tx: liquidatedQuantity counts units", () 
 
     // Seller shorts two units at distinct prices on the SAME deliveryDate → one
     // PositionSession with netQuantity -2 (both fills scale into one session).
-    await futures.write.createOrder([price1, deliveryDate, -1n], { account: seller.account });
-    const buy1 = await futures.write.createOrder([price1, deliveryDate, 1n], {
+    await futures.write.createOrder([price1, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
+    const buy1 = await futures.write.createOrder([price1, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buy1 });
 
-    await futures.write.createOrder([price2, deliveryDate, -1n], { account: seller.account });
-    const buy2 = await futures.write.createOrder([price2, deliveryDate, 1n], {
+    await futures.write.createOrder([price2, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
+    const buy2 = await futures.write.createOrder([price2, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buy2 });

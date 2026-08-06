@@ -1,6 +1,6 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { getContract } from "viem";
-import { HashPowerPerpsDEXAbi } from "../../../abi/Perps";
+import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
 import { QUANTITY_SCALE_NUM } from "../../../lib/units";
 import { TimeInForce, type TimeInForceValue } from "../../../types/timeInForce";
 
@@ -33,7 +33,7 @@ export function useCreatePerpsOrder() {
 
     const tif = props.timeInForce ?? TimeInForce.GTC;
 
-    const req = await perpsContract.simulate.createOrderV2(
+    const req = await perpsContract.simulate.createOrder(
       [props.price, quantityBigInt, tif],
       { account: walletClient.account.address },
     );

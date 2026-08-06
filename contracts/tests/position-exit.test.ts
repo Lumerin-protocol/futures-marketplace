@@ -2,6 +2,7 @@ import { it, describe } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { deployFuturesFixture } from "./fixtures.ts";
+import { TimeInForce } from "./timeInForce.ts";
 
 const { networkHelpers } = await network.getOrCreate();
 
@@ -16,17 +17,25 @@ describe("Position Exit", () => {
     const margin = price * 2n;
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.setTakerFee([0n], { account: owner.account });
+    await futures.write.setTakerFeeBps([0], { account: owner.account });
 
     await collateralVault.write.deposit([margin], { account: partA.account });
     await collateralVault.write.deposit([margin], { account: partB.account });
     await collateralVault.write.deposit([margin], { account: partC.account });
 
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: partA.account });
-    await futures.write.createOrder([price, deliveryDate, 1n], { account: partB.account });
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], {
+      account: partA.account,
+    });
+    await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
+      account: partB.account,
+    });
 
-    await futures.write.createOrder([price2, deliveryDate, -1n], { account: partB.account });
-    await futures.write.createOrder([price2, deliveryDate, 1n], { account: partA.account });
+    await futures.write.createOrder([price2, deliveryDate, -1n, TimeInForce.GTC], {
+      account: partB.account,
+    });
+    await futures.write.createOrder([price2, deliveryDate, 1n, TimeInForce.GTC], {
+      account: partA.account,
+    });
 
     const partAPos = await futures.read.getUserPosition([partA.account.address, deliveryDate]);
     const partBPos = await futures.read.getUserPosition([partB.account.address, deliveryDate]);
@@ -53,16 +62,24 @@ describe("Position Exit", () => {
     const margin = price * 2n;
     const deliveryDate = config.deliveryDates[0];
 
-    await futures.write.setTakerFee([0n], { account: owner.account });
+    await futures.write.setTakerFeeBps([0], { account: owner.account });
 
     await collateralVault.write.deposit([margin], { account: partA.account });
     await collateralVault.write.deposit([margin], { account: partB.account });
     await collateralVault.write.deposit([margin], { account: partC.account });
 
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: partA.account });
-    await futures.write.createOrder([price, deliveryDate, 1n], { account: partB.account });
-    await futures.write.createOrder([price, deliveryDate, 1n], { account: partC.account });
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: partB.account });
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], {
+      account: partA.account,
+    });
+    await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
+      account: partB.account,
+    });
+    await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
+      account: partC.account,
+    });
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], {
+      account: partB.account,
+    });
 
     const partAPos = await futures.read.getUserPosition([partA.account.address, deliveryDate]);
     const partBPos = await futures.read.getUserPosition([partB.account.address, deliveryDate]);

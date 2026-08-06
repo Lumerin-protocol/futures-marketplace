@@ -1,11 +1,10 @@
 import { useReadContracts } from "wagmi";
-import { FuturesAbi } from "../../abi/Futures";
-import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
+import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
 
 /**
  * Hook to get additional futures contract constants
- * Fetches: futureExpirationDatesCount, expirationIntervalDays, MAX_ORDERS_PER_PARTICIPANT,
- *          makerFee, takerFee
+ * Fetches: futureExpirationDatesCount, expirationIntervalDays,
+ *          MAX_ORDERS_PER_PARTICIPANT, makerFeeBps, takerFeeBps
  */
 export function useFuturesContractConstants() {
   const futuresAddress = process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`;
@@ -30,12 +29,12 @@ export function useFuturesContractConstants() {
       {
         address: futuresAddress,
         abi: FuturesAbi,
-        functionName: "makerFee",
+        functionName: "makerFeeBps",
       },
       {
         address: futuresAddress,
         abi: FuturesAbi,
-        functionName: "takerFee",
+        functionName: "takerFeeBps",
       },
     ],
     query: {
@@ -49,19 +48,18 @@ export function useFuturesContractConstants() {
   const futureExpirationDatesCount = result.data?.[0]?.result as number | undefined;
   const expirationIntervalDays = result.data?.[1]?.result as number | undefined;
   const maxOrdersPerParticipant = result.data?.[2]?.result as number | undefined;
-  const makerFee = result.data?.[3]?.result as bigint | undefined;
-  const takerFee = result.data?.[4]?.result as bigint | undefined;
+  const makerFeeBps = result.data?.[3]?.result as number | undefined;
+  const takerFeeBps = result.data?.[4]?.result as number | undefined;
 
   return {
     ...result,
     futureExpirationDatesCount,
     expirationIntervalDays,
     maxOrdersPerParticipant,
-    makerFee,
-    takerFee,
-    makerFeeFormatted:
-      makerFee !== undefined ? Number(makerFee) / PAYMENT_TOKEN_SCALE_NUM : null,
-    takerFeeFormatted:
-      takerFee !== undefined ? Number(takerFee) / PAYMENT_TOKEN_SCALE_NUM : null,
+    makerFeeBps,
+    takerFeeBps,
+    // Signed basis points of the filled notional; negative is a maker rebate.
+    makerFeePercent: makerFeeBps !== undefined ? makerFeeBps / 100 : null,
+    takerFeePercent: takerFeeBps !== undefined ? takerFeeBps / 100 : null,
   };
 }

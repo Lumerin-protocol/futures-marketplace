@@ -8,7 +8,10 @@ type ScalablePriceFeed = {
   read: { latestRoundData: () => Promise<readonly [bigint, bigint, bigint, bigint, bigint]> };
   write: {
     setPrice: (args: readonly [bigint], ...rest: never[]) => Promise<unknown>;
-    setRound: (args: readonly [bigint, bigint, bigint, bigint, bigint], ...rest: never[]) => Promise<unknown>;
+    setRound: (
+      args: readonly [bigint, bigint, bigint, bigint, bigint],
+      ...rest: never[]
+    ) => Promise<unknown>;
   };
 };
 

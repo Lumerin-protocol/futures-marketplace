@@ -35,12 +35,16 @@
     "@types/node": "^22.0.0",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "hardhat": "^3.9.1",
+    "hardhat-viem-abi": "https://github.com/lsheva/hardhat-viem-abi.git#v1.0.0-alpha.2&path:packages/hardhat-viem-abi",
     "typescript": "^5.8.0"
   },
   "pnpm": {
     "patchedDependencies": {
       "multicall3@0.0.0": "patches/multicall3@0.0.0.patch"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "hardhat-viem-abi"
+    ]
   },
   "dependencies": {
     "@chainlink/contracts": "^1.3.0",
@@ -50,7 +54,7 @@
     "@safe-global/api-kit": "^5.0.1",
     "@safe-global/protocol-kit": "^8.0.4",
     "@safe-global/types-kit": "^4.0.1",
-    "collateral-margin": "github:Lumerin-protocol/collateral-margin#feat/futures-3-keeper-mm",
+    "collateral-margin": "github:Lumerin-protocol/collateral-margin#9372f537a57682bb126aede41aac51be004828a6",
     "multicall3": "github:mds1/multicall3",
     "solidity-linked-list": "6.5.0",
     "viem": "^2.54.6"

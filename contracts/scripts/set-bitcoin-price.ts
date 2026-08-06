@@ -1,7 +1,6 @@
 import { createInterface } from "node:readline";
 import hre from "hardhat";
 import { formatUnits, parseUnits } from "viem";
-import { requireAddress } from "../lib/env.ts";
 
 async function main() {
   const { viem } = await hre.network.getOrCreate();
@@ -33,7 +32,7 @@ async function main() {
   });
 
   const prompt = () => {
-    console.log("\n" + "=".repeat(50));
+    console.log(`\n${"=".repeat(50)}`);
     console.log(`Current hashprice: $${currentPrice.toLocaleString()}`);
     console.log("=".repeat(50));
     console.log('Enter price change (e.g., "+2" for +2%, "-5" for -5%)');

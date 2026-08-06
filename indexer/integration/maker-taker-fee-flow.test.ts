@@ -1,9 +1,10 @@
 /**
- * Integration test: ConfigUpdated flow (replaces per-field MakerFeeUpdated /
- * TakerFeeUpdated events).
+ * Integration test: the per-field admin config events (MakerFeeBpsUpdated /
+ * TakerFeeBpsUpdated and friends) that replaced the monolithic ConfigUpdated.
  *
  * Deploy futures → bind Matchstick to the proxy → anchor → call
- * `setMakerFee(...)` / `setTakerFee(...)` → `index(read("Futures", "0"))` → assert.
+ * `setMakerFeeBps(...)` / `setTakerFeeBps(...)` → `index(read("Futures", "0"))`
+ * → assert.
  */
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
@@ -12,13 +13,16 @@ import { parseUnits } from "viem";
 import { read, type EntityFields } from "matchstick-ts";
 import { deployFuturesFixture } from "../../contracts/tests/fixtures.ts";
 import { quantizePrice } from "../../contracts/tests/utils.ts";
+import { TimeInForce } from "../../contracts/tests/timeInForce.ts";
 
 const conn = await network.getOrCreate();
 
-describe("Futures ConfigUpdated Integration", () => {
+const BPS = 10_000n;
+
+describe("Futures fee config events", () => {
   after(() => conn.matchstick.reset());
 
-  it("indexes makerFee and takerFee updates", async () => {
+  it("indexes makerFeeBps and takerFeeBps updates", async () => {
     const { contracts, accounts } = await conn.networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { owner } = accounts;
@@ -27,16 +31,18 @@ describe("Futures ConfigUpdated Integration", () => {
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
-    const newMakerFee = 4321n;
-    const newTakerFee = 12345n;
-    await futures.write.setMakerFee([newMakerFee], { account: owner.account });
-    await futures.write.setTakerFee([newTakerFee], { account: owner.account });
+    const newMakerFeeBps = -5;
+    const newTakerFeeBps = 25;
+    // Taker first: `_validateFees` rejects a maker rebate that the current
+    // taker fee cannot cover (makerFeeBps + takerFeeBps must stay >= 0).
+    await futures.write.setTakerFeeBps([newTakerFeeBps], { account: owner.account });
+    await futures.write.setMakerFeeBps([newMakerFeeBps], { account: owner.account });
 
     const [futuresEntity] = await conn.matchstick.index([read("Futures", "0")]);
 
     assert.ok(futuresEntity, "Futures#0 should exist after fee updates");
-    assert.equal(futuresEntity.makerFee, newMakerFee.toString());
-    assert.equal(futuresEntity.takerFee, newTakerFee.toString());
+    assert.equal(futuresEntity.makerFeeBps, newMakerFeeBps);
+    assert.equal(futuresEntity.takerFeeBps, newTakerFeeBps);
     assert.equal(futuresEntity.totalUsers, 0, "fee setters do not create users");
     assert.equal(conn.matchstick.eventCount, 2);
   });
@@ -45,24 +51,24 @@ describe("Futures ConfigUpdated Integration", () => {
 describe("Futures: full config + address surface populated by loadFuturesFromContract", () => {
   after(() => conn.matchstick.reset());
 
-  it("locks in every config field on the Futures singleton after a ConfigUpdated re-load", async () => {
+  it("locks in every config field on the Futures singleton", async () => {
     const { contracts, accounts, config } = await conn.networkHelpers.loadFixture(
       deployFuturesFixture,
     );
-    const { futures, collateralVault, hashpriceUsd, portfolioMarginEngine } = contracts;
+    const { futures, hashpriceUsd, portfolioMarginEngine } = contracts;
     const { owner } = accounts;
 
     conn.matchstick.bind("Futures", futures.address, futures.abi);
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
-    // Trigger any ConfigUpdated-flavored setter; `handleConfigUpdated` reloads
-    // the full snapshot from chain via `try_*` getters regardless of which
-    // field changed.
-    await futures.write.setMakerFee([config.makerFee], { account: owner.account });
+    // Any admin event will do: the per-field handler writes its own field, but
+    // creating the singleton pulls the rest of the snapshot from the chain via
+    // `try_*` getters (see `getOrCreateFutures`).
+    await futures.write.setMakerFeeBps([config.makerFeeBps], { account: owner.account });
 
     const [entity] = await conn.matchstick.index([read("Futures", "0")]);
-    assert.ok(entity, "Futures#0 should exist after ConfigUpdated");
+    assert.ok(entity, "Futures#0 should exist after a config event");
 
     // === id + addresses ===
     assert.equal(String(entity.id), "0", "Futures is a singleton at id=0");
@@ -71,34 +77,22 @@ describe("Futures: full config + address surface populated by loadFuturesFromCon
       futures.address.toLowerCase(),
       "contractAddress mirrors the proxy address Matchstick is bound to",
     );
-    // `Futures.collateralToken` is sourced from `contract.collateralVault()`,
-    // so it actually stores the vault proxy address (not the underlying USDC).
-    // Schema field name is misleading; behavior locked in here.
-    assert.equal(
-      String(entity.collateralToken).toLowerCase(),
-      collateralVault.address.toLowerCase(),
-      "collateralToken is populated from collateralVault() getter (vault proxy address)",
-    );
     assert.equal(
       String(entity.hashrateOracleAddress).toLowerCase(),
       hashpriceUsd.address.toLowerCase(),
     );
     assert.equal(
-      String(entity.marginEngineAddress).toLowerCase(),
+      String(entity.portfolioMarginAddress).toLowerCase(),
       portfolioMarginEngine.address.toLowerCase(),
     );
 
     // === scalar config ===
     assert.equal(String(entity.minimumPriceIncrement), config.priceLadderStep.toString());
-    assert.equal(String(entity.makerFee), config.makerFee.toString());
-    assert.equal(String(entity.takerFee), config.takerFee.toString());
-    assert.equal(String(entity.liquidationFee), "0", "liquidationFee defaults to 0 in fixture");
-    assert.equal(
-      String(entity.liquidationMarginPercent),
-      config.liquidationMarginPercent.toString(),
-    );
+    assert.equal(String(entity.makerFeeBps), config.makerFeeBps.toString());
+    assert.equal(String(entity.takerFeeBps), config.takerFeeBps.toString());
+    assert.equal(String(entity.liquidationFeeBps), "0", "fixture leaves liquidationFeeBps at 0");
     // Contract size is a compile-time constant (CONTRACT_SIZE_HPS_DAY = 1e15), read from the
-    // on-chain getter at bootstrap rather than emitted via ConfigUpdated.
+    // on-chain getter at bootstrap rather than emitted via a config event.
     assert.equal(String(entity.contractSizeHpsDay), "1000000000000000");
     assert.equal(String(entity.expirationIntervalDays), config.expirationIntervalDays.toString());
     assert.equal(
@@ -132,31 +126,33 @@ describe("Futures: full config + address surface populated by loadFuturesFromCon
     );
     assert.ok(
       BigInt(String(entity.lastUpdatedAt)) > 0n,
-      "lastUpdatedAt is bumped on every ConfigUpdated save (event.block.timestamp)",
+      "lastUpdatedAt is bumped on every config save (event.block.timestamp)",
     );
   });
 });
 
 // ============================================================================
-// Trade.tradingFee + PositionSession.tradingFees: flat per-unit maker/taker fees
-// (contract `_chargeMatchFees` transfers `makerFee` / `takerFee` once per
-// matched unit — NOT price-scaled).
+// Trade.tradingFee + PositionSession.tradingFees: maker/taker fees are basis
+// points of the matched notional (`_executeMatch` computes
+// `notional * feeBps / BPS`, where notional = price * fill).
 // ============================================================================
-describe("Trade.tradingFee and PositionSession.tradingFees reflect makerFee/takerFee", () => {
+describe("Trade.tradingFee and PositionSession.tradingFees reflect makerFeeBps/takerFeeBps", () => {
   after(() => conn.matchstick.reset());
 
-  it("Trade.tradingFee > 0 for both maker and taker after a real match", async () => {
+  const makerFeeBps = 50;
+  const takerFeeBps = 100;
+
+  /** Deploy, set non-zero fees on both sides, and match a single contract. */
+  async function matchOneContract() {
     const { contracts, accounts, config } = await conn.networkHelpers.loadFixture(
       deployFuturesFixture,
     );
     const { futures, collateralVault } = contracts;
     const { seller, buyer, owner, pc } = accounts;
 
-    // Override fixture default (makerFee=0) so BOTH sides should accrue a fee.
-    const nonZeroMakerFee = parseUnits("0.5", 6);
-    const nonZeroTakerFee = parseUnits("1", 6);
-    await futures.write.setMakerFee([nonZeroMakerFee], { account: owner.account });
-    await futures.write.setTakerFee([nonZeroTakerFee], { account: owner.account });
+    // Override the fixture default (0 bps) so BOTH sides accrue a fee.
+    await futures.write.setMakerFeeBps([makerFeeBps], { account: owner.account });
+    await futures.write.setTakerFeeBps([takerFeeBps], { account: owner.account });
 
     const price = quantizePrice(await futures.read.getMarketPrice(), config.priceLadderStep);
     const deliveryDate = config.deliveryDates[0];
@@ -169,14 +165,26 @@ describe("Trade.tradingFee and PositionSession.tradingFees reflect makerFee/take
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
-    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n], {
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
+    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
     await pc.waitForTransactionReceipt({ hash: buyTx });
 
-    const sellerAddr = seller.account.address.toLowerCase() as `0x${string}`;
-    const buyerAddr = buyer.account.address.toLowerCase() as `0x${string}`;
+    // One contract filled, so the notional is just the trade price.
+    return {
+      sellerAddr: seller.account.address.toLowerCase() as `0x${string}`,
+      buyerAddr: buyer.account.address.toLowerCase() as `0x${string}`,
+      expectedMakerFee: (price * BigInt(makerFeeBps)) / BPS,
+      expectedTakerFee: (price * BigInt(takerFeeBps)) / BPS,
+    };
+  }
+
+  it("Trade.tradingFee > 0 for both maker and taker after a real match", async () => {
+    const { sellerAddr, buyerAddr, expectedMakerFee, expectedTakerFee } =
+      await matchOneContract();
 
     const snap = await conn.matchstick.indexSnapshot([]);
     const trades = snap.saved("Trade");
@@ -184,55 +192,25 @@ describe("Trade.tradingFee and PositionSession.tradingFees reflect makerFee/take
     const sellerTrade = trades.find(
       (t: EntityFields) => String(t.user).toLowerCase() === sellerAddr,
     );
-    const buyerTrade = trades.find(
-      (t: EntityFields) => String(t.user).toLowerCase() === buyerAddr,
-    );
+    const buyerTrade = trades.find((t: EntityFields) => String(t.user).toLowerCase() === buyerAddr);
     assert.ok(sellerTrade, "seller (maker) has a Trade row");
     assert.ok(buyerTrade, "buyer (taker) has a Trade row");
 
     assert.equal(
       String(sellerTrade.tradingFee),
-      nonZeroMakerFee.toString(),
-      "maker (resting seller) Trade.tradingFee = flat makerFee per unit",
+      expectedMakerFee.toString(),
+      "maker (resting seller) Trade.tradingFee = notional * makerFeeBps / BPS",
     );
     assert.equal(
       String(buyerTrade.tradingFee),
-      nonZeroTakerFee.toString(),
-      "taker (incoming buyer) Trade.tradingFee = flat takerFee per unit",
+      expectedTakerFee.toString(),
+      "taker (incoming buyer) Trade.tradingFee = notional * takerFeeBps / BPS",
     );
   });
 
   it("PositionSession.tradingFees > 0 after a real match", async () => {
-    const { contracts, accounts, config } = await conn.networkHelpers.loadFixture(
-      deployFuturesFixture,
-    );
-    const { futures, collateralVault } = contracts;
-    const { seller, buyer, owner, pc } = accounts;
-
-    const nonZeroMakerFee = parseUnits("0.5", 6);
-    const nonZeroTakerFee = parseUnits("1", 6);
-    await futures.write.setMakerFee([nonZeroMakerFee], { account: owner.account });
-    await futures.write.setTakerFee([nonZeroTakerFee], { account: owner.account });
-
-    const price = quantizePrice(await futures.read.getMarketPrice(), config.priceLadderStep);
-    const deliveryDate = config.deliveryDates[0];
-    const margin = parseUnits("10000", 6);
-
-    await collateralVault.write.deposit([margin], { account: seller.account });
-    await collateralVault.write.deposit([margin], { account: buyer.account });
-
-    conn.matchstick.bind("Futures", futures.address, futures.abi);
-    await conn.matchstick.captureViewMocks();
-    await conn.matchstick.anchor();
-
-    await futures.write.createOrder([price, deliveryDate, -1n], { account: seller.account });
-    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n], {
-      account: buyer.account,
-    });
-    await pc.waitForTransactionReceipt({ hash: buyTx });
-
-    const sellerAddr = seller.account.address.toLowerCase() as `0x${string}`;
-    const buyerAddr = buyer.account.address.toLowerCase() as `0x${string}`;
+    const { sellerAddr, buyerAddr, expectedMakerFee, expectedTakerFee } =
+      await matchOneContract();
 
     const snap = await conn.matchstick.indexSnapshot([]);
     const sessions = snap.saved("PositionSession");
@@ -248,13 +226,13 @@ describe("Trade.tradingFee and PositionSession.tradingFees reflect makerFee/take
 
     assert.equal(
       String(sellerSession.tradingFees),
-      nonZeroMakerFee.toString(),
-      "maker PositionSession.tradingFees accumulates flat makerFee on open",
+      expectedMakerFee.toString(),
+      "maker PositionSession.tradingFees accumulates the maker fee on open",
     );
     assert.equal(
       String(buyerSession.tradingFees),
-      nonZeroTakerFee.toString(),
-      "taker PositionSession.tradingFees accumulates flat takerFee on open",
+      expectedTakerFee.toString(),
+      "taker PositionSession.tradingFees accumulates the taker fee on open",
     );
   });
 });

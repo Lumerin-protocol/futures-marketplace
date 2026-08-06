@@ -10,8 +10,8 @@ async function main() {
   const deployBlock = BigInt(env.FUTURES_DEPLOY_BLOCK);
 
   const futures = await viem.getContractAt("Futures", futuresAddress);
-  const makerFee = await futures.read.makerFee();
-  const takerFee = await futures.read.takerFee();
+  const makerFee = await futures.read.makerFeeBps();
+  const takerFee = await futures.read.takerFeeBps();
   const pc = await viem.getPublicClient();
   const currentBlock = await pc.getBlockNumber();
   const queryLimit = 1_000_000n;
@@ -53,11 +53,11 @@ async function main() {
 
     for (const event of [...events1, ...events2]) {
       if (
-        (event.args.value === makerFee || event.args.value === takerFee) &&
+        (event.args.value === (makerFee||0n) || event.args.value === (takerFee||0n)) &&
         event.args.to &&
         getAddress(event.args.to) === getAddress(futures.address)
       ) {
-        totalFees += event.args.value;
+        totalFees += event.args.value || 0n;
         charges++;
       }
       if (
