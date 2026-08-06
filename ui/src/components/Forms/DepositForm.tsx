@@ -1,7 +1,14 @@
 import { type FC, useCallback } from "react";
 import { useForm } from "react-hook-form";
-import { useAddMargin, useApproveAddMargin } from "../../hooks/data/useAddMargin";
+import { useAccount } from "wagmi";
+import {
+  useAddMargin,
+  useAddMarginWithPermit,
+  useApproveAddMargin,
+  usePermitAddMargin,
+} from "../../hooks/data/useAddMargin";
 import { useFuturesCollateralVault } from "../../hooks/data/useFuturesCollateralVault";
+import type { PermitSignature } from "../../hooks/data/usePermit";
 import type { AccountBalance } from "../../types/types";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import type { TxState } from "../../hooks/useTxForm";
@@ -18,9 +25,17 @@ interface InputValues {
   amount: string;
 }
 
+/** What the first ("Authorize") step actually did, read back by "Deposit Collateral". */
+type AuthorizeState =
+  | { mode: "permit"; signature: PermitSignature; deadline: bigint }
+  | { mode: "approve" };
+
 export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance }) => {
+  const { address } = useAccount();
   const { addMarginAsync } = useAddMargin();
   const { approveAsync } = useApproveAddMargin();
+  const { addMarginWithPermitAsync } = useAddMarginWithPermit();
+  const { signPermit, isSupported: isPermitSupported } = usePermitAddMargin();
 
   // Both Futures and Perps now settle against the same shared CollateralVault, so the
   // ERC20 spender is always the vault and the deposit goes through `vault.deposit(amount)`.
@@ -139,7 +154,11 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance })
 
   const transactionSteps = [
     {
-      label: "Approve Token",
+      // Signing a permit is off-chain (no gas, no tx to wait on) and collapses
+      // the usual approve+deposit sequence into a single on-chain transaction
+      // (see CollateralVault.depositForPermit). Only falls back to a real
+      // on-chain approve for tokens that don't implement EIP-2612.
+      label: "Authorize",
       async action() {
         const amount = form.getValues("amount");
         if (!amount) throw new Error("Amount not set");
@@ -147,11 +166,17 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance })
           throw new Error("Collateral vault address not loaded yet. Please try again.");
         }
         const amountBigInt = parseUnits(amount, paymentToken.decimals);
-        const result = await approveAsync({
-          spender: spenderAddress,
-          amount: amountBigInt,
-        });
-        return result ? { isSkipped: false, txhash: result } : { isSkipped: true };
+
+        if (isPermitSupported) {
+          const permit = await signPermit(amountBigInt);
+          if (!permit) throw new Error("Wallet not ready. Please try again.");
+          return { isSkipped: false, state: { mode: "permit", ...permit } };
+        }
+
+        const result = await approveAsync({ spender: spenderAddress, amount: amountBigInt });
+        return result
+          ? { isSkipped: false, txhash: result, state: { mode: "approve" } }
+          : { isSkipped: true, state: { mode: "approve" } };
       },
     },
     {
@@ -159,10 +184,23 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance })
       async action(txState: Record<number, TxState>) {
         const amount = form.getValues("amount");
         if (!amount) throw new Error("Amount not set");
+        if (!address) throw new Error("Wallet not connected. Please try again.");
         const amountBigInt = parseUnits(amount, paymentToken.decimals);
-        // Pin the deposit simulation to the block the approve step confirmed
-        // in (if it ran) so it doesn't race the wallet/RPC node's `latest`
-        // tag before that node has caught up to the just-mined approve.
+
+        const authorized = txState[0]?.customState as AuthorizeState | undefined;
+        if (authorized?.mode === "permit") {
+          const result = await addMarginWithPermitAsync({
+            amount: amountBigInt,
+            deadline: authorized.deadline,
+            signature: authorized.signature,
+            recipient: address,
+          });
+          return result ? { isSkipped: false, txhash: result } : { isSkipped: false };
+        }
+
+        // Approve fallback: pin the deposit simulation to the block the
+        // approve step confirmed in, so it doesn't race the wallet/RPC node's
+        // `latest` tag before that node has caught up to the just-mined approve.
         const minBlockNumber = txState[0]?.blockNumber;
         const result = await addMarginAsync({ amount: amountBigInt, minBlockNumber });
         return result ? { isSkipped: false, txhash: result } : { isSkipped: false };
