@@ -18,6 +18,12 @@ contract Futures is FuturesAdmin {
     using EnumerableSet for EnumerableSet.Bytes32Set;
     using StructuredLinkedList for StructuredLinkedList.List;
 
+    /// @notice Implementation version, bumped on every deployed change.
+    /// @dev Lives here rather than in {FuturesBase} so that a diff to this file
+    ///      and the version it ships under stay in the same place — CI reads it
+    ///      straight out of `Futures.sol` to require a bump.
+    string public constant VERSION = "4.0.0";
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) FuturesBase(_vault) { }
 
