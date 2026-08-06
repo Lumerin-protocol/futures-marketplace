@@ -3,7 +3,7 @@ import { tokens } from "../../../styles/tokens";
 import { useAccount } from "wagmi";
 import { useMemo } from "react";
 import { useModal } from "../../../hooks/useModal";
-import { Spinner } from "../../Spinner.styled";
+import { RefreshableValue } from "../../RefreshableValue";
 import { formatValue, PAYMENT_TOKEN_SCALE_NUM, paymentToken } from "../../../lib/units";
 import { UsdcIcon } from "../../../images";
 import { PrimaryButton } from "../../Forms/FormButtons/Buttons.styled";
@@ -16,15 +16,18 @@ interface BalanceQueryResult {
   data: bigint | undefined;
   isLoading: boolean;
   isSuccess: boolean;
+  isFetching?: boolean;
   refetch: () => void;
 }
 
 interface FuturesBalanceWidgetProps {
   minMargin: bigint | null;
   isLoadingMinMargin: boolean;
+  isRefreshingMinMargin?: boolean;
   unrealizedPnL: bigint | null;
   realizedPnL30D: number | null;
   isLoadingRealizedPnL?: boolean;
+  isRefreshingRealizedPnL?: boolean;
   balanceQuery: BalanceQueryResult;
   accountBalance?: AccountBalance;
 }
@@ -32,9 +35,11 @@ interface FuturesBalanceWidgetProps {
 export const FuturesBalanceWidget = ({
   minMargin,
   isLoadingMinMargin,
+  isRefreshingMinMargin = false,
   unrealizedPnL,
   realizedPnL30D,
   isLoadingRealizedPnL,
+  isRefreshingRealizedPnL = false,
   balanceQuery,
   accountBalance,
 }: FuturesBalanceWidgetProps) => {
@@ -52,8 +57,9 @@ export const FuturesBalanceWidget = ({
     withdrawalModal.close();
   };
 
-  const isLoading = balanceQuery.isLoading;
-  const isSuccess = !!(balanceQuery.isSuccess && address);
+  const hasBalance = balanceQuery.data !== undefined;
+  const isBalanceInitialLoading = !!address && !hasBalance && !!balanceQuery.isLoading;
+  const isBalanceRefreshing = !!address && hasBalance && !!balanceQuery.isFetching;
   const balanceValue = formatValue(balanceQuery.data ?? 0n, paymentToken);
   const lockedBalanceValue = formatValue(minMargin ?? 0n, paymentToken);
   const unrealizedPnLValue = formatValue(unrealizedPnL ?? 0n, paymentToken);
@@ -95,39 +101,67 @@ export const FuturesBalanceWidget = ({
           <DisconnectedMsg>Connect wallet to view balance</DisconnectedMsg>
         )}
 
-        {/* Loading */}
-        {isLoading && address && <Spinner fontSize="0.3em" />}
-
-        {/* Main metrics */}
-        {isSuccess && address && (
+        {/* Metrics stay mounted — no full-panel spinner. Values blink / skeleton while loading. */}
+        {!!address && (
           <>
             <MetricsGrid>
               <MetricCell>
                 <MetricLabel>Balance</MetricLabel>
-                <MetricValue>{Number(balanceValue?.valueRounded).toFixed(2)}</MetricValue>
+                <MetricValue>
+                  <RefreshableValue
+                    isInitialLoading={isBalanceInitialLoading}
+                    isRefreshing={isBalanceRefreshing}
+                    fallback="0.00"
+                    useFallbackWhileLoading
+                  >
+                    {hasBalance ? Number(balanceValue?.valueRounded).toFixed(2) : null}
+                  </RefreshableValue>
+                </MetricValue>
               </MetricCell>
               <MetricCell>
                 <MetricLabel>Unrealized PnL</MetricLabel>
-                <MetricValue style={{ color: unrealizedPnlColor }}>
-                  {unrealizedPnL !== null
-                    ? Number(unrealizedPnLValue.valueRounded).toFixed(2)
-                    : "-"}
+                <MetricValue>
+                  <RefreshableValue
+                    isInitialLoading={isBalanceInitialLoading}
+                    fallback="-"
+                    useFallbackWhileLoading
+                    style={{ color: unrealizedPnlColor }}
+                  >
+                    {unrealizedPnL !== null
+                      ? Number(unrealizedPnLValue.valueRounded).toFixed(2)
+                      : hasBalance
+                        ? "-"
+                        : null}
+                  </RefreshableValue>
                 </MetricValue>
               </MetricCell>
               <MetricCell>
                 <MetricLabel>Locked</MetricLabel>
                 <MetricValue>
-                  {isLoadingMinMargin ? (
-                    <Spinner fontSize="0.2em" />
-                  ) : (
-                    Number(lockedBalanceValue.valueRounded).toFixed(2)
-                  )}
+                  <RefreshableValue
+                    isInitialLoading={isLoadingMinMargin}
+                    isRefreshing={isRefreshingMinMargin}
+                    fallback="0.00"
+                    useFallbackWhileLoading
+                  >
+                    {minMargin !== null
+                      ? Number(lockedBalanceValue.valueRounded).toFixed(2)
+                      : null}
+                  </RefreshableValue>
                 </MetricValue>
               </MetricCell>
               <MetricCell>
                 <MetricLabel>Realized PnL (30D)</MetricLabel>
-                <MetricValue style={{ color: realizedPnlColor }}>
-                  {isLoadingRealizedPnL ? <Spinner fontSize="0.2em" /> : realizedPnL30DFormatted}
+                <MetricValue>
+                  <RefreshableValue
+                    isInitialLoading={!!isLoadingRealizedPnL}
+                    isRefreshing={isRefreshingRealizedPnL}
+                    fallback="-"
+                    useFallbackWhileLoading
+                    style={{ color: realizedPnlColor }}
+                  >
+                    {realizedPnL30D !== null ? realizedPnL30DFormatted : null}
+                  </RefreshableValue>
                 </MetricValue>
               </MetricCell>
             </MetricsGrid>

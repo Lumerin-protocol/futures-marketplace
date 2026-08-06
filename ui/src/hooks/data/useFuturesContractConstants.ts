@@ -1,5 +1,6 @@
 import { useReadContracts } from "wagmi";
 import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
+import { withErrors } from "../../lib/withErrors";
 
 /**
  * Hook to get additional futures contract constants
@@ -13,27 +14,27 @@ export function useFuturesContractConstants() {
     contracts: [
       {
         address: futuresAddress,
-        abi: FuturesAbi,
+        abi: withErrors(FuturesAbi),
         functionName: "futureExpirationDatesCount",
       },
       {
         address: futuresAddress,
-        abi: FuturesAbi,
+        abi: withErrors(FuturesAbi),
         functionName: "expirationIntervalDays",
       },
       {
         address: futuresAddress,
-        abi: FuturesAbi,
+        abi: withErrors(FuturesAbi),
         functionName: "MAX_ORDERS_PER_PARTICIPANT",
       },
       {
         address: futuresAddress,
-        abi: FuturesAbi,
+        abi: withErrors(FuturesAbi),
         functionName: "makerFeeBps",
       },
       {
         address: futuresAddress,
-        abi: FuturesAbi,
+        abi: withErrors(FuturesAbi),
         functionName: "takerFeeBps",
       },
     ],

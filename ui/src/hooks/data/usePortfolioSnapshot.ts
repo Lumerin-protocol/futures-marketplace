@@ -5,6 +5,7 @@ import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
 import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
 import { PAYMENT_TOKEN_DECIMALS, QUANTITY_DECIMALS } from "../../lib/units";
 import { useGetFutureBalance } from "./useGetFutureBalance";
+import { withErrors } from "../../lib/withErrors";
 
 /// A single `useReadContracts` entry, narrowed to what we actually consume.
 type ReadResult = { status: "success"; result: unknown } | { status: "failure" };
@@ -42,19 +43,19 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
     contracts: [
       {
         address: futuresAddress,
-        abi: FuturesAbi,
+        abi: withErrors(FuturesAbi),
         functionName: "getRiskView",
         args: [address as `0x${string}`],
       },
       {
         address: futuresAddress,
-        abi: FuturesAbi,
+        abi: withErrors(FuturesAbi),
         functionName: "getOrderValues",
         args: [address as `0x${string}`],
       },
       {
         address: futuresAddress,
-        abi: FuturesAbi,
+        abi: withErrors(FuturesAbi),
         functionName: "getActiveExpirationDates",
         args: [address as `0x${string}`],
       },
@@ -67,23 +68,23 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
     contracts: [
       {
         address: perpsAddress,
-        abi: HashPowerPerpsDEXAbi,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "getUserPosition",
         args: [address as `0x${string}`],
       },
       {
         address: perpsAddress,
-        abi: HashPowerPerpsDEXAbi,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "getRiskView",
         args: [address as `0x${string}`],
       },
       {
         address: perpsAddress,
-        abi: HashPowerPerpsDEXAbi,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "getOrderValues",
         args: [address as `0x${string}`],
       },
-      { address: perpsAddress, abi: HashPowerPerpsDEXAbi, functionName: "QUANTITY_DECIMALS" },
+      { address: perpsAddress, abi: withErrors(HashPowerPerpsDEXAbi), functionName: "QUANTITY_DECIMALS" },
     ],
     query: { enabled: !!address && !!perpsAddress, refetchInterval: 10000 },
   });
@@ -99,7 +100,7 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
   const aggregatesQuery = useReadContracts({
     contracts: (expirationAts ?? []).map((expirationAt) => ({
       address: futuresAddress,
-      abi: FuturesAbi,
+      abi: withErrors(FuturesAbi),
       functionName: "getUserPosition" as const,
       args: [address as `0x${string}`, expirationAt] as const,
     })),
@@ -111,7 +112,7 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
   const settlementQuery = useReadContracts({
     contracts: (expirationAts ?? []).map((expirationAt) => ({
       address: futuresAddress,
-      abi: FuturesAbi,
+      abi: withErrors(FuturesAbi),
       functionName: "settlementPrice" as const,
       args: [expirationAt] as const,
     })),

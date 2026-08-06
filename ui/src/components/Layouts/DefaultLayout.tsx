@@ -5,9 +5,9 @@ import { Header } from "../Header";
 import { Footer } from "../Footer";
 import { useMediaQuery } from "@mui/material";
 
-type Props = PropsWithChildren<{ pageTitle: string }>;
+type Props = PropsWithChildren;
 
-export const DefaultLayout: FC<Props> = ({ children, pageTitle }) => {
+export const DefaultLayout: FC<Props> = ({ children }) => {
   const isMobile = useMediaQuery("(max-width: 768px)");
 
   return (
@@ -24,7 +24,7 @@ export const DefaultLayout: FC<Props> = ({ children, pageTitle }) => {
         }}
       >
         <ContentWrapper>
-          <Header pageTitle={pageTitle} />
+          <Header />
           <Box component="main">{children}</Box>
         </ContentWrapper>
         <Footer />

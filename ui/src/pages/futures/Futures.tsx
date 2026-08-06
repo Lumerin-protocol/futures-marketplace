@@ -1,7 +1,7 @@
 import { tokens } from "../../styles/tokens";
 import { type FC, type ReactNode, useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { useAccount } from "wagmi";
-import { useLocation, useNavigate } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { FuturesBalanceWidget } from "../../components/Widgets/Futures/FuturesBalanceWidget";
 import { TradingHeader } from "../../components/Widgets/Futures/TradingHeader";
 import { OrderBookTable } from "../../components/Widgets/Futures/OrderBookTable";
@@ -42,29 +42,30 @@ interface TradingPageProps {
 
 export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const { isConnected, address } = useAccount();
-  const location = useLocation();
+  const { mode: modeParam } = useParams<{ mode: string }>();
   const navigate = useNavigate();
   const previousAddressRef = useRef<string | undefined>(undefined);
   // Below 768px the page renders the mobile-only compound layout (order book
   // beside the place-order form, chart collapsed) instead of the desktop grid.
   const isMobileTradingLayout = useIsMobileTradingLayout();
 
-  // Infer initial contract mode from URL or use defaultMode prop
-  const getInitialMode = (): ContractMode => {
-    if (location.pathname.includes("/trade/perpetual") || location.pathname.includes("/perpetual")) return "perpetual";
-    if (location.pathname.includes("/trade/futures") || location.pathname.includes("/futures")) return "futures";
-    return defaultMode;
-  };
+  // Mode is owned by the URL (/trade/:mode). Same route element stays mounted
+  // across futures↔perps, so wagmi Hydrate is not recreated mid-tree.
+  const contractMode: ContractMode =
+    modeParam === "perpetual" || modeParam === "futures" ? modeParam : defaultMode;
 
-  // Contract mode state - controls Perpetual vs Expiring Futures
-  const [contractMode, setContractMode] = useState<ContractMode>(getInitialMode);
+  useEffect(() => {
+    if (modeParam !== "perpetual" && modeParam !== "futures") {
+      navigate(`/trade/${defaultMode}`, { replace: true });
+    }
+  }, [modeParam, defaultMode, navigate]);
 
-  // Update URL when contract mode changes
-  const handleContractModeChange = useCallback((mode: ContractMode) => {
-    setContractMode(mode);
-    const newPath = mode === "perpetual" ? "/trade/perpetual" : "/trade/futures";
-    navigate(newPath, { replace: true });
-  }, [navigate]);
+  const handleContractModeChange = useCallback(
+    (mode: ContractMode) => {
+      navigate(mode === "perpetual" ? "/trade/perpetual" : "/trade/futures", { replace: true });
+    },
+    [navigate],
+  );
 
   // Reload the page only when the user genuinely switches to a different wallet
   // account. `address` from useAccount() flickers undefined <-> 0x... while
@@ -114,7 +115,11 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     ).length;
     setHasOpenPerpsOrders(openCount > 0);
   }, [perpsOpenOrdersQuery.data?.data?.orders]);
-  const { data: historicalPositionsData, isLoading: isHistoricalPositionsLoading } = useHistoricalPositions(
+  const {
+    data: historicalPositionsData,
+    isLoading: isHistoricalPositionsLoading,
+    isFetching: isHistoricalPositionsFetching,
+  } = useHistoricalPositions(
     address,
     true,
   );
@@ -130,7 +135,10 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     return minMarginQuery.data as bigint;
   }, [minMarginQuery.data]);
 
-  const isLoadingMinMargin = minMarginQuery.isLoading;
+  // Spinner only before the first IM value; background polls should not replace
+  // Locked with a spinner (see RefreshableValue in the balance widget).
+  const isLoadingMinMargin = minMargin === null && minMarginQuery.isFetching;
+  const isRefreshingMinMargin = minMargin !== null && minMarginQuery.isFetching;
 
   // Single shared balance — both Futures and Perps engines settle against the same CollateralVault,
   // so we always read `vault.balanceOf(account)` regardless of contract mode.
@@ -138,6 +146,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const balanceQuery = useMemo(() => ({
     data: vaultBalanceQuery.data,
     isLoading: vaultBalanceQuery.isLoading,
+    isFetching: vaultBalanceQuery.isFetching,
     isSuccess: vaultBalanceQuery.isSuccess,
     refetch: vaultBalanceQuery.refetch,
   }), [vaultBalanceQuery]);
@@ -423,9 +432,13 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     <FuturesBalanceWidget
       minMargin={minMargin}
       isLoadingMinMargin={isLoadingMinMargin}
+      isRefreshingMinMargin={isRefreshingMinMargin}
       unrealizedPnL={totalUnrealizedPnL}
       realizedPnL30D={totalRealizedPnL30D}
       isLoadingRealizedPnL={isHistoricalPositionsLoading}
+      isRefreshingRealizedPnL={
+        !isHistoricalPositionsLoading && isHistoricalPositionsFetching
+      }
       balanceQuery={balanceQuery}
       accountBalance={accountBalanceQuery}
     />
@@ -660,12 +673,12 @@ const RightPanelArea = styled("div")`
   }
 
   /* Balance widget: fixed, does not grow */
-  > *:first-child {
+  > *:first-of-type {
     flex-shrink: 0;
   }
 
   /* PlaceOrderWidget: grows to fill remaining space */
-  > *:nth-child(2) {
+  > *:nth-of-type(2) {
     flex: 1;
     min-height: 0;
   }
@@ -681,7 +694,7 @@ const RightPanelArea = styled("div")`
     overflow-y: visible;
     align-self: auto;
 
-    > *:nth-child(2) {
+    > *:nth-of-type(2) {
       flex: none;
     }
   }

@@ -2,6 +2,7 @@ import { useWriteContract, useWalletClient } from "wagmi";
 import { getContract } from "viem";
 import { CollateralVaultAbi } from "collateral-margin-abi/CollateralVault.ts";
 import { useFuturesCollateralVault } from "./useFuturesCollateralVault";
+import { withErrors } from "../../lib/withErrors";
 
 interface RemoveMarginProps {
   amount: bigint;
@@ -20,7 +21,7 @@ export function useRemoveMargin() {
 
     const vault = getContract({
       address: collateralVaultAddress,
-      abi: CollateralVaultAbi,
+      abi: withErrors(CollateralVaultAbi),
       client: walletClient,
     });
 

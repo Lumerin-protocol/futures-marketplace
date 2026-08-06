@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { TransactionReceipt } from "viem";
-import { useCustomWalletClient } from "./data/useCustomWalletClient";
+import { usePublicClient } from "wagmi";
 
 export type TransactionStep = {
   label: string;
@@ -16,11 +16,18 @@ export type TxState = {
   state: "pending" | "sending" | "sent" | "confirmed" | "failed" | "skipped";
   error?: Error;
   txhash?: `0x${string}`;
+  /**
+   * Block the step's tx was mined in (once confirmed). Later steps can pin
+   * their reads/simulations to this block instead of `latest` to avoid
+   * racing RPC read-after-write lag right after a dependency (e.g. an
+   * ERC20 approve) confirms — see `retryUntilBlockAvailable`.
+   */
+  blockNumber?: bigint;
   customState?: any;
 };
 
 export function useMultistepTx(props: { steps: TransactionStep[] }) {
-  const wc = useCustomWalletClient();
+  const wc = usePublicClient();
 
   const [txState, setTxState] = useState(() => {
     return props.steps.reduce<Record<number, TxState>>((acc, _, index) => {
@@ -76,6 +83,7 @@ export function useMultistepTx(props: { steps: TransactionStep[] }) {
           updateStep(txNumber, {
             state: receipt.status === "success" ? "confirmed" : "failed",
             txhash: actionResult.txhash,
+            blockNumber: receipt.blockNumber,
           });
           if (props.steps[txNumber].postConfirmation) {
             await props.steps[txNumber].postConfirmation(receipt);

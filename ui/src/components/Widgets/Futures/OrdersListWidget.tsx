@@ -322,7 +322,7 @@ const Table = styled("table")`
     border-bottom: 1px solid ${tokens.overlay.white10};
     white-space: nowrap;
     
-    &:first-child {
+    &:first-of-type {
       width: 130px;
       min-width: 130px;
     }
@@ -334,7 +334,7 @@ const Table = styled("table")`
     color: ${tokens.text.onDark};
     border-bottom: 1px solid ${tokens.overlay.white05};
     
-    &:first-child {
+    &:first-of-type {
       width: 130px;
       min-width: 130px;
     }

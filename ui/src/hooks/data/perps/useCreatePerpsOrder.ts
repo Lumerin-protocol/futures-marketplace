@@ -3,6 +3,7 @@ import { getContract } from "viem";
 import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
 import { QUANTITY_SCALE_NUM } from "../../../lib/units";
 import { TimeInForce, type TimeInForceValue } from "../../../types/timeInForce";
+import { withErrors } from "../../../lib/withErrors";
 
 interface CreatePerpsOrderProps {
   price: bigint;
@@ -21,7 +22,7 @@ export function useCreatePerpsOrder() {
 
     const perpsContract = getContract({
       address: process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`,
-      abi: HashPowerPerpsDEXAbi,
+      abi: withErrors(HashPowerPerpsDEXAbi),
       client: publicClient,
     });
 

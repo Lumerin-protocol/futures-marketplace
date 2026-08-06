@@ -1,25 +1,22 @@
+import { Suspense } from "react";
 import styled from "@mui/material/styles/styled";
 import { Link, useLocation, useNavigate } from "react-router";
 import { tokens } from "../styles/tokens";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
+import Skeleton from "@mui/material/Skeleton";
 import EmojiEventsOutlinedIcon from "@mui/icons-material/EmojiEventsOutlined";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { safeLazy } from "../utils/safeLazy";
 import { PathName } from "../types/types";
 import LogoIcon from "../images/icons/hpdx-logo.png";
-
-type Props = {
-  pageTitle: string;
-};
+import { Web3ProviderLazy } from "../Web3ProviderLazy";
 
 const HeaderConnectLazy = safeLazy(() =>
   import("./HeaderConnect").then((module) => ({ default: module.HeaderConnect })),
 );
 
-const Web3ProviderLazy = safeLazy(() => import("../Web3Provider").then((module) => ({ default: module.Web3Provider })));
-
-export const Header = (props: Props) => {
+export const Header = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const isLeaderboardActive = location.pathname === PathName.Leaderboard;
@@ -57,7 +54,7 @@ export const Header = (props: Props) => {
             Back
           </BackButton>
         ) : (
-          <NavLink to={PathName.Leaderboard} $active={false} aria-label="Leaderboard">
+          <NavLink to={PathName.Leaderboard} aria-label="Leaderboard">
             <NavIcon>
               <EmojiEventsOutlinedIcon fontSize="small" />
             </NavIcon>
@@ -65,12 +62,30 @@ export const Header = (props: Props) => {
           </NavLink>
         )}
       </Nav>
-      <Web3ProviderLazy>
-        <HeaderConnectLazy />
-      </Web3ProviderLazy>
+      {/* Local boundary so loading this chunk *and* the wagmi/appkit provider
+          it needs only shows a small inline spinner here, instead of
+          bubbling up and blanking the whole page like it did when nothing
+          caught it locally. Web3ProviderLazy is mounted fresh at this one
+          spot — see its comment for why that's safe/cheap. */}
+      <Suspense fallback={<ConnectSlotSkeleton />}>
+        <Web3ProviderLazy>
+          <HeaderConnectLazy />
+        </Web3ProviderLazy>
+      </Suspense>
     </StyledToolbar>
   );
 };
+
+const ConnectSlotSkeleton = () => (
+  <ConnectSlotSkeletonWrapper>
+    <Skeleton variant="rounded" width={140} height={48} sx={{ borderRadius: tokens.radius.md }} />
+  </ConnectSlotSkeletonWrapper>
+);
+
+const ConnectSlotSkeletonWrapper = styled("div")`
+  display: flex;
+  align-items: center;
+`;
 
 const StyledToolbar = styled(Toolbar)`
   display: flex;
@@ -117,17 +132,17 @@ const LeaderboardTitle = styled("span")`
   }
 `;
 
-const NavLink = styled(Link)<{ $active: boolean }>`
+const NavLink = styled(Link)`
   display: inline-flex;
   align-items: center;
   font-family: "Inter", sans-serif;
   font-size: 0.95rem;
-  font-weight: ${(props) => (props.$active ? 700 : 500)};
+  font-weight: 500;
   letter-spacing: 0.02em;
   text-decoration: none;
-  color: ${(props) => (props.$active ? tokens.accent.main : tokens.text.secondary)};
+  color: ${tokens.text.secondary};
   padding: 0.4rem 0;
-  border-bottom: 2px solid ${(props) => (props.$active ? tokens.accent.main : "transparent")};
+  border-bottom: 2px solid transparent;
   transition: color 0.15s ease;
 
   &:hover {

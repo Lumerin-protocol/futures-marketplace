@@ -1,5 +1,6 @@
 import { useReadContracts } from "wagmi";
 import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
+import { withErrors } from "../../../lib/withErrors";
 
 export function usePerpsContractConstants() {
   const perpsAddress = process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`;
@@ -8,32 +9,32 @@ export function usePerpsContractConstants() {
     contracts: [
       {
         address: perpsAddress,
-        abi: HashPowerPerpsDEXAbi,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "fundingPeriod",
       },
       {
         address: perpsAddress,
-        abi: HashPowerPerpsDEXAbi,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "fundingRateMaxBps",
       },
       {
         address: perpsAddress,
-        abi: HashPowerPerpsDEXAbi,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "MAX_ORDERS_PER_PARTICIPANT",
       },
       {
         address: perpsAddress,
-        abi: HashPowerPerpsDEXAbi,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "liquidationFeeBps",
       },
       {
         address: perpsAddress,
-        abi: HashPowerPerpsDEXAbi,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "MAX_PRICE_LEVELS_PER_SIDE",
       },
       {
         address: perpsAddress,
-        abi: HashPowerPerpsDEXAbi,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "lastFundingUpdateTime",
       },
     ],

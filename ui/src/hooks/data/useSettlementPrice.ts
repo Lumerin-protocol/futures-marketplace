@@ -1,5 +1,6 @@
 import { useReadContract } from "wagmi";
 import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
+import { withErrors } from "../../lib/withErrors";
 
 /**
  * Reads the on-chain pinned cash-settlement price for one expiration (`expirationAt`).
@@ -11,7 +12,7 @@ import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
 export function useSettlementPrice(expirationAt: bigint | undefined) {
   return useReadContract({
     address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS,
-    abi: FuturesAbi,
+    abi: withErrors(FuturesAbi),
     functionName: "settlementPrice",
     args: expirationAt !== undefined ? [expirationAt] : undefined,
     query: {

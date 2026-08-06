@@ -225,29 +225,35 @@ export const PerpsOrdersPositionsTabWidget = ({
         )}
       </Content>
 
-      <ClosePerpsPositionModal
-        open={closePositionSession !== null}
-        onClose={() => setClosePositionSession(null)}
-        session={closePositionSession}
-        marketPrice={marketPrice}
-        participantAddress={participantAddress}
-        onConfirmed={async () => {
-          // Closing a position adds history rows — reset every history table
-          // back to its newest page rather than merging in-place.
-          orderHistoryQuery.refresh();
-          positionHistoryQuery.refresh();
-          tradesQuery.refresh();
-          await onPositionClosed?.();
-        }}
-      />
+      {/* Mount only when open so wagmi Hydrate doesn't push store updates into
+          idle modals during render (React "setState while rendering Hydrate"). */}
+      {closePositionSession && (
+        <ClosePerpsPositionModal
+          open
+          onClose={() => setClosePositionSession(null)}
+          session={closePositionSession}
+          marketPrice={marketPrice}
+          participantAddress={participantAddress}
+          onConfirmed={async () => {
+            // Closing a position adds history rows — reset every history table
+            // back to its newest page rather than merging in-place.
+            orderHistoryQuery.refresh();
+            positionHistoryQuery.refresh();
+            tradesQuery.refresh();
+            await onPositionClosed?.();
+          }}
+        />
+      )}
 
-      <ModifyPerpsOrderModal
-        open={modifyOrder !== null}
-        onClose={() => setModifyOrder(null)}
-        order={modifyOrder}
-        marketPrice={marketPrice}
-        participantAddress={participantAddress}
-      />
+      {modifyOrder && (
+        <ModifyPerpsOrderModal
+          open
+          onClose={() => setModifyOrder(null)}
+          order={modifyOrder}
+          marketPrice={marketPrice}
+          participantAddress={participantAddress}
+        />
+      )}
     </TabContainer>
   );
 };

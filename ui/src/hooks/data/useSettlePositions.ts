@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
 import { waitForBlockNumberPositionBook } from "./getUserFuturesPositions";
 import { FUTURES_POSITION_HISTORY_QK } from "./useFuturesPositionHistory";
+import { withErrors } from "../../lib/withErrors";
 
 interface SettlePositionsProps {
   /// Expiration (expirationAt) whose matured aggregate position should be settled.
@@ -32,7 +33,7 @@ export function useSettlePositions() {
 
     const futuresContract = getContract({
       address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`,
-      abi: FuturesAbi,
+      abi: withErrors(FuturesAbi),
       client: publicClient,
     });
 

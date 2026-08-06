@@ -4,6 +4,7 @@ import { useAddMargin, useApproveAddMargin } from "../../hooks/data/useAddMargin
 import { useFuturesCollateralVault } from "../../hooks/data/useFuturesCollateralVault";
 import type { AccountBalance } from "../../types/types";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
+import type { TxState } from "../../hooks/useTxForm";
 import { AmountInputForm } from "./Shared/AmountInputForm";
 import { formatValue, PAYMENT_TOKEN_SCALE_NUM, paymentToken } from "../../lib/units";
 import { parseUnits } from "viem";
@@ -155,11 +156,15 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance })
     },
     {
       label: "Deposit Collateral",
-      async action() {
+      async action(txState: Record<number, TxState>) {
         const amount = form.getValues("amount");
         if (!amount) throw new Error("Amount not set");
         const amountBigInt = parseUnits(amount, paymentToken.decimals);
-        const result = await addMarginAsync({ amount: amountBigInt });
+        // Pin the deposit simulation to the block the approve step confirmed
+        // in (if it ran) so it doesn't race the wallet/RPC node's `latest`
+        // tag before that node has caught up to the just-mined approve.
+        const minBlockNumber = txState[0]?.blockNumber;
+        const result = await addMarginAsync({ amount: amountBigInt, minBlockNumber });
         return result ? { isSkipped: false, txhash: result } : { isSkipped: false };
       },
     },

@@ -8,7 +8,6 @@ const TypeEthAddress = (opt?: StringOptions) =>
 export const EnvSchema = Type.Object({
   DEV_SERVER_HTTPS: Type.Boolean({ default: false }),
   REACT_APP_CHAIN_ID: Type.Number(),
-  REACT_APP_CLONE_FACTORY: TypeEthAddress(),
   REACT_APP_ETHERSCAN_URL: Type.String({ format: "uri", default: "https://sepolia.basescan.org" }),
   REACT_APP_FUTURES_DOCS_URL: Type.String({
     format: "uri",
@@ -18,7 +17,6 @@ export const EnvSchema = Type.Object({
   REACT_APP_FUTURES_HIGH_PRICE_PERCENTAGE: Type.Integer({ minimum: 0, maximum: 300, default: 50 }),
   REACT_APP_FUTURES_TOKEN_ADDRESS: TypeEthAddress(),
   REACT_APP_GITBOOK_URL: Type.String({ format: "uri" }),
-  REACT_APP_INDEXER_URL: Type.String({ format: "uri" }),
   REACT_APP_MARGIN_UTILIZATION_WARNING_PERCENT: Type.Integer({
     minimum: 0,
     maximum: 100,
@@ -33,9 +31,7 @@ export const EnvSchema = Type.Object({
   REACT_APP_SUBGRAPH_ORACLES_URL: Type.String({ format: "uri" }),
   REACT_APP_SUBGRAPH_PERPS_URL: Type.Optional(Type.String({ format: "uri" })),
   REACT_APP_SUBGRAPH_POINTS_URL: Type.Optional(Type.String({ format: "uri" })),
-  REACT_APP_TITAN_LIGHTNING_POOL: Type.String({ default: "pplp.titan.io:4141" }),
   REACT_APP_URL: Type.String({ format: "uri" }),
-  REACT_APP_VALIDATOR_REGISTRY_ADDRESS: TypeEthAddress(),
   REACT_APP_VERSION: Type.String(),
   REACT_APP_WALLET_CONNECT_ID: Type.String({ minLength: 1 }),
 });
