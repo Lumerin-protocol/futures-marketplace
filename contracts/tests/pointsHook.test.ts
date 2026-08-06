@@ -223,7 +223,7 @@ describe("Futures - points hook wiring", function () {
       const data = await networkHelpers.loadFixture(deployFuturesFixture);
       const { contracts, accounts, config } = data;
       const { futures, collateralVault } = contracts;
-      const { owner, seller, buyer, buyer2, pc } = accounts;
+      const { owner, seller, buyer, buyer2 } = accounts;
 
       const price = await futures.read.getMarketPrice();
       const deliveryDate = config.deliveryDates[0];

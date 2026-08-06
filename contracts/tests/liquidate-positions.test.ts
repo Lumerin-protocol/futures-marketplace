@@ -26,7 +26,7 @@ const { viem, networkHelpers } = await network.getOrCreate();
  *     closing almost ALL contracts overshoots IM, closing EVERY contract is a
  *     full close.
  */
-async function partialLiquidationFixture(conn: NetworkConnection) {
+async function partialLiquidationFixture(_conn: NetworkConnection) {
   const data = await networkHelpers.loadFixture(deployFuturesFixture);
   const { contracts, accounts, config } = data;
   const { futures, portfolioMarginEngine, collateralVault } = contracts;

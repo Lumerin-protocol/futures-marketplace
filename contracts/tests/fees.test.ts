@@ -1,13 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
-import { parseEventLogs, parseUnits } from "viem";
+import { parseEventLogs, } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { TimeInForce } from "./timeInForce.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
-const USDC_DECIMALS = 6;
+const _USDC_DECIMALS = 6;
 
 describe("Fees (maker/taker)", () => {
   it("should NOT charge fees on a plain resting order", async () => {

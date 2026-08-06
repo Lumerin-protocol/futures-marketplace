@@ -67,9 +67,9 @@ export async function deployContract<ContractName extends keyof ContractAbis>(
   }) as unknown as ContractInstance<ContractName>;
 }
 
-const BITCOIN_DECIMALS = 8;
+const _BITCOIN_DECIMALS = 8;
 const USDC_DECIMALS = 6;
-const DIFFICULTY_TO_HASHRATE_FACTOR = 2n ** 32n;
+const _DIFFICULTY_TO_HASHRATE_FACTOR = 2n ** 32n;
 const HASHPRICE_DECIMALS = 8; // matches HashpriceUSD.decimals()
 
 const TOP_UP_BALANCE_USDC = parseUnits("10000", USDC_DECIMALS);
@@ -377,7 +377,7 @@ export async function deployOnlyFuturesWithDummyData(
 
   // create positions
   const d = config.deliveryDates[0];
-  const dst = "//shev8.contract:anything@stratum.braiins.com:3333";
+  const _dst = "//shev8.contract:anything@stratum.braiins.com:3333";
 
   await futures.write.createOrder([mp + inc, d, -1n, TimeInForce.GTC], { account: seller.account });
   await futures.write.createOrder([mp + 2n * inc, d, -1n, TimeInForce.GTC], {

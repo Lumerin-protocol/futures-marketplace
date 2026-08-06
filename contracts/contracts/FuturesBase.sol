@@ -128,7 +128,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, MulticallU
     uint8 internal immutable collateralDecimals;
 
     // constants
-    string public constant VERSION = "3.8.0";
+    string public constant VERSION = "4.0.0";
     /// @notice One contract settles 1 PH/s/day (hashes/s·day). Matches the hashprice oracle quote basis.
     uint256 public constant CONTRACT_SIZE_HPS_DAY = 1e15;
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;

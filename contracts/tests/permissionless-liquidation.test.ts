@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
-import { parseUnits, parseEventLogs, zeroHash } from "viem";
+import { parseEventLogs, zeroHash } from "viem";
 import type { NetworkConnection } from "hardhat/types/network";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { scaleHashprice } from "./utils.ts";
@@ -19,11 +19,11 @@ const { viem, networkHelpers } = await network.getOrCreate();
  *   - liquidatePosition(participant, expirationAt, closeQty) — reverts OrdersStillOpen if any orders remain
  *   - setLiquidationFeeBps — bps fee on notional, charged per cancelled order and per closed position
  */
-async function underwaterWithOrdersAndPositionFixture(conn: NetworkConnection) {
+async function underwaterWithOrdersAndPositionFixture(_conn: NetworkConnection) {
   const data = await networkHelpers.loadFixture(deployFuturesFixture);
   const { contracts, accounts, config } = data;
   const { futures, collateralVault } = contracts;
-  const { seller, buyer, buyer2, owner, pc } = accounts;
+  const { seller, buyer, buyer2, owner } = accounts;
 
   const entryPricePerDay = await futures.read.getMarketPrice();
   const deliveryDate = config.deliveryDates[0];
