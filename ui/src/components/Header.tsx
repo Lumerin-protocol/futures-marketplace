@@ -57,7 +57,7 @@ export const Header = (props: Props) => {
             Back
           </BackButton>
         ) : (
-          <NavLink to={PathName.Leaderboard} $active={false} aria-label="Leaderboard">
+          <NavLink to={PathName.Leaderboard} aria-label="Leaderboard">
             <NavIcon>
               <EmojiEventsOutlinedIcon fontSize="small" />
             </NavIcon>
@@ -117,17 +117,17 @@ const LeaderboardTitle = styled("span")`
   }
 `;
 
-const NavLink = styled(Link)<{ $active: boolean }>`
+const NavLink = styled(Link)`
   display: inline-flex;
   align-items: center;
   font-family: "Inter", sans-serif;
   font-size: 0.95rem;
-  font-weight: ${(props) => (props.$active ? 700 : 500)};
+  font-weight: 500;
   letter-spacing: 0.02em;
   text-decoration: none;
-  color: ${(props) => (props.$active ? tokens.accent.main : tokens.text.secondary)};
+  color: ${tokens.text.secondary};
   padding: 0.4rem 0;
-  border-bottom: 2px solid ${(props) => (props.$active ? tokens.accent.main : "transparent")};
+  border-bottom: 2px solid transparent;
   transition: color 0.15s ease;
 
   &:hover {

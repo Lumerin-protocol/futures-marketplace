@@ -48,6 +48,8 @@ export function useGetMarketPrice() {
   // Warn when the on-chain read has settled but returned no usable price.
   // A 0 or undefined value keeps the Place Order widget stuck on the
   // "Loading contract specifications..." spinner, so surface it explicitly.
+  // Absurdly large values (mis-scaled oracle) used to freeze the order-book
+  // ladder builder — still warn so the bad mark is obvious in the console.
   useEffect(() => {
     if (result.isLoading) return; // ignore the initial in-flight fetch
     const current = result.data as bigint | undefined;
@@ -55,7 +57,16 @@ export function useGetMarketPrice() {
       console.warn(
         `[useGetMarketPrice] getMarketPrice() returned ${
           current === undefined ? "undefined" : "0"
-        }.  `
+        }.  `,
+      );
+      return;
+    }
+    // Payment-token scaled (6dp). Hashprice marks are typically tens of dollars;
+    // anything past ~$10k is almost certainly a bad oracle / wrong decimals.
+    if (current > 10_000n * 1_000_000n) {
+      console.warn(
+        `[useGetMarketPrice] getMarketPrice() returned an implausible mark: ${current} ` +
+          `(≈ ${Number(current) / 1_000_000} with 6dp). Check the hashrate oracle.`,
       );
     }
   }, [result.data, result.isLoading]);

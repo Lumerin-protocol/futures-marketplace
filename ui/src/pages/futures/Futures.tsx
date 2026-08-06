@@ -660,12 +660,12 @@ const RightPanelArea = styled("div")`
   }
 
   /* Balance widget: fixed, does not grow */
-  > *:first-child {
+  > *:first-of-type {
     flex-shrink: 0;
   }
 
   /* PlaceOrderWidget: grows to fill remaining space */
-  > *:nth-child(2) {
+  > *:nth-of-type(2) {
     flex: 1;
     min-height: 0;
   }
@@ -681,7 +681,7 @@ const RightPanelArea = styled("div")`
     overflow-y: visible;
     align-self: auto;
 
-    > *:nth-child(2) {
+    > *:nth-of-type(2) {
       flex: none;
     }
   }

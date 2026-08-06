@@ -1,4 +1,4 @@
-import { type FC, useMemo, useEffect, useState, useCallback } from "react";
+import { type FC, useMemo, useState, useCallback } from "react";
 import Highcharts from "highcharts";
 import HighchartsReact from "highcharts-react-official";
 import styled from "@mui/material/styles/styled";
@@ -101,11 +101,6 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   // State to track BTC Price visibility
   const [isBtcPriceVisible, setIsBtcPriceVisible] = useState(false);
 
-  // Track time period changes and log to console
-  useEffect(() => {
-    console.log("Time period changed to:", timePeriod);
-  }, [timePeriod]);
-
   // Handler for BTC Price legend click
   const handleBtcPriceLegendClick = useCallback(() => {
     setIsBtcPriceVisible((prev) => !prev);
@@ -142,35 +137,34 @@ export const HashrateChart: FC<HashrateChartProps> = ({
     return data;
   }, [data, marketPrice, marketPriceFetchedAt]);
 
-  // Transform data for Highcharts
-  const chartData = enhancedData
-    .filter((item) => item.updatedAtDate || item.updatedAt) // Filter out items without date
-    .filter((item) => item.priceToken > 0.01)
-    .map((item) => {
+  // Transform data for Highcharts. Hooks return newest-first; Highcharts
+  // requires ascending X (error #15) for line/spline series.
+  const chartData = useMemo(() => {
+    const points: [number, number][] = [];
+    for (const item of enhancedData) {
+      if ((!item.updatedAtDate && !item.updatedAt) || item.priceToken <= 0.01) continue;
       const date = item.updatedAtDate || new Date(Number(item.updatedAt) * 1000);
-      return [
-        date.getTime(), // X-axis: timestamp
-        item.priceToken, // Y-axis: hashprice in USD
-      ];
-    });
+      points.push([date.getTime(), item.priceToken]);
+    }
+    points.sort((a, b) => a[0] - b[0]);
+    return points;
+  }, [enhancedData]);
 
-  // Transform BTC price data for Highcharts
   const btcPriceChartData = useMemo(() => {
     if (!btcPriceData || btcPriceData.length === 0) return [];
 
-    return btcPriceData
-      .filter((item) => item.updatedAtDate || item.updatedAt)
-      .filter((item) => item.price > 0)
-      .map((item) => {
-        const date = item.updatedAtDate || new Date(Number(item.updatedAt) * 1000);
-        return [
-          date.getTime(), // X-axis: timestamp
-          item.price, // Y-axis: BTC price (USD)
-        ];
-      });
+    const points: [number, number][] = [];
+    for (const item of btcPriceData) {
+      if ((!item.updatedAtDate && !item.updatedAt) || item.price <= 0) continue;
+      const date = item.updatedAtDate || new Date(Number(item.updatedAt) * 1000);
+      points.push([date.getTime(), item.price]);
+    }
+    points.sort((a, b) => a[0] - b[0]);
+    return points;
   }, [btcPriceData]);
 
   const options: Highcharts.Options = {
+    accessibility: { enabled: false },
     time: {
       useUTC: false, // Display dates in local timezone
     } as Highcharts.TimeOptions,

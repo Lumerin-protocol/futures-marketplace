@@ -1580,7 +1580,7 @@ const PriceButton = styled("button")<{ $isHighlighted?: boolean }>`
     opacity: 0.5;
   }
   
-  &:first-child {
+  &:first-of-type {
     border-top-right-radius: 0;
     border-bottom-right-radius: 0;
   }
@@ -1709,7 +1709,7 @@ const OrderSummaryRow = styled("div")`
   align-items: center;
   font-size: 0.8rem;
 
-  span:first-child {
+  span:first-of-type {
     color: ${tokens.text.secondary};
   }
 

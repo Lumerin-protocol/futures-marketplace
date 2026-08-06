@@ -20,9 +20,17 @@ export interface AggregatedOrderBookEntry {
 }
 
 // The contiguous ladder spans +/- this fraction of the market price so every
-// tick between orders is selectable (e.g. market $10 -> $5..$15). Real orders
-// falling outside this band still expand the range so no live level is hidden.
+// tick between orders is selectable (e.g. market $10 -> $5..$15). Live levels
+// outside the band are appended as sparse rows (no gap-fill) so a bad oracle
+// price or a far-away resting order cannot explode into tens of millions of
+// ticks and freeze the tab.
 const LADDER_WINDOW_FRACTION = 0.5;
+
+// Hard cap on contiguous empty+live ticks. At a $50 mark and 0.01 tick the
+// +/-50% window is ~5k rows; anything near this already needs virtualization.
+// Without a cap, a mis-scaled getMarketPrice (e.g. ~$1e6) tries to allocate
+// ~1e8 rows and the main thread never recovers.
+const MAX_LADDER_TICKS = 10_000;
 
 /**
  * Builds the order book ladder rendered by the volume view. Instead of showing
@@ -50,8 +58,6 @@ export const createFinalOrderBookData = (
 
   // Group live data by integer tick so it aligns exactly with the ladder slots.
   const liveByTick = new Map<number, { bidUnits: number | null; askUnits: number | null }>();
-  let minLiveTick = Infinity;
-  let maxLiveTick = -Infinity;
 
   if (inc !== null && inc > 0 && orderBookData && orderBookData.length > 0) {
     for (const order of orderBookData) {
@@ -61,8 +67,6 @@ export const createFinalOrderBookData = (
         bidUnits: order.buyOrdersCount > 0 ? order.buyOrdersCount : null,
         askUnits: order.sellOrdersCount > 0 ? order.sellOrdersCount : null,
       });
-      minLiveTick = Math.min(minLiveTick, tick);
-      maxLiveTick = Math.max(maxLiveTick, tick);
     }
   }
 
@@ -89,14 +93,22 @@ export const createFinalOrderBookData = (
   // Prices must stay positive; never generate a $0 (or negative) tick.
   lowTick = Math.max(1, lowTick);
 
-  // Expand the band so any live level outside +/-50% is still shown.
-  if (minLiveTick !== Infinity) {
-    lowTick = Math.max(1, Math.min(lowTick, minLiveTick));
-    highTick = Math.max(highTick, maxLiveTick);
+  // Shrink an oversized window around the mark instead of allocating millions
+  // of empty rows (bad/stale oracle prices are the usual trigger).
+  if (highTick - lowTick + 1 > MAX_LADDER_TICKS) {
+    const half = Math.floor(MAX_LADDER_TICKS / 2);
+    lowTick = Math.max(1, marketTick - half);
+    highTick = marketTick + (MAX_LADDER_TICKS - 1) - (marketTick - lowTick);
+    console.warn(
+      `[orderBook] Contiguous ladder capped at ${MAX_LADDER_TICKS} ticks ` +
+        `(market≈${rawMarketPrice}, tick=${inc}). Check getMarketPrice() scale/oracle.`,
+    );
   }
 
   const rows: OrderBookData[] = [];
+  const ladderTicks = new Set<number>();
   for (let tick = highTick; tick >= lowTick; tick--) {
+    ladderTicks.add(tick);
     const live = liveByTick.get(tick);
     rows.push({
       price: tick * inc,
@@ -106,7 +118,25 @@ export const createFinalOrderBookData = (
     });
   }
 
-  return rows;
+  // Keep out-of-window live levels visible without gap-filling every tick
+  // between them and the mark (that path is what used to freeze the UI).
+  const aboveExtras: OrderBookData[] = [];
+  const belowExtras: OrderBookData[] = [];
+  for (const [tick, live] of liveByTick) {
+    if (ladderTicks.has(tick)) continue;
+    const extra: OrderBookData = {
+      price: tick * inc,
+      bidUnits: live.bidUnits,
+      askUnits: live.askUnits,
+      isLastHashprice: false,
+    };
+    if (tick > highTick) aboveExtras.push(extra);
+    else belowExtras.push(extra);
+  }
+  aboveExtras.sort((a, b) => b.price - a.price);
+  belowExtras.sort((a, b) => b.price - a.price);
+
+  return [...aboveExtras, ...rows, ...belowExtras];
 };
 
 /**
