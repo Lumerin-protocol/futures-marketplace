@@ -22,7 +22,7 @@ contract Futures is FuturesAdmin {
     /// @dev Lives here rather than in {FuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `Futures.sol` to require a bump.
-    string public constant VERSION = "4.1.0";
+    string public constant VERSION = "4.2.0";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) FuturesBase(_vault) { }
@@ -116,6 +116,22 @@ contract Futures is FuturesAdmin {
         if (order.participant == address(0) || order.quantity == 0) revert OrderNotExists();
         if (order.expirationAt >= block.timestamp) revert OrderNotExpired();
         _dropRestingOrder(_orderId, order);
+    }
+
+    /// @notice Permissionlessly close every expired order in `_orderIds`.
+    /// @dev Missing, already-closed and not-yet-expired ids are skipped so concurrent
+    ///      keepers cannot revert unrelated cleanup work.
+    function removeOutdatedOrders(bytes32[] calldata _orderIds) external returns (uint256 removed) {
+        uint256 len = _orderIds.length;
+        for (uint256 i = 0; i < len; i++) {
+            bytes32 orderId = _orderIds[i];
+            Order memory order = orders[orderId];
+            if (order.participant == address(0) || order.quantity == 0 || order.expirationAt >= block.timestamp) {
+                continue;
+            }
+            _dropRestingOrder(orderId, order);
+            removed++;
+        }
     }
 
     /// @dev Per-leg body of `createOrder` / `createOrders` without the IM-check epilogue.

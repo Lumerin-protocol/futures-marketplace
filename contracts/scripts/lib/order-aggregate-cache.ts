@@ -1,24 +1,8 @@
-import {
-  getAddress,
-  type Address,
-  type Hex,
-  type PublicClient,
-} from "viem";
+import { type Address, getAbiItem, getAddress, type Hex, type PublicClient } from "viem";
 import { readContract } from "viem/actions";
+import { FuturesAbi } from "../../abi/Futures.ts";
 
 export const ORDER_CACHE_ABI = [
-  {
-    type: "event",
-    name: "OrderCreated",
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: "orderId", type: "bytes32" },
-      { indexed: true, name: "participant", type: "address" },
-      { indexed: false, name: "price", type: "uint256" },
-      { indexed: false, name: "quantity", type: "int256" },
-      { indexed: false, name: "expirationAt", type: "uint256" },
-    ],
-  },
   {
     type: "function",
     name: "getUserOrders",
@@ -73,6 +57,11 @@ export const ORDER_CACHE_ABI = [
     outputs: [],
   },
 ] as const;
+
+const ORDER_CREATED_EVENT = getAbiItem({
+  abi: FuturesAbi,
+  name: "OrderCreated",
+});
 
 export type DiscoverySource = "auto" | "indexer" | "events";
 export type UsedDiscoverySource = "supplied" | "indexer" | "events";
@@ -226,9 +215,7 @@ export async function verifyOrderAggregateCache(
     );
     for (const order of orders) {
       if (getAddress(order.participant) !== user) {
-        throw new Error(
-          `getUserOrders(${user}) returned an order owned by ${order.participant}`,
-        );
+        throw new Error(`getUserOrders(${user}) returned an order owned by ${order.participant}`);
       }
     }
 
@@ -330,7 +317,9 @@ export async function discoverFromIndexer(
   const indexedBlock = BigInt(metaPayload._meta.block.number);
   const lag = latestBlock > indexedBlock ? latestBlock - indexedBlock : 0n;
   if (lag > options.maxLagBlocks) {
-    throw new Error(`Indexer is ${lag} blocks behind; maximum allowed lag is ${options.maxLagBlocks}`);
+    throw new Error(
+      `Indexer is ${lag} blocks behind; maximum allowed lag is ${options.maxLagBlocks}`,
+    );
   }
 
   const addresses: Address[] = [];
@@ -398,14 +387,14 @@ export async function discoverFromEvents(
 
   const addresses = new Set<Address>();
   let chunkSize = options.initialChunkSize;
-  let fromBlock = options.startBlock;
-  while (fromBlock <= options.endBlock) {
-    const desiredTo = fromBlock + chunkSize - 1n;
-    const toBlock = desiredTo < options.endBlock ? desiredTo : options.endBlock;
+  let toBlock = options.endBlock;
+  while (toBlock >= options.startBlock) {
+    const desiredFrom = toBlock >= chunkSize - 1n ? toBlock - chunkSize + 1n : 0n;
+    const fromBlock = desiredFrom > options.startBlock ? desiredFrom : options.startBlock;
     try {
       const logs = await pc.getLogs({
         address: futuresAddress,
-        event: ORDER_CACHE_ABI[0],
+        event: ORDER_CREATED_EVENT,
         fromBlock,
         toBlock,
       });
@@ -413,7 +402,8 @@ export async function discoverFromEvents(
         if (log.args.participant) addresses.add(getAddress(log.args.participant));
       }
       options.onProgress?.(fromBlock, toBlock, addresses.size);
-      fromBlock = toBlock + 1n;
+      if (fromBlock === options.startBlock) break;
+      toBlock = fromBlock - 1n;
       if (chunkSize < options.initialChunkSize) {
         const doubled = chunkSize * 2n;
         chunkSize = doubled > options.initialChunkSize ? options.initialChunkSize : doubled;
@@ -541,7 +531,8 @@ export async function fetchDeploymentBlockFromEtherscan(
     throw new Error(`Etherscan returned no creation record for ${address}: ${detail}`);
   }
   const blockNumber = body.result[0]?.blockNumber;
-  if (!blockNumber) throw new Error(`Etherscan response omitted the deployment block for ${address}`);
+  if (!blockNumber)
+    throw new Error(`Etherscan response omitted the deployment block for ${address}`);
   return BigInt(blockNumber);
 }
 
@@ -562,9 +553,7 @@ export async function mapConcurrently<T, R>(
       results[index] = await fn(values[index], index);
     }
   }
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, values.length) }, () => worker()),
-  );
+  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, () => worker()));
   return results;
 }
 
@@ -593,7 +582,9 @@ async function postGraphQL<T>(
   }
   const payload = (await response.json()) as GraphResponse<T>;
   if (payload.errors?.length) {
-    throw new Error(`Indexer GraphQL error: ${payload.errors.map((error) => error.message).join("; ")}`);
+    throw new Error(
+      `Indexer GraphQL error: ${payload.errors.map((error) => error.message).join("; ")}`,
+    );
   }
   if (!payload.data) throw new Error("Indexer response did not contain data");
   return payload.data;

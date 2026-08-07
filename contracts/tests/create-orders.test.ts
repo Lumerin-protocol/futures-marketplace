@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
-import { encodeFunctionData, getAddress, parseEventLogs, parseUnits } from "viem";
+import { getAddress, parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { warpPastDeliveryWithFreshOracle } from "./utils.ts";
 import { TimeInForce } from "./timeInForce.ts";
@@ -257,7 +257,7 @@ describe("Futures.createOrders (batch placement)", () => {
     assert.equal(ordersAfter.length, 2, "stale order is still resting next to the new one");
   });
 
-  it("is cheaper than the equivalent multicall(createOrder × N)", async () => {
+  it("is cheaper than equivalent individual createOrder transactions", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, buyer, pc } = accounts;
@@ -271,23 +271,17 @@ describe("Futures.createOrders (batch placement)", () => {
     const dd = config.deliveryDates[0];
     const N = 4;
 
-    // Baseline: N × createOrder under one multicall (the current MM behavior).
-    const baselineCalldata: `0x${string}`[] = [];
+    // Baseline: N independent createOrder writes, each with its own IM check.
+    let baselineGas = 0n;
     for (let i = 0; i < N; i++) {
-      baselineCalldata.push(
-        encodeFunctionData({
-          abi: futures.abi,
-          functionName: "createOrder",
-          args: [mp + BigInt(i + 1) * step, dd, -1n, TimeInForce.GTC],
-        }),
+      const tx = await futures.write.createOrder(
+        [mp + BigInt(i + 1) * step, dd, -1n, TimeInForce.GTC],
+        { account: seller.account },
       );
+      baselineGas += (await pc.waitForTransactionReceipt({ hash: tx })).gasUsed;
     }
-    const baselineTx = await futures.write.multicall([baselineCalldata], {
-      account: seller.account,
-    });
-    const baselineGas = (await pc.waitForTransactionReceipt({ hash: baselineTx })).gasUsed;
 
-    // Candidate: a single createOrders call placing N orders on a *different*
+    // Candidate: a single createOrders call placing N orders for a *different*
     // participant so book state stays comparable (no resting orders to match).
     const intents: OrderIntent[] = [];
     for (let i = 0; i < N; i++) {
@@ -309,7 +303,7 @@ describe("Futures.createOrders (batch placement)", () => {
     // grow substantially).
     assert.ok(
       batchGas < baselineGas,
-      `createOrders (${batchGas}) should be cheaper than multicall(createOrder × ${N}) (${baselineGas})`,
+      `createOrders (${batchGas}) should be cheaper than ${N} createOrder transactions (${baselineGas})`,
     );
     const savings = baselineGas - batchGas;
     // Floor: each of the (N-1) skipped end-of-call IM checks must be worth at

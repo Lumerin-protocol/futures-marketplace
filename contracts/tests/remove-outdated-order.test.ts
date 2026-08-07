@@ -1,19 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
-import { encodeFunctionData, getAddress, parseEventLogs, parseUnits, zeroHash } from "viem";
+import { getAddress, parseEventLogs, parseUnits, zeroHash } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { warpPastDeliveryWithFreshOracle } from "./utils.ts";
 import { TimeInForce } from "./timeInForce.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
-
-type OrderIntent = {
-  price: bigint;
-  expirationAt: bigint;
-  quantity: bigint;
-  timeInForce: number;
-};
 
 describe("Futures.removeOutdatedOrder", () => {
   it("closes a single expired order and emits OrderCancelled", async () => {
@@ -127,21 +120,19 @@ describe("Futures.removeOutdatedOrder", () => {
     assert.equal(orders.length, 0);
   });
 
-  it("composes via multicall: bulk-clean N expired orders + place fresh ones in one tx", async () => {
+  it("bulk-cleans expired orders while skipping stale and live ids", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
-    const { seller, pc, tc } = accounts;
+    const { seller, buyer, pc, tc } = accounts;
 
     await collateralVault.write.deposit([parseUnits("5000", 6)], { account: seller.account });
 
     const mp = await futures.read.getMarketPrice();
     const step = config.priceLadderStep;
     const expiringDd = config.deliveryDates[0];
-    const N = 3;
 
-    // Rest N orders at the soon-to-expire date.
     const restingIds: `0x${string}`[] = [];
-    for (let i = 0; i < N; i++) {
+    for (let i = 0; i < 2; i++) {
       const tx = await futures.write.createOrder(
         [mp + BigInt(i) * step, expiringDd, -1n, TimeInForce.GTC],
         {
@@ -164,36 +155,19 @@ describe("Futures.removeOutdatedOrder", () => {
     );
     const futureDates = await futures.read.getExpirationDates();
     const freshDd = futureDates[futureDates.length - 1];
+    const freshTx = await futures.write.createOrder([mp + 2n * step, freshDd, -1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
+    const [freshCreated] = parseEventLogs({
+      logs: (await pc.waitForTransactionReceipt({ hash: freshTx })).logs,
+      abi: futures.abi,
+      eventName: "OrderCreated",
+    });
 
-    // Build a single multicall: [N × removeOutdatedOrder, createOrders([1 new])].
-    const calls: `0x${string}`[] = [];
-    for (const id of restingIds) {
-      calls.push(
-        encodeFunctionData({
-          abi: futures.abi,
-          functionName: "removeOutdatedOrder",
-          args: [id],
-        }),
-      );
-    }
-    calls.push(
-      encodeFunctionData({
-        abi: futures.abi,
-        functionName: "createOrders",
-        args: [
-          [
-            {
-              price: mp,
-              expirationAt: freshDd,
-              quantity: -1n,
-              timeInForce: TimeInForce.GTC,
-            } satisfies OrderIntent,
-          ],
-        ],
-      }),
+    const tx = await futures.write.removeOutdatedOrders(
+      [[restingIds[0], zeroHash, freshCreated.args.orderId, restingIds[1], restingIds[0]]],
+      { account: buyer.account },
     );
-
-    const tx = await futures.write.multicall([calls], { account: seller.account });
     const receipt = await pc.waitForTransactionReceipt({ hash: tx });
 
     const closed = parseEventLogs({
@@ -201,17 +175,12 @@ describe("Futures.removeOutdatedOrder", () => {
       abi: futures.abi,
       eventName: "OrderCancelled",
     });
-    assert.equal(closed.length, N);
-
-    const created = parseEventLogs({
-      logs: receipt.logs,
-      abi: futures.abi,
-      eventName: "OrderCreated",
-    });
-    assert.equal(created.length, 1);
-    assert.equal(created[0].args.expirationAt, freshDd);
+    assert.deepEqual(
+      closed.map((event) => event.args.orderId),
+      restingIds,
+    );
 
     const finalOrders = await futures.read.getUserOrders([seller.account.address]);
-    assert.equal(finalOrders.length, 1, "only the freshly placed order remains");
+    assert.deepEqual(finalOrders, [freshCreated.args.orderId]);
   });
 });

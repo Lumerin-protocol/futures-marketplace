@@ -424,11 +424,17 @@ async function benchmarkOrderMaintenance() {
           quantity: -1n,
           timeInForce: TimeInForce.GTC,
         },
+        {
+          price: price + 3n * data.config.priceLadderStep,
+          expirationAt,
+          quantity: -1n,
+          timeInForce: TimeInForce.GTC,
+        },
       ],
     ],
     { account: seller.account },
   );
-  const [cancelId, reduceId, outdatedId] = await futures.read.getUserOrders([
+  const [cancelId, reduceId, outdatedId, outdatedBatchId] = await futures.read.getUserOrders([
     seller.account.address,
   ]);
 
@@ -450,6 +456,12 @@ async function benchmarkOrderMaintenance() {
     "removeOutdatedOrder(bytes32)",
     "permissionless expired order",
     futures.write.removeOutdatedOrder([outdatedId], { account: buyer.account }),
+  );
+  await recordTransaction(
+    pc,
+    "removeOutdatedOrders(bytes32[])",
+    "permissionless expired order batch",
+    futures.write.removeOutdatedOrders([[outdatedBatchId]], { account: buyer.account }),
   );
 }
 
@@ -655,23 +667,22 @@ async function benchmarkAdminAndLifecycle() {
     const price = await futures.read.getMarketPrice();
     const expirationAt = data.config.deliveryDates[0];
     await fund(data, [seller]);
-    const calls = [
-      encodeFunctionData({
-        abi: FuturesAbi,
-        functionName: "createOrder",
-        args: [price, expirationAt, -1n, TimeInForce.GTC],
-      }),
-      encodeFunctionData({
-        abi: FuturesAbi,
-        functionName: "createOrder",
-        args: [price + data.config.priceLadderStep, expirationAt, -1n, TimeInForce.GTC],
-      }),
-    ];
     await recordTransaction(
       pc,
-      "multicall(bytes[])",
+      "createOrders((uint256,uint256,int256,uint8)[])",
       "two resting orders",
-      futures.write.multicall([calls], { account: seller.account }),
+      futures.write.createOrders(
+        [[
+          { price, expirationAt, quantity: -1n, timeInForce: TimeInForce.GTC },
+          {
+            price: price + data.config.priceLadderStep,
+            expirationAt,
+            quantity: -1n,
+            timeInForce: TimeInForce.GTC,
+          },
+        ]],
+        { account: seller.account },
+      ),
     );
   }
   {

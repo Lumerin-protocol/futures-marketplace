@@ -11,7 +11,7 @@
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
-import { encodeFunctionData, parseEventLogs, parseUnits } from "viem";
+import { parseEventLogs, parseUnits } from "viem";
 import { read, type EntityFields } from "matchstick-ts";
 import { deployFuturesFixture } from "../../contracts/tests/fixtures.ts";
 import { quantizePrice, scaleHashprice } from "../../contracts/tests/utils.ts";
@@ -402,21 +402,12 @@ describe("multi-leg liquidation in one tx: liquidatedQuantity counts units", () 
 
     await scaleHashprice(hashpriceUsd, 40n, 1n);
 
-    // Liquidate BOTH units in a SINGLE tx via the embedded multicall so the
+    // Liquidate BOTH units in a SINGLE typed batch so the
     // tx carries two PositionLiquidated legs for the same (participant, session).
-    const calldata = [
-      encodeFunctionData({
-        abi: futures.abi,
-        functionName: "liquidatePosition",
-        args: [seller.account.address, deliveryDate, 1n],
-      }),
-      encodeFunctionData({
-        abi: futures.abi,
-        functionName: "liquidatePosition",
-        args: [seller.account.address, deliveryDate, 1n],
-      }),
-    ];
-    const liqTx = await futures.write.multicall([calldata], { account: validator.account });
+    const liqTx = await futures.write.liquidatePositions(
+      [seller.account.address, [deliveryDate, deliveryDate], [1n, 1n]],
+      { account: validator.account },
+    );
     const liqReceipt = await pc.waitForTransactionReceipt({ hash: liqTx });
 
     const positionLiquidatedEvents = parseEventLogs({
@@ -427,7 +418,7 @@ describe("multi-leg liquidation in one tx: liquidatedQuantity counts units", () 
     assert.equal(
       positionLiquidatedEvents.length,
       2,
-      "a single multicall tx must carry two PositionLiquidated legs",
+      "a single liquidatePositions tx must carry two PositionLiquidated legs",
     );
 
     const sellerAddr = seller.account.address.toLowerCase() as `0x${string}`;
