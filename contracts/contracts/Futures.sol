@@ -230,15 +230,8 @@ contract Futures is FuturesAdmin {
     }
 
     function _hasActiveOrders(address _participant) private view returns (bool) {
-        uint256 currentIndex = _getCurrentExpirationAtIndex();
-        for (uint256 i = 0; i < futureExpirationDatesCount; i++) {
-            uint256 expirationAt = _activeExpirationAt(currentIndex, i);
-            OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_participant][expirationAt];
-            if (aggregate.buyQty != 0 || aggregate.sellQty != 0) {
-                return true;
-            }
-        }
-        return false;
+        (, uint256 count) = _activeOrderExpirations(_participant);
+        return count != 0;
     }
 
     /// @notice Cancel one resting order of an underwater participant, charging the liquidation fee.
@@ -417,18 +410,16 @@ contract Futures is FuturesAdmin {
 
     /// @notice Resting orders for the currently tradable delivery window.
     function getUserOrders(address _user) external view returns (bytes32[] memory orderIds) {
-        uint256 currentIndex = _getCurrentExpirationAtIndex();
+        (uint256[] memory expirationAts, uint256 activeCount) = _activeOrderExpirations(_user);
         uint256 total;
-        for (uint256 i = 0; i < futureExpirationDatesCount; i++) {
-            uint256 expirationAt = _activeExpirationAt(currentIndex, i);
-            total += participantExpirationAtOrderIdsIndex[_user][expirationAt].length();
+        for (uint256 i = 0; i < activeCount; i++) {
+            total += participantExpirationAtOrderIdsIndex[_user][expirationAts[i]].length();
         }
 
         orderIds = new bytes32[](total);
         uint256 cursor;
-        for (uint256 i = 0; i < futureExpirationDatesCount; i++) {
-            uint256 expirationAt = _activeExpirationAt(currentIndex, i);
-            EnumerableSet.Bytes32Set storage ids = participantExpirationAtOrderIdsIndex[_user][expirationAt];
+        for (uint256 i = 0; i < activeCount; i++) {
+            EnumerableSet.Bytes32Set storage ids = participantExpirationAtOrderIdsIndex[_user][expirationAts[i]];
             uint256 len = ids.length();
             for (uint256 j = 0; j < len; j++) {
                 orderIds[cursor++] = ids.at(j);
@@ -448,10 +439,9 @@ contract Futures is FuturesAdmin {
     }
 
     function getOrderAggregate(address _user) external view returns (OrderAggregate memory aggregate_) {
-        uint256 currentIndex = _getCurrentExpirationAtIndex();
-        for (uint256 i = 0; i < futureExpirationDatesCount; i++) {
-            uint256 expirationAt = _activeExpirationAt(currentIndex, i);
-            OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_user][expirationAt];
+        (uint256[] memory expirationAts, uint256 activeCount) = _activeOrderExpirations(_user);
+        for (uint256 i = 0; i < activeCount; i++) {
+            OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_user][expirationAts[i]];
             aggregate_.buyQty += aggregate.buyQty;
             aggregate_.sellQty += aggregate.sellQty;
             aggregate_.buyValue += aggregate.buyValue;
@@ -582,13 +572,12 @@ contract Futures is FuturesAdmin {
             uint256 sellMark
         )
     {
-        uint256 currentIndex = _getCurrentExpirationAtIndex();
+        (uint256[] memory expirationAts, uint256 activeCount) = _activeOrderExpirations(_participant);
         uint256 livePrice = 0;
         bool livePriceLoaded = false;
-        for (uint256 i = 0; i < futureExpirationDatesCount; i++) {
-            uint256 expirationAt = _activeExpirationAt(currentIndex, i);
+        for (uint256 i = 0; i < activeCount; i++) {
+            uint256 expirationAt = expirationAts[i];
             OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_participant][expirationAt];
-            if (aggregate.buyQty == 0 && aggregate.sellQty == 0) continue;
             uint256 markPrice = settlementPrice[expirationAt];
             if (markPrice == 0) {
                 if (!livePriceLoaded) {

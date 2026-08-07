@@ -134,6 +134,9 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     /// @dev Canonical resting-order index for v4.3+: bounded independently per delivery date.
     ///      The legacy global `participantOrderIdsIndex` remains in-place for upgrade cleanup only.
     mapping(address => mapping(uint256 => EnumerableSet.Bytes32Set)) internal participantExpirationAtOrderIdsIndex;
+    /// @dev One bit per absolute delivery index. Reads mask this to the current window, so
+    ///      historical bits never require a keeper sweep and never increase risk-view gas.
+    mapping(address => mapping(uint256 => uint256)) internal participantOrderExpirationBitmap;
 
     // immutable
     ICollateralVault public immutable vault;
@@ -329,6 +332,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     {
         uint256 absQty = M.abs(_quantity);
         OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_participant][_expirationAt];
+        bool wasEmpty = aggregate.buyQty == 0 && aggregate.sellQty == 0;
         if (_quantity > 0) {
             aggregate.buyQty += absQty;
             aggregate.buyValue += _price * absQty;
@@ -336,7 +340,10 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
             aggregate.sellQty += absQty;
             aggregate.sellValue += _price * absQty;
         }
-        participantOrderExpirationAts[_participant].add(_expirationAt);
+        if (wasEmpty) {
+            participantOrderExpirationAts[_participant].add(_expirationAt);
+            _setOrderExpirationActive(_participant, _expirationAt, true);
+        }
     }
 
     function _decreaseOrderAggregate(
@@ -356,6 +363,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         }
         if (aggregate.buyQty == 0 && aggregate.sellQty == 0) {
             participantOrderExpirationAts[_participant].remove(_expirationAt);
+            _setOrderExpirationActive(_participant, _expirationAt, false);
         }
     }
 
@@ -818,6 +826,46 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
 
     function _activeExpirationAt(uint256 _currentIndex, uint256 _offset) internal view returns (uint256) {
         return firstFutureExpirationDate + expirationIntervalSeconds() * (_currentIndex + _offset);
+    }
+
+    function _setOrderExpirationActive(address _participant, uint256 _expirationAt, bool _active) private {
+        uint256 absoluteIndex = (_expirationAt - firstFutureExpirationDate) / expirationIntervalSeconds();
+        uint256 page = absoluteIndex >> 8;
+        uint256 bit = 1 << (absoluteIndex & 0xff);
+        if (_active) {
+            participantOrderExpirationBitmap[_participant][page] |= bit;
+        } else {
+            participantOrderExpirationBitmap[_participant][page] &= ~bit;
+        }
+    }
+
+    /// @dev Active delivery dates with resting orders. A window spans at most two bitmap
+    ///      pages because `futureExpirationDatesCount` is a uint8.
+    function _activeOrderExpirations(address _participant)
+        internal
+        view
+        returns (uint256[] memory expirationAts, uint256 count)
+    {
+        uint256 len = futureExpirationDatesCount;
+        expirationAts = new uint256[](len);
+        uint256 absoluteIndex = _getCurrentExpirationAtIndex();
+        uint256 page = absoluteIndex >> 8;
+        uint256 word = participantOrderExpirationBitmap[_participant][page];
+        uint256 expirationAt = _activeExpirationAt(absoluteIndex, 0);
+        uint256 interval = expirationIntervalSeconds();
+
+        for (uint256 i = 0; i < len; i++) {
+            uint256 nextPage = absoluteIndex >> 8;
+            if (nextPage != page) {
+                page = nextPage;
+                word = participantOrderExpirationBitmap[_participant][page];
+            }
+            if (word & (1 << (absoluteIndex & 0xff)) != 0) {
+                expirationAts[count++] = expirationAt;
+            }
+            absoluteIndex++;
+            expirationAt += interval;
+        }
     }
 
     function _isActiveExpirationAt(uint256 _expirationAt) internal view returns (bool) {
