@@ -2,7 +2,7 @@ import { tokens } from "../../../styles/tokens";
 import { useState } from "react";
 import styled from "@mui/material/styles/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
-import type { ParticipantOrder } from "../../../hooks/data/getUserFuturesOrders";
+import type { Participant, ParticipantOrder } from "../../../hooks/data/getUserFuturesOrders";
 import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
 import { ModifyOrderForm } from "../../Forms/ModifyOrderForm";
@@ -24,7 +24,7 @@ interface BalanceQueryResult {
 interface OrdersListWidgetProps {
   orders: ParticipantOrder[];
   isLoading?: boolean;
-  participantData?: any;
+  participantData?: Participant | null;
   minMargin?: bigint | null;
   accountBalance?: AccountBalance;
   contractMode?: ContractMode;
@@ -46,7 +46,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
     expirationAt: bigint;
     amount: number;
   } | null>(null);
-  const getStatusColor = (isActive: boolean, closedAt: string | null) => {
+  const _getStatusColor = (isActive: boolean, closedAt: string | null) => {
     if (closedAt) {
       return tokens.trading.info; // Filled/Closed
     }
@@ -60,7 +60,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   //   return isActive ? "Active" : "Cancelled";
   // };
 
-  const getTypeColor = (isBuy: boolean) => {
+  const _getTypeColor = (isBuy: boolean) => {
     return isBuy ? tokens.trading.long : tokens.trading.short;
   };
 
@@ -361,7 +361,7 @@ const TypeBadge = styled("span")<{ $type: string }>`
   color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
-const StatusBadge = styled("span")<{ $status: string }>`
+const _StatusBadge = styled("span")<{ $status: string }>`
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;

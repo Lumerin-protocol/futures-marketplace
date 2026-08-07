@@ -5,9 +5,9 @@ import styled from "@mui/material/styles/styled";
 import CheckCircle from "@mui/icons-material/CheckCircle";
 import SkipNext from "@mui/icons-material/SkipNext";
 import ErrorIcon from "@mui/icons-material/Error";
-import { FormButtonsWrapper, PrimaryButton, SecondaryButton } from "../FormButtons/Buttons.styled";
+import { PrimaryButton, SecondaryButton } from "../FormButtons/Buttons.styled";
 import { truncateAddress } from "../../../utils/formatters";
-import { BaseError, ContractFunctionRevertedError, type PublicClient, UserRejectedRequestError } from "viem";
+import { BaseError, ContractFunctionRevertedError, UserRejectedRequestError } from "viem";
 import { type TransactionStep, type TxState, useMultistepTx } from "../../../hooks/useTxForm";
 import { SpinnerV2 } from "../../Spinner.styled";
 import { Link } from "react-router";
@@ -27,6 +27,8 @@ interface TransactionFormProps {
 }
 
 export const TransactionForm = (props: TransactionFormProps) => {
+  // Pulled into a const so the guard below narrows it inside the step closures.
+  const { resultForm } = props;
   const multistepTx = useMultistepTx({
     steps: props.transactionSteps,
   });
@@ -52,7 +54,7 @@ export const TransactionForm = (props: TransactionFormProps) => {
                 component: (p: StepComponentProps) => (
                   <>
                     <p className="mb-2">{props.description}</p>
-                    {typeof props.inputForm === "function" ? props.inputForm!(p) : props.inputForm}
+                    {typeof props.inputForm === "function" ? props.inputForm(p) : props.inputForm}
                     <MultistepFormActions
                       primary={{
                         label: "Review",
@@ -110,13 +112,13 @@ export const TransactionForm = (props: TransactionFormProps) => {
             </>
           ),
         },
-        ...(props.resultForm
+        ...(resultForm
           ? [
               {
                 label: props.title,
                 component: (p: StepComponentProps) => (
                   <>
-                    {props.resultForm!(p)}
+                    {resultForm(p)}
                     <MultistepFormActions
                       primary={{ label: "Close", onClick: () => props.onClose() }}
                       secondary={{ label: "Back", onClick: () => p.prevStep() }}
@@ -157,7 +159,7 @@ export const TransactionFormV2 = (props: TransactionFormProps) => {
                 component: (p: StepComponentProps) => (
                   <>
                     <p className="mb-2">{props.description}</p>
-                    {typeof props.inputForm === "function" ? props.inputForm!(p) : props.inputForm}
+                    {typeof props.inputForm === "function" ? props.inputForm(p) : props.inputForm}
                     <MultistepFormActions
                       primary={{
                         label: "Review",
@@ -208,7 +210,7 @@ export const TransactionFormV2 = (props: TransactionFormProps) => {
                 onToggleShowError={multistepTx.toggleShowError}
                 onRetry={(stepNumber) => handleExecuteTransaction(stepNumber)}
               />
-              {multistepTx.isSuccess && props.resultForm!(p)}
+              {multistepTx.isSuccess && props.resultForm?.(p)}
               <MultistepFormActions
                 primary={{
                   label: multistepTx.isSuccess && props.resultForm ? "Okay" : "Cancel",
@@ -289,7 +291,7 @@ function mapErrorToString(error: Error): string {
   if (error instanceof BaseError) {
     let found: string | undefined;
 
-    const err = error.walk((err) => {
+    const _err = error.walk((err) => {
       const errorString = knownError(err as BaseError);
       if (errorString) {
         found = errorString;
@@ -317,7 +319,7 @@ function getStepProgressIcon(tx: TxState["state"]): ReactNode {
   };
   switch (tx) {
     case "pending":
-      return <></>;
+      return null;
     case "sending":
       return <SpinnerV2 />;
     case "sent":

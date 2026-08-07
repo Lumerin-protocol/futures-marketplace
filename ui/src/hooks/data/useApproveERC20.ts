@@ -16,13 +16,15 @@ interface ApproveProps {
   minBlockNumber?: bigint;
 }
 
-export function useApproveERC20(tokenAddress: `0x${string}`) {
+/// `tokenAddress` may be undefined while the caller is still resolving it from
+/// chain; approving is a no-op until it is known.
+export function useApproveERC20(tokenAddress: `0x${string}` | undefined) {
   const { writeContractAsync, ...rest } = useWriteContract();
   const { data: wc } = useWalletClient();
 
   const approveAsync = useCallback(
     async (props: ApproveProps) => {
-      if (!writeContractAsync || !wc) return;
+      if (!writeContractAsync || !wc || !tokenAddress) return;
 
       const token = getContract({
         address: tokenAddress,

@@ -33,7 +33,7 @@ interface AddMarginWithPermitProps {
 export function useApproveAddMargin() {
   const { data: tokenAddress } = useFuturePaymentToken();
 
-  return useApproveERC20(tokenAddress!);
+  return useApproveERC20(tokenAddress);
 }
 
 /// EIP-2612 permit signing for the futures payment token, scoped to the

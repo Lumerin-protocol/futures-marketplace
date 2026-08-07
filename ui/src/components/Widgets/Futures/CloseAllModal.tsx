@@ -7,9 +7,9 @@ import IconButton from "@mui/material/IconButton";
 import { ModalCard } from "../../Modal.styled";
 import { ModalActions, ModalCancelButton, ModalConfirmButton } from "./PerpsOrderFormFields";
 import type { PositionSession } from "../../../hooks/data/perps/useUserPositionSessions";
-import { readContract } from "@wagmi/core";
 import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
 import { useConfig } from "wagmi";
+import { readContract } from "wagmi/actions";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { withErrors } from "../../../lib/withErrors";
 
@@ -30,7 +30,8 @@ interface CloseAllModalProps {
   onCloseAll?: () => void;
 }
 
-export const CloseAllModal = ({ open, onClose, positionSessions, marketPrice, onCloseAll }: CloseAllModalProps) => {
+// `onCloseAll` is accepted but never invoked — see ui/TECH_DEBT.md.
+export const CloseAllModal = ({ open, onClose, positionSessions, marketPrice }: CloseAllModalProps) => {
   const [simResults, setSimResults] = useState<SimulationResult[]>([]);
   const [isSimulating, setIsSimulating] = useState(false);
   const [simError, setSimError] = useState<string | null>(null);

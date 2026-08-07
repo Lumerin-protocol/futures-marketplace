@@ -201,7 +201,7 @@ const ModalButtons = styled("div")`
   margin-top: 0.5rem;
 `;
 
-const CancelButton = styled("button")`
+const _CancelButton = styled("button")`
   padding: 0.75rem 1.25rem;
   background: ${tokens.overlay.white10};
   color: ${tokens.text.onDark};

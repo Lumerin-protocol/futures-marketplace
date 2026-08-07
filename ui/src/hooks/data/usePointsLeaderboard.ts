@@ -166,7 +166,10 @@ export const usePointsLeaderboard = (first = 20) =>
 export const useUserPoints = (address: `0x${string}` | undefined) =>
   useQuery({
     queryKey: [USER_POINTS_QK, address?.toLowerCase()],
-    queryFn: () => fetchUserPoints(address!),
+    queryFn: () => {
+      if (!address) throw new Error("useUserPoints: address is required");
+      return fetchUserPoints(address);
+    },
     enabled: !!address,
     staleTime: 60 * 1000,
   });
@@ -178,7 +181,10 @@ export const useUserPointsMints = (
 ) =>
   useQuery({
     queryKey: [USER_POINTS_MINTS_QK, address?.toLowerCase(), first],
-    queryFn: () => fetchUserPointsMints(address!, first),
+    queryFn: () => {
+      if (!address) throw new Error("useUserPointsMints: address is required");
+      return fetchUserPointsMints(address, first);
+    },
     enabled: !!address,
     staleTime: 60 * 1000,
   });

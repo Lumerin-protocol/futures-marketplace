@@ -1,7 +1,7 @@
 import styled from "@mui/material/styles/styled";
 import { keyframes, css } from "@emotion/react";
 import { SmallWidget } from "../../Cards/Cards.styled";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useId } from "react";
 import Slider from "@mui/material/Slider";
 import Tooltip from "@mui/material/Tooltip";
 import { tokens } from "../../../styles/tokens";
@@ -34,7 +34,6 @@ import { useMarginEngineShocks } from "../../../hooks/data/useMarginEngineShocks
 import type { Participant } from "../../../hooks/data/getUserFuturesOrders";
 import type { ContractMode, AccountBalance } from "../../../types/types";
 import type { PerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
-import { useAccount } from "wagmi";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
 import {
   handleNumericDecimalInput,
@@ -108,10 +107,9 @@ export const PlaceOrderWidget = ({
   accountBalance,
   balanceQuery,
   perpsCollection,
-  quantityUnit = "BTC",
 }: PlaceOrderWidgetProps) => {
+  const fieldId = useId();
   const { data: marketPrice, isLoading: isMarketPriceLoading } = useGetMarketPrice();
-  const { address } = useAccount();
   const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
   const { feeFor } = useMakerTakerFees();
 
@@ -183,7 +181,11 @@ export const PlaceOrderWidget = ({
     setTimeInForce(type === "market" ? TimeInForce.IOC : TimeInForce.GTC);
   };
 
-  // Update slider when price or balance changes
+  // Update slider when price or balance changes.
+  // The dependency list enumerates the values `calculateMaxQuantity` and
+  // `getNumericAmount` read; both are plain functions redefined on every render,
+  // so listing them would rerun this effect on every render.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   useEffect(() => {
     const maxQty = calculateMaxQuantity();
     if (maxQty > 0) {
@@ -193,7 +195,6 @@ export const PlaceOrderWidget = ({
     } else {
       setSliderValue(0);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     price,
     balanceQuery.data,
@@ -206,7 +207,7 @@ export const PlaceOrderWidget = ({
   // Helper to get numeric amount value for calculations
   const getNumericAmount = (): number => {
     const parsed = typeof amount === "string" ? parseFloat(amount) : amount;
-    return isNaN(parsed) || parsed <= 0 ? 0 : parsed;
+    return Number.isNaN(parsed) || parsed <= 0 ? 0 : parsed;
   };
 
   // Returns the USDC notional size regardless of amountMode
@@ -234,7 +235,7 @@ export const PlaceOrderWidget = ({
   // Calculate margin percentage from leverage
   // Formula: marginPercent = (1 / leverage) * 100
   // Example: 10x leverage = (1/10) * 100 = 10%
-  const getMarginPercentFromLeverage = (): number => {
+  const _getMarginPercentFromLeverage = (): number => {
     return (1 / leverage) * 100;
   };
 
@@ -248,7 +249,7 @@ export const PlaceOrderWidget = ({
   };
 
   // Calculate size (notional) from quantity for perps mode (reverse operation)
-  const calculateAmountFromQuantity = (quantityValue: number, priceValue: number): number => {
+  const _calculateAmountFromQuantity = (quantityValue: number, priceValue: number): number => {
     if (contractMode !== "perpetual" || priceValue <= 0) return quantityValue;
     return quantityValue * priceValue;
   };
@@ -351,7 +352,7 @@ export const PlaceOrderWidget = ({
   const simMarketPriceDecimal = marketPrice ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : 0;
   const simNumericAmount = (() => {
     const parsed = typeof amount === "string" ? parseFloat(amount) : amount;
-    return isNaN(parsed) || parsed <= 0 ? 0 : parsed;
+    return Number.isNaN(parsed) || parsed <= 0 ? 0 : parsed;
   })();
   const simNeedsLiquidityCheck =
     orderType === "market" || timeInForce === TimeInForce.FOK || timeInForce === TimeInForce.IOC;
@@ -973,7 +974,7 @@ export const PlaceOrderWidget = ({
 
             {orderType === "limit" && (
               <InputGroup $isHighlighted={highlightedButton !== null}>
-                <label>Price (USDC)</label>
+                <label htmlFor={`${fieldId}-price`}>Price (USDC)</label>
                 <PriceInputContainer $isHighlighted={highlightedButton !== null}>
                   <PriceButton
                     onClick={decrementPrice}
@@ -983,6 +984,7 @@ export const PlaceOrderWidget = ({
                     −
                   </PriceButton>
                   <input
+                    id={`${fieldId}-price`}
                     type="text"
                     value={price}
                     onChange={(e) => {
@@ -1006,12 +1008,13 @@ export const PlaceOrderWidget = ({
             )}
 
             <InputGroup $isHighlighted={highlightedButton !== null}>
-              <label>
+              <label htmlFor={`${fieldId}-amount`}>
                 {contractMode === "perpetual" ? (amountMode === "size" ? "Size" : "Quantity") : "Quantity"}
               </label>
               {contractMode === "perpetual" ? (
                 <AmountInputWrapper>
                   <input
+                    id={`${fieldId}-amount`}
                     type="text"
                     value={amount}
                     onChange={(e) => handleAmountChange(e.target.value.replace("-", ""))}
@@ -1032,6 +1035,7 @@ export const PlaceOrderWidget = ({
                 </AmountInputWrapper>
               ) : (
                 <input
+                  id={`${fieldId}-amount`}
                   type="text"
                   value={amount}
                   onChange={(e) => {
@@ -1264,7 +1268,6 @@ const LeverageModal = ({
 
 const ConflictingOrderModal = ({
   pendingOrder,
-  conflictingOrderQuantity,
   externalExpirationAt,
   onConfirm,
   onCancel,
@@ -1329,7 +1332,6 @@ const ConflictingOrderModal = ({
 const HighPriceConfirmationModal = ({
   pendingOrder,
   newestItemPrice,
-  highPricePercentage,
   contractSpecsQuery,
   onConfirm,
   onCancel,
@@ -1504,14 +1506,14 @@ const InputGroup = styled("div")<{ $isHighlighted?: boolean }>`
   }
 `;
 
-const MinMarginLabel = styled("div")`
+const _MinMarginLabel = styled("div")`
   font-size: 0.75rem;
   color: ${tokens.text.secondary};
   margin-top: 0.25rem;
   text-align: center;
 `;
 
-const ExpectedQuantityLabel = styled("div")`
+const _ExpectedQuantityLabel = styled("div")`
   font-size: 0.75rem;
   color: ${tokens.accent.main};
   margin-top: 0.25rem;
@@ -1845,14 +1847,14 @@ const OrderTypeRow = styled("div")`
   }
 `;
 
-const SliderInfoContainer = styled("div")`
+const _SliderInfoContainer = styled("div")`
   display: flex;
   justify-content: center;
   align-items: center;
   margin-top: 0.25rem;
 `;
 
-const SliderInfo = styled("span")`
+const _SliderInfo = styled("span")`
   color: ${tokens.text.primary};
   font-weight: 500;
   text-align: center;

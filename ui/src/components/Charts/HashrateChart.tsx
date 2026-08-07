@@ -58,14 +58,16 @@ const ChartControls = styled("div")`
 `;
 
 interface HashrateChartProps {
+  // The index hooks emit `updatedAt` as either a raw subgraph string or an
+  // already-converted number depending on the branch, hence the widened type.
   data: Array<{
     updatedAtDate?: Date;
-    updatedAt?: string;
+    updatedAt?: string | number;
     priceToken: number;
   }>;
   btcPriceData?: Array<{
     updatedAtDate?: Date;
-    updatedAt?: string;
+    updatedAt?: string | number;
     price: number;
   }>;
   isLoading?: boolean;
@@ -297,9 +299,8 @@ export const HashrateChart: FC<HashrateChartProps> = ({
         },
         events: {
           legendItemClick: function () {
-            const series = this;
-            if (!series.visible) {
-              series.show();
+            if (!this.visible) {
+              this.show();
             }
             return false; // Prevent unchecking Hashprice
           },

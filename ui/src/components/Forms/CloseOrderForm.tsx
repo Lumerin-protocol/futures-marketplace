@@ -1,6 +1,4 @@
 import { waitForOrderBookBlockNumber, getOrderBookQueryKey } from "../../hooks/data/orderBookHelpers";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCheckCircle } from "@fortawesome/free-solid-svg-icons/faCheckCircle";
 import { useQueryClient } from "@tanstack/react-query";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import type { TransactionReceipt } from "viem";
@@ -35,8 +33,6 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, ex
   // Conditionally use futures or perps create order hook
   const futuresCreateOrder = useCreateOrder();
   const perpsCreateOrder = useCreatePerpsOrder();
-  const { createOrderAsync } = contractMode === "perpetual" ? perpsCreateOrder : futuresCreateOrder;
-
   // Create an order with opposite sign to close the existing orders
   // If buy orders (isBuy = true), create sell order with negative quantity
   // If sell orders (isBuy = false), create buy order with positive quantity
@@ -56,7 +52,7 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, ex
       onClose={closeForm}
       title="Close Order"
       description=""
-      reviewForm={(props) => (
+      reviewForm={(_props) => (
         <>
           <div className="mb-4">
             <h3 className="font-semibold mb-2">Order Details:</h3>
@@ -84,7 +80,7 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, ex
           </p>
         </>
       )}
-      resultForm={(props) => (
+      resultForm={(_props) => (
         <>
           <p className="w-6/6 text-left font-normal text-s mt-5">
             Your order has been closed and will be removed from the order book shortly.
@@ -95,15 +91,15 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, ex
         {
           label: "Close Order",
           action: async () => {
-            let txhash;
+            let txhash: `0x${string}` | undefined;
             if (contractMode === "perpetual") {
               // Perps only needs price and quantity
-              txhash = await (createOrderAsync as any)({
+              txhash = await perpsCreateOrder.createOrderAsync({
                 price: pricePerDay,
                 quantity: oppositeQuantity,
               });
             } else {
-              txhash = await (createOrderAsync as any)({
+              txhash = await futuresCreateOrder.createOrderAsync({
                 price: pricePerDay,
                 expirationAt: expirationAt,
                 quantity: oppositeQuantity,

@@ -8,9 +8,11 @@ export type TransactionStep = {
   postConfirmation?: (receipt: TransactionReceipt) => Promise<void>;
 };
 
+/// `state` is an opaque hand-off between steps: a step stores whatever it needs
+/// and a later step casts it back to the shape it expects.
 export type ActionResult =
-  | { isSkipped: false; txhash?: `0x${string}`; state?: any }
-  | { isSkipped: true; state?: any };
+  | { isSkipped: false; txhash?: `0x${string}`; state?: unknown }
+  | { isSkipped: true; state?: unknown };
 
 export type TxState = {
   state: "pending" | "sending" | "sent" | "confirmed" | "failed" | "skipped";
@@ -23,7 +25,8 @@ export type TxState = {
    * ERC20 approve) confirms — see `retryUntilBlockAvailable`.
    */
   blockNumber?: bigint;
-  customState?: any;
+  /// See `ActionResult.state`.
+  customState?: unknown;
 };
 
 export function useMultistepTx(props: { steps: TransactionStep[] }) {
@@ -77,7 +80,8 @@ export function useMultistepTx(props: { steps: TransactionStep[] }) {
 
       try {
         if (!actionResult.isSkipped && actionResult.txhash) {
-          const receipt = await wc!.waitForTransactionReceipt({
+          if (!wc) throw new Error("No public client available to await the transaction receipt");
+          const receipt = await wc.waitForTransactionReceipt({
             hash: actionResult.txhash,
           });
           updateStep(txNumber, {
