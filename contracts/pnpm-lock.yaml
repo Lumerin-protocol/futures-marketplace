@@ -50,6 +50,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.4.10
         version: 2.4.13
+      '@lsheva/evm-gas-benchmark':
+        specifier: github:lsheva/evm-gas-benchmark#v1&path:packages/evm-gas-benchmark
+        version: https://codeload.github.com/lsheva/evm-gas-benchmark/tar.gz/94f3df7c06b20e712b666697207bb4752b0d7bee#path:packages/evm-gas-benchmark
       '@nomicfoundation/hardhat-toolbox-viem':
         specifier: ^5.0.7
         version: 5.0.7(a5f8928738448af8a85cfa179d0634f5)
@@ -476,6 +479,12 @@ packages:
   '@jest/schemas@29.6.3':
     resolution: {integrity: sha512-mo5j5X+jIZmJQveBKeS/clAueipV7KgiX1vMgCxam1RNYiqE1w62n0/tJJnHtjW8ZHcQco5gY85jA3mi0L+nSA==}
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
+
+  '@lsheva/evm-gas-benchmark@https://codeload.github.com/lsheva/evm-gas-benchmark/tar.gz/94f3df7c06b20e712b666697207bb4752b0d7bee#path:packages/evm-gas-benchmark':
+    resolution: {path: packages/evm-gas-benchmark, tarball: https://codeload.github.com/lsheva/evm-gas-benchmark/tar.gz/94f3df7c06b20e712b666697207bb4752b0d7bee}
+    version: 0.1.0
+    engines: {node: '>=24'}
+    hasBin: true
 
   '@manypkg/find-root@1.1.0':
     resolution: {integrity: sha512-mki5uBvhHzO8kYYix/WRy2WX8S3B5wdVSc9D6KcU5lQNglP2yt58/VfLuAK49glRXChosY8ap2oJ1qgma3GUVA==}
@@ -2313,6 +2322,8 @@ snapshots:
   '@jest/schemas@29.6.3':
     dependencies:
       '@sinclair/typebox': 0.27.10
+
+  '@lsheva/evm-gas-benchmark@https://codeload.github.com/lsheva/evm-gas-benchmark/tar.gz/94f3df7c06b20e712b666697207bb4752b0d7bee#path:packages/evm-gas-benchmark': {}
 
   '@manypkg/find-root@1.1.0':
     dependencies:
