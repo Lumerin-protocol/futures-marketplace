@@ -13,7 +13,7 @@ export function useGetFutureBalance(address: `0x${string}` | undefined) {
     address: collateralVaultAddress,
     abi: withErrors(CollateralVaultAbi),
     functionName: "balanceOf",
-    args: [address!],
+    args: address ? [address] : undefined,
     query: {
       enabled: !!address && !!collateralVaultAddress,
     },

@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from "react";
-import { useConnect, useDisconnect, useAccount, type Connector } from "wagmi";
+import { useConnect, useDisconnect, useAccount, } from "wagmi";
 
 interface WalletModalConfig {
   onConnect?: () => void;
@@ -8,7 +8,8 @@ interface WalletModalConfig {
 }
 
 export const useAppkit = (config?: WalletModalConfig) => {
-  const { onConnect, onDisconnect, onError } = config || {};
+  // `onConnect` is part of the public config but has never been wired up here.
+  const { onDisconnect, onError } = config || {};
 
   // Account state
   const { address, isConnected, connector } = useAccount();

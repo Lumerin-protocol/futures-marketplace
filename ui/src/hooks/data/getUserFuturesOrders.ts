@@ -19,7 +19,10 @@ export const getUserFuturesOrders = (
 ) => {
   const query = useQuery({
     queryKey: [PARTICIPANT_QK],
-    queryFn: () => fetchParticipantAsync(participantAddress!, props),
+    queryFn: () => {
+      if (!participantAddress) throw new Error("getUserFuturesOrders: participantAddress is required");
+      return fetchParticipantAsync(participantAddress, props);
+    },
     enabled: !!participantAddress,
     ...(props?.refetch ? backgroundRefetchOpts : {}),
   });

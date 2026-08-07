@@ -1,7 +1,7 @@
 import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useGetExpirationDates } from "../../../hooks/data/useGetExpirationDates";
 import { useAggregateOrderBook } from "../../../hooks/data/useAggregateOrderBook";
 import { usePerpsOrderBook } from "../../../hooks/data/perps/usePerpsOrderBook";
@@ -30,6 +30,13 @@ interface OrderBookTableProps {
   // being closed.
   targetExpirationAt?: number;
 }
+
+const normalizePrice = (price: number, minimumPriceIncrement: number | null): number => {
+  if (minimumPriceIncrement !== null) {
+    return Math.round(price / minimumPriceIncrement) * minimumPriceIncrement;
+  }
+  return Math.round(price * 100) / 100;
+};
 
 export const OrderBookTable = ({
   onRowClick,
@@ -87,6 +94,9 @@ export const OrderBookTable = ({
 
   // Snap the carousel to a target expiration date when the parent requests it
   // (e.g. closing a position on a different expiry than the one currently shown).
+  // `selectedDateIndex` is deliberately omitted: with it listed, manually paging
+  // the carousel would immediately snap back to the target while it is still set.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   useEffect(() => {
     if (!targetExpirationAt || expirationDates.length === 0) return;
     const idx = expirationDates.findIndex((d) => d.expirationAt === targetExpirationAt);
@@ -98,7 +108,11 @@ export const OrderBookTable = ({
   // Get selected expiration date
   const selectedExpirationAt = expirationDates[selectedDateIndex]?.expirationAt;
 
-  // Notify parent component when expiration date changes
+  // Notify parent component when expiration date changes.
+  // `onExpirationAtChange` is an optional prop that callers pass inline, so it is
+  // a new function on every parent render; listing it would fire this
+  // notification on every render instead of only when the expiry changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   useEffect(() => {
     if (selectedExpirationAt) {
       onExpirationAtChange?.(selectedExpirationAt);
@@ -164,18 +178,15 @@ export const OrderBookTable = ({
     futuresOrderBookQuery.data?.data?.priceLevels,
   ]);
 
+  // Drop the highlight baseline and refetch when the user pages to another
+  // expiry. `selectedDateIndex` is the trigger rather than a value read here, and
+  // `orderBookQuery` swaps between the futures and perps query objects, so
+  // listing its `refetch` would fire an extra request whenever the mode flips.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   useEffect(() => {
     previousOrderBookStateRef.current = new Map();
     orderBookQuery.refetch();
   }, [selectedDateIndex]);
-
-  // Helper function to normalize price
-  const normalizePrice = (price: number, minimumPriceIncrement: number | null): number => {
-    if (minimumPriceIncrement !== null) {
-      return Math.round(price / minimumPriceIncrement) * minimumPriceIncrement;
-    }
-    return Math.round(price * 100) / 100;
-  };
 
   // Get current order book state from pre-aggregated data
   const currentOrderBookState = useMemo(() => {
@@ -246,6 +257,27 @@ export const OrderBookTable = ({
   const marketPriceNumber =
     marketPrice != null ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : currentBasePrice?.price ?? null;
 
+  // Only closes over a ref, so it stays stable and can be listed as an effect
+  // dependency without retriggering anything. Declared above the effects that
+  // use it because dependency arrays are evaluated during render.
+  const scrollToOrder = useCallback((orderIndex: number) => {
+    setTimeout(() => {
+      if (orderIndex !== -1 && tableContainerRef.current) {
+        const rowHeight = 26; // Fixed row height from styles
+
+        // Calculate scroll position to center the row in the viewport
+        // (row index * row height) - (container height / 2) + (row height / 2)
+        const scrollPosition = orderIndex * rowHeight - 9 * rowHeight;
+
+        // Smooth scroll to center the row
+        tableContainerRef.current.scrollTo({
+          top: Math.max(0, scrollPosition),
+          behavior: "smooth",
+        });
+      }
+    }, 100);
+  }, []);
+
   // Auto-scroll to last hashprice row when basePrice (hashprice) updates
   useEffect(() => {
     if (!tableContainerRef.current) {
@@ -265,9 +297,13 @@ export const OrderBookTable = ({
       const lastHashpriceIndex = finalOrderBookDataWithHighlights.findIndex((row) => row.isLastHashprice);
       scrollToOrder(lastHashpriceIndex);
     }, 100);
-  }, [currentBasePrice, finalOrderBookDataWithHighlights]);
+  }, [currentBasePrice, finalOrderBookDataWithHighlights, finalOrderBookData.length, scrollToOrder]);
 
-  // Track order book changes and highlight changed prices
+  // Track order book changes and highlight changed prices.
+  // `finalOrderBookDataWithHighlights` must stay out of the dependency list: this
+  // effect calls `setPriceHighlights`, which is what that value is derived from,
+  // so listing it would loop forever.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   useEffect(() => {
     const previousState = previousOrderBookStateRef.current;
 
@@ -283,7 +319,7 @@ export const OrderBookTable = ({
     for (const [price, current] of currentOrderBookState.entries()) {
       const previous = previousState.get(price);
 
-      if (previous && previous.askUnits == current.askUnits && previous.bidUnits == current.bidUnits) {
+      if (previous && previous.askUnits === current.askUnits && previous.bidUnits === current.bidUnits) {
         continue;
       }
 
@@ -301,7 +337,7 @@ export const OrderBookTable = ({
       setPriceHighlights(newHighlights);
 
       const firstItemToHightlight = finalOrderBookDataWithHighlights.findIndex(
-        (row) => row.price == newHighlights.keys().next().value,
+        (row) => row.price === newHighlights.keys().next().value,
       );
       scrollToOrder(firstItemToHightlight);
 
@@ -327,24 +363,6 @@ export const OrderBookTable = ({
     }
   };
 
-  const scrollToOrder = (orderIndex: number) => {
-    setTimeout(() => {
-      if (orderIndex !== -1 && tableContainerRef.current) {
-        const rowHeight = 26; // Fixed row height from styles
-
-        // Calculate scroll position to center the row in the viewport
-        // (row index * row height) - (container height / 2) + (row height / 2)
-        const scrollPosition = orderIndex * rowHeight - 9 * rowHeight;
-
-        // Smooth scroll to center the row
-        tableContainerRef.current.scrollTo({
-          top: Math.max(0, scrollPosition),
-          behavior: "smooth",
-        });
-      }
-    }, 100);
-  };
-
   // Format expiration date for display
   const formatExpirationAt = (timestamp: number) => {
     const date = new Date(timestamp * 1000);
@@ -366,11 +384,11 @@ export const OrderBookTable = ({
     return (
       <OrderBookWidget>
         <Header>
-          <button className="nav-arrow" disabled>
+          <button type="button" className="nav-arrow" disabled>
             ←
           </button>
           <h3>Error</h3>
-          <button className="nav-arrow" disabled>
+          <button type="button" className="nav-arrow" disabled>
             →
           </button>
         </Header>
@@ -386,11 +404,11 @@ export const OrderBookTable = ({
     return (
       <OrderBookWidget>
         <Header>
-          <button className="nav-arrow" disabled>
+          <button type="button" className="nav-arrow" disabled>
             ←
           </button>
           <h3>Loading...</h3>
-          <button className="nav-arrow" disabled>
+          <button type="button" className="nav-arrow" disabled>
             →
           </button>
         </Header>
@@ -429,11 +447,17 @@ export const OrderBookTable = ({
         </ViewToggle>
         {contractMode === "futures" && viewMode !== "trades" && (
           <DateSwitcher>
-            <button onClick={goToPreviousDate} className="nav-arrow" disabled={selectedDateIndex === 0 || isLoading}>
+            <button
+              type="button"
+              onClick={goToPreviousDate}
+              className="nav-arrow"
+              disabled={selectedDateIndex === 0 || isLoading}
+            >
               ←
             </button>
             <span className="date-label">{selectedDateDisplay}</span>
             <button
+              type="button"
               onClick={goToNextDate}
               className="nav-arrow"
               disabled={selectedDateIndex === expirationDates.length - 1 || isLoading}
@@ -645,7 +669,7 @@ const ToggleButton = styled("button")<{ $active?: boolean }>`
   }
 `;
 
-const PerpsInfoHeader = styled("div")`
+const _PerpsInfoHeader = styled("div")`
   display: flex;
   justify-content: space-around;
   align-items: center;
@@ -655,7 +679,7 @@ const PerpsInfoHeader = styled("div")`
   gap: 1rem;
 `;
 
-const InfoLabel = styled("div")`
+const _InfoLabel = styled("div")`
   display: flex;
   flex-direction: column;
   align-items: center;

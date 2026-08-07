@@ -1,7 +1,7 @@
-import { type FC } from "react";
+import type { FC } from "react";
 import TextField from "@mui/material/TextField";
 import { type Control, useController } from "react-hook-form";
-import { ErrorWrapper, InputWrapper } from "./Forms.styled";
+import { InputWrapper } from "./Forms.styled";
 import styled from "@mui/material/styles/styled";
 import { tokens } from "../../../styles/tokens";
 
@@ -14,12 +14,19 @@ interface Props {
 }
 
 /**
+ * The element that actually received the input. `currentTarget` is unusable here
+ * because MUI's TextField forwards `onBeforeInput` to its root `div`, so only
+ * `target` is guaranteed to be the underlying input.
+ */
+const getInputTarget = (e: React.InputEvent<HTMLElement>) => e.target as HTMLInputElement | HTMLTextAreaElement;
+
+/**
  * Validates numeric input for decimal numbers with up to 2 decimal places.
  * Prevents non-numeric characters (except single decimal point) and limits decimal places.
  * @param e - The beforeinput event
  */
-export const handleNumericDecimalInput = (e: React.FormEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-  const inputChar = e.data;
+export const handleNumericDecimalInput = (e: React.InputEvent<HTMLElement>) => {
+  const inputChar = e.nativeEvent.data;
 
   // Allow deletion or navigation
   if (!inputChar) return;
@@ -30,9 +37,10 @@ export const handleNumericDecimalInput = (e: React.FormEvent<HTMLInputElement | 
     return;
   }
 
-  const current = e.target.value;
-  const selectionStart = e.target.selectionStart;
-  const selectionEnd = e.target.selectionEnd;
+  const target = getInputTarget(e);
+  const current = target.value;
+  const selectionStart = target.selectionStart;
+  const selectionEnd = target.selectionEnd;
 
   // Predict the new value if input is allowed
   const newValue = current.slice(0, selectionStart ?? 0) + inputChar + current.slice(selectionEnd ?? 0);
@@ -56,8 +64,8 @@ export const handleNumericDecimalInput = (e: React.FormEvent<HTMLInputElement | 
  * Used for futures quantity inputs which must be positive integers.
  * @param e - The beforeinput event
  */
-export const handleNumericIntegerInput = (e: React.FormEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-  const inputChar = e.data;
+export const handleNumericIntegerInput = (e: React.InputEvent<HTMLElement>) => {
+  const inputChar = e.nativeEvent.data;
 
   // Allow deletion or navigation
   if (!inputChar) return;
@@ -73,8 +81,8 @@ export const handleNumericIntegerInput = (e: React.FormEvent<HTMLInputElement | 
  * Used for perpetuals quantity input which supports higher precision.
  * @param e - The beforeinput event
  */
-export const handleNumericDecimalInput6Decimals = (e: React.FormEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-  const inputChar = e.data;
+export const handleNumericDecimalInput6Decimals = (e: React.InputEvent<HTMLElement>) => {
+  const inputChar = e.nativeEvent.data;
 
   // Allow deletion or navigation
   if (!inputChar) return;
@@ -85,9 +93,10 @@ export const handleNumericDecimalInput6Decimals = (e: React.FormEvent<HTMLInputE
     return;
   }
 
-  const current = e.target.value;
-  const selectionStart = e.target.selectionStart;
-  const selectionEnd = e.target.selectionEnd;
+  const target = getInputTarget(e);
+  const current = target.value;
+  const selectionStart = target.selectionStart;
+  const selectionEnd = target.selectionEnd;
 
   // Predict the new value if input is allowed
   const newValue = current.slice(0, selectionStart ?? 0) + inputChar + current.slice(selectionEnd ?? 0);
@@ -120,7 +129,7 @@ export const AmountInputForm: FC<Props> = ({
       required: `${label} is required`,
       validate: (value: string) => {
         const numValue = parseFloat(value);
-        if (isNaN(numValue) || numValue <= 0) {
+        if (Number.isNaN(numValue) || numValue <= 0) {
           return `${label} must be a positive number`;
         }
         // Apply additional validation if provided

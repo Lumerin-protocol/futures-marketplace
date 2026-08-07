@@ -192,7 +192,10 @@ const fetchAllHistoricalPositions = async (
 export const useHistoricalPositions = (address: `0x${string}` | undefined, enabled: boolean = false) => {
   return useQuery({
     queryKey: [HISTORICAL_POSITIONS_QK, address],
-    queryFn: () => fetchAllHistoricalPositions(address!),
+    queryFn: () => {
+      if (!address) throw new Error("useHistoricalPositions: address is required");
+      return fetchAllHistoricalPositions(address);
+    },
     enabled: !!address && enabled,
     staleTime: 60 * 1000, // 1 minute
   });

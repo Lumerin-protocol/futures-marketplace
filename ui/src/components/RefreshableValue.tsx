@@ -1,4 +1,4 @@
-import { type FC, type ReactNode, type CSSProperties } from "react";
+import type { FC, ReactNode, CSSProperties } from "react";
 import { keyframes, css } from "@emotion/react";
 import styled from "@mui/material/styles/styled";
 import { tokens } from "../styles/tokens";

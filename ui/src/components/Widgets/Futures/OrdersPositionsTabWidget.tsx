@@ -7,7 +7,7 @@ import { OrdersListWidget } from "./OrdersListWidget";
 import { PositionsListWidget } from "./PositionsListWidget";
 import { HistoricalOrdersListWidget } from "./HistoricalOrdersListWidget";
 import { HistoricalPositionsListWidget } from "./HistoricalPositionsListWidget";
-import type { ParticipantOrder } from "../../../hooks/data/getUserFuturesOrders";
+import type { Participant, ParticipantOrder } from "../../../hooks/data/getUserFuturesOrders";
 import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPositions";
 import { useHistoricalOrders } from "../../../hooks/data/useHistoricalOrders";
 import { useFuturesPositionHistory } from "../../../hooks/data/useFuturesPositionHistory";
@@ -36,7 +36,7 @@ interface OrdersPositionsTabWidgetProps {
   positionsLoading?: boolean;
   participantAddress?: `0x${string}`;
   onClosePosition?: (price: string, amount: number, isBuy: boolean, expirationAt?: number) => void;
-  participantData?: any;
+  participantData?: Participant | null;
   minMargin?: bigint | null;
   accountBalance?: AccountBalance;
   contractMode?: ContractMode;

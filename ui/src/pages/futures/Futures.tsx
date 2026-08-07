@@ -191,7 +191,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // account (not per position) and a hedged book can have thresholds on both sides.
   const { liqPrice, liqDirection, alreadyUnderwater } = useLiquidationThresholds(address);
 
-  const openPositionNetQuantity = useMemo(() => {
+  const _openPositionNetQuantity = useMemo(() => {
     if (contractMode !== "perpetual") return null;
     const sessions = positionSessionsQuery.data?.positionSessions || [];
     const openSessions = sessions.filter((s) => s.status === "OPEN");
@@ -267,7 +267,14 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
       return totalPnL;
     }
-  }, [marketPrice, positionBookData?.data?.positions, address, contractMode, positionSessionsQuery.data?.positionSessions]);
+  }, [
+    marketPrice,
+    positionBookData?.data?.positions,
+    address,
+    contractMode,
+    positionSessionsQuery.data?.positionSessions,
+    contractSpecsQuery?.data,
+  ]);
 
   // Calculate total realized PnL (30D) based on contract mode
   const totalRealizedPnL30D = useMemo(() => {
@@ -299,7 +306,9 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const [highlightMode, setHighlightMode] = useState<"inputs" | "buttons" | undefined>();
   const [highlightTrigger, setHighlightTrigger] = useState(0);
 
-  // Reset state when contract mode changes
+  // Reset state when contract mode changes. `contractMode` is not read in the
+  // body, it is the trigger — dropping it would stop the reset from ever running.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   useEffect(() => {
     setSelectedPrice(undefined);
     setSelectedAmount(undefined);
@@ -330,7 +339,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
   const closePositionModal = useClosePositionModal(proceedWithClosePosition);
 
-  const handleOrderBookClick = (price: string, amount: number | null) => {
+  const handleOrderBookClick = (price: string, _amount: number | null) => {
     setSelectedPrice(price);
     setSelectedAmount(1);
     setHighlightMode("inputs");
@@ -469,14 +478,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const tablesNode = isConnected ? (
     contractMode === "perpetual" ? (
       <PerpsOrdersPositionsTabWidget
-        orders={participantData?.data?.orders || []}
-        positions={positionBookData?.data?.positions || []}
-        ordersLoading={isParticipantLoading}
-        positionsLoading={isPositionBookLoading}
         participantAddress={address}
-        onClosePosition={closePositionModal.handleClosePosition}
-        participantData={participantData?.data}
-        accountBalance={accountBalanceQuery}
         marketPrice={marketPrice}
         positionSessions={positionSessionsQuery.data?.positionSessions || []}
         positionSessionsLoading={positionSessionsQuery.isLoading}
@@ -701,14 +703,14 @@ const RightPanelArea = styled("div")`
 `;
 
 // Order Information block — blank placeholder at bottom of right panel
-const OrderInfoSection = styled("div")`
+const _OrderInfoSection = styled("div")`
   padding: 0.875rem 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
 `;
 
-const OrderInfoTitle = styled("div")`
+const _OrderInfoTitle = styled("div")`
   font-size: 0.7rem;
   font-weight: 600;
   color: ${tokens.text.secondary};

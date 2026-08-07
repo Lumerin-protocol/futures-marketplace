@@ -13,7 +13,10 @@ export const useUserPerpsTrades = (
 ) => {
   const query = useQuery({
     queryKey: [USER_PERPS_TRADES_QK, address],
-    queryFn: () => fetchUserPerpsTradesAsync(address!),
+    queryFn: () => {
+      if (!address) throw new Error("useUserPerpsTrades: address is required");
+      return fetchUserPerpsTradesAsync(address);
+    },
     enabled: !!address,
     ...(props?.refetch ? backgroundRefetchOpts : {}),
   });

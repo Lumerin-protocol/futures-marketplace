@@ -27,7 +27,7 @@ export function usePerpsOrderForm({
   const getCurrentQuantity = (): number => {
     if (sliderValue === 100) return maxQuantity;
     const parsed = parseFloat(amount);
-    if (isNaN(parsed) || parsed <= 0) return 0;
+    if (Number.isNaN(parsed) || parsed <= 0) return 0;
     if (amountMode === "size") return currentPrice > 0 ? parsed / currentPrice : 0;
     return parsed;
   };
@@ -35,7 +35,7 @@ export function usePerpsOrderForm({
   const getCurrentSize = (): number => {
     if (sliderValue === 100) return maxQuantity * currentPrice;
     const parsed = parseFloat(amount);
-    if (isNaN(parsed) || parsed <= 0) return 0;
+    if (Number.isNaN(parsed) || parsed <= 0) return 0;
     if (amountMode === "quantity") return parsed * currentPrice;
     return parsed;
   };
@@ -52,7 +52,7 @@ export function usePerpsOrderForm({
   const handleAmountChange = (newAmount: string) => {
     setAmount(newAmount);
     const parsed = parseFloat(newAmount);
-    if (!isNaN(parsed) && parsed >= 0) {
+    if (!Number.isNaN(parsed) && parsed >= 0) {
       const maxVal = amountMode === "size" ? maxSize : maxQuantity;
       if (maxVal > 0) {
         const pct = Math.min(100, Math.max(0, (parsed / maxVal) * 100));

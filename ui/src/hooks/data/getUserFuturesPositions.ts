@@ -1,6 +1,6 @@
 import { backgroundRefetchOpts } from "./config";
 import { graphqlRequest } from "./graphql";
-import { QueryClient, useQuery } from "@tanstack/react-query";
+import { type QueryClient, useQuery } from "@tanstack/react-query";
 import type { GetResponse } from "../../gateway/interfaces";
 import { PositionsBookQuery } from "./graphql-queries";
 
@@ -12,7 +12,10 @@ const ZERO_HASH = "0x00000000000000000000000000000000000000000000000000000000000
 export const getUserFuturesPositions = (address: `0x${string}` | undefined, props?: { refetch?: boolean }) => {
   const query = useQuery({
     queryKey: [POSITION_BOOK_QK],
-    queryFn: () => fetchPositionBookAsync(address!),
+    queryFn: () => {
+      if (!address) throw new Error("getUserFuturesPositions: address is required");
+      return fetchPositionBookAsync(address);
+    },
     enabled: !!address,
     ...(props?.refetch ? backgroundRefetchOpts : {}),
   });

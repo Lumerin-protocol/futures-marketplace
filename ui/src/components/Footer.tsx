@@ -77,7 +77,7 @@ const FooterContent = styled("div")`
   }
 `;
 
-const SectionTitle = styled("h3")`
+const _SectionTitle = styled("h3")`
   color: ${tokens.text.onDark};
   font-size: 0.875rem;
   font-weight: 600;

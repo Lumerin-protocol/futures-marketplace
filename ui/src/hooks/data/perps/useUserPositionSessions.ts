@@ -10,7 +10,10 @@ export const useUserPositionSessions = (
 ) => {
   const query = useQuery({
     queryKey: [USER_POSITION_SESSIONS_QK, address],
-    queryFn: () => fetchUserPositionSessionsAsync(address!),
+    queryFn: () => {
+      if (!address) throw new Error("useUserPositionSessions: address is required");
+      return fetchUserPositionSessionsAsync(address);
+    },
     enabled: !!address,
     refetchInterval: props?.refetch ? 15_000 : 60_000,
     refetchOnMount: false,

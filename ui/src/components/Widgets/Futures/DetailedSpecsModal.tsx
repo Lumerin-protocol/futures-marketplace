@@ -55,7 +55,8 @@ interface DetailedSpecsModalProps {
   contractMode?: ContractMode;
 }
 
-export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "futures" }: DetailedSpecsModalProps) => {
+// `closeForm` is accepted but never invoked — see ui/TECH_DEBT.md.
+export const DetailedSpecsModal = ({ contractSpecs, contractMode = "futures" }: DetailedSpecsModalProps) => {
   const { data: expirationDatesRaw } = useGetExpirationDates();
   const contractConstants = useFuturesContractConstants();
   const tokenInfo = useFuturesTokenInfo();
@@ -110,7 +111,7 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
   const tickSize = Number(contractSpecs.minimumPriceIncrement) / PAYMENT_TOKEN_SCALE_NUM;
 
   // Calculate total coverage days
-  const totalCoverageDays =
+  const _totalCoverageDays =
     contractConstants.futureExpirationDatesCount && contractConstants.expirationIntervalDays
       ? contractConstants.futureExpirationDatesCount * contractConstants.expirationIntervalDays
       : null;
@@ -289,7 +290,7 @@ const PerpetualStatistics = () => {
   const docsUrl = process.env.REACT_APP_FUTURES_DOCS_URL;
 
   const tickSize = perpsCollection ? perpsCollection.minimumPriceIncrement / PAYMENT_TOKEN_SCALE_NUM : null;
-  const minMarginPerOrder = perpsCollection ? perpsCollection.minimumMarginPerOrder / PAYMENT_TOKEN_SCALE_NUM : null;
+  const _minMarginPerOrder = perpsCollection ? perpsCollection.minimumMarginPerOrder / PAYMENT_TOKEN_SCALE_NUM : null;
 
   const formatFundingPeriod = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);

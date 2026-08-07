@@ -38,7 +38,11 @@ interface UsePaginatedHistoryOptions<TRaw, TItem> {
   subgraphUrl?: string;
   /// Pull the raw row array out of the GraphQL response.
   selectRows: (response: TRaw) => unknown[];
-  /// Map a single raw row to the entity-specific shape.
+  /// Map a single raw row to the entity-specific shape. The row type cannot be
+  /// expressed here: `selectRows` hands back `unknown[]` and every caller pins
+  /// `TRaw`/`TItem` explicitly, so a third inferred generic for the row is not an
+  /// option. Each caller's mapper declares its own concrete row type.
+  // biome-ignore lint/suspicious/noExplicitAny: see comment above.
   mapRow: (raw: any) => TItem;
   /// Stable unique id for a mapped row, used to de-duplicate while appending.
   getId: (item: TItem) => string;
@@ -89,6 +93,10 @@ export const usePaginatedHistory = <TRaw, TItem>({
     refetchInterval,
   });
 
+  // `getId` is usually passed as an inline arrow by callers, so listing it would
+  // rebuild this list on every render. Flattening only needs to rerun when the
+  // pages change.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   const data = useMemo<TItem[]>(() => {
     const pages = infinite.data?.pages ?? [];
     const seen = new Set<string>();
@@ -102,7 +110,6 @@ export const usePaginatedHistory = <TRaw, TItem>({
       }
     }
     return flat;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [infinite.data?.pages]);
 
   return {
