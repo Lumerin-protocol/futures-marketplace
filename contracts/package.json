@@ -29,7 +29,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.10",
-    "@lsheva/evm-gas-benchmark": "github:lsheva/evm-gas-benchmark#v1.0.1&path:packages/evm-gas-benchmark",
+    "@lsheva/evm-gas-benchmark": "github:lsheva/evm-gas-benchmark#v1.0.2&path:packages/evm-gas-benchmark",
     "@nomicfoundation/hardhat-toolbox-viem": "^5.0.7",
     "@nomicfoundation/hardhat-verify": "^3.0.17",
     "@nomicfoundation/hardhat-viem": "^3.0.9",
