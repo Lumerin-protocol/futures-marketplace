@@ -191,7 +191,7 @@ export const DetailedSpecsModal = ({ closeForm, contractSpecs, contractMode = "f
         </SpecItem>
 
         <SpecItem>
-          <SpecLabel>Max Open Orders</SpecLabel>
+          <SpecLabel>Max Open Orders per Delivery</SpecLabel>
           <SpecValue>{contractConstants.maxOrdersPerParticipant ?? "..."}</SpecValue>
         </SpecItem>
       </SpecSection>

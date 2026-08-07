@@ -181,7 +181,10 @@ async function benchmarkViews() {
     ["CONTRACT_SIZE_HPS_DAY()", "CONTRACT_SIZE_HPS_DAY"],
     ["EXPIRATION_INTERVAL_DAYS()", "EXPIRATION_INTERVAL_DAYS"],
     ["MAX_ORACLE_STALENESS()", "MAX_ORACLE_STALENESS"],
-    ["MAX_ORDERS_PER_PARTICIPANT()", "MAX_ORDERS_PER_PARTICIPANT"],
+    [
+      "MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION()",
+      "MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION",
+    ],
     ["MAX_PRICE_LEVELS_PER_SIDE()", "MAX_PRICE_LEVELS_PER_SIDE"],
     ["UPGRADE_INTERFACE_VERSION()", "UPGRADE_INTERFACE_VERSION"],
     ["VERSION()", "VERSION"],
@@ -212,6 +215,11 @@ async function benchmarkViews() {
     ["getRiskView(address)", "getRiskView", [seller.account.address]],
     ["getUnrealizedPnl(address)", "getUnrealizedPnl", [buyer.account.address]],
     ["getUserOrders(address)", "getUserOrders", [seller.account.address]],
+    [
+      "getUserOrdersAtExpiration(address,uint256)",
+      "getUserOrdersAtExpiration",
+      [seller.account.address, firstExpiration],
+    ],
     [
       "getUserPosition(address,uint256)",
       "getUserPosition",
@@ -295,25 +303,6 @@ async function benchmarkOrderPlacement() {
       "resting order",
       futures.write.createOrder([price, data.config.deliveryDates[0], -1n, TimeInForce.GTC], {
         account: seller.account,
-      }),
-    );
-  }
-  {
-    const data = await fresh();
-    const { futures } = data.contracts;
-    const { owner, seller, pc } = data.accounts;
-    const price = await futures.read.getMarketPrice();
-    const expirationAt = data.config.deliveryDates[0];
-    await fund(data, [seller]);
-    await futures.write.createOrder([price, expirationAt, -1n, TimeInForce.GTC], {
-      account: seller.account,
-    });
-    await recordTransaction(
-      pc,
-      "rebuildOrderAggregateCache(address[])",
-      "one user with one resting order",
-      futures.write.rebuildOrderAggregateCache([[seller.account.address]], {
-        account: owner.account,
       }),
     );
   }
@@ -453,15 +442,9 @@ async function benchmarkOrderMaintenance() {
   await tc.setNextBlockTimestamp({ timestamp: expirationAt + 1n });
   await recordTransaction(
     pc,
-    "removeOutdatedOrder(bytes32)",
-    "permissionless expired order",
-    futures.write.removeOutdatedOrder([outdatedId], { account: buyer.account }),
-  );
-  await recordTransaction(
-    pc,
     "removeOutdatedOrders(bytes32[])",
-    "permissionless expired order batch",
-    futures.write.removeOutdatedOrders([[outdatedBatchId]], { account: buyer.account }),
+    "permissionless expired order batch-2",
+    futures.write.removeOutdatedOrders([[outdatedId, outdatedBatchId]], { account: buyer.account }),
   );
 }
 
@@ -614,6 +597,12 @@ async function benchmarkAdminAndLifecycle() {
       "setFutureExpirationDatesCount(uint8)",
       "10-to-8",
       futures.write.setFutureExpirationDatesCount([8], { account: owner.account }),
+    );
+    await recordTransaction(
+      pc,
+      "dropActiveOrders(address[])",
+      "empty post-upgrade cutover",
+      futures.write.dropActiveOrders([[]], { account: owner.account }),
     );
     await recordTransaction(
       pc,

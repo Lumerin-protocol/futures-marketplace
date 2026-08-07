@@ -10,11 +10,6 @@ export const contractErrors = [
     "type": "error"
   },
   {
-    "inputs": [],
-    "name": "MaxOrdersPerParticipantReached",
-    "type": "error"
-  },
-  {
     "inputs": [
       {
         "internalType": "string",
@@ -127,11 +122,6 @@ export const contractErrors = [
   },
   {
     "inputs": [],
-    "name": "OrderNotExpired",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "OrderNotBelongToUser",
     "type": "error"
   },
@@ -233,6 +223,11 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "ERC1967NonPayable",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "MaxOrdersPerParticipantPerExpirationReached",
     "type": "error"
   },
   {

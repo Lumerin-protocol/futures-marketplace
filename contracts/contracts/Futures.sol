@@ -22,7 +22,7 @@ contract Futures is FuturesAdmin {
     /// @dev Lives here rather than in {FuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `Futures.sol` to require a bump.
-    string public constant VERSION = "4.2.0";
+    string public constant VERSION = "4.3.0";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) FuturesBase(_vault) { }
@@ -107,20 +107,10 @@ contract Futures is FuturesAdmin {
         _cancelOrder(_msgSender(), _orderId);
     }
 
-    /// @notice Permissionlessly close a resting order whose `expirationAt` is in the past.
-    /// @dev Anyone may call: a matured order can no longer fill (`_validateExpirationAt`
-    ///      rejects new orders at that expiry, so nothing can cross it), and leaving it
-    ///      resting only wastes the owner's `MAX_ORDERS_PER_PARTICIPANT` budget.
-    function removeOutdatedOrder(bytes32 _orderId) external {
-        Order memory order = orders[_orderId];
-        if (order.participant == address(0) || order.quantity == 0) revert OrderNotExists();
-        if (order.expirationAt >= block.timestamp) revert OrderNotExpired();
-        _dropRestingOrder(_orderId, order);
-    }
-
-    /// @notice Permissionlessly close every expired order in `_orderIds`.
+    /// @notice Optionally close expired resting orders in one maintenance transaction.
     /// @dev Missing, already-closed and not-yet-expired ids are skipped so concurrent
-    ///      keepers cannot revert unrelated cleanup work.
+    ///      callers cannot revert unrelated cleanup work. No protocol path calls this
+    ///      automatically; expired orders are inert and do not consume future delivery caps.
     function removeOutdatedOrders(bytes32[] calldata _orderIds) external returns (uint256 removed) {
         uint256 len = _orderIds.length;
         for (uint256 i = 0; i < len; i++) {
@@ -168,9 +158,10 @@ contract Futures is FuturesAdmin {
                 emit OrderUpdated(orderId, _participant, remainingQty);
             }
             if (remainingAbs > 0) {
-                EnumerableSet.Bytes32Set storage participantOrders = participantOrderIdsIndex[_participant];
-                if (participantOrders.length() >= MAX_ORDERS_PER_PARTICIPANT) {
-                    revert MaxOrdersPerParticipantReached();
+                EnumerableSet.Bytes32Set storage participantOrders =
+                    participantExpirationAtOrderIdsIndex[_participant][_expirationAt];
+                if (participantOrders.length() >= MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION) {
+                    revert MaxOrdersPerParticipantPerExpirationReached();
                 }
                 orders[orderId] = Order({
                     participant: _participant,
@@ -181,7 +172,6 @@ contract Futures is FuturesAdmin {
                 StructuredLinkedList.List storage orderQueue =
                     _expirationAtPriceOrderIds(_expirationAt, _price, _quantity > 0);
                 _addOrderToQueue(orderQueue, orderId, _expirationAt, _price, _quantity > 0);
-                participantOrders.add(orderId);
                 _indexRestingOrder(_participant, _expirationAt, _price, orderId);
                 _increaseOrderAggregate(_participant, _expirationAt, _price, remainingQty);
             }
@@ -235,9 +225,20 @@ contract Futures is FuturesAdmin {
     /// @dev The state check is what separates this from `_underwater`: an account holding
     ///      nothing has an MM of zero, so it is never "liquidatable" even at a zero balance.
     function isLiquidatable(address _participant) public view returns (bool) {
-        bool hasState = participantOrderIdsIndex[_participant].length() > 0
-            || participantActiveExpirationAts[_participant].length() > 0;
+        bool hasState = _hasActiveOrders(_participant) || participantActiveExpirationAts[_participant].length() > 0;
         return hasState && _underwater(_participant);
+    }
+
+    function _hasActiveOrders(address _participant) private view returns (bool) {
+        uint256 currentIndex = _getCurrentExpirationAtIndex();
+        for (uint256 i = 0; i < futureExpirationDatesCount; i++) {
+            uint256 expirationAt = _activeExpirationAt(currentIndex, i);
+            OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_participant][expirationAt];
+            if (aggregate.buyQty != 0 || aggregate.sellQty != 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// @notice Cancel one resting order of an underwater participant, charging the liquidation fee.
@@ -414,17 +415,42 @@ contract Futures is FuturesAdmin {
         return orders[_orderId];
     }
 
-    function getUserOrders(address _user) external view returns (bytes32[] memory) {
-        return participantOrderIdsIndex[_user].values();
+    /// @notice Resting orders for the currently tradable delivery window.
+    function getUserOrders(address _user) external view returns (bytes32[] memory orderIds) {
+        uint256 currentIndex = _getCurrentExpirationAtIndex();
+        uint256 total;
+        for (uint256 i = 0; i < futureExpirationDatesCount; i++) {
+            uint256 expirationAt = _activeExpirationAt(currentIndex, i);
+            total += participantExpirationAtOrderIdsIndex[_user][expirationAt].length();
+        }
+
+        orderIds = new bytes32[](total);
+        uint256 cursor;
+        for (uint256 i = 0; i < futureExpirationDatesCount; i++) {
+            uint256 expirationAt = _activeExpirationAt(currentIndex, i);
+            EnumerableSet.Bytes32Set storage ids = participantExpirationAtOrderIdsIndex[_user][expirationAt];
+            uint256 len = ids.length();
+            for (uint256 j = 0; j < len; j++) {
+                orderIds[cursor++] = ids.at(j);
+            }
+        }
+    }
+
+    /// @notice Every physically resting order for one participant and delivery date.
+    /// @dev Explicit historical reads include expired orders; normal callers should use
+    ///      `getUserOrders`, whose cost and response are bounded to active deliveries.
+    function getUserOrdersAtExpiration(address _user, uint256 _expirationAt)
+        external
+        view
+        returns (bytes32[] memory orderIds)
+    {
+        return participantExpirationAtOrderIdsIndex[_user][_expirationAt].values();
     }
 
     function getOrderAggregate(address _user) external view returns (OrderAggregate memory aggregate_) {
-        EnumerableSet.UintSet storage expirationAts = participantOrderExpirationAts[_user];
-        uint256 len = expirationAts.length();
-        for (uint256 i = 0; i < len; i++) {
-            uint256 expirationAt = expirationAts.at(i);
-            if (expirationAt < block.timestamp) continue;
-
+        uint256 currentIndex = _getCurrentExpirationAtIndex();
+        for (uint256 i = 0; i < futureExpirationDatesCount; i++) {
+            uint256 expirationAt = _activeExpirationAt(currentIndex, i);
             OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_user][expirationAt];
             aggregate_.buyQty += aggregate.buyQty;
             aggregate_.sellQty += aggregate.sellQty;
@@ -537,9 +563,8 @@ contract Futures is FuturesAdmin {
 
     /// @notice Total resting order notional per side at the orders' own limit prices
     ///         (token decimals).
-    /// @dev One pass over the participant's cached order expirations. Expired orders are
-    ///      skipped as they cannot fill; each aggregate is marked at its expiry's settlement price,
-    ///      falling back to the live index, matching `getRiskView`'s position loop.
+    /// @dev One pass over the fixed currently tradable delivery window. Historical
+    ///      aggregates are never traversed and therefore cannot increase margin-call gas.
     ///
     ///      The fill-loss clamp is applied per side across all expiries rather than per
     ///      expiry — the less conservative of the two, and consistent with this venue
@@ -557,17 +582,13 @@ contract Futures is FuturesAdmin {
             uint256 sellMark
         )
     {
-        EnumerableSet.UintSet storage expirationAts = participantOrderExpirationAts[_participant];
-        uint256 len = expirationAts.length();
-        if (len == 0) return (0, 0, 0, 0, 0, 0);
-
+        uint256 currentIndex = _getCurrentExpirationAtIndex();
         uint256 livePrice = 0;
         bool livePriceLoaded = false;
-        for (uint256 i = 0; i < len; i++) {
-            uint256 expirationAt = expirationAts.at(i);
-            if (expirationAt < block.timestamp) continue;
-
+        for (uint256 i = 0; i < futureExpirationDatesCount; i++) {
+            uint256 expirationAt = _activeExpirationAt(currentIndex, i);
             OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_participant][expirationAt];
+            if (aggregate.buyQty == 0 && aggregate.sellQty == 0) continue;
             uint256 markPrice = settlementPrice[expirationAt];
             if (markPrice == 0) {
                 if (!livePriceLoaded) {
@@ -598,8 +619,7 @@ contract Futures is FuturesAdmin {
         uint256 currentExpirationDateIndex = _getCurrentExpirationAtIndex();
         uint256[] memory expirationDatesArray = new uint256[](futureExpirationDatesCount);
         for (uint256 i = 0; i < futureExpirationDatesCount; i++) {
-            expirationDatesArray[i] =
-                firstFutureExpirationDate + expirationIntervalSeconds() * (currentExpirationDateIndex + i);
+            expirationDatesArray[i] = _activeExpirationAt(currentExpirationDateIndex, i);
         }
         return expirationDatesArray;
     }

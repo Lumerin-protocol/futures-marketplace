@@ -109,7 +109,7 @@
   },
   {
     "inputs": [],
-    "name": "MaxOrdersPerParticipantReached",
+    "name": "MaxOrdersPerParticipantPerExpirationReached",
     "type": "error"
   },
   {
@@ -150,11 +150,6 @@
   {
     "inputs": [],
     "name": "OrderNotExists",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "OrderNotExpired",
     "type": "error"
   },
   {
@@ -780,7 +775,7 @@
   },
   {
     "inputs": [],
-    "name": "MAX_ORDERS_PER_PARTICIPANT",
+    "name": "MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION",
     "outputs": [
       {
         "internalType": "uint8",
@@ -915,6 +910,19 @@
       }
     ],
     "name": "createOrders",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address[]",
+        "name": "_participants",
+        "type": "address[]"
+      }
+    ],
+    "name": "dropActiveOrders",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1352,7 +1360,31 @@
     "outputs": [
       {
         "internalType": "bytes32[]",
-        "name": "",
+        "name": "orderIds",
+        "type": "bytes32[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_expirationAt",
+        "type": "uint256"
+      }
+    ],
+    "name": "getUserOrdersAtExpiration",
+    "outputs": [
+      {
+        "internalType": "bytes32[]",
+        "name": "orderIds",
         "type": "bytes32[]"
       }
     ],
@@ -1667,19 +1699,6 @@
   {
     "inputs": [
       {
-        "internalType": "address[]",
-        "name": "_users",
-        "type": "address[]"
-      }
-    ],
-    "name": "rebuildOrderAggregateCache",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
         "internalType": "uint256",
         "name": "expirationAt",
         "type": "uint256"
@@ -1710,19 +1729,6 @@
       }
     ],
     "name": "reduceOrderSize",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "_orderId",
-        "type": "bytes32"
-      }
-    ],
-    "name": "removeOutdatedOrder",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

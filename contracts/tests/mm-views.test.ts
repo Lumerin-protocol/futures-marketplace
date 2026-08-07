@@ -12,7 +12,7 @@ const { viem, networkHelpers } = await network.getOrCreate();
  * Tests covering the views added for the off-chain market maker:
  *   - getUserOrders(participant)
  *   - getActiveExpirationDates(participant)
- *   - MAX_ORDERS_PER_PARTICIPANT constant
+ *   - MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION constant
  *   - getOrderBookPrices / getQuantityAtPrice (per-expiration depth)
  *
  * Active-price-set maintenance is verified end-to-end by creating, partially
@@ -21,9 +21,9 @@ const { viem, networkHelpers } = await network.getOrCreate();
  */
 
 describe("MM views", () => {
-  it("MAX_ORDERS_PER_PARTICIPANT equals 100", async () => {
+  it("MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION equals 100", async () => {
     const { contracts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const max = await contracts.futures.read.MAX_ORDERS_PER_PARTICIPANT();
+    const max = await contracts.futures.read.MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION();
     assert.equal(Number(max), 100);
   });
 
@@ -46,6 +46,7 @@ describe("MM views", () => {
 
     const ids = await futures.read.getUserOrders([seller.account.address]);
     assert.equal(ids.length, 2, "two resting orders");
+    assert.deepEqual(await futures.read.getUserOrdersAtExpiration([seller.account.address, dd]), ids);
   });
 
   it("getActiveExpirationDates returns positions where caller is buyer or seller", async () => {

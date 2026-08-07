@@ -5,7 +5,7 @@
  * paths. This file pins down the rarer terminal states the indexer must
  * still map correctly:
  *   - EXPIRED:    after `expirationAt`, anyone can permissionlessly call
- *                 `removeOutdatedOrder(orderId)` to close the stale order.
+ *                 `removeOutdatedOrders([orderId])` to close the stale order.
  *   - LIQUIDATED: permissionless `liquidateOrders` force-cancels resting orders before touching
  *                 positions.
  */
@@ -22,7 +22,7 @@ import { TimeInForce } from "../../contracts/tests/timeInForce.ts";
 const conn = await network.create({ override: { loggingEnabled: true } });
 const { matchstick } = conn;
 
-describe("OrderEntryStatus.EXPIRED: removeOutdatedOrder", () => {
+describe("OrderEntryStatus.EXPIRED: removeOutdatedOrders", () => {
   after(() => matchstick.reset());
 
   it("closes a stale resting order and flips OrderEntry.status to EXPIRED", async () => {
@@ -57,7 +57,7 @@ describe("OrderEntryStatus.EXPIRED: removeOutdatedOrder", () => {
       timestamp: deliveryDate + BigInt(config.expirationIntervalSeconds) + 1n,
     });
 
-    const sweepTx = await futures.write.removeOutdatedOrder([restingOrderId], {
+    const sweepTx = await futures.write.removeOutdatedOrders([[restingOrderId]], {
       account: seller.account,
     });
     const sweepReceipt = await pc.waitForTransactionReceipt({ hash: sweepTx });

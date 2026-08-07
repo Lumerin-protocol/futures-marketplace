@@ -49,13 +49,6 @@ export const ORDER_CACHE_ABI = [
       },
     ],
   },
-  {
-    type: "function",
-    name: "rebuildOrderAggregateCache",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "users", type: "address[]" }],
-    outputs: [],
-  },
 ] as const;
 
 const ORDER_CREATED_EVENT = getAbiItem({
@@ -110,9 +103,10 @@ const MIN_EVENT_CHUNK = 1n;
 
 export function readDiscoverySource(
   value = process.env.ORDER_CACHE_DISCOVERY_SOURCE ?? "auto",
+  envName = "ORDER_CACHE_DISCOVERY_SOURCE",
 ): DiscoverySource {
   if (value !== "auto" && value !== "indexer" && value !== "events") {
-    throw new Error("ORDER_CACHE_DISCOVERY_SOURCE must be auto, indexer, or events");
+    throw new Error(`${envName} must be auto, indexer, or events`);
   }
   return value;
 }

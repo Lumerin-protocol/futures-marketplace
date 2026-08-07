@@ -131,6 +131,9 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
 
     mapping(address => mapping(uint256 => OrderAggregate)) internal participantExpirationAtOrderAggregate;
     mapping(address => EnumerableSet.UintSet) internal participantOrderExpirationAts;
+    /// @dev Canonical resting-order index for v4.3+: bounded independently per delivery date.
+    ///      The legacy global `participantOrderIdsIndex` remains in-place for upgrade cleanup only.
+    mapping(address => mapping(uint256 => EnumerableSet.Bytes32Set)) internal participantExpirationAtOrderIdsIndex;
 
     // immutable
     ICollateralVault public immutable vault;
@@ -139,7 +142,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     // constants
     /// @notice One contract settles 1 PH/s/day (hashes/s·day). Matches the hashprice oracle quote basis.
     uint256 public constant CONTRACT_SIZE_HPS_DAY = 1e15;
-    uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
+    uint8 public constant MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION = 100;
     uint256 public constant MAX_PRICE_LEVELS_PER_SIDE = 200;
     uint256 internal constant BPS = 10_000; // Basis points denominator
     /// @notice Hard ceiling on |makerFeeBps| and |takerFeeBps|: 100 bps (1%).
@@ -266,7 +269,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     error InsufficientMarginBalance();
     error PositionNotExists();
     error PositionExpirationNotStartedYet();
-    error MaxOrdersPerParticipantReached();
+    error MaxOrdersPerParticipantPerExpirationReached();
     error ValueOutOfRange(int256 min, int256 max);
     error ZeroAddress();
     error InsuranceFundNotConfigured();
@@ -280,7 +283,6 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     error OverLiquidation();
     error OrderNotBelongToUser();
     error OrderNotExists();
-    error OrderNotExpired();
     error ArrayLengthMismatch();
     error MaxPriceLevelsReached();
     /// @notice FOK could not fill entirely, or IOC matched nothing.
@@ -313,11 +315,12 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         return bytes32(++nonce);
     }
 
-    /// @dev Index a newly resting order under its (participant, expiry, price) bucket.
-    ///      Mirrors the removal in {_removeRestingOrder}, and keeps the index private here.
+    /// @dev Index a newly resting order under its participant/expiry and price buckets.
+    ///      Mirrors the removal in {_removeRestingOrder}.
     function _indexRestingOrder(address _participant, uint256 _expirationAt, uint256 _price, bytes32 _orderId)
         internal
     {
+        participantExpirationAtOrderIdsIndex[_participant][_expirationAt].add(_orderId);
         participantExpirationAtPriceOrderIdsIndex[_participant][_expirationAt][_price].add(_orderId);
     }
 
@@ -353,29 +356,6 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         }
         if (aggregate.buyQty == 0 && aggregate.sellQty == 0) {
             participantOrderExpirationAts[_participant].remove(_expirationAt);
-        }
-    }
-
-    function _clearOrderAggregateCache(address _participant) internal {
-        EnumerableSet.UintSet storage expirationAts = participantOrderExpirationAts[_participant];
-        while (expirationAts.length() > 0) {
-            uint256 expirationAt = expirationAts.at(expirationAts.length() - 1);
-            delete participantExpirationAtOrderAggregate[_participant][expirationAt];
-            expirationAts.remove(expirationAt);
-        }
-    }
-
-    /// @dev Rebuild from the canonical order index, including physically resting expired orders.
-    function _rebuildOrderAggregateCache(address _participant) internal {
-        _clearOrderAggregateCache(_participant);
-
-        EnumerableSet.Bytes32Set storage ids = participantOrderIdsIndex[_participant];
-        uint256 len = ids.length();
-        for (uint256 i = 0; i < len; i++) {
-            Order storage order = orders[ids.at(i)];
-            if (order.quantity != 0) {
-                _increaseOrderAggregate(_participant, order.expirationAt, order.price, order.quantity);
-            }
         }
     }
 
@@ -670,6 +650,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         StructuredLinkedList.List storage orderIndexId = _expirationAtPriceOrderIds(expirationAt, price, isBuy);
         _removeOrderFromQueue(orderIndexId, orderId, expirationAt, price, isBuy);
         participantOrderIdsIndex[participant].remove(orderId);
+        participantExpirationAtOrderIdsIndex[participant][expirationAt].remove(orderId);
         participantExpirationAtPriceOrderIdsIndex[participant][expirationAt][price].remove(orderId);
         _decreaseOrderAggregate(participant, expirationAt, price, M.abs(orders[orderId].quantity), isBuy);
         delete orders[orderId];
@@ -833,6 +814,21 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
             return (block.timestamp - firstFutureExpirationDate) / expirationIntervalSeconds() + 1;
         }
         return 0;
+    }
+
+    function _activeExpirationAt(uint256 _currentIndex, uint256 _offset) internal view returns (uint256) {
+        return firstFutureExpirationDate + expirationIntervalSeconds() * (_currentIndex + _offset);
+    }
+
+    function _isActiveExpirationAt(uint256 _expirationAt) internal view returns (bool) {
+        if (_expirationAt <= block.timestamp || _expirationAt < firstFutureExpirationDate) return false;
+
+        uint256 interval = expirationIntervalSeconds();
+        uint256 elapsedFromFirst = _expirationAt - firstFutureExpirationDate;
+        if (elapsedFromFirst % interval != 0) return false;
+
+        uint256 currentIndex = _getCurrentExpirationAtIndex();
+        return elapsedFromFirst <= (futureExpirationDatesCount - 1 + currentIndex) * interval;
     }
 
     function expirationIntervalSeconds() internal pure returns (uint256) {
