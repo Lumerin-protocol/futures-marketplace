@@ -196,8 +196,13 @@ async function benchmarkViews() {
     ["getMarketPrice()", "getMarketPrice"],
     ["getNetPositionDelta(address)", "getNetPositionDelta", [buyer.account.address]],
     ["getOrder(bytes32)", "getOrder", [sellerOrder]],
+    ["getOrderAggregate(address)", "getOrderAggregate", [seller.account.address]],
+    [
+      "getOrderAggregateAtExpiration(address,uint256)",
+      "getOrderAggregateAtExpiration",
+      [seller.account.address, firstExpiration],
+    ],
     ["getOrderBookPrices(uint256,uint256)", "getOrderBookPrices", [firstExpiration, 10n]],
-    ["getOrderValues(address)", "getOrderValues", [seller.account.address]],
     ["getPendingFunding(address)", "getPendingFunding", [buyer.account.address]],
     [
       "getQuantityAtPrice(uint256,uint256,bool)",
@@ -274,14 +279,6 @@ async function benchmarkScaledRiskViews() {
       [seller.account.address],
       scenario,
     );
-    await recordView(
-      pc,
-      futures,
-      "getOrderValues(address)",
-      "getOrderValues",
-      [seller.account.address],
-      scenario,
-    );
   }
 }
 
@@ -298,6 +295,25 @@ async function benchmarkOrderPlacement() {
       "resting order",
       futures.write.createOrder([price, data.config.deliveryDates[0], -1n, TimeInForce.GTC], {
         account: seller.account,
+      }),
+    );
+  }
+  {
+    const data = await fresh();
+    const { futures } = data.contracts;
+    const { owner, seller, pc } = data.accounts;
+    const price = await futures.read.getMarketPrice();
+    const expirationAt = data.config.deliveryDates[0];
+    await fund(data, [seller]);
+    await futures.write.createOrder([price, expirationAt, -1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
+    await recordTransaction(
+      pc,
+      "rebuildOrderAggregateCache(address[])",
+      "one user with one resting order",
+      futures.write.rebuildOrderAggregateCache([[seller.account.address]], {
+        account: owner.account,
       }),
     );
   }
@@ -746,7 +762,7 @@ describe("Futures gas benchmark", () => {
 
     const snapshot = gas.snapshot();
     const coverage = assertAbiFunctionCoverage(FuturesAbi, snapshot, exclusions);
-    assert.equal(coverage.covered.length, 68);
+    assert.equal(coverage.covered.length, 70);
     assert.deepEqual(coverage.excluded, [
       "initialize(address,uint8,uint256,uint8,uint8,uint256)",
       "proxiableUUID()",

@@ -23,6 +23,7 @@
     "deploy:futures": "hardhat run scripts/deploy-futures.ts",
     "deploy:local": "hardhat run scripts/deploy-local.ts",
     "upgrade:futures": "hardhat run scripts/update-futures.ts",
+    "rebuild:order-cache": "hardhat run scripts/rebuild-order-aggregate-cache.ts",
     "futures:close": "hardhat run scripts/futures-close.ts",
     "futures:reset-state": "hardhat run scripts/futures-reset-state.ts",
     "set:btc-price": "hardhat run scripts/set-bitcoin-price.ts"

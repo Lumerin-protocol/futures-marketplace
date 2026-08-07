@@ -116,6 +116,14 @@ abstract contract FuturesAdmin is FuturesBase {
 
     // ── Escape hatch ──────────────────────────────────────────────────────────
 
+    /// @notice Rebuild per-expiration resting-order aggregates from canonical order indexes.
+    /// @dev Idempotent and includes expired orders that have not yet been physically removed.
+    function rebuildOrderAggregateCache(address[] calldata _users) external onlyOwner {
+        for (uint256 i = 0; i < _users.length; i++) {
+            _rebuildOrderAggregateCache(_users[i]);
+        }
+    }
+
     /// @notice Admin escape hatch: clear orders + aggregate positions for the given participants.
     /// @dev Does not walk legacy lots for economics — zeros `netDelta` / `netEntryValue` /
     ///      `activeExpirationAts` directly. Also purges dead lot indexes and order queues.
