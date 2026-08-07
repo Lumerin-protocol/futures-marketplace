@@ -123,6 +123,16 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, MulticallU
     /// @dev Dead — former vault. Moved to immutable.
     address private __gap15;
 
+    struct OrderAggregate {
+        uint256 buyQty;
+        uint256 sellQty;
+        uint256 buyValue;
+        uint256 sellValue;
+    }
+
+    mapping(address => mapping(uint256 => OrderAggregate)) internal participantExpirationAtOrderAggregate;
+    mapping(address => EnumerableSet.UintSet) internal participantOrderExpirationAts;
+
     // immutable
     ICollateralVault public immutable vault;
     uint8 internal immutable collateralDecimals;
@@ -312,6 +322,64 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, MulticallU
         participantExpirationAtPriceOrderIdsIndex[_participant][_expirationAt][_price].add(_orderId);
     }
 
+    function _increaseOrderAggregate(address _participant, uint256 _expirationAt, uint256 _price, int256 _quantity)
+        internal
+    {
+        uint256 absQty = M.abs(_quantity);
+        OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_participant][_expirationAt];
+        if (_quantity > 0) {
+            aggregate.buyQty += absQty;
+            aggregate.buyValue += _price * absQty;
+        } else {
+            aggregate.sellQty += absQty;
+            aggregate.sellValue += _price * absQty;
+        }
+        participantOrderExpirationAts[_participant].add(_expirationAt);
+    }
+
+    function _decreaseOrderAggregate(
+        address _participant,
+        uint256 _expirationAt,
+        uint256 _price,
+        uint256 _absQty,
+        bool _isBuy
+    ) internal {
+        OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_participant][_expirationAt];
+        if (_isBuy) {
+            aggregate.buyQty -= _absQty;
+            aggregate.buyValue -= _price * _absQty;
+        } else {
+            aggregate.sellQty -= _absQty;
+            aggregate.sellValue -= _price * _absQty;
+        }
+        if (aggregate.buyQty == 0 && aggregate.sellQty == 0) {
+            participantOrderExpirationAts[_participant].remove(_expirationAt);
+        }
+    }
+
+    function _clearOrderAggregateCache(address _participant) internal {
+        EnumerableSet.UintSet storage expirationAts = participantOrderExpirationAts[_participant];
+        while (expirationAts.length() > 0) {
+            uint256 expirationAt = expirationAts.at(expirationAts.length() - 1);
+            delete participantExpirationAtOrderAggregate[_participant][expirationAt];
+            expirationAts.remove(expirationAt);
+        }
+    }
+
+    /// @dev Rebuild from the canonical order index, including physically resting expired orders.
+    function _rebuildOrderAggregateCache(address _participant) internal {
+        _clearOrderAggregateCache(_participant);
+
+        EnumerableSet.Bytes32Set storage ids = participantOrderIdsIndex[_participant];
+        uint256 len = ids.length();
+        for (uint256 i = 0; i < len; i++) {
+            Order storage order = orders[ids.at(i)];
+            if (order.quantity != 0) {
+                _increaseOrderAggregate(_participant, order.expirationAt, order.price, order.quantity);
+            }
+        }
+    }
+
     /// @dev Absolute qty of resting orders that reduce `_net` at `_expirationAt`.
     function _restingReduceAbs(address _user, uint256 _expirationAt, int256 _net)
         internal
@@ -319,15 +387,8 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, MulticallU
         returns (uint256 total)
     {
         if (_net == 0) return 0;
-        EnumerableSet.Bytes32Set storage ids = participantOrderIdsIndex[_user];
-        uint256 len = ids.length();
-        for (uint256 i = 0; i < len; i++) {
-            Order memory order = orders[ids.at(i)];
-            if (order.expirationAt != _expirationAt || order.quantity == 0) continue;
-            if (_net > 0 ? order.quantity < 0 : order.quantity > 0) {
-                total += M.abs(order.quantity);
-            }
-        }
+        OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_user][_expirationAt];
+        return _net > 0 ? aggregate.sellQty : aggregate.buyQty;
     }
 
     /// @notice Walk opposite sorted book from best price toward the taker limit; fill at maker price.
@@ -405,6 +466,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, MulticallU
         } else {
             uint256 reducedMakerAbs = makerAbs - cancelAmt;
             int256 newMakerQty = M.toSigned(isBuy, reducedMakerAbs);
+            _decreaseOrderAggregate(_taker, _expirationAt, _makerOrder.price, cancelAmt, isBuy);
             _makerOrder.quantity = newMakerQty;
             emit OrderUpdated(_makerOrderId, _taker, newMakerQty);
         }
@@ -446,6 +508,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, MulticallU
         if (leftoverMakerAbs == 0) {
             _removeRestingOrder(_makerOrderId, _expirationAt, makerPrice, makerParticipant, isBuy);
         } else {
+            _decreaseOrderAggregate(makerParticipant, _expirationAt, makerPrice, fill, isBuy);
             _makerOrder.quantity = newMakerQty;
         }
         emit OrderUpdated(_makerOrderId, makerParticipant, newMakerQty);
@@ -609,6 +672,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, MulticallU
         _removeOrderFromQueue(orderIndexId, orderId, expirationAt, price, isBuy);
         participantOrderIdsIndex[participant].remove(orderId);
         participantExpirationAtPriceOrderIdsIndex[participant][expirationAt][price].remove(orderId);
+        _decreaseOrderAggregate(participant, expirationAt, price, M.abs(orders[orderId].quantity), isBuy);
         delete orders[orderId];
     }
 

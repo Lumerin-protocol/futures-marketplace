@@ -22,7 +22,7 @@ contract Futures is FuturesAdmin {
     /// @dev Lives here rather than in {FuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `Futures.sol` to require a bump.
-    string public constant VERSION = "4.0.0";
+    string public constant VERSION = "4.1.0";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) FuturesBase(_vault) { }
@@ -167,6 +167,7 @@ contract Futures is FuturesAdmin {
                 _addOrderToQueue(orderQueue, orderId, _expirationAt, _price, _quantity > 0);
                 participantOrders.add(orderId);
                 _indexRestingOrder(_participant, _expirationAt, _price, orderId);
+                _increaseOrderAggregate(_participant, _expirationAt, _price, remainingQty);
             }
         } else {
             // IOC (or FOK after a full fill): never rest; close the taker order id at 0.
@@ -205,6 +206,9 @@ contract Futures is FuturesAdmin {
         if (_newQuantity == 0 || (_newQuantity > 0) != (oldQty > 0)) revert InvalidReduceQuantity();
         if (M.abs(_newQuantity) >= M.abs(oldQty)) revert InvalidReduceQuantity();
 
+        _decreaseOrderAggregate(
+            order.participant, order.expirationAt, order.price, M.abs(oldQty) - M.abs(_newQuantity), oldQty > 0
+        );
         order.quantity = _newQuantity;
         emit OrderUpdated(_orderId, order.participant, _newQuantity);
     }
@@ -398,6 +402,30 @@ contract Futures is FuturesAdmin {
         return participantOrderIdsIndex[_user].values();
     }
 
+    function getOrderAggregate(address _user) external view returns (OrderAggregate memory aggregate_) {
+        EnumerableSet.UintSet storage expirationAts = participantOrderExpirationAts[_user];
+        uint256 len = expirationAts.length();
+        for (uint256 i = 0; i < len; i++) {
+            uint256 expirationAt = expirationAts.at(i);
+            if (expirationAt < block.timestamp) continue;
+
+            OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_user][expirationAt];
+            aggregate_.buyQty += aggregate.buyQty;
+            aggregate_.sellQty += aggregate.sellQty;
+            aggregate_.buyValue += aggregate.buyValue;
+            aggregate_.sellValue += aggregate.sellValue;
+        }
+    }
+
+    /// @notice Raw per-expiration cache, including orders awaiting cleanup after expiration.
+    function getOrderAggregateAtExpiration(address _user, uint256 _expirationAt)
+        external
+        view
+        returns (OrderAggregate memory)
+    {
+        return participantExpirationAtOrderAggregate[_user][_expirationAt];
+    }
+
     function getUserPosition(address _user, uint256 _expirationAt) external view returns (Position memory) {
         return Position({
             netQuantity: participantExpirationAtNetDelta[_user][_expirationAt],
@@ -493,15 +521,8 @@ contract Futures is FuturesAdmin {
 
     /// @notice Total resting order notional per side at the orders' own limit prices
     ///         (token decimals).
-    /// @dev Book state, not a margin figure. Exposed for off-chain consumers that need to
-    ///      re-evaluate fill loss at a hypothetical spot: `RiskView` reports the loss only
-    ///      at the current mark, and the clamp makes it non-invertible once it reads zero.
-    function getOrderValues(address _participant) external view returns (uint256 buyValue, uint256 sellValue) {
-        (,, buyValue, sellValue,,) = _restingAggregate(_participant);
-    }
-
-    /// @dev One pass over the participant's resting book. Expired orders are skipped as
-    ///      they cannot fill; each order is marked at its own expiry's settlement price,
+    /// @dev One pass over the participant's cached order expirations. Expired orders are
+    ///      skipped as they cannot fill; each aggregate is marked at its expiry's settlement price,
     ///      falling back to the live index, matching `getRiskView`'s position loop.
     ///
     ///      The fill-loss clamp is applied per side across all expiries rather than per
@@ -520,17 +541,18 @@ contract Futures is FuturesAdmin {
             uint256 sellMark
         )
     {
-        EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[_participant];
-        uint256 len = _orders.length();
+        EnumerableSet.UintSet storage expirationAts = participantOrderExpirationAts[_participant];
+        uint256 len = expirationAts.length();
         if (len == 0) return (0, 0, 0, 0, 0, 0);
 
         uint256 livePrice = 0;
         bool livePriceLoaded = false;
         for (uint256 i = 0; i < len; i++) {
-            Order memory order = orders[_orders.at(i)];
-            if (order.expirationAt < block.timestamp || order.quantity == 0) continue;
+            uint256 expirationAt = expirationAts.at(i);
+            if (expirationAt < block.timestamp) continue;
 
-            uint256 markPrice = settlementPrice[order.expirationAt];
+            OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_participant][expirationAt];
+            uint256 markPrice = settlementPrice[expirationAt];
             if (markPrice == 0) {
                 if (!livePriceLoaded) {
                     livePrice = getMarketPrice();
@@ -539,16 +561,12 @@ contract Futures is FuturesAdmin {
                 markPrice = livePrice;
             }
 
-            uint256 absQty = M.abs(order.quantity);
-            if (order.quantity > 0) {
-                buyQty += absQty;
-                buyValue += order.price * absQty;
-                buyMark += markPrice * absQty;
-            } else {
-                sellQty += absQty;
-                sellValue += order.price * absQty;
-                sellMark += markPrice * absQty;
-            }
+            buyQty += aggregate.buyQty;
+            sellQty += aggregate.sellQty;
+            buyValue += aggregate.buyValue;
+            sellValue += aggregate.sellValue;
+            buyMark += markPrice * aggregate.buyQty;
+            sellMark += markPrice * aggregate.sellQty;
         }
     }
 

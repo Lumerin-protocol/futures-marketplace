@@ -1104,6 +1104,93 @@
   {
     "inputs": [
       {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      }
+    ],
+    "name": "getOrderAggregate",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "buyQty",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "sellQty",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "buyValue",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "sellValue",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct FuturesBase.OrderAggregate",
+        "name": "aggregate_",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_expirationAt",
+        "type": "uint256"
+      }
+    ],
+    "name": "getOrderAggregateAtExpiration",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "buyQty",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "sellQty",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "buyValue",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "sellValue",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct FuturesBase.OrderAggregate",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "uint256",
         "name": "_expirationAt",
         "type": "uint256"
@@ -1125,30 +1212,6 @@
         "internalType": "uint256[]",
         "name": "asks",
         "type": "uint256[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_participant",
-        "type": "address"
-      }
-    ],
-    "name": "getOrderValues",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "buyValue",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "sellValue",
-        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -1618,6 +1681,19 @@
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address[]",
+        "name": "_users",
+        "type": "address[]"
+      }
+    ],
+    "name": "rebuildOrderAggregateCache",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {

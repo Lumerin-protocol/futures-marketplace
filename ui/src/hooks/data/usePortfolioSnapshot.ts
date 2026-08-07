@@ -22,10 +22,8 @@ type RiskView = { pendingFunding: bigint; buyOrderDelta: bigint; sellOrderDelta:
 /// two waves. Wagmi batches each wave through multicall.
 ///
 /// Resting orders come from two calls per venue rather than one. `getRiskView`
-/// carries the per-side order delta but reports fill loss only at the current
-/// mark, and the clamp makes that non-invertible once it reads zero, so the
-/// per-side limit-price totals come from `getOrderValues` and the model derives
-/// fill loss at whatever price it is evaluating.
+/// carries the per-side order delta while `getOrderAggregate` supplies the
+/// unclamped limit-price totals needed to evaluate fill loss at arbitrary prices.
 ///
 /// The snapshot stays `undefined` until every read has succeeded — a partial
 /// one would silently understate the margin requirement.
@@ -50,7 +48,7 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
       {
         address: futuresAddress,
         abi: withErrors(FuturesAbi),
-        functionName: "getOrderValues",
+        functionName: "getOrderAggregate",
         args: [address as `0x${string}`],
       },
       {
@@ -81,7 +79,7 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
       {
         address: perpsAddress,
         abi: withErrors(HashPowerPerpsDEXAbi),
-        functionName: "getOrderValues",
+        functionName: "getOrderAggregate",
         args: [address as `0x${string}`],
       },
       { address: perpsAddress, abi: withErrors(HashPowerPerpsDEXAbi), functionName: "QUANTITY_DECIMALS" },
@@ -173,20 +171,26 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
   };
 }
 
-/// Pair a venue's `getRiskView` deltas with its `getOrderValues` limit-price totals.
-function restingOrders(risk: RiskView, values: readonly [bigint, bigint]): RestingOrders {
+/// Pair a venue's risk deltas with its cached order aggregate.
+function restingOrders(
+  risk: RiskView,
+  aggregate: { buyValue: bigint; sellValue: bigint },
+): RestingOrders {
   return {
     buyDelta: risk.buyOrderDelta,
     sellDelta: risk.sellOrderDelta,
-    buyValue: values[0],
-    sellValue: values[1],
+    buyValue: aggregate.buyValue,
+    sellValue: aggregate.sellValue,
   };
 }
 
 function readOrders(results: ReadResult[] | undefined): RestingOrders | undefined {
   const values = allSucceeded(results, 3);
   if (!values) return undefined;
-  return restingOrders(values[0] as RiskView, values[1] as readonly [bigint, bigint]);
+  return restingOrders(
+    values[0] as RiskView,
+    values[1] as { buyValue: bigint; sellValue: bigint },
+  );
 }
 
 function readPerps(
@@ -214,7 +218,10 @@ function readPerps(
     perp: {
       netQty: position.netQuantity,
       entryPrice: position.aggregatedEntryPrice,
-      orders: restingOrders(risk, values[2] as readonly [bigint, bigint]),
+      orders: restingOrders(
+        risk,
+        values[2] as { buyValue: bigint; sellValue: bigint },
+      ),
       // The engine only counts funding the user owes.
       fundingOwed: risk.pendingFunding > 0n ? risk.pendingFunding : 0n,
     },
