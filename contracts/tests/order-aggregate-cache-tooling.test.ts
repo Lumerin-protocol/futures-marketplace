@@ -25,10 +25,13 @@ describe("order aggregate cache tooling", () => {
       { participant: alice, price: 11n, quantity: 4n, expirationAt: 2n },
     ];
 
-    assert.deepEqual(aggregateOrdersByExpiration(orders), new Map([
-      [1n, { buyQty: 3n, sellQty: 2n, buyValue: 15n, sellValue: 14n }],
-      [2n, { buyQty: 4n, sellQty: 0n, buyValue: 44n, sellValue: 0n }],
-    ]));
+    assert.deepEqual(
+      aggregateOrdersByExpiration(orders),
+      new Map([
+        [1n, { buyQty: 3n, sellQty: 2n, buyValue: 15n, sellValue: 14n }],
+        [2n, { buyQty: 4n, sellQty: 0n, buyValue: 44n, sellValue: 0n }],
+      ]),
+    );
   });
 
   it("paginates a pinned indexer snapshot and deterministically deduplicates users", async () => {
@@ -114,7 +117,7 @@ describe("order aggregate cache tooling", () => {
     const pc = {
       getLogs: async ({ fromBlock, toBlock }: { fromBlock: bigint; toBlock: bigint }) => {
         ranges.push([fromBlock, toBlock]);
-        if (fromBlock === 1n && toBlock === 8n) throw new Error("range too large");
+        if (fromBlock === 3n && toBlock === 10n) throw new Error("range too large");
         const participant = fromBlock < 5n ? bob : alice;
         return [{ args: { participant } }, { args: { participant } }];
       },
@@ -126,7 +129,11 @@ describe("order aggregate cache tooling", () => {
       { startBlock: 1n, endBlock: 10n, initialChunkSize: 8n },
     );
 
-    assert.deepEqual(ranges, [[1n, 8n], [1n, 4n], [5n, 10n]]);
+    assert.deepEqual(ranges, [
+      [3n, 10n],
+      [7n, 10n],
+      [1n, 6n],
+    ]);
     assert.deepEqual(users, [alice, bob]);
   });
 

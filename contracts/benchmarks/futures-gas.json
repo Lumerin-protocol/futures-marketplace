@@ -2,7 +2,7 @@
   "measurements": [
     {
       "function": "CONTRACT_SIZE_HPS_DAY()",
-      "gas": "27061",
+      "gas": "27083",
       "id": "CONTRACT_SIZE_HPS_DAY()::representative",
       "kind": "view",
       "scenario": "representative"
@@ -23,7 +23,7 @@
     },
     {
       "function": "MAX_ORDERS_PER_PARTICIPANT()",
-      "gas": "27083",
+      "gas": "27105",
       "id": "MAX_ORDERS_PER_PARTICIPANT()::representative",
       "kind": "view",
       "scenario": "representative"
@@ -37,14 +37,14 @@
     },
     {
       "function": "UPGRADE_INTERFACE_VERSION()",
-      "gas": "27458",
+      "gas": "27455",
       "id": "UPGRADE_INTERFACE_VERSION()::representative",
       "kind": "view",
       "scenario": "representative"
     },
     {
       "function": "VERSION()",
-      "gas": "27896",
+      "gas": "27893",
       "id": "VERSION()::representative",
       "kind": "view",
       "scenario": "representative"
@@ -97,6 +97,13 @@
       "id": "createOrders((uint256,uint256,int256,uint8)[])::batch-5",
       "kind": "transaction",
       "scenario": "batch-5"
+    },
+    {
+      "function": "createOrders((uint256,uint256,int256,uint8)[])",
+      "gas": "958613",
+      "id": "createOrders((uint256,uint256,int256,uint8)[])::two resting orders",
+      "kind": "transaction",
+      "scenario": "two resting orders"
     },
     {
       "function": "expirationIntervalDays()",
@@ -198,7 +205,7 @@
     },
     {
       "function": "getQuantityAtPrice(uint256,uint256,bool)",
-      "gas": "42392",
+      "gas": "42414",
       "id": "getQuantityAtPrice(uint256,uint256,bool)::representative",
       "kind": "view",
       "scenario": "representative"
@@ -358,13 +365,6 @@
       "scenario": "representative"
     },
     {
-      "function": "multicall(bytes[])",
-      "gas": "993165",
-      "id": "multicall(bytes[])::two resting orders",
-      "kind": "transaction",
-      "scenario": "two resting orders"
-    },
-    {
       "function": "owner()",
       "gas": "29242",
       "id": "owner()::representative",
@@ -408,10 +408,17 @@
     },
     {
       "function": "removeOutdatedOrder(bytes32)",
-      "gas": "118628",
+      "gas": "112313",
       "id": "removeOutdatedOrder(bytes32)::permissionless expired order",
       "kind": "transaction",
       "scenario": "permissionless expired order"
+    },
+    {
+      "function": "removeOutdatedOrders(bytes32[])",
+      "gas": "120009",
+      "id": "removeOutdatedOrders(bytes32[])::permissionless expired order batch",
+      "kind": "transaction",
+      "scenario": "permissionless expired order batch"
     },
     {
       "function": "renounceOwnership()",
@@ -555,7 +562,7 @@
     },
     {
       "function": "upgradeToAndCall(address,bytes)",
-      "gas": "37947",
+      "gas": "37958",
       "id": "upgradeToAndCall(address,bytes)::new compatible implementation",
       "kind": "transaction",
       "scenario": "new compatible implementation"

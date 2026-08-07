@@ -1613,25 +1613,6 @@ export const FuturesAbi = [
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "bytes[]",
-        "name": "data",
-        "type": "bytes[]"
-      }
-    ],
-    "name": "multicall",
-    "outputs": [
-      {
-        "internalType": "bytes[]",
-        "name": "results",
-        "type": "bytes[]"
-      }
-    ],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
     "inputs": [],
     "name": "owner",
     "outputs": [
@@ -1743,6 +1724,25 @@ export const FuturesAbi = [
     ],
     "name": "removeOutdatedOrder",
     "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32[]",
+        "name": "_orderIds",
+        "type": "bytes32[]"
+      }
+    ],
+    "name": "removeOutdatedOrders",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "removed",
+        "type": "uint256"
+      }
+    ],
     "stateMutability": "nonpayable",
     "type": "function"
   },

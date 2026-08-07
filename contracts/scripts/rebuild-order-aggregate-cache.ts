@@ -1,6 +1,6 @@
 import { OperationType } from "@safe-global/types-kit";
 import hre from "hardhat";
-import { encodeFunctionData, getAddress, type Address } from "viem";
+import { encodeFunctionData, getAddress, type PublicClient } from "viem";
 import { simulateContract, writeContract } from "viem/actions";
 import { readOptionalAddress, readOptionalBigInt, requireAddress } from "../lib/env.ts";
 import { addrUrl, txUrl } from "../lib/explorer.ts";
@@ -12,13 +12,33 @@ import {
   discoverOrderCacheCandidates,
   filterUsersWithPhysicalOrders,
   ORDER_CACHE_ABI,
-  parseAddressList,
-  readDiscoverySource,
-  readNonNegativeBigInt,
   readPositiveInteger,
-  type UsedDiscoverySource,
   verifyOrderAggregateCache,
 } from "./lib/order-aggregate-cache.ts";
+
+const DAY = 24n * 60n * 60n;
+const DEFAULT_EVENT_LOOKBACK_SECONDS = 180n * DAY;
+const DEFAULT_EVENT_CHUNK_SIZE = 100_000n;
+const REBUILD_CONFIRMATIONS = 5;
+
+async function resolveLookbackStartBlock(
+  pc: PublicClient,
+  latestBlock: bigint,
+  lookbackSeconds: bigint,
+): Promise<bigint> {
+  const latest = await pc.getBlock({ blockNumber: latestBlock });
+  const targetTimestamp =
+    latest.timestamp > lookbackSeconds ? latest.timestamp - lookbackSeconds : 0n;
+  let low = 0n;
+  let high = latestBlock;
+  while (low < high) {
+    const mid = (low + high) / 2n;
+    const block = await pc.getBlock({ blockNumber: mid });
+    if (block.timestamp < targetTimestamp) low = mid + 1n;
+    else high = mid;
+  }
+  return low;
+}
 
 async function main(): Promise<void> {
   logTitle("Rebuild Futures Order Aggregate Cache");
@@ -31,51 +51,31 @@ async function main(): Promise<void> {
   const futures = await viem.getContractAt("Futures", futuresAddress);
   const owner = getAddress(await futures.read.owner());
 
-  const source = readDiscoverySource();
   const readConcurrency = readPositiveInteger("READ_CONCURRENCY", 25);
   const writeBatchSize = readPositiveInteger("ORDER_CACHE_WRITE_BATCH_SIZE", 50);
   const latestBlock = await pc.getBlockNumber();
-  const suppliedUsers = parseAddressList(process.env.FUTURES_ORDER_CACHE_USERS);
   const dryRun = process.env.DRY_RUN === "true";
   const verifyOnly = process.env.VERIFY_ONLY === "true";
 
-  let candidates: Address[];
-  let usedSource: UsedDiscoverySource;
-  let discoveryDetail = "";
-  if (suppliedUsers) {
-    candidates = suppliedUsers;
-    usedSource = "supplied";
-    discoveryDetail = "FUTURES_ORDER_CACHE_USERS (declared complete)";
-  } else {
-    const result = await discoverOrderCacheCandidates(pc, futuresAddress, {
-      source,
-      indexerUrl: process.env.FUTURES_INDEXER_URL ?? process.env.SUBGRAPH_URL,
-      latestBlock,
-      startBlock:
-        readOptionalBigInt("FUTURES_START_BLOCK") ?? readOptionalBigInt("START_BLOCK"),
-      endBlock: readOptionalBigInt("END_BLOCK"),
-      eventChunkSize:
-        readOptionalBigInt("EVENT_SCAN_CHUNK_SIZE") ??
-        readOptionalBigInt("BLOCK_CHUNK_SIZE") ??
-        5_000n,
-      maxIndexerLagBlocks: readNonNegativeBigInt("MAX_INDEXER_LAG_BLOCKS", 50n),
-      etherscanApiKey: process.env.ETHERSCAN_API_KEY,
-      onIndexerFallback: (error) => {
-        console.warn(`Indexer discovery failed: ${(error as Error).message}`);
-        console.warn("Falling back to OrderCreated event scan");
-      },
-      onEventProgress: (from, to, count) =>
-        logStep(`scan ${from}-${to}`, `${count} participant(s)`),
-      onEventRetry: (from, to, nextChunk) =>
-        console.warn(`Log query ${from}-${to} failed; retrying with ${nextChunk}-block chunks`),
-    });
-    candidates = result.addresses;
-    usedSource = result.source;
-    discoveryDetail =
-      result.source === "indexer"
-        ? `snapshot block ${result.indexedBlock}`
-        : `blocks ${result.startBlock}-${result.endBlock}`;
-  }
+  const lookbackSeconds = process.env.EVENT_LOOKBACK_DAYS
+    ? BigInt(readPositiveInteger("EVENT_LOOKBACK_DAYS", 0)) * DAY
+    : DEFAULT_EVENT_LOOKBACK_SECONDS;
+  const startBlock = await resolveLookbackStartBlock(pc, latestBlock, lookbackSeconds);
+  const discovery = await discoverOrderCacheCandidates(pc, futuresAddress, {
+    source: "events",
+    latestBlock,
+    startBlock,
+    endBlock: latestBlock,
+    eventChunkSize:
+      readOptionalBigInt("EVENT_SCAN_CHUNK_SIZE") ??
+      readOptionalBigInt("BLOCK_CHUNK_SIZE") ??
+      DEFAULT_EVENT_CHUNK_SIZE,
+    maxIndexerLagBlocks: 0n,
+    onEventProgress: (from, to, count) => logStep(`scan ${from}-${to}`, `${count} participant(s)`),
+    onEventRetry: (from, to, nextChunk) =>
+      console.warn(`Log query ${from}-${to} failed; retrying with ${nextChunk}-block chunks`),
+  });
+  const candidates = discovery.addresses;
 
   // This is intentionally the only "active" filter. Do not compare expiration
   // timestamps: expired orders remain migration-relevant until physically removed.
@@ -91,7 +91,7 @@ async function main(): Promise<void> {
     Version: await futures.read.VERSION().catch(() => "unknown"),
     Owner: addrUrl(pc, owner),
     Caller: safeOwnerAddress ?? deployer.account.address,
-    Discovery: `${usedSource} (${discoveryDetail})`,
+    Discovery: `OrderCreated events blocks ${startBlock}-${latestBlock}`,
     "Latest block": latestBlock,
     "Discovered participants": candidates.length,
     "Participants with physical orders": users.length,
@@ -180,7 +180,10 @@ async function main(): Promise<void> {
       account: deployer.account,
     });
     const hash = await writeContract(deployer, simulation.request);
-    const receipt = await pc.waitForTransactionReceipt({ hash });
+    const receipt = await pc.waitForTransactionReceipt({
+      hash,
+      confirmations: REBUILD_CONFIRMATIONS,
+    });
     if (receipt.status !== "success") {
       throw new Error(`Rebuild transaction reverted: ${txUrl(pc, receipt.transactionHash)}`);
     }

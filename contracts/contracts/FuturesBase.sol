@@ -3,7 +3,6 @@ pragma solidity ^0.8.20;
 
 import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import { MulticallUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/MulticallUpgradeable.sol";
 import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
@@ -18,7 +17,7 @@ import { MathLib as M } from "./libs/MathLib.sol";
 /// @title FuturesBase — storage layout and internal helpers for {Futures}
 /// @dev Owns the full UUPS storage layout (declaration order is part of the layout — do not reorder).
 ///      {Futures} declares no state of its own; append new storage here, at the end.
-abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, MulticallUpgradeable, Versionable {
+abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionable {
     using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableSet for EnumerableSet.Bytes32Set;
     using StructuredLinkedList for StructuredLinkedList.List;

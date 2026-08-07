@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
-import { encodeFunctionData, parseEventLogs, parseUnits } from "viem";
+import { parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { TimeInForce } from "./timeInForce.ts";
 
@@ -175,7 +175,7 @@ describe("Futures.updateOrders (cancel + reduce + create batch)", () => {
     );
   });
 
-  it("is cheaper than multicall(cancelOrder × N + createOrders)", async () => {
+  it("is cheaper than separate cancelOrder and createOrders transactions", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller, buyer, pc } = accounts;
@@ -203,30 +203,18 @@ describe("Futures.updateOrders (cancel + reduce + create batch)", () => {
     await futures.write.createOrders([buyerResting], { account: buyer.account });
     const buyerIds = await futures.read.getUserOrders([buyer.account.address]);
 
-    const baselineCalls: `0x${string}`[] = [];
+    let baselineGas = 0n;
     for (const id of sellerIds) {
-      baselineCalls.push(
-        encodeFunctionData({
-          abi: futures.abi,
-          functionName: "cancelOrder",
-          args: [id],
-        }),
-      );
+      const tx = await futures.write.cancelOrder([id], { account: seller.account });
+      baselineGas += (await pc.waitForTransactionReceipt({ hash: tx })).gasUsed;
     }
     const sellerNext: OrderIntent[] = [
       { price: mp + 4n * step, expirationAt: dd, quantity: -1n, timeInForce: TimeInForce.GTC },
       { price: mp + 5n * step, expirationAt: dd, quantity: -1n, timeInForce: TimeInForce.GTC },
       { price: mp + 6n * step, expirationAt: dd, quantity: -1n, timeInForce: TimeInForce.GTC },
     ];
-    baselineCalls.push(
-      encodeFunctionData({
-        abi: futures.abi,
-        functionName: "createOrders",
-        args: [sellerNext],
-      }),
-    );
-    const baselineTx = await futures.write.multicall([baselineCalls], { account: seller.account });
-    const baselineGas = (await pc.waitForTransactionReceipt({ hash: baselineTx })).gasUsed;
+    const sellerCreateTx = await futures.write.createOrders([sellerNext], { account: seller.account });
+    baselineGas += (await pc.waitForTransactionReceipt({ hash: sellerCreateTx })).gasUsed;
 
     const buyerNext: OrderIntent[] = [
       { price: mp - 4n * step, expirationAt: dd, quantity: 1n, timeInForce: TimeInForce.GTC },
@@ -240,7 +228,7 @@ describe("Futures.updateOrders (cancel + reduce + create batch)", () => {
 
     assert.ok(
       batchGas < baselineGas,
-      `updateOrders (${batchGas}) should be cheaper than multicall cancel+createOrders (${baselineGas})`,
+      `updateOrders (${batchGas}) should be cheaper than separate cancel+create transactions (${baselineGas})`,
     );
   });
 });
