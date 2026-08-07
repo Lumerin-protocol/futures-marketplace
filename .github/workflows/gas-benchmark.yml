@@ -33,7 +33,7 @@ jobs:
           fetch-depth: 0
 
       - name: Benchmark and report gas deltas
-        uses: lsheva/evm-gas-benchmark@v1
+        uses: lsheva/evm-gas-benchmark@v1.0.1
         with:
           benchmark-command: cd contracts && pnpm install --frozen-lockfile && pnpm test:gas
           baseline-path: contracts/benchmarks/futures-gas.json

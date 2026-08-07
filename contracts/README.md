@@ -14,4 +14,4 @@ also fails if a callable Futures ABI function is missing a measurement of the
 correct kind.
 
 The benchmark helper and reusable GitHub Action are pinned to
-`lsheva/evm-gas-benchmark@v1`.
+`lsheva/evm-gas-benchmark@v1.0.1`.
