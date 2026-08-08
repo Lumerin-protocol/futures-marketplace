@@ -135,13 +135,15 @@ abstract contract FuturesAdmin is FuturesBase {
         }
     }
 
-    /// @notice Admin escape hatch: clear orders + aggregate positions for the given participants.
-    /// @dev Does not walk legacy lots for economics — zeros `netDelta` / `netEntryValue` /
-    ///      `activeExpirationAts` directly. Also purges dead lot indexes and order queues.
+    /// @notice Admin escape hatch: clear active orders + aggregate positions for the given participants.
+    /// @dev Expired v4.3+ orders are already inert and remain available to optional permissionless
+    ///      cleanup. Does not walk legacy lots for economics — zeros `netDelta` / `netEntryValue` /
+    ///      `activeExpirationAts` directly. Also purges dead lot indexes and active order queues.
     function resetState(address[] calldata _participants) external onlyOwner {
         for (uint256 p = 0; p < _participants.length; p++) {
             address participant = _participants[p];
-            uint256[] memory orderExpirationAts = participantOrderExpirationAts[participant].values();
+            (uint256[] memory orderExpirationAts, uint256 orderExpirationCount) =
+                _activeOrderExpirations(participant);
 
             EnumerableSet.Bytes32Set storage legacyOrders = participantOrderIdsIndex[participant];
             for (uint256 i = legacyOrders.length(); i > 0; i--) {
@@ -151,7 +153,7 @@ abstract contract FuturesAdmin is FuturesBase {
                 _removeRestingOrder(orderId, order.expirationAt, order.price, order.participant, isBuy);
                 emit OrderCancelled(orderId, participant);
             }
-            for (uint256 d = 0; d < orderExpirationAts.length; d++) {
+            for (uint256 d = 0; d < orderExpirationCount; d++) {
                 EnumerableSet.Bytes32Set storage deliveryOrders =
                     participantExpirationAtOrderIdsIndex[participant][orderExpirationAts[d]];
                 while (deliveryOrders.length() > 0) {

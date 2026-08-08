@@ -131,7 +131,8 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     }
 
     mapping(address => mapping(uint256 => OrderAggregate)) internal participantExpirationAtOrderAggregate;
-    mapping(address => EnumerableSet.UintSet) internal participantOrderExpirationAts;
+    /// @dev Dead after v4.3: former order-expiration set used only by resetState. Slot retained.
+    mapping(address => EnumerableSet.UintSet) private participantOrderExpirationAts;
     /// @dev Canonical resting-order index for v4.3+: bounded independently per delivery date.
     ///      The legacy global `participantOrderIdsIndex` remains in-place for upgrade cleanup only.
     mapping(address => mapping(uint256 => EnumerableSet.Bytes32Set)) internal participantExpirationAtOrderIdsIndex;
@@ -339,7 +340,6 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
             aggregate.sellValue += _price * absQty;
         }
         if (wasEmpty) {
-            participantOrderExpirationAts[_participant].add(_expirationAt);
             _setOrderExpirationActive(_participant, _expirationAt, true);
         }
     }
@@ -360,7 +360,6 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
             aggregate.sellValue -= _price * _absQty;
         }
         if (aggregate.buyQty == 0 && aggregate.sellQty == 0) {
-            participantOrderExpirationAts[_participant].remove(_expirationAt);
             _setOrderExpirationActive(_participant, _expirationAt, false);
         }
     }
