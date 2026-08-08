@@ -330,6 +330,17 @@ async function benchmarkOrderPlacement() {
     const data = await fresh();
     const { futures } = data.contracts;
     const { seller, pc } = data.accounts;
+    await recordTransaction(
+      pc,
+      "createOrders((uint256,uint256,int256,uint8)[])",
+      "empty batch",
+      futures.write.createOrders([[]], { account: seller.account }),
+    );
+  }
+  {
+    const data = await fresh();
+    const { futures } = data.contracts;
+    const { seller, pc } = data.accounts;
     const price = await futures.read.getMarketPrice();
     await fund(data, [seller]);
     await recordTransaction(

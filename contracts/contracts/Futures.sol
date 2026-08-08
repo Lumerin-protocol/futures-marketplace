@@ -68,8 +68,9 @@ contract Futures is FuturesAdmin {
 
     /// @notice Batched placement with per-leg time-in-force — IM check once at the end.
     function createOrders(OrderIntent[] calldata _intents) external {
-        address sender = _msgSender();
         uint256 len = _intents.length;
+        if (len == 0) return;
+        address sender = _msgSender();
         for (uint256 i = 0; i < len; i++) {
             OrderIntent calldata intent = _intents[i];
             _validateOrderIntent(intent.price, intent.expirationAt, intent.quantity, intent.timeInForce);
