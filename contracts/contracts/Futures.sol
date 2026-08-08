@@ -101,7 +101,7 @@ contract Futures is FuturesAdmin {
             _validateOrderIntent(intent.price, intent.expirationAt, intent.quantity, intent.timeInForce);
             _createOrder(sender, intent.price, intent.expirationAt, intent.quantity, intent.timeInForce);
         }
-        _ensureNoCollateralDeficit(sender, 0);
+        if (createLen != 0) _ensureNoCollateralDeficit(sender, 0);
     }
 
     /// @notice Shrink a resting order owned by the caller without losing FIFO priority.

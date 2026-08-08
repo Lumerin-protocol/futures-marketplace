@@ -583,24 +583,38 @@
     },
     {
       "function": "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])",
-      "gas": "440055",
+      "gas": "440069",
       "id": "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])::cancel-1-reduce-1-create-1",
       "kind": "transaction",
       "scenario": "cancel-1-reduce-1-create-1"
     },
     {
       "function": "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])",
-      "gas": "3040655",
+      "gas": "3040669",
       "id": "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])::cancel-10-reduce-10-create-10",
       "kind": "transaction",
       "scenario": "cancel-10-reduce-10-create-10"
     },
     {
       "function": "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])",
-      "gas": "1595886",
+      "gas": "1595900",
       "id": "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])::cancel-5-reduce-5-create-5",
       "kind": "transaction",
       "scenario": "cancel-5-reduce-5-create-5"
+    },
+    {
+      "function": "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])",
+      "gas": "105576",
+      "id": "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])::cancel-only",
+      "kind": "transaction",
+      "scenario": "cancel-only"
+    },
+    {
+      "function": "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])",
+      "gas": "55988",
+      "id": "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])::reduce-only",
+      "kind": "transaction",
+      "scenario": "reduce-only"
     },
     {
       "function": "upgradeToAndCall(address,bytes)",

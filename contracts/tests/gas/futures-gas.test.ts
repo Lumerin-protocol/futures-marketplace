@@ -467,61 +467,101 @@ async function benchmarkOrderPlacement() {
 }
 
 async function benchmarkOrderMaintenance() {
-  const data = await fresh();
-  const { futures } = data.contracts;
-  const { seller, buyer, pc, tc } = data.accounts;
-  const price = await futures.read.getMarketPrice();
-  const expirationAt = data.config.deliveryDates[0];
-  await fund(data, [seller]);
-  await futures.write.createOrders(
-    [
+  {
+    const data = await fresh();
+    const { futures } = data.contracts;
+    const { seller, buyer, pc, tc } = data.accounts;
+    const price = await futures.read.getMarketPrice();
+    const expirationAt = data.config.deliveryDates[0];
+    await fund(data, [seller]);
+    await futures.write.createOrders(
       [
-        { price, expirationAt, quantity: -1n, timeInForce: TimeInForce.GTC },
-        {
-          price: price + data.config.priceLadderStep,
-          expirationAt,
-          quantity: -4n,
-          timeInForce: TimeInForce.GTC,
-        },
-        {
-          price: price + 2n * data.config.priceLadderStep,
-          expirationAt,
-          quantity: -1n,
-          timeInForce: TimeInForce.GTC,
-        },
-        {
-          price: price + 3n * data.config.priceLadderStep,
-          expirationAt,
-          quantity: -1n,
-          timeInForce: TimeInForce.GTC,
-        },
+        [
+          { price, expirationAt, quantity: -1n, timeInForce: TimeInForce.GTC },
+          {
+            price: price + data.config.priceLadderStep,
+            expirationAt,
+            quantity: -4n,
+            timeInForce: TimeInForce.GTC,
+          },
+          {
+            price: price + 2n * data.config.priceLadderStep,
+            expirationAt,
+            quantity: -1n,
+            timeInForce: TimeInForce.GTC,
+          },
+          {
+            price: price + 3n * data.config.priceLadderStep,
+            expirationAt,
+            quantity: -1n,
+            timeInForce: TimeInForce.GTC,
+          },
+        ],
       ],
-    ],
-    { account: seller.account },
-  );
-  const [cancelId, reduceId, outdatedId, outdatedBatchId] = await futures.read.getUserOrders([
-    seller.account.address,
-  ]);
+      { account: seller.account },
+    );
+    const [cancelId, reduceId, outdatedId, outdatedBatchId] = await futures.read.getUserOrders([
+      seller.account.address,
+    ]);
 
-  await recordTransaction(
-    pc,
-    "cancelOrder(bytes32)",
-    "resting order",
-    futures.write.cancelOrder([cancelId], { account: seller.account }),
-  );
-  await recordTransaction(
-    pc,
-    "reduceOrderSize(bytes32,int256)",
-    "four-to-one",
-    futures.write.reduceOrderSize([reduceId, -1n], { account: seller.account }),
-  );
-  await tc.setNextBlockTimestamp({ timestamp: expirationAt + 1n });
-  await recordTransaction(
-    pc,
-    "removeOutdatedOrders(bytes32[])",
-    "permissionless expired order batch-2",
-    futures.write.removeOutdatedOrders([[outdatedId, outdatedBatchId]], { account: buyer.account }),
-  );
+    await recordTransaction(
+      pc,
+      "cancelOrder(bytes32)",
+      "resting order",
+      futures.write.cancelOrder([cancelId], { account: seller.account }),
+    );
+    await recordTransaction(
+      pc,
+      "reduceOrderSize(bytes32,int256)",
+      "four-to-one",
+      futures.write.reduceOrderSize([reduceId, -1n], { account: seller.account }),
+    );
+    await tc.setNextBlockTimestamp({ timestamp: expirationAt + 1n });
+    await recordTransaction(
+      pc,
+      "removeOutdatedOrders(bytes32[])",
+      "permissionless expired order batch-2",
+      futures.write.removeOutdatedOrders([[outdatedId, outdatedBatchId]], { account: buyer.account }),
+    );
+  }
+  {
+    const data = await fresh();
+    const { futures } = data.contracts;
+    const { seller, pc } = data.accounts;
+    const price = await futures.read.getMarketPrice();
+    const expirationAt = data.config.deliveryDates[0];
+    await fund(data, [seller]);
+    await futures.write.createOrder([price, expirationAt, -1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
+    const [orderId] = await futures.read.getUserOrders([seller.account.address]);
+    await recordTransaction(
+      pc,
+      "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])",
+      "cancel-only",
+      futures.write.updateOrders([[orderId], [], []], { account: seller.account }),
+    );
+  }
+  {
+    const data = await fresh();
+    const { futures } = data.contracts;
+    const { seller, pc } = data.accounts;
+    const price = await futures.read.getMarketPrice();
+    const expirationAt = data.config.deliveryDates[0];
+    await fund(data, [seller]);
+    await futures.write.createOrder([price, expirationAt, -4n, TimeInForce.GTC], {
+      account: seller.account,
+    });
+    const [orderId] = await futures.read.getUserOrders([seller.account.address]);
+    await recordTransaction(
+      pc,
+      "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])",
+      "reduce-only",
+      futures.write.updateOrders([[], [{ orderId, newQuantity: -1n }], []], {
+        account: seller.account,
+      }),
+    );
+  }
 }
 
 async function benchmarkSettlement() {
