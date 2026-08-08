@@ -290,6 +290,41 @@ async function benchmarkScaledRiskViews() {
   }
 }
 
+async function benchmarkAskLadderInsertion(
+  scenario: string,
+  selectPrice: (marketPrice: bigint, tick: bigint, prices: bigint[]) => bigint,
+) {
+  const data = await fresh();
+  const { futures } = data.contracts;
+  const { seller, pc } = data.accounts;
+  const marketPrice = await futures.read.getMarketPrice();
+  const tick = data.config.priceLadderStep;
+  const expirationAt = data.config.deliveryDates[0];
+  const prices = Array.from({ length: 10 }, (_, index) => marketPrice + BigInt((index + 1) * 2) * tick);
+  await fund(data, [seller]);
+  await futures.write.createOrders(
+    [
+      prices.map((price) => ({
+        price,
+        expirationAt,
+        quantity: -1n,
+        timeInForce: TimeInForce.GTC,
+      })),
+    ],
+    { account: seller.account },
+  );
+
+  await recordTransaction(
+    pc,
+    "createOrder(uint256,uint256,int256,uint8)",
+    scenario,
+    futures.write.createOrder(
+      [selectPrice(marketPrice, tick, prices), expirationAt, -1n, TimeInForce.GTC],
+      { account: seller.account },
+    ),
+  );
+}
+
 async function benchmarkOrderPlacement() {
   {
     const data = await fresh();
@@ -350,6 +385,22 @@ async function benchmarkOrderPlacement() {
       ),
     );
   }
+  await benchmarkAskLadderInsertion(
+    "resting existing price in 10-level ask ladder",
+    (_marketPrice, _tick, prices) => prices[4],
+  );
+  await benchmarkAskLadderInsertion(
+    "resting head of 10-level ask ladder",
+    (marketPrice, tick) => marketPrice + tick,
+  );
+  await benchmarkAskLadderInsertion(
+    "resting middle of 10-level ask ladder",
+    (marketPrice, tick) => marketPrice + 11n * tick,
+  );
+  await benchmarkAskLadderInsertion(
+    "resting tail of 10-level ask ladder",
+    (marketPrice, tick) => marketPrice + 21n * tick,
+  );
 
   for (const size of [1, 5, 10]) {
     const data = await fresh();

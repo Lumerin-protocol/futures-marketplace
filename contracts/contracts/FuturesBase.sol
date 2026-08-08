@@ -667,8 +667,9 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         uint256 _price,
         bool _isBuy
     ) internal {
+        bool newPriceLevel = orderIndexId.sizeOf() == 0;
         orderIndexId.pushBack(uint256(_orderId));
-        _addPriceLevel(_expirationAt, _price, _isBuy);
+        if (newPriceLevel) _addPriceLevel(_expirationAt, _price, _isBuy);
     }
 
     function _removeOrderFromQueue(
@@ -682,10 +683,10 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         _removePriceLevelIfEmpty(orderIndexId, _expirationAt, _price, _isBuy);
     }
 
-    /// @notice Insert `_price` into the sorted ladder for `_expirationAt` if absent.
+    /// @notice Insert a new `_price` into the sorted ladder for `_expirationAt`.
     function _addPriceLevel(uint256 _expirationAt, uint256 _price, bool _isBid) internal {
         StructuredLinkedList.List storage priceList = _isBid ? activeBidPrices[_expirationAt] : activeAskPrices[_expirationAt];
-        PriceLadderLib.insertPrice(priceList, _price, _isBid, MAX_PRICE_LEVELS_PER_SIDE);
+        PriceLadderLib.insertNewPrice(priceList, _price, _isBid, MAX_PRICE_LEVELS_PER_SIDE);
     }
 
     /// @notice Remove price level when its order queue is empty.
