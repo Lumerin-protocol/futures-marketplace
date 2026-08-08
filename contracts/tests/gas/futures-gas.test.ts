@@ -325,6 +325,31 @@ async function benchmarkOrderPlacement() {
       }),
     );
   }
+  {
+    const data = await fresh();
+    const { futures } = data.contracts;
+    const { seller, buyer, pc } = data.accounts;
+    const price = await futures.read.getMarketPrice();
+    const expirationAt = data.config.deliveryDates[0];
+    await fund(data, [seller, buyer]);
+    await futures.write.createOrder([price, expirationAt, -1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
+    await futures.write.createOrder([price, expirationAt, 1n, TimeInForce.GTC], {
+      account: buyer.account,
+    });
+    await recordTransaction(
+      pc,
+      "createOrder(uint256,uint256,int256,uint8)",
+      "portfolio-reducing resting order",
+      futures.write.createOrder(
+        [price + data.config.priceLadderStep, expirationAt, -1n, TimeInForce.GTC],
+        {
+          account: buyer.account,
+        },
+      ),
+    );
+  }
 
   for (const size of [1, 5, 10]) {
     const data = await fresh();

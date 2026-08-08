@@ -152,7 +152,7 @@ describe("Futures - portfolio margin (PME)", () => {
   it("allows a reduce-only order when margin is tight", async () => {
     const data = await positionWithMarginFixture();
     const { contracts, accounts, deliveryDate, entryPricePerDay, config } = data;
-    const { futures, collateralVault, portfolioMarginEngine, hashpriceUsd } = contracts;
+    const { futures, collateralVault, portfolioMarginEngine } = contracts;
     const { buyer, owner } = accounts;
 
     // Real IM > MM buffer (fixture defaults IM==MM).
@@ -161,14 +161,16 @@ describe("Futures - portfolio margin (PME)", () => {
       { account: owner.account },
     );
 
-    // Skin to just above IM, then adverse mark move into the [MM, IM) band.
-    // (Withdrawals cannot leave balance below IM, so the crash must create the gap.)
+    // Skin to just above IM, then increase only the IM shock to enter the
+    // [MM, IM) band without changing the order's portfolio effect.
     const im0 = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
     const bal0 = await collateralVault.read.balanceOf([buyer.account.address]);
     assert.ok(bal0 > im0 + 1n, "fixture should leave withdrawable surplus above IM");
     await collateralVault.write.withdraw([bal0 - im0 - 1n], { account: buyer.account });
-
-    await scaleHashprice(hashpriceUsd, 100n, 90n);
+    await portfolioMarginEngine.write.setShocks(
+      [parseUnits("0.30", 18), parseUnits("0.10", 18), 0n, 0n],
+      { account: owner.account },
+    );
 
     const balAfter = await collateralVault.read.balanceOf([buyer.account.address]);
     const im = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
@@ -193,10 +195,43 @@ describe("Futures - portfolio margin (PME)", () => {
     assert.equal(orders.length, 1, "reduce-only closing order should rest");
   });
 
+  it("rejects a locally reducing order that increases portfolio IM", async () => {
+    const data = await positionWithMarginFixture();
+    const { contracts, accounts, deliveryDate, entryPricePerDay, config } = data;
+    const { futures, collateralVault, portfolioMarginEngine, perpsDEXMock } = contracts;
+    const { buyer, owner } = accounts;
+    const buyerAddr = buyer.account.address;
+
+    // Futures is long 1; a short 2 position elsewhere makes the portfolio net
+    // short 1. A local sell looks reducing here but widens the portfolio's
+    // all-asks-fill endpoint to short 2.
+    await perpsDEXMock.write.setVault([collateralVault.address], { account: owner.account, chain: null });
+    await perpsDEXMock.write.setUserPosition([buyerAddr, -2_000_000n, 0n], {
+      account: owner.account,
+      chain: null,
+    });
+    await portfolioMarginEngine.write.addLinearMarket([perpsDEXMock.address]);
+
+    const imBefore = await portfolioMarginEngine.read.computePortfolioIM([buyerAddr]);
+    const balance = await collateralVault.read.balanceOf([buyerAddr]);
+    if (balance > imBefore) {
+      await collateralVault.write.withdraw([balance - imBefore], { account: buyer.account });
+    }
+
+    await viem.assertions.revertWithCustomError(
+      futures.write.createOrder(
+        [entryPricePerDay + config.priceLadderStep, deliveryDate, -1n, TimeInForce.GTC],
+        { account: buyer.account },
+      ),
+      futures,
+      "InsufficientMarginBalance",
+    );
+  });
+
   it("rejects a second stacked reduce-only order when margin is tight", async () => {
     const data = await positionWithMarginFixture();
     const { contracts, accounts, deliveryDate, entryPricePerDay, config } = data;
-    const { futures, collateralVault, portfolioMarginEngine, hashpriceUsd } = contracts;
+    const { futures, collateralVault, portfolioMarginEngine } = contracts;
     const { buyer, owner } = accounts;
 
     await portfolioMarginEngine.write.setShocks(
@@ -207,7 +242,10 @@ describe("Futures - portfolio margin (PME)", () => {
     const im0 = await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]);
     const bal0 = await collateralVault.read.balanceOf([buyer.account.address]);
     await collateralVault.write.withdraw([bal0 - im0 - 1n], { account: buyer.account });
-    await scaleHashprice(hashpriceUsd, 100n, 90n);
+    await portfolioMarginEngine.write.setShocks(
+      [parseUnits("0.30", 18), parseUnits("0.10", 18), 0n, 0n],
+      { account: owner.account },
+    );
 
     const step = config.priceLadderStep;
     // First full-size reduce-only is allowed.

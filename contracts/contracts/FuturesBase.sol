@@ -919,6 +919,26 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         if (uint8(_tif) > uint8(TimeInForce.FOK)) revert InvalidTimeInForce();
     }
 
+    function _validateOrderIntent(uint256 _price, uint256 _expirationAt, int256 _qty, TimeInForce _tif)
+        internal
+        view
+    {
+        _validateTIF(_tif);
+        _validatePrice(_price);
+        _validateExpirationAt(_expirationAt);
+        _validateQty(_qty);
+    }
+
+    function _isLocallyReducing(address _participant, uint256 _expirationAt, int256 _quantity)
+        internal
+        view
+        returns (bool)
+    {
+        int256 position = participantExpirationAtNetDelta[_participant][_expirationAt];
+        if (position == 0 || (position > 0 ? _quantity >= 0 : _quantity <= 0)) return false;
+        return M.abs(_quantity) + _restingReduceAbs(_participant, _expirationAt, position) <= M.abs(position);
+    }
+
     function _validateQty(int256 _qty) internal pure {
         if (_qty == 0) revert InvalidQty();
     }
@@ -945,9 +965,14 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         }
     }
 
-    function _ensureNoCollateralDeficit(address _participant) internal view {
+    function _ensureNoCollateralDeficit(address _participant, uint256 _allowedImPlusOne) internal view {
         uint256 required = portfolioMargin.computePortfolioIM(_participant);
-        if (vault.balanceOf(_participant) < required) revert InsufficientMarginBalance();
+        if (
+            vault.balanceOf(_participant) < required
+                && (_allowedImPlusOne == 0 || required >= _allowedImPlusOne)
+        ) {
+            revert InsufficientMarginBalance();
+        }
     }
 
     // ── Internal helpers: collateral movement ─────────────────────────────────

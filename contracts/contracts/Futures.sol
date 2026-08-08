@@ -53,11 +53,17 @@ contract Futures is FuturesAdmin {
 
     /// @notice Place a limit order with explicit time-in-force (GTC / IOC / FOK).
     ///         `quantity` > 0 = buy/long, < 0 = sell/short.
-    /// @dev Reduce-only legs (opposite side, size ≤ position at `expirationAt`) skip the IM check.
+    /// @dev Locally reducing legs are accepted below IM only when authoritative portfolio IM
+    ///      does not increase, so cross-venue exposure cannot bypass the margin gate.
     function createOrder(uint256 _price, uint256 _expirationAt, int256 _quantity, TimeInForce _tif) external {
         address sender = _msgSender();
-        bool skipMargin = _createOrder(sender, _price, _expirationAt, _quantity, _tif);
-        if (!skipMargin) _ensureNoCollateralDeficit(sender);
+        _validateOrderIntent(_price, _expirationAt, _quantity, _tif);
+        uint256 allowedImPlusOne;
+        if (_isLocallyReducing(sender, _expirationAt, _quantity)) {
+            allowedImPlusOne = portfolioMargin.computePortfolioIM(sender) + 1;
+        }
+        _createOrder(sender, _price, _expirationAt, _quantity, _tif);
+        _ensureNoCollateralDeficit(sender, allowedImPlusOne);
     }
 
     /// @notice Batched placement with per-leg time-in-force — IM check once at the end.
@@ -66,9 +72,10 @@ contract Futures is FuturesAdmin {
         uint256 len = _intents.length;
         for (uint256 i = 0; i < len; i++) {
             OrderIntent calldata intent = _intents[i];
+            _validateOrderIntent(intent.price, intent.expirationAt, intent.quantity, intent.timeInForce);
             _createOrder(sender, intent.price, intent.expirationAt, intent.quantity, intent.timeInForce);
         }
-        _ensureNoCollateralDeficit(sender);
+        _ensureNoCollateralDeficit(sender, 0);
     }
 
     /// @notice Cancel, reduce-in-place, then place orders — IM check once at the end.
@@ -91,9 +98,10 @@ contract Futures is FuturesAdmin {
         uint256 createLen = _intents.length;
         for (uint256 j = 0; j < createLen; j++) {
             OrderIntent calldata intent = _intents[j];
+            _validateOrderIntent(intent.price, intent.expirationAt, intent.quantity, intent.timeInForce);
             _createOrder(sender, intent.price, intent.expirationAt, intent.quantity, intent.timeInForce);
         }
-        _ensureNoCollateralDeficit(sender);
+        _ensureNoCollateralDeficit(sender, 0);
     }
 
     /// @notice Shrink a resting order owned by the caller without losing FIFO priority.
@@ -124,25 +132,14 @@ contract Futures is FuturesAdmin {
         }
     }
 
-    /// @dev Per-leg body of `createOrder` / `createOrders` without the IM-check epilogue.
-    ///      Returns true when the leg is reduce-only (single-order callers may skip IM);
-    ///      batch callers always check once at the end.
+    /// @dev Validated per-leg body of `createOrder` / `createOrders` without the IM-check epilogue.
     function _createOrder(
         address _participant,
         uint256 _price,
         uint256 _expirationAt,
         int256 _quantity,
         TimeInForce _tif
-    ) internal returns (bool isReduceOnly) {
-        _validateTIF(_tif);
-        _validatePrice(_price);
-        _validateExpirationAt(_expirationAt);
-        _validateQty(_quantity);
-
-        // Snapshot before matching — reduce-only vs position minus already-resting reduces.
-        int256 positionBefore = participantExpirationAtNetDelta[_participant][_expirationAt];
-        uint256 reducingBefore = _restingReduceAbs(_participant, _expirationAt, positionBefore);
-
+    ) internal {
         bytes32 orderId = _nextOrderId();
         emit OrderCreated(orderId, _participant, _price, _quantity, _expirationAt);
 
@@ -182,9 +179,6 @@ contract Futures is FuturesAdmin {
             }
         }
 
-        // Opposite side and combined reducing size (resting + this intent) ≤ position.
-        isReduceOnly = positionBefore != 0 && (positionBefore > 0 ? _quantity < 0 : _quantity > 0)
-            && M.abs(_quantity) + reducingBefore <= M.abs(positionBefore);
     }
 
     /// @dev Shared cancel body for `cancelOrder` / `updateOrders`.
