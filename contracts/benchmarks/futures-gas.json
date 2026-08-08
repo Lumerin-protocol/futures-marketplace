@@ -359,10 +359,17 @@
     },
     {
       "function": "liquidateOrders(address,bytes32[])",
-      "gas": "269990",
+      "gas": "269992",
       "id": "liquidateOrders(address,bytes32[])::batch-2",
       "kind": "transaction",
       "scenario": "batch-2"
+    },
+    {
+      "function": "liquidateOrders(address,bytes32[])",
+      "gas": "285282",
+      "id": "liquidateOrders(address,bytes32[])::three stale ids then batch-2",
+      "kind": "transaction",
+      "scenario": "three stale ids then batch-2"
     },
     {
       "function": "liquidatePosition(address,uint256,uint256)",

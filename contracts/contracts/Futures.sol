@@ -245,11 +245,11 @@ contract Futures is FuturesAdmin {
         uint256 cancelled = 0;
         uint256 len = _orderIds.length;
         for (uint256 i = 0; i < len; i++) {
-            if (!_underwater(_user)) break;
             bytes32 orderId = _orderIds[i];
             Order memory order = orders[orderId];
-            // Skip raced/stale ids; stop only once healthy.
+            // Skip raced/stale ids before the expensive portfolio MM check.
             if (order.participant != _user || order.quantity == 0) continue;
+            if (!_underwater(_user)) break;
             _doLiquidateOrder(_user, orderId, order);
             cancelled++;
         }

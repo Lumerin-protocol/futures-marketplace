@@ -622,6 +622,21 @@ async function benchmarkLiquidations() {
     );
   }
   {
+    const data = await setupOrderLiquidation();
+    const { futures } = data.contracts;
+    const { buyer, buyer2, pc } = data.accounts;
+    const orderIds = await futures.read.getUserOrders([buyer.account.address]);
+    const staleIds = [1n, 2n, 3n].map((id) => `0x${id.toString(16).padStart(64, "0")}` as Hash);
+    await recordTransaction(
+      pc,
+      "liquidateOrders(address,bytes32[])",
+      "three stale ids then batch-2",
+      futures.write.liquidateOrders([buyer.account.address, [...staleIds, ...orderIds]], {
+        account: buyer2.account,
+      }),
+    );
+  }
+  {
     const data = await setupPositionLiquidation();
     const { futures } = data.contracts;
     const { buyer, buyer2, pc } = data.accounts;
