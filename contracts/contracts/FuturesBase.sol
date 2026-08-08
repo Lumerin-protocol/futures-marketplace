@@ -757,14 +757,13 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
 
     // ── Internal helpers: margin / liquidation ────────────────────────────────
 
-    function _doLiquidateFullPosition(address _user, uint256 _expirationAt, int256 _netQty) internal {
-        uint256 mark = _getMarketPrice(_getPrice());
+    function _doLiquidateFullPosition(address _user, uint256 _expirationAt, int256 _netQty, uint256 _mark) internal {
         int256 netEntry = participantExpirationAtNetEntryValue[_user][_expirationAt];
-        int256 pnl = int256(mark) * _netQty - netEntry;
+        int256 pnl = int256(_mark) * _netQty - netEntry;
 
         _transferPnl(_insuranceFundAccount(), _user, pnl);
 
-        uint256 closedNotional = mark * M.abs(_netQty);
+        uint256 closedNotional = _mark * M.abs(_netQty);
         uint256 liqFee = _chargeLiquidationFee(_user, closedNotional);
 
         participantExpirationAtNetDelta[_user][_expirationAt] = 0;
@@ -775,16 +774,18 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         _notifyLiquidation(_msgSender(), liqFee);
     }
 
-    function _doPartialLiquidatePosition(address _user, uint256 _expirationAt, int256 _netQty, uint256 _closeAbs)
-        internal
-        returns (int256 pnl, int256 signedClose)
-    {
-        uint256 mark = _getMarketPrice(_getPrice());
+    function _doPartialLiquidatePosition(
+        address _user,
+        uint256 _expirationAt,
+        int256 _netQty,
+        uint256 _closeAbs,
+        uint256 _mark
+    ) internal returns (int256 pnl, int256 signedClose) {
         int256 netEntry = participantExpirationAtNetEntryValue[_user][_expirationAt];
         uint256 absNet = M.abs(_netQty);
         uint256 avgEntry = M.abs(netEntry) / absNet;
         signedClose = M.toSigned(_netQty > 0, _closeAbs);
-        pnl = (int256(mark) - int256(avgEntry)) * signedClose;
+        pnl = (int256(_mark) - int256(avgEntry)) * signedClose;
         _transferPnl(_insuranceFundAccount(), _user, pnl);
 
         // Reduce toward zero; scale netEntryValue proportionally.

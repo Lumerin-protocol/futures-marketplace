@@ -331,14 +331,14 @@
     },
     {
       "function": "liquidatePosition(address,uint256,uint256)",
-      "gas": "200883",
+      "gas": "198510",
       "id": "liquidatePosition(address,uint256,uint256)::partial close",
       "kind": "transaction",
       "scenario": "partial close"
     },
     {
       "function": "liquidatePositions(address,uint256[],uint256[])",
-      "gas": "232205",
+      "gas": "229853",
       "id": "liquidatePositions(address,uint256[],uint256[])::skip-empty-then-partial-close",
       "kind": "transaction",
       "scenario": "skip-empty-then-partial-close"

@@ -293,7 +293,8 @@ contract Futures is FuturesAdmin {
         int256 netQty = participantExpirationAtNetDelta[_user][_expirationAt];
         if (netQty == 0) revert NotLiquidatable();
 
-        if (!_closePosition(_user, _expirationAt, netQty, _closeQty)) revert NotLiquidatable();
+        uint256 mark = _getMarketPrice(_getPrice());
+        if (!_closePosition(_user, _expirationAt, netQty, _closeQty, mark)) revert NotLiquidatable();
         _revertIfOverLiquidated(_user);
     }
 
@@ -306,6 +307,7 @@ contract Futures is FuturesAdmin {
         if (portfolioMargin.hasRestingOrderDelta(_user)) revert OrdersStillOpen();
 
         uint256 closed = 0;
+        uint256 mark = _getMarketPrice(_getPrice());
         for (uint256 i = 0; i < _expirationAts.length; i++) {
             if (!_underwater(_user)) break;
             uint256 expirationAt = _expirationAts[i];
@@ -313,7 +315,7 @@ contract Futures is FuturesAdmin {
             int256 netQty = participantExpirationAtNetDelta[_user][expirationAt];
             // Skip empty/stale legs; stop only once healthy.
             if (netQty == 0 || closeQty == 0) continue;
-            if (!_closePosition(_user, expirationAt, netQty, closeQty)) continue;
+            if (!_closePosition(_user, expirationAt, netQty, closeQty, mark)) continue;
             closed++;
         }
 
@@ -322,7 +324,7 @@ contract Futures is FuturesAdmin {
     }
 
     /// @dev Close up to `_closeQty` at `_expirationAt`. Returns false when no positive close.
-    function _closePosition(address _user, uint256 _expirationAt, int256 _netQty, uint256 _closeQty)
+    function _closePosition(address _user, uint256 _expirationAt, int256 _netQty, uint256 _closeQty, uint256 _mark)
         internal
         returns (bool)
     {
@@ -331,14 +333,14 @@ contract Futures is FuturesAdmin {
         if (closeAbs == 0) return false;
 
         if (closeAbs == absNet) {
-            _doLiquidateFullPosition(_user, _expirationAt, _netQty);
+            _doLiquidateFullPosition(_user, _expirationAt, _netQty, _mark);
             return true;
         }
 
-        (int256 pnl, int256 signedClose) = _doPartialLiquidatePosition(_user, _expirationAt, _netQty, closeAbs);
+        (int256 pnl, int256 signedClose) =
+            _doPartialLiquidatePosition(_user, _expirationAt, _netQty, closeAbs, _mark);
 
-        uint256 mark = _getMarketPrice(_getPrice());
-        uint256 closedNotional = mark * closeAbs;
+        uint256 closedNotional = _mark * closeAbs;
         uint256 liqFee = _chargeLiquidationFee(_user, closedNotional);
 
         emit PositionLiquidated(_user, _msgSender(), _expirationAt, signedClose, pnl, liqFee);
