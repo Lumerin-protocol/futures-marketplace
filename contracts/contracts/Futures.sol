@@ -348,8 +348,7 @@ contract Futures is FuturesAdmin {
 
     /// @dev With remaining portfolio risk and a real IM>MM buffer, balance must be ≤ IM.
     function _revertIfOverLiquidated(address _user) internal view {
-        uint256 im = portfolioMargin.computePortfolioIM(_user);
-        uint256 mm = portfolioMargin.computePortfolioMM(_user);
+        (uint256 im, uint256 mm) = portfolioMargin.computePortfolioMargins(_user);
         if (im > mm && vault.balanceOf(_user) > im) revert OverLiquidation();
     }
 
