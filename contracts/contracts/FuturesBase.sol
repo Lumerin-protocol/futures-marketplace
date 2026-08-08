@@ -34,6 +34,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     mapping(address => EnumerableSet.Bytes32Set) internal participantOrderIdsIndex;
     /// @dev Dead after v3: former per-(user, expiry) lot index. Slot retained.
     mapping(address => mapping(uint256 => EnumerableSet.Bytes32Set)) internal participantExpirationAtPositionIdsIndex;
+    /// @dev Dead after v4.3: former per-(user, expiry, price) order index. Slot retained.
     mapping(address => mapping(uint256 => mapping(uint256 => EnumerableSet.Bytes32Set))) private
         participantExpirationAtPriceOrderIdsIndex;
 
@@ -318,13 +319,10 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         return bytes32(++nonce);
     }
 
-    /// @dev Index a newly resting order under its participant/expiry and price buckets.
+    /// @dev Index a newly resting order under its participant/expiry bucket.
     ///      Mirrors the removal in {_removeRestingOrder}.
-    function _indexRestingOrder(address _participant, uint256 _expirationAt, uint256 _price, bytes32 _orderId)
-        internal
-    {
+    function _indexRestingOrder(address _participant, uint256 _expirationAt, bytes32 _orderId) internal {
         participantExpirationAtOrderIdsIndex[_participant][_expirationAt].add(_orderId);
-        participantExpirationAtPriceOrderIdsIndex[_participant][_expirationAt][_price].add(_orderId);
     }
 
     function _increaseOrderAggregate(address _participant, uint256 _expirationAt, uint256 _price, int256 _quantity)
@@ -659,7 +657,6 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         _removeOrderFromQueue(orderIndexId, orderId, expirationAt, price, isBuy);
         participantOrderIdsIndex[participant].remove(orderId);
         participantExpirationAtOrderIdsIndex[participant][expirationAt].remove(orderId);
-        participantExpirationAtPriceOrderIdsIndex[participant][expirationAt][price].remove(orderId);
         _decreaseOrderAggregate(participant, expirationAt, price, M.abs(orders[orderId].quantity), isBuy);
         delete orders[orderId];
     }

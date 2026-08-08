@@ -169,7 +169,7 @@ contract Futures is FuturesAdmin {
                 StructuredLinkedList.List storage orderQueue =
                     _expirationAtPriceOrderIds(_expirationAt, _price, _quantity > 0);
                 _addOrderToQueue(orderQueue, orderId, _expirationAt, _price, _quantity > 0);
-                _indexRestingOrder(_participant, _expirationAt, _price, orderId);
+                _indexRestingOrder(_participant, _expirationAt, orderId);
                 _increaseOrderAggregate(_participant, _expirationAt, _price, remainingQty);
             }
         } else {
