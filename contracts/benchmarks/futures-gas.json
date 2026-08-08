@@ -65,70 +65,70 @@
     },
     {
       "function": "createOrder(uint256,uint256,int256,uint8)",
-      "gas": "384177",
+      "gas": "379443",
       "id": "createOrder(uint256,uint256,int256,uint8)::full match",
       "kind": "transaction",
       "scenario": "full match"
     },
     {
       "function": "createOrder(uint256,uint256,int256,uint8)",
-      "gas": "529497",
+      "gas": "520107",
       "id": "createOrder(uint256,uint256,int256,uint8)::portfolio-reducing resting order",
       "kind": "transaction",
       "scenario": "portfolio-reducing resting order"
     },
     {
       "function": "createOrder(uint256,uint256,int256,uint8)",
-      "gas": "340164",
+      "gas": "335579",
       "id": "createOrder(uint256,uint256,int256,uint8)::resting existing price in 10-level ask ladder",
       "kind": "transaction",
       "scenario": "resting existing price in 10-level ask ladder"
     },
     {
       "function": "createOrder(uint256,uint256,int256,uint8)",
-      "gas": "413915",
+      "gas": "409330",
       "id": "createOrder(uint256,uint256,int256,uint8)::resting head of 10-level ask ladder",
       "kind": "transaction",
       "scenario": "resting head of 10-level ask ladder"
     },
     {
       "function": "createOrder(uint256,uint256,int256,uint8)",
-      "gas": "440887",
+      "gas": "436302",
       "id": "createOrder(uint256,uint256,int256,uint8)::resting middle of 10-level ask ladder",
       "kind": "transaction",
       "scenario": "resting middle of 10-level ask ladder"
     },
     {
       "function": "createOrder(uint256,uint256,int256,uint8)",
-      "gas": "514757",
+      "gas": "510172",
       "id": "createOrder(uint256,uint256,int256,uint8)::resting order",
       "kind": "transaction",
       "scenario": "resting order"
     },
     {
       "function": "createOrder(uint256,uint256,int256,uint8)",
-      "gas": "414563",
+      "gas": "409978",
       "id": "createOrder(uint256,uint256,int256,uint8)::resting tail of 10-level ask ladder",
       "kind": "transaction",
       "scenario": "resting tail of 10-level ask ladder"
     },
     {
       "function": "createOrders((uint256,uint256,int256,uint8)[])",
-      "gas": "512835",
+      "gas": "508250",
       "id": "createOrders((uint256,uint256,int256,uint8)[])::batch-1",
       "kind": "transaction",
       "scenario": "batch-1"
     },
     {
       "function": "createOrders((uint256,uint256,int256,uint8)[])",
-      "gas": "2544939",
+      "gas": "2540354",
       "id": "createOrders((uint256,uint256,int256,uint8)[])::batch-10",
       "kind": "transaction",
       "scenario": "batch-10"
     },
     {
       "function": "createOrders((uint256,uint256,int256,uint8)[])",
-      "gas": "1608299",
+      "gas": "1603714",
       "id": "createOrders((uint256,uint256,int256,uint8)[])::batch-5",
       "kind": "transaction",
       "scenario": "batch-5"
@@ -142,7 +142,7 @@
     },
     {
       "function": "createOrders((uint256,uint256,int256,uint8)[])",
-      "gas": "774549",
+      "gas": "769964",
       "id": "createOrders((uint256,uint256,int256,uint8)[])::two resting orders",
       "kind": "transaction",
       "scenario": "two resting orders"
@@ -352,42 +352,42 @@
     },
     {
       "function": "isLiquidatable(address)",
-      "gas": "132913",
+      "gas": "128032",
       "id": "isLiquidatable(address)::representative",
       "kind": "view",
       "scenario": "representative"
     },
     {
       "function": "liquidateOrder(address,bytes32)",
-      "gas": "194105",
+      "gas": "189372",
       "id": "liquidateOrder(address,bytes32)::one underwater resting order",
       "kind": "transaction",
       "scenario": "one underwater resting order"
     },
     {
       "function": "liquidateOrders(address,bytes32[])",
-      "gas": "269992",
+      "gas": "262420",
       "id": "liquidateOrders(address,bytes32[])::batch-2",
       "kind": "transaction",
       "scenario": "batch-2"
     },
     {
       "function": "liquidateOrders(address,bytes32[])",
-      "gas": "285282",
+      "gas": "277709",
       "id": "liquidateOrders(address,bytes32[])::three stale ids then batch-2",
       "kind": "transaction",
       "scenario": "three stale ids then batch-2"
     },
     {
       "function": "liquidatePosition(address,uint256,uint256)",
-      "gas": "198510",
+      "gas": "184259",
       "id": "liquidatePosition(address,uint256,uint256)::partial close",
       "kind": "transaction",
       "scenario": "partial close"
     },
     {
       "function": "liquidatePositions(address,uint256[],uint256[])",
-      "gas": "229853",
+      "gas": "210869",
       "id": "liquidatePositions(address,uint256[],uint256[])::skip-empty-then-partial-close",
       "kind": "transaction",
       "scenario": "skip-empty-then-partial-close"
@@ -590,21 +590,21 @@
     },
     {
       "function": "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])",
-      "gas": "440069",
+      "gas": "435484",
       "id": "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])::cancel-1-reduce-1-create-1",
       "kind": "transaction",
       "scenario": "cancel-1-reduce-1-create-1"
     },
     {
       "function": "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])",
-      "gas": "3040669",
+      "gas": "3036084",
       "id": "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])::cancel-10-reduce-10-create-10",
       "kind": "transaction",
       "scenario": "cancel-10-reduce-10-create-10"
     },
     {
       "function": "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])",
-      "gas": "1595900",
+      "gas": "1591315",
       "id": "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])::cancel-5-reduce-5-create-5",
       "kind": "transaction",
       "scenario": "cancel-5-reduce-5-create-5"
@@ -639,7 +639,7 @@
     },
     {
       "function": "withdrawCollectedFees()",
-      "gas": "133086",
+      "gas": "128508",
       "id": "withdrawCollectedFees()::nonzero fee balance",
       "kind": "transaction",
       "scenario": "nonzero fee balance"
