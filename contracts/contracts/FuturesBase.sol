@@ -825,7 +825,9 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     }
 
     function _activeExpirationAt(uint256 _currentIndex, uint256 _offset) internal view returns (uint256) {
-        return firstFutureExpirationDate + expirationIntervalSeconds() * (_currentIndex + _offset);
+        unchecked {
+            return firstFutureExpirationDate + expirationIntervalSeconds() * (_currentIndex + _offset);
+        }
     }
 
     function _setOrderExpirationActive(address _participant, uint256 _expirationAt, bool _active) private {
@@ -854,17 +856,23 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         uint256 expirationAt = _activeExpirationAt(absoluteIndex, 0);
         uint256 interval = expirationIntervalSeconds();
 
-        for (uint256 i = 0; i < len; i++) {
+        for (uint256 i = 0; i < len;) {
             uint256 nextPage = absoluteIndex >> 8;
             if (nextPage != page) {
                 page = nextPage;
                 word = participantOrderExpirationBitmap[_participant][page];
             }
             if (word & (1 << (absoluteIndex & 0xff)) != 0) {
-                expirationAts[count++] = expirationAt;
+                expirationAts[count] = expirationAt;
+                unchecked {
+                    ++count;
+                }
             }
-            absoluteIndex++;
-            expirationAt += interval;
+            unchecked {
+                ++i;
+                ++absoluteIndex;
+                expirationAt += interval;
+            }
         }
     }
 

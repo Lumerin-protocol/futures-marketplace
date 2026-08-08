@@ -49,6 +49,24 @@ describe("MM views", () => {
     assert.deepEqual(await futures.read.getUserOrdersAtExpiration([seller.account.address, dd]), ids);
   });
 
+  it("hasRestingOrderDelta ignores expired orders without cleanup", async () => {
+    const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures, collateralVault } = contracts;
+    const { seller, tc } = accounts;
+    const dd = (await futures.read.getExpirationDates())[0];
+
+    assert.equal(await futures.read.hasRestingOrderDelta([seller.account.address]), false);
+    await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
+    await futures.write.createOrder([parseUnits("100", 6), dd, 1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
+    assert.equal(await futures.read.hasRestingOrderDelta([seller.account.address]), true);
+
+    await tc.setNextBlockTimestamp({ timestamp: dd + 1n });
+    await tc.mine({ blocks: 1 });
+    assert.equal(await futures.read.hasRestingOrderDelta([seller.account.address]), false);
+  });
+
   it("getActiveExpirationDates returns positions where caller is buyer or seller", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;

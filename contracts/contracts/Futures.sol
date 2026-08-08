@@ -225,11 +225,13 @@ contract Futures is FuturesAdmin {
     /// @dev The state check is what separates this from `_underwater`: an account holding
     ///      nothing has an MM of zero, so it is never "liquidatable" even at a zero balance.
     function isLiquidatable(address _participant) public view returns (bool) {
-        bool hasState = _hasActiveOrders(_participant) || participantActiveExpirationAts[_participant].length() > 0;
+        bool hasState =
+            hasRestingOrderDelta(_participant) || participantActiveExpirationAts[_participant].length() > 0;
         return hasState && _underwater(_participant);
     }
 
-    function _hasActiveOrders(address _participant) private view returns (bool) {
+    /// @notice Whether the participant has margin-relevant orders in the tradable window.
+    function hasRestingOrderDelta(address _participant) public view returns (bool) {
         (, uint256 count) = _activeOrderExpirations(_participant);
         return count != 0;
     }
@@ -412,17 +414,27 @@ contract Futures is FuturesAdmin {
     function getUserOrders(address _user) external view returns (bytes32[] memory orderIds) {
         (uint256[] memory expirationAts, uint256 activeCount) = _activeOrderExpirations(_user);
         uint256 total;
-        for (uint256 i = 0; i < activeCount; i++) {
-            total += participantExpirationAtOrderIdsIndex[_user][expirationAts[i]].length();
+        for (uint256 i = 0; i < activeCount;) {
+            unchecked {
+                total += participantExpirationAtOrderIdsIndex[_user][expirationAts[i]].length();
+                ++i;
+            }
         }
 
         orderIds = new bytes32[](total);
         uint256 cursor;
-        for (uint256 i = 0; i < activeCount; i++) {
+        for (uint256 i = 0; i < activeCount;) {
             EnumerableSet.Bytes32Set storage ids = participantExpirationAtOrderIdsIndex[_user][expirationAts[i]];
             uint256 len = ids.length();
-            for (uint256 j = 0; j < len; j++) {
-                orderIds[cursor++] = ids.at(j);
+            for (uint256 j = 0; j < len;) {
+                orderIds[cursor] = ids.at(j);
+                unchecked {
+                    ++j;
+                    ++cursor;
+                }
+            }
+            unchecked {
+                ++i;
             }
         }
     }
@@ -440,12 +452,15 @@ contract Futures is FuturesAdmin {
 
     function getOrderAggregate(address _user) external view returns (OrderAggregate memory aggregate_) {
         (uint256[] memory expirationAts, uint256 activeCount) = _activeOrderExpirations(_user);
-        for (uint256 i = 0; i < activeCount; i++) {
+        for (uint256 i = 0; i < activeCount;) {
             OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_user][expirationAts[i]];
             aggregate_.buyQty += aggregate.buyQty;
             aggregate_.sellQty += aggregate.sellQty;
             aggregate_.buyValue += aggregate.buyValue;
             aggregate_.sellValue += aggregate.sellValue;
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -478,11 +493,13 @@ contract Futures is FuturesAdmin {
     function getNetPositionDelta(address _participant) external view returns (int256) {
         EnumerableSet.UintSet storage dates = participantActiveExpirationAts[_participant];
         uint256 len = dates.length();
-        int256 netDelta = 0;
-        for (uint256 i = 0; i < len; i++) {
+        int256 netDelta;
+        for (uint256 i = 0; i < len;) {
             uint256 date = dates.at(i);
-            if (settlementPrice[date] != 0) continue;
-            netDelta += participantExpirationAtNetDelta[_participant][date];
+            if (settlementPrice[date] == 0) netDelta += participantExpirationAtNetDelta[_participant][date];
+            unchecked {
+                ++i;
+            }
         }
         return netDelta * int256(10 ** collateralDecimals);
     }
@@ -607,8 +624,11 @@ contract Futures is FuturesAdmin {
     function getExpirationDates() external view returns (uint256[] memory) {
         uint256 currentExpirationDateIndex = _getCurrentExpirationAtIndex();
         uint256[] memory expirationDatesArray = new uint256[](futureExpirationDatesCount);
-        for (uint256 i = 0; i < futureExpirationDatesCount; i++) {
+        for (uint256 i = 0; i < futureExpirationDatesCount;) {
             expirationDatesArray[i] = _activeExpirationAt(currentExpirationDateIndex, i);
+            unchecked {
+                ++i;
+            }
         }
         return expirationDatesArray;
     }
