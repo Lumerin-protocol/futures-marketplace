@@ -206,7 +206,6 @@ async function benchmarkViews() {
       [seller.account.address, firstExpiration],
     ],
     ["getOrderBookPrices(uint256,uint256)", "getOrderBookPrices", [firstExpiration, 10n]],
-    ["getPendingFunding(address)", "getPendingFunding", [buyer.account.address]],
     [
       "getQuantityAtPrice(uint256,uint256,bool)",
       "getQuantityAtPrice",
@@ -762,7 +761,7 @@ describe("Futures gas benchmark", () => {
 
     const snapshot = gas.snapshot();
     const coverage = assertAbiFunctionCoverage(FuturesAbi, snapshot, exclusions);
-    assert.equal(coverage.covered.length, 70);
+    assert.equal(coverage.covered.length, 69);
     assert.deepEqual(coverage.excluded, [
       "initialize(address,uint8,uint256,uint8,uint8,uint256)",
       "proxiableUUID()",

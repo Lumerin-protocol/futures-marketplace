@@ -487,40 +487,31 @@ contract Futures is FuturesAdmin {
         return netDelta * int256(10 ** collateralDecimals);
     }
 
-    /// @dev One pass over the participant's active expiries, yielding both figures the
-    ///      three position views need. Settled expiries stop contributing delta — the
-    ///      exposure is gone once the price is pinned — but keep contributing PnL, frozen
-    ///      at that pinned price until `settlePosition` pays it out.
-    ///
-    ///      The live index is read lazily, and that is load-bearing: a participant whose
-    ///      expiries have all settled never touches the oracle, so these views keep working
-    ///      (rather than reverting `OracleStale`) when the feed is down. Hoisting the read
-    ///      above the loop would quietly break that.
-    function _positionAggregate(address _participant)
+    /// @dev Collect mark-independent position inputs. Future expiries cannot have a pinned
+    ///      settlement price, so their settlement slots are not touched. All unpinned
+    ///      positions share one live mark and can be collapsed before pricing.
+    function _positionRiskInputs(address _participant)
         private
         view
-        returns (int256 netPositionDelta, int256 unrealizedPnl)
+        returns (int256 liveDelta, int256 liveEntryValue, int256 pinnedPnl)
     {
         EnumerableSet.UintSet storage dates = participantActiveExpirationAts[_participant];
         uint256 len = dates.length();
-        int256 netDelta = 0;
-        uint256 livePrice = 0;
-        bool livePriceLoaded = false;
-        for (uint256 i = 0; i < len; i++) {
+        for (uint256 i = 0; i < len;) {
             uint256 date = dates.at(i);
             int256 dateDelta = participantExpirationAtNetDelta[_participant][date];
-            uint256 markPrice = settlementPrice[date];
-            if (markPrice == 0) {
-                netDelta += dateDelta;
-                if (!livePriceLoaded) {
-                    livePrice = getMarketPrice();
-                    livePriceLoaded = true;
-                }
-                markPrice = livePrice;
+            int256 entryValue = participantExpirationAtNetEntryValue[_participant][date];
+            uint256 pinnedPrice = date <= block.timestamp ? settlementPrice[date] : 0;
+            if (pinnedPrice != 0) {
+                pinnedPnl += int256(pinnedPrice) * dateDelta - entryValue;
+            } else {
+                liveDelta += dateDelta;
+                liveEntryValue += entryValue;
             }
-            unrealizedPnl += int256(markPrice) * dateDelta - participantExpirationAtNetEntryValue[_participant][date];
+            unchecked {
+                ++i;
+            }
         }
-        netPositionDelta = netDelta * int256(10 ** collateralDecimals);
     }
 
     /// @notice ILinearMarket: all per-user margin inputs in a single call (saves the
@@ -534,21 +525,29 @@ contract Futures is FuturesAdmin {
     ///      gone with it: netting at the engine is exact and cross-product, and covers the
     ///      case a venue-local credit cannot, where the offsetting position sits elsewhere.
     function getRiskView(address _participant) external view returns (ILinearMarket.RiskView memory view_) {
-        (view_.netPositionDelta, view_.unrealizedPnl) = _positionAggregate(_participant);
-        view_.pendingFunding = 0;
+        (int256 liveDelta, int256 liveEntryValue, int256 pinnedPnl) = _positionRiskInputs(_participant);
+        (
+            OrderAggregate memory orders_,
+            uint256 liveBuyQty,
+            uint256 liveSellQty,
+            uint256 pinnedBuyMark,
+            uint256 pinnedSellMark
+        ) = _restingRiskInputs(_participant);
 
-        (uint256 buyQty, uint256 sellQty, uint256 buyValue, uint256 sellValue, uint256 buyMark, uint256 sellMark) =
-            _restingAggregate(_participant);
-        view_.buyOrderDelta = buyQty * (10 ** collateralDecimals);
-        view_.sellOrderDelta = sellQty * (10 ** collateralDecimals);
-        if (buyValue > buyMark) view_.buyOrderFillLoss = buyValue - buyMark;
-        if (sellMark > sellValue) view_.sellOrderFillLoss = sellMark - sellValue;
-    }
+        uint256 livePrice;
+        if (liveDelta != 0 || liveBuyQty != 0 || liveSellQty != 0) {
+            livePrice = getMarketPrice();
+        }
+        uint256 scale = 10 ** collateralDecimals;
+        view_.netPositionDelta = liveDelta * int256(scale);
+        view_.unrealizedPnl = pinnedPnl + int256(livePrice) * liveDelta - liveEntryValue;
+        view_.buyOrderDelta = orders_.buyQty * scale;
+        view_.sellOrderDelta = orders_.sellQty * scale;
 
-    /// @notice Always 0 — futures have no funding mechanism. Kept as a standalone read so
-    ///         off-chain consumers can treat both venues uniformly.
-    function getPendingFunding(address) external pure returns (int256) {
-        return 0;
+        uint256 buyMark = pinnedBuyMark + livePrice * liveBuyQty;
+        uint256 sellMark = pinnedSellMark + livePrice * liveSellQty;
+        if (orders_.buyValue > buyMark) view_.buyOrderFillLoss = orders_.buyValue - buyMark;
+        if (sellMark > orders_.sellValue) view_.sellOrderFillLoss = sellMark - orders_.sellValue;
     }
 
     /// @notice Total resting order notional per side at the orders' own limit prices
@@ -560,47 +559,48 @@ contract Futures is FuturesAdmin {
     ///      expiry — the less conservative of the two, and consistent with this venue
     ///      already collapsing every expiry into a single `netPositionDelta` and ignoring
     ///      calendar-spread risk.
-    function _restingAggregate(address _participant)
+    function _restingRiskInputs(address _participant)
         private
         view
         returns (
-            uint256 buyQty,
-            uint256 sellQty,
-            uint256 buyValue,
-            uint256 sellValue,
-            uint256 buyMark,
-            uint256 sellMark
+            OrderAggregate memory orders_,
+            uint256 liveBuyQty,
+            uint256 liveSellQty,
+            uint256 pinnedBuyMark,
+            uint256 pinnedSellMark
         )
     {
         (uint256[] memory expirationAts, uint256 activeCount) = _activeOrderExpirations(_participant);
-        uint256 livePrice = 0;
-        bool livePriceLoaded = false;
-        for (uint256 i = 0; i < activeCount; i++) {
+        for (uint256 i = 0; i < activeCount;) {
             uint256 expirationAt = expirationAts[i];
             OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_participant][expirationAt];
-            uint256 markPrice = settlementPrice[expirationAt];
-            if (markPrice == 0) {
-                if (!livePriceLoaded) {
-                    livePrice = getMarketPrice();
-                    livePriceLoaded = true;
-                }
-                markPrice = livePrice;
-            }
+            uint256 buyQty = aggregate.buyQty;
+            uint256 sellQty = aggregate.sellQty;
+            orders_.buyQty += buyQty;
+            orders_.sellQty += sellQty;
+            orders_.buyValue += aggregate.buyValue;
+            orders_.sellValue += aggregate.sellValue;
 
-            buyQty += aggregate.buyQty;
-            sellQty += aggregate.sellQty;
-            buyValue += aggregate.buyValue;
-            sellValue += aggregate.sellValue;
-            buyMark += markPrice * aggregate.buyQty;
-            sellMark += markPrice * aggregate.sellQty;
+            uint256 pinnedPrice = expirationAt <= block.timestamp ? settlementPrice[expirationAt] : 0;
+            if (pinnedPrice == 0) {
+                liveBuyQty += buyQty;
+                liveSellQty += sellQty;
+            } else {
+                pinnedBuyMark += pinnedPrice * buyQty;
+                pinnedSellMark += pinnedPrice * sellQty;
+            }
+            unchecked {
+                ++i;
+            }
         }
     }
 
     /// @notice Mark-to-market PnL across active expiries, in collateral token units.
     ///         Settled-but-unswept expiries are marked at their pinned settlement price.
     function getUnrealizedPnl(address _participant) external view returns (int256) {
-        (, int256 unrealizedPnl) = _positionAggregate(_participant);
-        return unrealizedPnl;
+        (int256 liveDelta, int256 liveEntryValue, int256 pinnedPnl) = _positionRiskInputs(_participant);
+        uint256 livePrice = liveDelta != 0 ? getMarketPrice() : 0;
+        return pinnedPnl + int256(livePrice) * liveDelta - liveEntryValue;
     }
 
     /// @notice The currently tradable expiration timestamps, earliest first.
