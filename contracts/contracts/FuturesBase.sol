@@ -103,7 +103,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     uint16 public liquidationFeeBps;
     /// @notice Share of the liquidation fee paid to the keeper (msg.sender).
     ///         In basis points: 10_000 = 100% to liquidator, 5_000 = 50/50 split.
-    ///         The remainder goes to the insurance fund.
+    ///         The remainder becomes venue revenue in this contract's vault account.
     /// @dev Appended at end of storage to preserve the upgradeable layout.
     uint16 public liquidatorShareBps;
 
@@ -541,8 +541,15 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     }
 
     function _chargeMatchFees(address _maker, address _taker, int256 makerAmt, int256 takerAmt) internal {
-        _transferFee(_maker, makerAmt);
-        _transferFee(_taker, takerAmt);
+        // Collect the positive side first so a same-match rebate can use revenue
+        // earned by that match instead of depending on a pre-funded fee pot.
+        if (makerAmt < 0) {
+            _transferFee(_taker, takerAmt);
+            _transferFee(_maker, makerAmt);
+        } else {
+            _transferFee(_maker, makerAmt);
+            _transferFee(_taker, takerAmt);
+        }
     }
 
     /// @dev Move a signed trading fee between a participant and the fee pot
@@ -1000,10 +1007,10 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     }
 
     /// @notice Charge a liquidation fee on the closed notional value, split between
-    ///         liquidator (msg.sender) and insurance fund according to `liquidatorShareBps`.
+    ///         liquidator (msg.sender) and venue revenue according to `liquidatorShareBps`.
     /// @dev Fee is `_notionalValue * liquidationFeeBps / 10000`, capped at the user's
     ///      actual vault balance. The liquidator receives `fee * liquidatorShareBps / 10000`
-    ///      (also capped at available balance), and the remainder goes to the insurance fund.
+    ///      (also capped at available balance), and the remainder becomes venue revenue.
     /// @param _user The liquidated user (fee source)
     /// @param _notionalValue Notional value of the liquidated position/order
     /// @return totalFee Total fee actually collected (may be less than computed if balance insufficient)
@@ -1019,14 +1026,15 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         if (totalFee == 0) return 0;
 
         address liquidator = _msgSender();
-        address insurance = _insuranceFundAccount();
-
         uint16 liqShareBps = liquidatorShareBps;
         uint256 liquidatorShare = totalFee * uint256(liqShareBps) / BPS;
-        uint256 insuranceShare = totalFee - liquidatorShare;
+        uint256 exchangeShare = totalFee - liquidatorShare;
 
         _internalTransfer(_user, liquidator, liquidatorShare);
-        _internalTransfer(_user, insurance, insuranceShare);
+        if (exchangeShare != 0) {
+            collectedFeesBalance += exchangeShare;
+            _internalTransfer(_user, address(this), exchangeShare);
+        }
     }
 
     function _insuranceFundAccount() internal view returns (address) {

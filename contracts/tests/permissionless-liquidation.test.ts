@@ -158,7 +158,7 @@ describe("Futures - permissionless liquidation entry points", function () {
       );
     });
 
-    it("cancels the order without paying a fee (payout disabled), and emits events", async function () {
+    it("cancels the order, routes the exchange share to revenue, and emits events", async function () {
       const data = await networkHelpers.loadFixture(underwaterWithOrdersAndPositionFixture);
       const { contracts, accounts } = data;
       const { futures, collateralVault } = contracts;
@@ -172,6 +172,8 @@ describe("Futures - permissionless liquidation entry points", function () {
 
       const liqBalBefore = await collateralVault.read.balanceOf([buyer2.account.address]);
       const userBalBefore = await collateralVault.read.balanceOf([buyer.account.address]);
+      const revenueBefore = await futures.read.collectedFeesBalance();
+      const insuranceBefore = await collateralVault.read.insuranceFundBalance();
 
       const tx = await futures.write.liquidateOrder([buyer.account.address, target], {
         account: buyer2.account,
@@ -183,7 +185,7 @@ describe("Futures - permissionless liquidation entry points", function () {
 
       // Liquidator gets nothing (liquidatorShareBps defaults to 0).
       assert.equal(liqBalAfter, liqBalBefore);
-      // User pays the fee to the insurance fund.
+      // User pays the fee to venue revenue.
       assert.ok(userBalBefore > userBalAfter, "user should pay liquidation fee");
 
       const ordersAfter = await futures.read.getUserOrders([buyer.account.address]);
@@ -200,9 +202,19 @@ describe("Futures - permissionless liquidation entry points", function () {
       assert.ok(orderCancelled, "OrderCancelled should be emitted when order is liquidated");
       assert.ok(orderLiquidated);
       assert.ok(orderLiquidated.args.fee > 0n, "fee should be non-zero");
+      assert.equal(
+        await futures.read.collectedFeesBalance(),
+        revenueBefore + orderLiquidated.args.fee,
+        "exchange share should accrue as Futures revenue",
+      );
+      assert.equal(
+        await collateralVault.read.insuranceFundBalance(),
+        insuranceBefore,
+        "liquidation revenue should not be classified as insurance",
+      );
     });
 
-    it("does not transfer any fee even when liquidationFeeBps is set high (payout disabled)", async function () {
+    it("keeps the liquidator share at zero even when liquidationFeeBps is high", async function () {
       const data = await networkHelpers.loadFixture(underwaterWithOrdersAndPositionFixture);
       const { contracts, accounts } = data;
       const { futures, collateralVault } = contracts;
@@ -245,7 +257,7 @@ describe("Futures - permissionless liquidation entry points", function () {
       );
     });
 
-    it("cancels supplied orders without paying a fee (payout disabled)", async function () {
+    it("cancels supplied orders without paying a liquidator share", async function () {
       const data = await networkHelpers.loadFixture(underwaterWithOrdersAndPositionFixture);
       const { contracts, accounts } = data;
       const { futures, collateralVault } = contracts;
