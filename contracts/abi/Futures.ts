@@ -44,6 +44,11 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "EmptyBatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "ExpirationDateNotAvailable",
     "type": "error"
   },

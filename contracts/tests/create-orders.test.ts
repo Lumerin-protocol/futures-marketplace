@@ -17,26 +17,16 @@ type OrderIntent = {
 };
 
 describe("Futures.createOrders (batch placement)", () => {
-  it("empty intents array is a no-op", async () => {
+  it("rejects an empty intents array before submission", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault } = contracts;
-    const { seller, pc } = accounts;
+    const { futures } = contracts;
+    const { seller } = accounts;
 
-    // Even with zero collateral, an empty batch must succeed: outdated-orders
-    // sweep is empty, and the IM check passes trivially (required = 0).
-    const balanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
-
-    const tx = await futures.write.createOrders([[]], { account: seller.account });
-    const receipt = await pc.waitForTransactionReceipt({ hash: tx });
-    assert.equal(receipt.status, "success");
-
-    const created = parseEventLogs({
-      logs: receipt.logs,
-      abi: futures.abi,
-      eventName: "OrderCreated",
-    });
-    assert.equal(created.length, 0);
-    assert.equal(await collateralVault.read.balanceOf([seller.account.address]), balanceBefore);
+    await viem.assertions.revertWithCustomError(
+      futures.write.createOrders([[]], { account: seller.account }),
+      futures,
+      "EmptyBatch",
+    );
   });
 
   it("places multiple same-side orders in one call and emits one OrderCreated per intent", async () => {

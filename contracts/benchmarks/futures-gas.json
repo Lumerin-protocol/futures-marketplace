@@ -114,35 +114,28 @@
     },
     {
       "function": "createOrders((uint256,uint256,int256,uint8)[])",
-      "gas": "508266",
+      "gas": "508224",
       "id": "createOrders((uint256,uint256,int256,uint8)[])::batch-1",
       "kind": "transaction",
       "scenario": "batch-1"
     },
     {
       "function": "createOrders((uint256,uint256,int256,uint8)[])",
-      "gas": "2540370",
+      "gas": "2540328",
       "id": "createOrders((uint256,uint256,int256,uint8)[])::batch-10",
       "kind": "transaction",
       "scenario": "batch-10"
     },
     {
       "function": "createOrders((uint256,uint256,int256,uint8)[])",
-      "gas": "1603730",
+      "gas": "1603688",
       "id": "createOrders((uint256,uint256,int256,uint8)[])::batch-5",
       "kind": "transaction",
       "scenario": "batch-5"
     },
     {
       "function": "createOrders((uint256,uint256,int256,uint8)[])",
-      "gas": "27539",
-      "id": "createOrders((uint256,uint256,int256,uint8)[])::empty batch",
-      "kind": "transaction",
-      "scenario": "empty batch"
-    },
-    {
-      "function": "createOrders((uint256,uint256,int256,uint8)[])",
-      "gas": "769980",
+      "gas": "769938",
       "id": "createOrders((uint256,uint256,int256,uint8)[])::two resting orders",
       "kind": "transaction",
       "scenario": "two resting orders"

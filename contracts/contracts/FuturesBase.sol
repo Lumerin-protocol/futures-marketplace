@@ -294,6 +294,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     error TimeInForceNotFilled();
     error InvalidTimeInForce();
     error InvalidReduceQuantity();
+    error EmptyBatch();
     /// @notice Fee magnitude above `MAX_FEE_BPS`, or a maker+taker sum below zero (which
     ///         would make every match a net outflow from the insurance fund).
     error InvalidFee();
