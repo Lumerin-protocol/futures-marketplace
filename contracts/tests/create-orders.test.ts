@@ -17,26 +17,16 @@ type OrderIntent = {
 };
 
 describe("Futures.createOrders (batch placement)", () => {
-  it("empty intents array is a no-op", async () => {
+  it("rejects an empty intents array before submission", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault } = contracts;
-    const { seller, pc } = accounts;
+    const { futures } = contracts;
+    const { seller } = accounts;
 
-    // Even with zero collateral, an empty batch must succeed: outdated-orders
-    // sweep is empty, and the IM check passes trivially (required = 0).
-    const balanceBefore = await collateralVault.read.balanceOf([seller.account.address]);
-
-    const tx = await futures.write.createOrders([[]], { account: seller.account });
-    const receipt = await pc.waitForTransactionReceipt({ hash: tx });
-    assert.equal(receipt.status, "success");
-
-    const created = parseEventLogs({
-      logs: receipt.logs,
-      abi: futures.abi,
-      eventName: "OrderCreated",
-    });
-    assert.equal(created.length, 0);
-    assert.equal(await collateralVault.read.balanceOf([seller.account.address]), balanceBefore);
+    await viem.assertions.revertWithCustomError(
+      futures.write.createOrders([[]], { account: seller.account }),
+      futures,
+      "EmptyBatch",
+    );
   });
 
   it("places multiple same-side orders in one call and emits one OrderCreated per intent", async () => {
@@ -220,11 +210,14 @@ describe("Futures.createOrders (batch placement)", () => {
       BigInt(config.expirationIntervalSeconds),
     );
 
-    // The stale order is now past `expirationAt`, but a fresh `createOrders`
-    // call must NOT close it (the prologue sweep is gone). The only effect on
-    // the seller's order set is the newly-added intent.
+    // The stale order remains physically stored but leaves the active-window view.
     const ordersBefore = await futures.read.getUserOrders([seller.account.address]);
-    assert.equal(ordersBefore.length, 1, "stale order should still be present pre-placement");
+    assert.equal(ordersBefore.length, 0);
+    assert.equal(
+      (await futures.read.getUserOrdersAtExpiration([seller.account.address, dd])).length,
+      1,
+      "explicit historical view still exposes the stale order",
+    );
 
     const freshDeliveryDate = (await futures.read.getExpirationDates()).at(-1);
     if (!freshDeliveryDate) {
@@ -254,7 +247,7 @@ describe("Futures.createOrders (batch placement)", () => {
     assert.equal(closed.length, 0, "createOrders must not implicitly close expired orders");
 
     const ordersAfter = await futures.read.getUserOrders([seller.account.address]);
-    assert.equal(ordersAfter.length, 2, "stale order is still resting next to the new one");
+    assert.equal(ordersAfter.length, 1, "only the new active-delivery order is returned");
   });
 
   it("is cheaper than equivalent individual createOrder transactions", async () => {

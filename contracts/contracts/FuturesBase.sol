@@ -34,6 +34,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     mapping(address => EnumerableSet.Bytes32Set) internal participantOrderIdsIndex;
     /// @dev Dead after v3: former per-(user, expiry) lot index. Slot retained.
     mapping(address => mapping(uint256 => EnumerableSet.Bytes32Set)) internal participantExpirationAtPositionIdsIndex;
+    /// @dev Dead after v4.3: former per-(user, expiry, price) order index. Slot retained.
     mapping(address => mapping(uint256 => mapping(uint256 => EnumerableSet.Bytes32Set))) private
         participantExpirationAtPriceOrderIdsIndex;
 
@@ -102,7 +103,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     uint16 public liquidationFeeBps;
     /// @notice Share of the liquidation fee paid to the keeper (msg.sender).
     ///         In basis points: 10_000 = 100% to liquidator, 5_000 = 50/50 split.
-    ///         The remainder goes to the insurance fund.
+    ///         The remainder becomes venue revenue in this contract's vault account.
     /// @dev Appended at end of storage to preserve the upgradeable layout.
     uint16 public liquidatorShareBps;
 
@@ -130,7 +131,14 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     }
 
     mapping(address => mapping(uint256 => OrderAggregate)) internal participantExpirationAtOrderAggregate;
-    mapping(address => EnumerableSet.UintSet) internal participantOrderExpirationAts;
+    /// @dev Dead after v4.3: former order-expiration set used only by resetState. Slot retained.
+    mapping(address => EnumerableSet.UintSet) private participantOrderExpirationAts;
+    /// @dev Canonical resting-order index for v4.3+: bounded independently per delivery date.
+    ///      The legacy global `participantOrderIdsIndex` remains in-place for upgrade cleanup only.
+    mapping(address => mapping(uint256 => EnumerableSet.Bytes32Set)) internal participantExpirationAtOrderIdsIndex;
+    /// @dev One bit per absolute delivery index. Reads mask this to the current window, so
+    ///      historical bits never require a keeper sweep and never increase risk-view gas.
+    mapping(address => mapping(uint256 => uint256)) internal participantOrderExpirationBitmap;
 
     // immutable
     ICollateralVault public immutable vault;
@@ -139,7 +147,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     // constants
     /// @notice One contract settles 1 PH/s/day (hashes/s·day). Matches the hashprice oracle quote basis.
     uint256 public constant CONTRACT_SIZE_HPS_DAY = 1e15;
-    uint8 public constant MAX_ORDERS_PER_PARTICIPANT = 100;
+    uint8 public constant MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION = 100;
     uint256 public constant MAX_PRICE_LEVELS_PER_SIDE = 200;
     uint256 internal constant BPS = 10_000; // Basis points denominator
     /// @notice Hard ceiling on |makerFeeBps| and |takerFeeBps|: 100 bps (1%).
@@ -266,7 +274,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     error InsufficientMarginBalance();
     error PositionNotExists();
     error PositionExpirationNotStartedYet();
-    error MaxOrdersPerParticipantReached();
+    error MaxOrdersPerParticipantPerExpirationReached();
     error ValueOutOfRange(int256 min, int256 max);
     error ZeroAddress();
     error InsuranceFundNotConfigured();
@@ -280,13 +288,13 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     error OverLiquidation();
     error OrderNotBelongToUser();
     error OrderNotExists();
-    error OrderNotExpired();
     error ArrayLengthMismatch();
     error MaxPriceLevelsReached();
     /// @notice FOK could not fill entirely, or IOC matched nothing.
     error TimeInForceNotFilled();
     error InvalidTimeInForce();
     error InvalidReduceQuantity();
+    error EmptyBatch();
     /// @notice Fee magnitude above `MAX_FEE_BPS`, or a maker+taker sum below zero (which
     ///         would make every match a net outflow from the insurance fund).
     error InvalidFee();
@@ -313,12 +321,10 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         return bytes32(++nonce);
     }
 
-    /// @dev Index a newly resting order under its (participant, expiry, price) bucket.
-    ///      Mirrors the removal in {_removeRestingOrder}, and keeps the index private here.
-    function _indexRestingOrder(address _participant, uint256 _expirationAt, uint256 _price, bytes32 _orderId)
-        internal
-    {
-        participantExpirationAtPriceOrderIdsIndex[_participant][_expirationAt][_price].add(_orderId);
+    /// @dev Index a newly resting order under its participant/expiry bucket.
+    ///      Mirrors the removal in {_removeRestingOrder}.
+    function _indexRestingOrder(address _participant, uint256 _expirationAt, bytes32 _orderId) internal {
+        participantExpirationAtOrderIdsIndex[_participant][_expirationAt].add(_orderId);
     }
 
     function _increaseOrderAggregate(address _participant, uint256 _expirationAt, uint256 _price, int256 _quantity)
@@ -326,6 +332,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     {
         uint256 absQty = M.abs(_quantity);
         OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_participant][_expirationAt];
+        bool wasEmpty = aggregate.buyQty == 0 && aggregate.sellQty == 0;
         if (_quantity > 0) {
             aggregate.buyQty += absQty;
             aggregate.buyValue += _price * absQty;
@@ -333,7 +340,9 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
             aggregate.sellQty += absQty;
             aggregate.sellValue += _price * absQty;
         }
-        participantOrderExpirationAts[_participant].add(_expirationAt);
+        if (wasEmpty) {
+            _setOrderExpirationActive(_participant, _expirationAt, true);
+        }
     }
 
     function _decreaseOrderAggregate(
@@ -352,30 +361,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
             aggregate.sellValue -= _price * _absQty;
         }
         if (aggregate.buyQty == 0 && aggregate.sellQty == 0) {
-            participantOrderExpirationAts[_participant].remove(_expirationAt);
-        }
-    }
-
-    function _clearOrderAggregateCache(address _participant) internal {
-        EnumerableSet.UintSet storage expirationAts = participantOrderExpirationAts[_participant];
-        while (expirationAts.length() > 0) {
-            uint256 expirationAt = expirationAts.at(expirationAts.length() - 1);
-            delete participantExpirationAtOrderAggregate[_participant][expirationAt];
-            expirationAts.remove(expirationAt);
-        }
-    }
-
-    /// @dev Rebuild from the canonical order index, including physically resting expired orders.
-    function _rebuildOrderAggregateCache(address _participant) internal {
-        _clearOrderAggregateCache(_participant);
-
-        EnumerableSet.Bytes32Set storage ids = participantOrderIdsIndex[_participant];
-        uint256 len = ids.length();
-        for (uint256 i = 0; i < len; i++) {
-            Order storage order = orders[ids.at(i)];
-            if (order.quantity != 0) {
-                _increaseOrderAggregate(_participant, order.expirationAt, order.price, order.quantity);
-            }
+            _setOrderExpirationActive(_participant, _expirationAt, false);
         }
     }
 
@@ -555,8 +541,15 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     }
 
     function _chargeMatchFees(address _maker, address _taker, int256 makerAmt, int256 takerAmt) internal {
-        _transferFee(_maker, makerAmt);
-        _transferFee(_taker, takerAmt);
+        // Collect the positive side first so a same-match rebate can use revenue
+        // earned by that match instead of depending on a pre-funded fee pot.
+        if (makerAmt < 0) {
+            _transferFee(_taker, takerAmt);
+            _transferFee(_maker, makerAmt);
+        } else {
+            _transferFee(_maker, makerAmt);
+            _transferFee(_taker, takerAmt);
+        }
     }
 
     /// @dev Move a signed trading fee between a participant and the fee pot
@@ -670,7 +663,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         StructuredLinkedList.List storage orderIndexId = _expirationAtPriceOrderIds(expirationAt, price, isBuy);
         _removeOrderFromQueue(orderIndexId, orderId, expirationAt, price, isBuy);
         participantOrderIdsIndex[participant].remove(orderId);
-        participantExpirationAtPriceOrderIdsIndex[participant][expirationAt][price].remove(orderId);
+        participantExpirationAtOrderIdsIndex[participant][expirationAt].remove(orderId);
         _decreaseOrderAggregate(participant, expirationAt, price, M.abs(orders[orderId].quantity), isBuy);
         delete orders[orderId];
     }
@@ -682,8 +675,9 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         uint256 _price,
         bool _isBuy
     ) internal {
+        bool newPriceLevel = orderIndexId.sizeOf() == 0;
         orderIndexId.pushBack(uint256(_orderId));
-        _addPriceLevel(_expirationAt, _price, _isBuy);
+        if (newPriceLevel) _addPriceLevel(_expirationAt, _price, _isBuy);
     }
 
     function _removeOrderFromQueue(
@@ -697,10 +691,10 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         _removePriceLevelIfEmpty(orderIndexId, _expirationAt, _price, _isBuy);
     }
 
-    /// @notice Insert `_price` into the sorted ladder for `_expirationAt` if absent.
+    /// @notice Insert a new `_price` into the sorted ladder for `_expirationAt`.
     function _addPriceLevel(uint256 _expirationAt, uint256 _price, bool _isBid) internal {
         StructuredLinkedList.List storage priceList = _isBid ? activeBidPrices[_expirationAt] : activeAskPrices[_expirationAt];
-        PriceLadderLib.insertPrice(priceList, _price, _isBid, MAX_PRICE_LEVELS_PER_SIDE);
+        PriceLadderLib.insertNewPrice(priceList, _price, _isBid, MAX_PRICE_LEVELS_PER_SIDE);
     }
 
     /// @notice Remove price level when its order queue is empty.
@@ -768,14 +762,13 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
 
     // ── Internal helpers: margin / liquidation ────────────────────────────────
 
-    function _doLiquidateFullPosition(address _user, uint256 _expirationAt, int256 _netQty) internal {
-        uint256 mark = _getMarketPrice(_getPrice());
+    function _doLiquidateFullPosition(address _user, uint256 _expirationAt, int256 _netQty, uint256 _mark) internal {
         int256 netEntry = participantExpirationAtNetEntryValue[_user][_expirationAt];
-        int256 pnl = int256(mark) * _netQty - netEntry;
+        int256 pnl = int256(_mark) * _netQty - netEntry;
 
         _transferPnl(_insuranceFundAccount(), _user, pnl);
 
-        uint256 closedNotional = mark * M.abs(_netQty);
+        uint256 closedNotional = _mark * M.abs(_netQty);
         uint256 liqFee = _chargeLiquidationFee(_user, closedNotional);
 
         participantExpirationAtNetDelta[_user][_expirationAt] = 0;
@@ -786,16 +779,18 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         _notifyLiquidation(_msgSender(), liqFee);
     }
 
-    function _doPartialLiquidatePosition(address _user, uint256 _expirationAt, int256 _netQty, uint256 _closeAbs)
-        internal
-        returns (int256 pnl, int256 signedClose)
-    {
-        uint256 mark = _getMarketPrice(_getPrice());
+    function _doPartialLiquidatePosition(
+        address _user,
+        uint256 _expirationAt,
+        int256 _netQty,
+        uint256 _closeAbs,
+        uint256 _mark
+    ) internal returns (int256 pnl, int256 signedClose) {
         int256 netEntry = participantExpirationAtNetEntryValue[_user][_expirationAt];
         uint256 absNet = M.abs(_netQty);
         uint256 avgEntry = M.abs(netEntry) / absNet;
         signedClose = M.toSigned(_netQty > 0, _closeAbs);
-        pnl = (int256(mark) - int256(avgEntry)) * signedClose;
+        pnl = (int256(_mark) - int256(avgEntry)) * signedClose;
         _transferPnl(_insuranceFundAccount(), _user, pnl);
 
         // Reduce toward zero; scale netEntryValue proportionally.
@@ -835,6 +830,69 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         return 0;
     }
 
+    function _activeExpirationAt(uint256 _currentIndex, uint256 _offset) internal view returns (uint256) {
+        unchecked {
+            return firstFutureExpirationDate + expirationIntervalSeconds() * (_currentIndex + _offset);
+        }
+    }
+
+    function _setOrderExpirationActive(address _participant, uint256 _expirationAt, bool _active) private {
+        uint256 absoluteIndex = (_expirationAt - firstFutureExpirationDate) / expirationIntervalSeconds();
+        uint256 page = absoluteIndex >> 8;
+        uint256 bit = 1 << (absoluteIndex & 0xff);
+        if (_active) {
+            participantOrderExpirationBitmap[_participant][page] |= bit;
+        } else {
+            participantOrderExpirationBitmap[_participant][page] &= ~bit;
+        }
+    }
+
+    /// @dev Active delivery dates with resting orders. A window spans at most two bitmap
+    ///      pages because `futureExpirationDatesCount` is a uint8.
+    function _activeOrderExpirations(address _participant)
+        internal
+        view
+        returns (uint256[] memory expirationAts, uint256 count)
+    {
+        uint256 len = futureExpirationDatesCount;
+        expirationAts = new uint256[](len);
+        uint256 absoluteIndex = _getCurrentExpirationAtIndex();
+        uint256 page = absoluteIndex >> 8;
+        uint256 word = participantOrderExpirationBitmap[_participant][page];
+        uint256 expirationAt = _activeExpirationAt(absoluteIndex, 0);
+        uint256 interval = expirationIntervalSeconds();
+
+        for (uint256 i = 0; i < len;) {
+            uint256 nextPage = absoluteIndex >> 8;
+            if (nextPage != page) {
+                page = nextPage;
+                word = participantOrderExpirationBitmap[_participant][page];
+            }
+            if (word & (1 << (absoluteIndex & 0xff)) != 0) {
+                expirationAts[count] = expirationAt;
+                unchecked {
+                    ++count;
+                }
+            }
+            unchecked {
+                ++i;
+                ++absoluteIndex;
+                expirationAt += interval;
+            }
+        }
+    }
+
+    function _isActiveExpirationAt(uint256 _expirationAt) internal view returns (bool) {
+        if (_expirationAt <= block.timestamp || _expirationAt < firstFutureExpirationDate) return false;
+
+        uint256 interval = expirationIntervalSeconds();
+        uint256 elapsedFromFirst = _expirationAt - firstFutureExpirationDate;
+        if (elapsedFromFirst % interval != 0) return false;
+
+        uint256 currentIndex = _getCurrentExpirationAtIndex();
+        return elapsedFromFirst <= (futureExpirationDatesCount - 1 + currentIndex) * interval;
+    }
+
     function expirationIntervalSeconds() internal pure returns (uint256) {
         return EXPIRATION_INTERVAL_DAYS * SECONDS_PER_DAY;
     }
@@ -866,6 +924,26 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         if (uint8(_tif) > uint8(TimeInForce.FOK)) revert InvalidTimeInForce();
     }
 
+    function _validateOrderIntent(uint256 _price, uint256 _expirationAt, int256 _qty, TimeInForce _tif)
+        internal
+        view
+    {
+        _validateTIF(_tif);
+        _validatePrice(_price);
+        _validateExpirationAt(_expirationAt);
+        _validateQty(_qty);
+    }
+
+    function _isLocallyReducing(address _participant, uint256 _expirationAt, int256 _quantity)
+        internal
+        view
+        returns (bool)
+    {
+        int256 position = participantExpirationAtNetDelta[_participant][_expirationAt];
+        if (position == 0 || (position > 0 ? _quantity >= 0 : _quantity <= 0)) return false;
+        return M.abs(_quantity) + _restingReduceAbs(_participant, _expirationAt, position) <= M.abs(position);
+    }
+
     function _validateQty(int256 _qty) internal pure {
         if (_qty == 0) revert InvalidQty();
     }
@@ -892,9 +970,11 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         }
     }
 
-    function _ensureNoCollateralDeficit(address _participant) internal view {
+    function _ensureNoCollateralDeficit(address _participant, uint256 _maxAllowedIm) internal view {
         uint256 required = portfolioMargin.computePortfolioIM(_participant);
-        if (vault.balanceOf(_participant) < required) revert InsufficientMarginBalance();
+        if (vault.balanceOf(_participant) < required && required > _maxAllowedIm) {
+            revert InsufficientMarginBalance();
+        }
     }
 
     // ── Internal helpers: collateral movement ─────────────────────────────────
@@ -927,10 +1007,10 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     }
 
     /// @notice Charge a liquidation fee on the closed notional value, split between
-    ///         liquidator (msg.sender) and insurance fund according to `liquidatorShareBps`.
+    ///         liquidator (msg.sender) and venue revenue according to `liquidatorShareBps`.
     /// @dev Fee is `_notionalValue * liquidationFeeBps / 10000`, capped at the user's
     ///      actual vault balance. The liquidator receives `fee * liquidatorShareBps / 10000`
-    ///      (also capped at available balance), and the remainder goes to the insurance fund.
+    ///      (also capped at available balance), and the remainder becomes venue revenue.
     /// @param _user The liquidated user (fee source)
     /// @param _notionalValue Notional value of the liquidated position/order
     /// @return totalFee Total fee actually collected (may be less than computed if balance insufficient)
@@ -946,14 +1026,15 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         if (totalFee == 0) return 0;
 
         address liquidator = _msgSender();
-        address insurance = _insuranceFundAccount();
-
         uint16 liqShareBps = liquidatorShareBps;
         uint256 liquidatorShare = totalFee * uint256(liqShareBps) / BPS;
-        uint256 insuranceShare = totalFee - liquidatorShare;
+        uint256 exchangeShare = totalFee - liquidatorShare;
 
         _internalTransfer(_user, liquidator, liquidatorShare);
-        _internalTransfer(_user, insurance, insuranceShare);
+        if (exchangeShare != 0) {
+            collectedFeesBalance += exchangeShare;
+            _internalTransfer(_user, address(this), exchangeShare);
+        }
     }
 
     function _insuranceFundAccount() internal view returns (address) {

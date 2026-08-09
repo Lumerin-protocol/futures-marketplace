@@ -220,8 +220,6 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
         args: [
           hashpriceUsd.address,
           liquidationMarginPercent,
-          0n, // was minimumPriceIncrement — now constant
-          0, // was expirationIntervalDays — now constant
           futureExpirationDatesCount,
           firstFutureExpirationDate,
         ],

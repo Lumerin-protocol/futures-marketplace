@@ -1,17 +1,27 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import { MulticallUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/MulticallUpgradeable.sol";
+import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
-import { Futures } from "../Futures.sol";
+import { FuturesBase } from "../FuturesBase.sol";
 
-/// @dev Test-only implementation used to simulate an upgraded proxy whose canonical
-///      orders predate the per-expiration aggregate cache and which still exposes
-///      the legacy embedded multicall removed in v4.2.
-contract FuturesOrderCacheMigrationHarness is Futures, MulticallUpgradeable {
-    constructor(ICollateralVault _vault) Futures(_vault) { }
+/// @dev Test-only implementation used to move newly created fixture orders into
+///      the legacy global participant index before exercising the v4.3 cutover.
+contract FuturesOrderCacheMigrationHarness is FuturesBase {
+    using EnumerableSet for EnumerableSet.Bytes32Set;
 
-    function clearOrderAggregateCache(address _participant) external {
-        _clearOrderAggregateCache(_participant);
+    string public constant VERSION = "test";
+
+    constructor(ICollateralVault _vault) FuturesBase(_vault) { }
+
+    function _authorizeUpgrade(address) internal override onlyOwner { }
+
+    function moveOrdersToLegacyIndex(address _participant, uint256 _expirationAt) external {
+        EnumerableSet.Bytes32Set storage ids = participantExpirationAtOrderIdsIndex[_participant][_expirationAt];
+        while (ids.length() > 0) {
+            bytes32 orderId = ids.at(ids.length() - 1);
+            ids.remove(orderId);
+            participantOrderIdsIndex[_participant].add(orderId);
+        }
     }
 }

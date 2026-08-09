@@ -116,28 +116,53 @@ abstract contract FuturesAdmin is FuturesBase {
 
     // ── Escape hatch ──────────────────────────────────────────────────────────
 
-    /// @notice Rebuild per-expiration resting-order aggregates from canonical order indexes.
-    /// @dev Idempotent and includes expired orders that have not yet been physically removed.
-    function rebuildOrderAggregateCache(address[] calldata _users) external onlyOwner {
-        for (uint256 i = 0; i < _users.length; i++) {
-            _rebuildOrderAggregateCache(_users[i]);
+    /// @notice Drop pre-v4.3 resting orders at currently tradable delivery dates.
+    /// @dev Intended for the one-transaction post-upgrade cutover. Historical expired
+    ///      orders and all positions remain untouched. Repeated calls are harmless.
+    function dropActiveOrders(address[] calldata _participants) external onlyOwner {
+        for (uint256 p = 0; p < _participants.length; p++) {
+            address participant = _participants[p];
+            EnumerableSet.Bytes32Set storage legacyIds = participantOrderIdsIndex[participant];
+            for (uint256 i = legacyIds.length(); i > 0; i--) {
+                bytes32 orderId = legacyIds.at(i - 1);
+                Order storage order = orders[orderId];
+                if (!_isActiveExpirationAt(order.expirationAt)) continue;
+
+                bool isBuy = order.quantity > 0;
+                _removeRestingOrder(orderId, order.expirationAt, order.price, participant, isBuy);
+                emit OrderCancelled(orderId, participant);
+            }
         }
     }
 
-    /// @notice Admin escape hatch: clear orders + aggregate positions for the given participants.
-    /// @dev Does not walk legacy lots for economics — zeros `netDelta` / `netEntryValue` /
-    ///      `activeExpirationAts` directly. Also purges dead lot indexes and order queues.
+    /// @notice Admin escape hatch: clear active orders + aggregate positions for the given participants.
+    /// @dev Expired v4.3+ orders are already inert and remain available to optional permissionless
+    ///      cleanup. Does not walk legacy lots for economics — zeros `netDelta` / `netEntryValue` /
+    ///      `activeExpirationAts` directly. Also purges dead lot indexes and active order queues.
     function resetState(address[] calldata _participants) external onlyOwner {
         for (uint256 p = 0; p < _participants.length; p++) {
             address participant = _participants[p];
+            (uint256[] memory orderExpirationAts, uint256 orderExpirationCount) =
+                _activeOrderExpirations(participant);
 
-            EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[participant];
-            for (uint256 i = _orders.length(); i > 0; i--) {
-                bytes32 orderId = _orders.at(i - 1);
+            EnumerableSet.Bytes32Set storage legacyOrders = participantOrderIdsIndex[participant];
+            for (uint256 i = legacyOrders.length(); i > 0; i--) {
+                bytes32 orderId = legacyOrders.at(i - 1);
                 Order storage order = orders[orderId];
                 bool isBuy = order.quantity > 0;
                 _removeRestingOrder(orderId, order.expirationAt, order.price, order.participant, isBuy);
                 emit OrderCancelled(orderId, participant);
+            }
+            for (uint256 d = 0; d < orderExpirationCount; d++) {
+                EnumerableSet.Bytes32Set storage deliveryOrders =
+                    participantExpirationAtOrderIdsIndex[participant][orderExpirationAts[d]];
+                while (deliveryOrders.length() > 0) {
+                    bytes32 orderId = deliveryOrders.at(deliveryOrders.length() - 1);
+                    Order storage order = orders[orderId];
+                    bool isBuy = order.quantity > 0;
+                    _removeRestingOrder(orderId, order.expirationAt, order.price, participant, isBuy);
+                    emit OrderCancelled(orderId, participant);
+                }
             }
 
             // Clear aggregates + active dates directly (no lot iteration for economics).

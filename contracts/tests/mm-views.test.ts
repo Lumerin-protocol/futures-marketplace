@@ -12,7 +12,7 @@ const { viem, networkHelpers } = await network.getOrCreate();
  * Tests covering the views added for the off-chain market maker:
  *   - getUserOrders(participant)
  *   - getActiveExpirationDates(participant)
- *   - MAX_ORDERS_PER_PARTICIPANT constant
+ *   - MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION constant
  *   - getOrderBookPrices / getQuantityAtPrice (per-expiration depth)
  *
  * Active-price-set maintenance is verified end-to-end by creating, partially
@@ -21,9 +21,9 @@ const { viem, networkHelpers } = await network.getOrCreate();
  */
 
 describe("MM views", () => {
-  it("MAX_ORDERS_PER_PARTICIPANT equals 100", async () => {
+  it("MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION equals 100", async () => {
     const { contracts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const max = await contracts.futures.read.MAX_ORDERS_PER_PARTICIPANT();
+    const max = await contracts.futures.read.MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION();
     assert.equal(Number(max), 100);
   });
 
@@ -46,6 +46,25 @@ describe("MM views", () => {
 
     const ids = await futures.read.getUserOrders([seller.account.address]);
     assert.equal(ids.length, 2, "two resting orders");
+    assert.deepEqual(await futures.read.getUserOrdersAtExpiration([seller.account.address, dd]), ids);
+  });
+
+  it("hasRestingOrderDelta ignores expired orders without cleanup", async () => {
+    const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures, collateralVault } = contracts;
+    const { seller, tc } = accounts;
+    const dd = (await futures.read.getExpirationDates())[0];
+
+    assert.equal(await futures.read.hasRestingOrderDelta([seller.account.address]), false);
+    await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
+    await futures.write.createOrder([parseUnits("100", 6), dd, 1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
+    assert.equal(await futures.read.hasRestingOrderDelta([seller.account.address]), true);
+
+    await tc.setNextBlockTimestamp({ timestamp: dd + 1n });
+    await tc.mine({ blocks: 1 });
+    assert.equal(await futures.read.hasRestingOrderDelta([seller.account.address]), false);
   });
 
   it("getActiveExpirationDates returns positions where caller is buyer or seller", async () => {

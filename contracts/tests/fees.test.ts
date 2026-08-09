@@ -265,6 +265,45 @@ describe("Fees (maker/taker)", () => {
     );
   });
 
+  it("funds a maker rebate from the same match's taker fee", async () => {
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures, collateralVault } = contracts;
+    const { owner, seller, buyer } = accounts;
+
+    const price = await futures.read.getMarketPrice();
+    const deliveryDate = config.deliveryDates[0];
+    const margin = price * 20n;
+    const feeBps = 30;
+    const expectedFee = (price * BigInt(feeBps)) / 10_000n;
+
+    await collateralVault.write.deposit([margin], { account: seller.account });
+    await collateralVault.write.deposit([margin], { account: buyer.account });
+    await futures.write.setTakerFeeBps([feeBps], { account: owner.account });
+    await futures.write.setMakerFeeBps([-feeBps], { account: owner.account });
+
+    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
+    const makerBefore = await collateralVault.read.balanceOf([seller.account.address]);
+    const takerBefore = await collateralVault.read.balanceOf([buyer.account.address]);
+
+    await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
+      account: buyer.account,
+    });
+
+    assert.equal(
+      (await collateralVault.read.balanceOf([seller.account.address])) - makerBefore,
+      expectedFee,
+      "maker receives the rebate collected from this match",
+    );
+    assert.equal(
+      takerBefore - (await collateralVault.read.balanceOf([buyer.account.address])),
+      expectedFee,
+      "taker funds the same-match rebate",
+    );
+    assert.equal(await futures.read.collectedFeesBalance(), 0n, "net-zero fee pair leaves no revenue");
+  });
+
   it("should reject non-owner attempts to set maker/taker fees", async () => {
     const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;

@@ -50,8 +50,6 @@ async function main() {
 
   const env = requireEnvsSet(
     "LIQUIDATION_MARGIN_PERCENT",
-    "MINIMUM_PRICE_INCREMENT",
-    "EXPIRATION_INTERVAL_DAYS",
     "FUTURE_DELIVERY_DATES_COUNT",
   );
 
@@ -127,8 +125,6 @@ async function main() {
     args: [
       hashpriceUsdAddress,
       Number(env.LIQUIDATION_MARGIN_PERCENT),
-      0n, // was minimumPriceIncrement — now constant = 1e4
-      0,  // was expirationIntervalDays — now EXPIRATION_INTERVAL_DAYS constant
       Number(env.FUTURE_DELIVERY_DATES_COUNT),
       firstFutureExpirationDate,
     ],

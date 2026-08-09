@@ -1,18 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { network } from "hardhat";
-import { encodeFunctionData, getContract, parseAbi, parseUnits } from "viem";
+import { parseUnits } from "viem";
 import type { Address } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { TimeInForce } from "./timeInForce.ts";
 import { refreshHashprice, scaleHashprice } from "./utils.ts";
 
-const { viem, networkHelpers } = await network.getOrCreate();
-
-const cacheAbi = parseAbi([
-  "function rebuildOrderAggregateCache(address[] users)",
-  "function getOrderAggregateAtExpiration(address user, uint256 expirationAt) view returns ((uint256 buyQty, uint256 sellQty, uint256 buyValue, uint256 sellValue) aggregate)",
-]);
+const { networkHelpers } = await network.getOrCreate();
 
 type FuturesContract = Awaited<ReturnType<typeof deployFuturesFixture>>["contracts"]["futures"];
 type OrderAggregate = {
@@ -60,63 +55,10 @@ async function assertCacheMatchesOrders(
 }
 
 describe("Futures per-expiration order aggregate cache", () => {
-  it("rebuilds pre-upgrade canonical orders after the cache is cleared", async () => {
-    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault } = contracts;
-    const { owner, seller, pc } = accounts;
-    const expirationAt = config.deliveryDates[0];
-    const buyPrice = parseUnits("30", 6);
-    const sellPrice = parseUnits("40", 6);
-
-    await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
-    await futures.write.createOrder([buyPrice, expirationAt, 3n, TimeInForce.GTC], {
-      account: seller.account,
-    });
-    await futures.write.createOrder([sellPrice, expirationAt, -2n, TimeInForce.GTC], {
-      account: seller.account,
-    });
-
-    const implementation = await viem.deployContract("FuturesOrderCacheMigrationHarness", [
-      collateralVault.address,
-    ]);
-    await futures.write.upgradeToAndCall([implementation.address, "0x"], {
-      account: owner.account,
-    });
-    const harness = await viem.getContractAt(
-      "FuturesOrderCacheMigrationHarness",
-      futures.address,
-    );
-    const cache = getContract({
-      address: futures.address,
-      abi: cacheAbi,
-      client: { public: pc, wallet: owner },
-    });
-
-    await harness.write.clearOrderAggregateCache([seller.account.address], {
-      account: owner.account,
-    });
-    const rebuiltImplementation = await viem.deployContract("Futures", [collateralVault.address]);
-    const migrationData = encodeFunctionData({
-      abi: cacheAbi,
-      functionName: "rebuildOrderAggregateCache",
-      args: [[seller.account.address]],
-    });
-    await harness.write.upgradeToAndCall([rebuiltImplementation.address, migrationData], {
-      account: owner.account,
-    });
-
-    assert.deepEqual(
-      aggregateTuple(
-        await cache.read.getOrderAggregateAtExpiration([seller.account.address, expirationAt]),
-      ),
-      [3n, 2n, buyPrice * 3n, sellPrice * 2n],
-    );
-  });
-
   it("tracks mixed sides across expirations through reduce, cancel, update, and rollback", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
-    const { owner, seller, buyer } = accounts;
+    const { seller } = accounts;
     const expirationAts = config.deliveryDates.slice(0, 3);
     const buyPrice = parseUnits("30", 6);
     const sellPrice = parseUnits("40", 6);
@@ -198,18 +140,7 @@ describe("Futures per-expiration order aggregate cache", () => {
       );
     }
 
-    await futures.write.rebuildOrderAggregateCache([[]], { account: owner.account });
-    await futures.write.rebuildOrderAggregateCache(
-      [[seller.account.address, seller.account.address]],
-      { account: owner.account },
-    );
     await assertCacheMatchesOrders(futures, seller.account.address, expirationAts);
-    await assert.rejects(
-      futures.write.rebuildOrderAggregateCache([[seller.account.address]], {
-        account: buyer.account,
-      }),
-      /OwnableUnauthorizedAccount/,
-    );
   });
 
   it("tracks normal fills, self-crosses at maker price, and GTC remainders at taker limit", async () => {
@@ -311,7 +242,7 @@ describe("Futures per-expiration order aggregate cache", () => {
       [0n, 2n, 0n, price * 2n],
       "raw cache includes expired physical orders",
     );
-    await futures.write.removeOutdatedOrder([expiredOrderId], { account: buyer.account });
+    await futures.write.removeOutdatedOrders([[expiredOrderId]], { account: buyer.account });
     assert.deepEqual(
       aggregateTuple(
         await futures.read.getOrderAggregateAtExpiration([seller.account.address, expiredAt]),
@@ -330,6 +261,31 @@ describe("Futures per-expiration order aggregate cache", () => {
       ),
       [0n, 0n, 0n, 0n],
     );
+  });
+
+  it("resetState leaves expired orders inert for optional cleanup", async () => {
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures, collateralVault, hashpriceUsd } = contracts;
+    const { owner, seller, buyer, tc } = accounts;
+    const expiredAt = config.deliveryDates[0];
+    const price = parseUnits("40", 6);
+
+    await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
+    await futures.write.createOrder([price, expiredAt, -2n, TimeInForce.GTC], {
+      account: seller.account,
+    });
+    const [expiredOrderId] = await futures.read.getUserOrders([seller.account.address]);
+
+    await tc.setNextBlockTimestamp({ timestamp: expiredAt + 1n });
+    await tc.mine({ blocks: 1 });
+    await refreshHashprice(hashpriceUsd, expiredAt + 1n);
+    await futures.write.resetState([[seller.account.address]], { account: owner.account });
+
+    assert.equal((await futures.read.getUserOrders([seller.account.address])).length, 0);
+    assert.equal((await futures.read.getOrder([expiredOrderId])).quantity, -2n, "physical order remains");
+
+    await futures.write.removeOutdatedOrders([[expiredOrderId]], { account: buyer.account });
+    assert.equal((await futures.read.getOrder([expiredOrderId])).quantity, 0n);
   });
 
   it("removes the cached order aggregate during order liquidation", async () => {

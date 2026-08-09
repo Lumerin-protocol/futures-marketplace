@@ -44,6 +44,11 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "EmptyBatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "ExpirationDateNotAvailable",
     "type": "error"
   },
@@ -109,7 +114,7 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "MaxOrdersPerParticipantReached",
+    "name": "MaxOrdersPerParticipantPerExpirationReached",
     "type": "error"
   },
   {
@@ -150,11 +155,6 @@ export const FuturesAbi = [
   {
     "inputs": [],
     "name": "OrderNotExists",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "OrderNotExpired",
     "type": "error"
   },
   {
@@ -780,7 +780,7 @@ export const FuturesAbi = [
   },
   {
     "inputs": [],
-    "name": "MAX_ORDERS_PER_PARTICIPANT",
+    "name": "MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION",
     "outputs": [
       {
         "internalType": "uint8",
@@ -915,6 +915,19 @@ export const FuturesAbi = [
       }
     ],
     "name": "createOrders",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address[]",
+        "name": "_participants",
+        "type": "address[]"
+      }
+    ],
+    "name": "dropActiveOrders",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1220,25 +1233,6 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "getPendingFunding",
-    "outputs": [
-      {
-        "internalType": "int256",
-        "name": "",
-        "type": "int256"
-      }
-    ],
-    "stateMutability": "pure",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
         "internalType": "uint256",
         "name": "_expirationAt",
         "type": "uint256"
@@ -1352,7 +1346,31 @@ export const FuturesAbi = [
     "outputs": [
       {
         "internalType": "bytes32[]",
-        "name": "",
+        "name": "orderIds",
+        "type": "bytes32[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_user",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_expirationAt",
+        "type": "uint256"
+      }
+    ],
+    "name": "getUserOrdersAtExpiration",
+    "outputs": [
+      {
+        "internalType": "bytes32[]",
+        "name": "orderIds",
         "type": "bytes32[]"
       }
     ],
@@ -1396,6 +1414,25 @@ export const FuturesAbi = [
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      }
+    ],
+    "name": "hasRestingOrderDelta",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "hook",
     "outputs": [
@@ -1418,16 +1455,6 @@ export const FuturesAbi = [
       {
         "internalType": "uint8",
         "name": "_liquidationMarginPercent",
-        "type": "uint8"
-      },
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint8",
-        "name": "",
         "type": "uint8"
       },
       {
@@ -1667,19 +1694,6 @@ export const FuturesAbi = [
   {
     "inputs": [
       {
-        "internalType": "address[]",
-        "name": "_users",
-        "type": "address[]"
-      }
-    ],
-    "name": "rebuildOrderAggregateCache",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
         "internalType": "uint256",
         "name": "expirationAt",
         "type": "uint256"
@@ -1710,19 +1724,6 @@ export const FuturesAbi = [
       }
     ],
     "name": "reduceOrderSize",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "_orderId",
-        "type": "bytes32"
-      }
-    ],
-    "name": "removeOutdatedOrder",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
