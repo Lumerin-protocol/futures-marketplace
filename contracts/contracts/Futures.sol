@@ -58,12 +58,12 @@ contract Futures is FuturesAdmin {
     function createOrder(uint256 _price, uint256 _expirationAt, int256 _quantity, TimeInForce _tif) external {
         address sender = _msgSender();
         _validateOrderIntent(_price, _expirationAt, _quantity, _tif);
-        uint256 allowedImPlusOne;
+        uint256 maxAllowedIm;
         if (_isLocallyReducing(sender, _expirationAt, _quantity)) {
-            allowedImPlusOne = portfolioMargin.computePortfolioIM(sender) + 1;
+            maxAllowedIm = portfolioMargin.computePortfolioIM(sender);
         }
         _createOrder(sender, _price, _expirationAt, _quantity, _tif);
-        _ensureNoCollateralDeficit(sender, allowedImPlusOne);
+        _ensureNoCollateralDeficit(sender, maxAllowedIm);
     }
 
     /// @notice Batched placement with per-leg time-in-force — IM check once at the end.

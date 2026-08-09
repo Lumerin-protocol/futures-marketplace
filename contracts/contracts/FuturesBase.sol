@@ -962,12 +962,9 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         }
     }
 
-    function _ensureNoCollateralDeficit(address _participant, uint256 _allowedImPlusOne) internal view {
+    function _ensureNoCollateralDeficit(address _participant, uint256 _maxAllowedIm) internal view {
         uint256 required = portfolioMargin.computePortfolioIM(_participant);
-        if (
-            vault.balanceOf(_participant) < required
-                && (_allowedImPlusOne == 0 || required >= _allowedImPlusOne)
-        ) {
+        if (vault.balanceOf(_participant) < required && required > _maxAllowedIm) {
             revert InsufficientMarginBalance();
         }
     }
