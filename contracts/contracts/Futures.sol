@@ -22,7 +22,7 @@ contract Futures is FuturesAdmin {
     /// @dev Lives here rather than in {FuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `Futures.sol` to require a bump.
-    string public constant VERSION = "4.3.0";
+    string public constant VERSION = "4.4.0";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) FuturesBase(_vault) { }
@@ -30,8 +30,6 @@ contract Futures is FuturesAdmin {
     function initialize(
         AggregatorV3Interface _priceOracle,
         uint8 _liquidationMarginPercent,
-        uint256, // was _minimumPriceIncrement — now constant = 1e4
-        uint8, // was expirationIntervalDays — now EXPIRATION_INTERVAL_DAYS constant
         uint8 _futureExpirationDatesCount,
         uint256 _firstFutureExpirationDate
     ) public initializer {

@@ -26,7 +26,7 @@ type OrderIntent = {
 };
 
 const exclusions = {
-  "initialize(address,uint8,uint256,uint8,uint8,uint256)":
+  "initialize(address,uint8,uint8,uint256)":
     "The deployed UUPS proxy is already initialized, while the implementation constructor disables initializers; no successful independent call exists after deployment.",
   "proxiableUUID()":
     "OpenZeppelin UUPS marks proxiableUUID notDelegated, so it intentionally reverts through the deployed proxy and is callable only on the implementation.",
@@ -895,7 +895,7 @@ describe("Futures gas benchmark", () => {
     const coverage = assertAbiFunctionCoverage(FuturesAbi, snapshot, exclusions);
     assert.equal(coverage.covered.length, 70);
     assert.deepEqual(coverage.excluded, [
-      "initialize(address,uint8,uint256,uint8,uint8,uint256)",
+      "initialize(address,uint8,uint8,uint256)",
       "proxiableUUID()",
     ]);
 
