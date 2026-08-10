@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { getAddress, zeroAddress } from "viem";
+import { FuturesAbi } from "../abi/Futures.ts";
 import { deployFuturesFixture } from "./fixtures.ts";
 
 const { networkHelpers, viem } = await network.getOrCreate();
@@ -29,6 +30,17 @@ describe("Futures - Initialization", () => {
     const { futures } = contracts;
 
     assert.equal(await futures.read.MAX_ORACLE_STALENESS(), 3600n);
+  });
+
+  it("exposes whole-unit quantity scale in the runtime and generated ABI", async function () {
+    const { contracts } = await networkHelpers.loadFixture(deployFuturesFixture);
+
+    assert.equal(await contracts.futures.read.QUANTITY_DECIMALS(), 0);
+    assert.ok(
+      FuturesAbi.some(
+        (item) => item.type === "function" && item.name === "QUANTITY_DECIMALS",
+      ),
+    );
   });
 });
 

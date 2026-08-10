@@ -24,6 +24,9 @@ contract Futures is FuturesAdmin {
     ///      straight out of `Futures.sol` to require a bump.
     string public constant VERSION = "4.4.0";
 
+    /// @notice Number of decimal places used by order and position quantities.
+    uint8 public constant QUANTITY_DECIMALS = 0;
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) FuturesBase(_vault) { }
 

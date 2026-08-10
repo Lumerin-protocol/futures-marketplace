@@ -181,6 +181,7 @@ async function benchmarkViews() {
     ["CONTRACT_SIZE_HPS_DAY()", "CONTRACT_SIZE_HPS_DAY"],
     ["EXPIRATION_INTERVAL_DAYS()", "EXPIRATION_INTERVAL_DAYS"],
     ["MAX_ORACLE_STALENESS()", "MAX_ORACLE_STALENESS"],
+    ["QUANTITY_DECIMALS()", "QUANTITY_DECIMALS"],
     [
       "MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION()",
       "MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION",
@@ -893,7 +894,7 @@ describe("Futures gas benchmark", () => {
 
     const snapshot = gas.snapshot();
     const coverage = assertAbiFunctionCoverage(FuturesAbi, snapshot, exclusions);
-    assert.equal(coverage.covered.length, 70);
+    assert.equal(coverage.covered.length, 71);
     assert.deepEqual(coverage.excluded, [
       "initialize(address,uint8,uint8,uint256)",
       "proxiableUUID()",
