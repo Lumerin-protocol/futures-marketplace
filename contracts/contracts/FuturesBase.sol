@@ -390,13 +390,20 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         if (oppositePrices.sizeOf() == 0) return remainingQuantity;
 
         (, uint256 currentPrice) = oppositePrices.getNextNode(0);
+        if ((isBuy && currentPrice > _limitPrice) || (!isBuy && currentPrice < _limitPrice)) {
+            return remainingQuantity;
+        }
+        IPointsHook pointsHook = hook;
+        uint256 refPrice = address(pointsHook) == address(0) ? 0 : _refPriceForPoints();
 
         while (currentPrice != 0 && remainingQuantity != 0) {
             if (isBuy && currentPrice > _limitPrice) break;
             if (!isBuy && currentPrice < _limitPrice) break;
 
             (, uint256 nextPrice) = oppositePrices.getNextNode(currentPrice);
-            remainingQuantity = _matchOrdersAtPrice(_taker, currentPrice, _expirationAt, remainingQuantity, isBuy);
+            remainingQuantity = _matchOrdersAtPrice(
+                _taker, currentPrice, _expirationAt, remainingQuantity, isBuy, pointsHook, refPrice
+            );
             currentPrice = nextPrice;
         }
     }
@@ -407,7 +414,9 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         uint256 _price,
         uint256 _expirationAt,
         int256 _remainingQty,
-        bool _isBuy
+        bool _isBuy,
+        IPointsHook _pointsHook,
+        uint256 _refPrice
     ) internal returns (int256) {
         StructuredLinkedList.List storage makerOrderQueue = _expirationAtPriceOrderIds(_expirationAt, _price, !_isBuy);
 
@@ -422,7 +431,17 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
                 continue;
             }
 
-            _remainingQty = _executeMatch(_taker, makerOrderId, makerOrder, _remainingQty, _isBuy, _price, _expirationAt);
+            _remainingQty = _executeMatch(
+                _taker,
+                makerOrderId,
+                makerOrder,
+                _remainingQty,
+                _isBuy,
+                _price,
+                _expirationAt,
+                _pointsHook,
+                _refPrice
+            );
             (, orderIdUint) = makerOrderQueue.getNextNode(0);
         }
 
@@ -466,7 +485,9 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         int256 _remainingQty,
         bool _isBuy,
         uint256 _price,
-        uint256 _expirationAt
+        uint256 _expirationAt,
+        IPointsHook _pointsHook,
+        uint256 _refPrice
     ) internal returns (int256) {
         // Cache fields up front: a full fill deletes the storage order below.
         address makerParticipant = _makerOrder.participant;
@@ -486,7 +507,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         int256 makerFeeAmt = int256(notional) * int256(makerFeeBps) / int256(BPS);
         int256 takerFeeAmt = int256(notional) * int256(takerFeeBps) / int256(BPS);
         _chargeMatchFees(makerParticipant, _taker, makerFeeAmt, takerFeeAmt);
-        _notifyFill(makerParticipant, _taker, notional, makerFeeAmt, takerFeeAmt, _price);
+        _notifyFill(_pointsHook, makerParticipant, _taker, notional, makerFeeAmt, takerFeeAmt, _price, _refPrice);
 
         uint256 leftoverMakerAbs = makerAbs - fill;
         int256 newMakerQty = M.toSigned(isBuy, leftoverMakerAbs);
@@ -734,17 +755,18 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
     // ── Internal helpers: points hook ─────────────────────────────────────────
 
     function _notifyFill(
+        IPointsHook _hook,
         address _maker,
         address _taker,
         uint256 _notional,
         int256 _makerFee,
         int256 _takerFee,
-        uint256 _makerPrice
+        uint256 _makerPrice,
+        uint256 _refPrice
     ) internal {
-        IPointsHook _hook = hook;
         if (address(_hook) == address(0)) return;
         uint256 takerFeeAbs = _takerFee > 0 ? uint256(_takerFee) : 0;
-        _hook.onFill(_maker, _taker, _notional, _makerFee, takerFeeAbs, _makerPrice, _refPriceForPoints());
+        _hook.onFill(_maker, _taker, _notional, _makerFee, takerFeeAbs, _makerPrice, _refPrice);
     }
 
     function _refPriceForPoints() internal view returns (uint256) {

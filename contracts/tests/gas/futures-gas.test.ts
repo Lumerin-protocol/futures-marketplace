@@ -364,6 +364,45 @@ async function benchmarkOrderPlacement() {
   {
     const data = await fresh();
     const { futures } = data.contracts;
+    const { owner, seller, buyer, pc } = data.accounts;
+    const price = await futures.read.getMarketPrice();
+    const expirationAt = data.config.deliveryDates[0];
+    const points = await viem.deployContract("Points", [owner.account.address]);
+    const pointsHook = await viem.deployContract("PointsHook", [
+      points.address,
+      owner.account.address,
+      10n ** 18n,
+      10n ** 18n,
+      parseUnits("10", 6),
+    ]);
+    await points.write.grantRole([await points.read.MINTER_ROLE(), pointsHook.address], {
+      account: owner.account,
+    });
+    await pointsHook.write.grantRole([await pointsHook.read.HOOK_CALLER_ROLE(), futures.address], {
+      account: owner.account,
+    });
+    await futures.write.setHook([pointsHook.address], { account: owner.account });
+    await fund(data, [seller, buyer]);
+    await futures.write.createOrder([price, expirationAt, -1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
+    await futures.write.createOrder(
+      [price + data.config.priceLadderStep, expirationAt, -1n, TimeInForce.GTC],
+      { account: seller.account },
+    );
+    await recordTransaction(
+      pc,
+      "createOrder(uint256,uint256,int256,uint8)",
+      "two-level fill with points hook",
+      futures.write.createOrder(
+        [price + data.config.priceLadderStep, expirationAt, 2n, TimeInForce.IOC],
+        { account: buyer.account },
+      ),
+    );
+  }
+  {
+    const data = await fresh();
+    const { futures } = data.contracts;
     const { seller, buyer, pc } = data.accounts;
     const price = await futures.read.getMarketPrice();
     const expirationAt = data.config.deliveryDates[0];

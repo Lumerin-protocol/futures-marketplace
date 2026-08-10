@@ -147,6 +147,51 @@ describe("Futures - points hook wiring", function () {
       assert.equal(await futures.read.hook(), zeroAddress);
     });
 
+    it("uses one reference-price snapshot across a multi-level fill", async function () {
+      const { contracts, accounts, config } =
+        await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures, collateralVault } = contracts;
+      const { owner, seller, buyer } = accounts;
+      const initialOraclePrice = parseUnits("40", 8);
+      const movedOraclePrice = parseUnits("50", 8);
+      const initialMarketPrice = parseUnits("40", 6);
+      const secondMakerPrice = parseUnits("41", 6);
+      const deliveryDate = config.deliveryDates[0];
+
+      const oracle = await viem.deployContract("PriceFeedMock", [8, "HashpriceUSD"]);
+      await oracle.write.setPrice([initialOraclePrice]);
+      await futures.write.setOracle([oracle.address], { account: owner.account });
+
+      const hook = await viem.deployContract("MutatingPointsHook", [
+        oracle.address,
+        movedOraclePrice,
+      ]);
+      await futures.write.setHook([hook.address], { account: owner.account });
+
+      await collateralVault.write.deposit([parseUnits("10000", 6)], {
+        account: seller.account,
+      });
+      await collateralVault.write.deposit([parseUnits("10000", 6)], {
+        account: buyer.account,
+      });
+      await futures.write.createOrder(
+        [initialMarketPrice, deliveryDate, -1n, TimeInForce.GTC],
+        { account: seller.account },
+      );
+      await futures.write.createOrder(
+        [secondMakerPrice, deliveryDate, -1n, TimeInForce.GTC],
+        { account: seller.account },
+      );
+
+      await futures.write.createOrder([secondMakerPrice, deliveryDate, 2n, TimeInForce.IOC], {
+        account: buyer.account,
+      });
+
+      assert.equal(await hook.read.refPrices([0n]), initialMarketPrice);
+      assert.equal(await hook.read.refPrices([1n]), initialMarketPrice);
+      assert.equal(await futures.read.getMarketPrice(), parseUnits("50", 6));
+    });
+
     it("reverts the fill when the venue lacks HOOK_CALLER_ROLE (no try/catch isolation)", async function () {
       const { contracts, accounts, config } =
         await networkHelpers.loadFixture(deployFuturesFixture);
