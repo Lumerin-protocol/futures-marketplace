@@ -87,9 +87,6 @@ abstract contract FuturesAdmin is FuturesBase {
         if (address(_oracle) == address(0)) revert InvalidOracle();
 
         oracleDecimals = _validateOracleContract(_oracle);
-        if (collateralDecimals > oracleDecimals) {
-            revert UnsupportedTokenDecimals();
-        }
 
         priceOracle = _oracle;
         emit OracleUpdated(address(_oracle));
@@ -211,9 +208,10 @@ abstract contract FuturesAdmin is FuturesBase {
         } catch {
             revert InvalidDependency();
         }
-        if (answer <= 0 || updatedAt == 0) {
+        if (answer <= 0 || updatedAt == 0 || updatedAt > block.timestamp) {
             revert InvalidOracle();
         }
+        if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) revert OracleStale();
 
         uint8 dec;
         try _oracle.decimals() returns (uint8 _dec) {
@@ -235,6 +233,11 @@ abstract contract FuturesAdmin is FuturesBase {
         }
 
         try _pm.mmSpotShock() returns (uint256) { }
+        catch {
+            revert InvalidDependency();
+        }
+
+        try _pm.linearOrderMargin(0) returns (uint256) { }
         catch {
             revert InvalidDependency();
         }

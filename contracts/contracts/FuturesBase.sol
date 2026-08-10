@@ -310,6 +310,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
         if (address(_vault) == address(0)) revert ZeroAddress();
         vault = _vault;
         collateralDecimals = IERC20Metadata(address(_vault.collateralToken())).decimals();
+        if (collateralDecimals != 6) revert UnsupportedTokenDecimals();
         _disableInitializers();
     }
 
@@ -771,7 +772,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
 
     function _refPriceForPoints() internal view returns (uint256) {
         (, int256 answer,, uint256 updatedAt,) = priceOracle.latestRoundData();
-        if (answer <= 0) return 0;
+        if (answer <= 0 || updatedAt == 0 || updatedAt > block.timestamp) return 0;
         if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) return 0;
         return _getMarketPrice(uint256(answer));
     }
@@ -933,11 +934,11 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
 
     function _getPrice() internal view returns (uint256) {
         (, int256 answer,, uint256 updatedAt,) = priceOracle.latestRoundData();
+        if (answer <= 0 || updatedAt == 0 || updatedAt > block.timestamp) {
+            revert InvalidOracle();
+        }
         if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) {
             revert OracleStale();
-        }
-        if (answer <= 0) {
-            revert InvalidOracle();
         }
         return uint256(answer);
     }
