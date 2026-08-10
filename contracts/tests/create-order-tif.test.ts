@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
+import {
+  getUserOrders,
+} from "./lib/viewHelpers.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -47,7 +50,7 @@ describe("Futures - createOrder time-in-force", () => {
     const [bids, asks] = await futures.read.getOrderBookPrices([dd, 50n]);
     assert.equal(bids.length, 0, "IOC remainder must not rest as a bid");
     assert.equal(asks.length, 0);
-    assert.equal((await futures.read.getUserOrders([buyer.account.address])).length, 0);
+    assert.equal((await getUserOrders(futures, buyer.account.address)).length, 0);
   });
 
   it("IOC with no liquidity reverts TimeInForceNotFilled", async () => {
@@ -64,7 +67,7 @@ describe("Futures - createOrder time-in-force", () => {
       futures,
       "TimeInForceNotFilled",
     );
-    assert.equal((await futures.read.getUserOrders([buyer.account.address])).length, 0);
+    assert.equal((await getUserOrders(futures, buyer.account.address)).length, 0);
   });
 
   it("FOK reverts when the book cannot fill the full size", async () => {
@@ -113,7 +116,7 @@ describe("Futures - createOrder time-in-force", () => {
     });
     assert.equal(matches.length, 1);
     assert.equal(matches[0].args.takerQuantity, 3n);
-    assert.equal((await futures.read.getUserOrders([buyer.account.address])).length, 0);
+    assert.equal((await getUserOrders(futures, buyer.account.address)).length, 0);
     assert.equal(await futures.read.getQuantityAtPrice([dd, price, false]), 0n);
   });
 
@@ -131,6 +134,6 @@ describe("Futures - createOrder time-in-force", () => {
     await futures.write.createOrder([price, dd, 3n, TimeInForce.GTC], { account: buyer.account });
 
     assert.equal(await futures.read.getQuantityAtPrice([dd, price, true]), 2n);
-    assert.equal((await futures.read.getUserOrders([buyer.account.address])).length, 1);
+    assert.equal((await getUserOrders(futures, buyer.account.address)).length, 1);
   });
 });

@@ -10,6 +10,9 @@ import type { FuturesFixture } from "../fixtures.ts";
 import { TimeInForce } from "../timeInForce.ts";
 import { refreshHashprice, scaleHashprice } from "../utils.ts";
 import { deployFuturesGasFixture } from "./fixtures.ts";
+import {
+  getUserOrders,
+} from "../lib/viewHelpers.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 const gas = new GasRecorder();
@@ -175,7 +178,7 @@ async function benchmarkViews() {
     account: buyer.account,
   });
   await openPosition(data, thirdExpiration, 1n, price);
-  const [sellerOrder] = await futures.read.getUserOrders([seller.account.address]);
+  const [sellerOrder] = await getUserOrders(futures, seller.account.address);
 
   const calls: Array<[string, string, (readonly unknown[])?]> = [
     ["CONTRACT_SIZE_HPS_DAY()", "CONTRACT_SIZE_HPS_DAY"],
@@ -194,13 +197,9 @@ async function benchmarkViews() {
     ["firstFutureExpirationDate()", "firstFutureExpirationDate"],
     ["futureExpirationDatesCount()", "futureExpirationDatesCount"],
     ["getActiveExpirationDates(address)", "getActiveExpirationDates", [buyer.account.address]],
-    ["getBestAskPrice(uint256)", "getBestAskPrice", [firstExpiration]],
-    ["getBestBidPrice(uint256)", "getBestBidPrice", [secondExpiration]],
     ["getExpirationDates()", "getExpirationDates"],
     ["getMarketPrice()", "getMarketPrice"],
-    ["getNetPositionDelta(address)", "getNetPositionDelta", [buyer.account.address]],
     ["getOrder(bytes32)", "getOrder", [sellerOrder]],
-    ["getOrderAggregate(address)", "getOrderAggregate", [seller.account.address]],
     [
       "getOrderAggregateAtExpiration(address,uint256)",
       "getOrderAggregateAtExpiration",
@@ -215,7 +214,6 @@ async function benchmarkViews() {
     ["getRiskView(address)", "getRiskView", [seller.account.address]],
     ["hasRestingOrderDelta(address)", "hasRestingOrderDelta", [seller.account.address]],
     ["getUnrealizedPnl(address)", "getUnrealizedPnl", [buyer.account.address]],
-    ["getUserOrders(address)", "getUserOrders", [seller.account.address]],
     [
       "getUserOrdersAtExpiration(address,uint256)",
       "getUserOrdersAtExpiration",
@@ -483,7 +481,7 @@ async function benchmarkOrderPlacement() {
       ],
       { account: seller.account },
     );
-    const ids = await futures.read.getUserOrders([seller.account.address]);
+    const ids = await getUserOrders(futures, seller.account.address);
     const creates = Array.from({ length: size }, (_, index) => ({
       price: price + BigInt(size * 2 + index + 1) * data.config.priceLadderStep,
       expirationAt,
@@ -540,9 +538,9 @@ async function benchmarkOrderMaintenance() {
       ],
       { account: seller.account },
     );
-    const [cancelId, reduceId, outdatedId, outdatedBatchId] = await futures.read.getUserOrders([
+    const [cancelId, reduceId, outdatedId, outdatedBatchId] = await getUserOrders(futures, 
       seller.account.address,
-    ]);
+    );
 
     await recordTransaction(
       pc,
@@ -574,7 +572,7 @@ async function benchmarkOrderMaintenance() {
     await futures.write.createOrder([price, expirationAt, -1n, TimeInForce.GTC], {
       account: seller.account,
     });
-    const [orderId] = await futures.read.getUserOrders([seller.account.address]);
+    const [orderId] = await getUserOrders(futures, seller.account.address);
     await recordTransaction(
       pc,
       "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])",
@@ -592,7 +590,7 @@ async function benchmarkOrderMaintenance() {
     await futures.write.createOrder([price, expirationAt, -4n, TimeInForce.GTC], {
       account: seller.account,
     });
-    const [orderId] = await futures.read.getUserOrders([seller.account.address]);
+    const [orderId] = await getUserOrders(futures, seller.account.address);
     await recordTransaction(
       pc,
       "updateOrders(bytes32[],(bytes32,int256)[],(uint256,uint256,int256,uint8)[])",
@@ -677,7 +675,7 @@ async function benchmarkLiquidations() {
     const data = await setupOrderLiquidation();
     const { futures } = data.contracts;
     const { buyer, buyer2, pc } = data.accounts;
-    const [orderId] = await futures.read.getUserOrders([buyer.account.address]);
+    const [orderId] = await getUserOrders(futures, buyer.account.address);
     await recordTransaction(
       pc,
       "liquidateOrder(address,bytes32)",
@@ -691,7 +689,7 @@ async function benchmarkLiquidations() {
     const data = await setupOrderLiquidation();
     const { futures } = data.contracts;
     const { buyer, buyer2, pc } = data.accounts;
-    const orderIds = await futures.read.getUserOrders([buyer.account.address]);
+    const orderIds = await getUserOrders(futures, buyer.account.address);
     await recordTransaction(
       pc,
       "liquidateOrders(address,bytes32[])",
@@ -705,7 +703,7 @@ async function benchmarkLiquidations() {
     const data = await setupOrderLiquidation();
     const { futures } = data.contracts;
     const { buyer, buyer2, pc } = data.accounts;
-    const orderIds = await futures.read.getUserOrders([buyer.account.address]);
+    const orderIds = await getUserOrders(futures, buyer.account.address);
     const staleIds = [1n, 2n, 3n].map((id) => `0x${id.toString(16).padStart(64, "0")}` as Hash);
     await recordTransaction(
       pc,
@@ -933,7 +931,7 @@ describe("Futures gas benchmark", () => {
 
     const snapshot = gas.snapshot();
     const coverage = assertAbiFunctionCoverage(HashPowerFuturesAbi, snapshot, exclusions);
-    assert.equal(coverage.covered.length, 71);
+    assert.equal(coverage.covered.length, 66);
     assert.deepEqual(coverage.excluded, [
       "initialize(address,uint8,uint8,uint256)",
       "proxiableUUID()",

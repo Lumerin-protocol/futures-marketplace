@@ -57,8 +57,8 @@ describe("Futures - Initialization", () => {
     };
 
     assert.deepEqual(functionOutputs("getOrderBookPrices"), ["bids", "asks"]);
-    assert.deepEqual(functionOutputs("getUserOrders"), ["orderIds"]);
-    assert.deepEqual(functionOutputs("getOrderAggregate"), ["aggregate_"]);
+    assert.deepEqual(functionOutputs("getUserOrdersAtExpiration"), ["orderIds"]);
+    assert.deepEqual(functionOutputs("getOrderAggregateAtExpiration"), [""]);
     assert.deepEqual(functionOutputs("getQuantityAtPrice"), [""]);
     assert.deepEqual(functionOutputs("getRiskView"), ["view_"]);
     assert.deepEqual(functionOutputs("getUnrealizedPnl"), [""]);

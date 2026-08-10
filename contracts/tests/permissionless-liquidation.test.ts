@@ -6,6 +6,9 @@ import type { NetworkConnection } from "hardhat/types/network";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { scaleHashprice } from "./utils.ts";
 import { TimeInForce } from "./timeInForce.ts";
+import {
+  getUserOrders,
+} from "./lib/viewHelpers.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -113,7 +116,7 @@ describe("Futures - permissionless liquidation entry points", function () {
       const { futures } = contracts;
       const { buyer, buyer2 } = accounts;
 
-      const orders = await futures.read.getUserOrders([buyer.account.address]);
+      const orders = await getUserOrders(futures, buyer.account.address);
       assert.ok(orders.length > 0);
 
       await viem.assertions.revertWithCustomError(
@@ -133,7 +136,7 @@ describe("Futures - permissionless liquidation entry points", function () {
 
       await data.makeUnderwater();
 
-      const buyerOrders = await futures.read.getUserOrders([buyer.account.address]);
+      const buyerOrders = await getUserOrders(futures, buyer.account.address);
       assert.ok(buyerOrders.length > 0);
 
       // Seller is healthy at this point too (price drop benefits the short), so we use
@@ -166,7 +169,7 @@ describe("Futures - permissionless liquidation entry points", function () {
 
       await data.makeUnderwater();
 
-      const ordersBefore = await futures.read.getUserOrders([buyer.account.address]);
+      const ordersBefore = await getUserOrders(futures, buyer.account.address);
       assert.equal(ordersBefore.length, 2);
       const target = ordersBefore[0];
 
@@ -188,7 +191,7 @@ describe("Futures - permissionless liquidation entry points", function () {
       // User pays the fee to venue revenue.
       assert.ok(userBalBefore > userBalAfter, "user should pay liquidation fee");
 
-      const ordersAfter = await futures.read.getUserOrders([buyer.account.address]);
+      const ordersAfter = await getUserOrders(futures, buyer.account.address);
       assert.equal(ordersAfter.length, 1);
       assert.ok(!ordersAfter.includes(target));
 
@@ -227,7 +230,7 @@ describe("Futures - permissionless liquidation entry points", function () {
       const userBalBefore = await collateralVault.read.balanceOf([buyer.account.address]);
       const liqBalBefore = await collateralVault.read.balanceOf([buyer2.account.address]);
 
-      const orders = await futures.read.getUserOrders([buyer.account.address]);
+      const orders = await getUserOrders(futures, buyer.account.address);
       await futures.write.liquidateOrder([buyer.account.address, orders[0]], {
         account: buyer2.account,
       });
@@ -249,7 +252,7 @@ describe("Futures - permissionless liquidation entry points", function () {
       const { futures } = contracts;
       const { buyer, buyer2 } = accounts;
 
-      const ids = await futures.read.getUserOrders([buyer.account.address]);
+      const ids = await getUserOrders(futures, buyer.account.address);
       await viem.assertions.revertWithCustomError(
         futures.write.liquidateOrders([buyer.account.address, ids], { account: buyer2.account }),
         futures,
@@ -265,7 +268,7 @@ describe("Futures - permissionless liquidation entry points", function () {
 
       await data.makeUnderwater();
 
-      const ordersBefore = await futures.read.getUserOrders([buyer.account.address]);
+      const ordersBefore = await getUserOrders(futures, buyer.account.address);
       assert.equal(ordersBefore.length, 2);
 
       const liqBalBefore = await collateralVault.read.balanceOf([buyer2.account.address]);
@@ -275,7 +278,7 @@ describe("Futures - permissionless liquidation entry points", function () {
       });
 
       const liqBalAfter = await collateralVault.read.balanceOf([buyer2.account.address]);
-      const ordersAfter = await futures.read.getUserOrders([buyer.account.address]);
+      const ordersAfter = await getUserOrders(futures, buyer.account.address);
 
       assert.equal(ordersAfter.length, 0);
       // Liquidator gets nothing (liquidatorShareBps defaults to 0).
@@ -291,7 +294,7 @@ describe("Futures - permissionless liquidation entry points", function () {
       const { buyer, buyer2 } = accounts;
 
       await data.makeUnderwater();
-      const orderIds = await futures.read.getUserOrders([buyer.account.address]);
+      const orderIds = await getUserOrders(futures, buyer.account.address);
       await futures.write.liquidateOrders([buyer.account.address, orderIds], {
         account: buyer2.account,
       });
@@ -330,7 +333,7 @@ describe("Futures - permissionless liquidation entry points", function () {
 
       await data.makeUnderwater();
 
-      const ordersBefore = await futures.read.getUserOrders([buyer.account.address]);
+      const ordersBefore = await getUserOrders(futures, buyer.account.address);
       assert.ok(ordersBefore.length > 0);
 
       await viem.assertions.revertWithCustomError(
@@ -350,7 +353,7 @@ describe("Futures - permissionless liquidation entry points", function () {
 
       // Cancel buyer's resting orders permissionlessly is gated by underwater predicate, so
       // for "healthy + no orders" we cancel them via the participant themselves first.
-      const orders = await futures.read.getUserOrders([buyer.account.address]);
+      const orders = await getUserOrders(futures, buyer.account.address);
       for (const id of orders) {
         await futures.write.cancelOrder([id], { account: buyer.account });
       }
@@ -374,11 +377,11 @@ describe("Futures - permissionless liquidation entry points", function () {
       await data.makeUnderwater();
 
       // Step 1: clear orders.
-      const orderIds = await futures.read.getUserOrders([buyer.account.address]);
+      const orderIds = await getUserOrders(futures, buyer.account.address);
       await futures.write.liquidateOrders([buyer.account.address, orderIds], {
         account: buyer2.account,
       });
-      assert.equal((await futures.read.getUserOrders([buyer.account.address])).length, 0);
+      assert.equal((await getUserOrders(futures, buyer.account.address)).length, 0);
 
       const liqBalBefore = await collateralVault.read.balanceOf([buyer2.account.address]);
 

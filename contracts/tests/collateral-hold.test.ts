@@ -5,6 +5,9 @@ import { parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture, type FuturesFixture } from "./fixtures.ts";
 import { quantizePrice, refreshHashprice } from "./utils.ts";
 import { TimeInForce } from "./timeInForce.ts";
+import {
+  getNetPositionDelta,
+} from "./lib/viewHelpers.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -55,7 +58,7 @@ describe("Futures collateral hold until settlement", () => {
 
     // The matured position still imposes IM equal to the pinned loss, with no stress delta
     // (the priced date carries no remaining market risk).
-    assert.equal(await futures.read.getNetPositionDelta([buyer.account.address]), 0n);
+    assert.equal(await getNetPositionDelta(futures, buyer.account.address), 0n);
     assert.equal(
       await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]),
       expectedLoss,
@@ -128,13 +131,13 @@ describe("Futures collateral hold until settlement", () => {
     await collateralVault.write.deposit([margin], { account: buyer.account });
     await openLot(data, entry, deliveryDate);
 
-    const deltaOpen = await futures.read.getNetPositionDelta([buyer.account.address]);
+    const deltaOpen = await getNetPositionDelta(futures, buyer.account.address);
     assert.notEqual(deltaOpen, 0n); // long counted while open
 
     // Warp past maturity WITHOUT pinning a price: the position must still be counted.
     await refreshHashprice(hashpriceUsd, deliveryDate);
     await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
-    assert.equal(await futures.read.getNetPositionDelta([buyer.account.address]), deltaOpen);
+    assert.equal(await getNetPositionDelta(futures, buyer.account.address), deltaOpen);
     assert.equal(await futures.read.settlementPrice([deliveryDate]), 0n);
 
     // Settle both sides (lazy-pins); dates leave the active set and margin returns to baseline.
@@ -144,7 +147,7 @@ describe("Futures collateral hold until settlement", () => {
     await futures.write.settlePosition([seller.account.address, deliveryDate], {
       account: validator.account,
     });
-    assert.equal(await futures.read.getNetPositionDelta([buyer.account.address]), 0n);
+    assert.equal(await getNetPositionDelta(futures, buyer.account.address), 0n);
     assert.equal(await portfolioMarginEngine.read.computePortfolioIM([buyer.account.address]), 0n);
   });
 });

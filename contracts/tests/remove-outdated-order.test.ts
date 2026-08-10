@@ -5,6 +5,9 @@ import { parseEventLogs, parseUnits, zeroHash } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { warpPastDeliveryWithFreshOracle } from "./utils.ts";
 import { TimeInForce } from "./timeInForce.ts";
+import {
+  getUserOrders,
+} from "./lib/viewHelpers.ts";
 
 const { networkHelpers } = await network.getOrCreate();
 
@@ -69,7 +72,7 @@ describe("HashPowerFutures.removeOutdatedOrders", () => {
       restingIds,
     );
 
-    const finalOrders = await futures.read.getUserOrders([seller.account.address]);
+    const finalOrders = await getUserOrders(futures, seller.account.address);
     assert.deepEqual(finalOrders, [freshCreated.args.orderId]);
   });
 });

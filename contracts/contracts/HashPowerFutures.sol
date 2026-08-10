@@ -416,58 +416,15 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         return orders[_orderId];
     }
 
-    /// @notice Resting orders for the currently tradable delivery window.
-    function getUserOrders(address _user) external view returns (bytes32[] memory orderIds) {
-        (uint256[] memory expirationAts, uint256 activeCount) = _activeOrderExpirations(_user);
-        uint256 total;
-        for (uint256 i = 0; i < activeCount;) {
-            unchecked {
-                total += participantExpirationAtOrderIdsIndex[_user][expirationAts[i]].length();
-                ++i;
-            }
-        }
-
-        orderIds = new bytes32[](total);
-        uint256 cursor;
-        for (uint256 i = 0; i < activeCount;) {
-            EnumerableSet.Bytes32Set storage ids = participantExpirationAtOrderIdsIndex[_user][expirationAts[i]];
-            uint256 len = ids.length();
-            for (uint256 j = 0; j < len;) {
-                orderIds[cursor] = ids.at(j);
-                unchecked {
-                    ++j;
-                    ++cursor;
-                }
-            }
-            unchecked {
-                ++i;
-            }
-        }
-    }
-
     /// @notice Every physically resting order for one participant and delivery date.
-    /// @dev Explicit historical reads include expired orders; normal callers should use
-    ///      `getUserOrders`, whose cost and response are bounded to active deliveries.
+    /// @dev Explicit historical reads include expired orders. For the currently tradable
+    ///      window, callers should multicall over `getExpirationDates()`.
     function getUserOrdersAtExpiration(address _user, uint256 _expirationAt)
         external
         view
         returns (bytes32[] memory orderIds)
     {
         return participantExpirationAtOrderIdsIndex[_user][_expirationAt].values();
-    }
-
-    function getOrderAggregate(address _user) external view returns (OrderAggregate memory aggregate_) {
-        (uint256[] memory expirationAts, uint256 activeCount) = _activeOrderExpirations(_user);
-        for (uint256 i = 0; i < activeCount;) {
-            OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_user][expirationAts[i]];
-            aggregate_.buyQty += aggregate.buyQty;
-            aggregate_.sellQty += aggregate.sellQty;
-            aggregate_.buyValue += aggregate.buyValue;
-            aggregate_.sellValue += aggregate.sellValue;
-            unchecked {
-                ++i;
-            }
-        }
     }
 
     /// @notice Raw per-expiration cache, including orders awaiting cleanup after expiration.
@@ -488,26 +445,6 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
 
     function getActiveExpirationDates(address _user) external view returns (uint256[] memory) {
         return participantActiveExpirationAts[_user].values();
-    }
-
-    /// @notice Net linear delta across active positions, signed and scaled by
-    ///         10^collateralDecimals: one unit per contract.
-    /// @dev Deliberately does not share `_positionAggregate`: delta needs no mark, so this
-    ///      view never reads the oracle and keeps answering while the feed is stale. That
-    ///      matters for matured-but-unpriced expiries, where the price is stale by
-    ///      construction yet the exposure still has to be reported.
-    function getNetPositionDelta(address _participant) external view returns (int256) {
-        EnumerableSet.UintSet storage dates = participantActiveExpirationAts[_participant];
-        uint256 len = dates.length();
-        int256 netDelta;
-        for (uint256 i = 0; i < len;) {
-            uint256 date = dates.at(i);
-            if (settlementPrice[date] == 0) netDelta += participantExpirationAtNetDelta[_participant][date];
-            unchecked {
-                ++i;
-            }
-        }
-        return netDelta * int256(10 ** collateralDecimals);
     }
 
     /// @dev Collect mark-independent position inputs. Future expiries cannot have a pinned
@@ -647,22 +584,6 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     {
         bids = _activePricesSlice(activeBidPrices[_expirationAt], _maxLevels);
         asks = _activePricesSlice(activeAskPrices[_expirationAt], _maxLevels);
-    }
-
-    /// @notice Best (highest) bid for `expirationAt`, or 0 if empty.
-    function getBestBidPrice(uint256 _expirationAt) public view returns (uint256) {
-        StructuredLinkedList.List storage bids = activeBidPrices[_expirationAt];
-        if (bids.sizeOf() == 0) return 0;
-        (, uint256 bestBid) = bids.getNextNode(0);
-        return bestBid;
-    }
-
-    /// @notice Best (lowest) ask for `expirationAt`, or 0 if empty.
-    function getBestAskPrice(uint256 _expirationAt) public view returns (uint256) {
-        StructuredLinkedList.List storage asks = activeAskPrices[_expirationAt];
-        if (asks.sizeOf() == 0) return 0;
-        (, uint256 bestAsk) = asks.getNextNode(0);
-        return bestAsk;
     }
 
     /// @notice Simulate a limit order: filled qty, VWAP, and remainder (view, no state change).

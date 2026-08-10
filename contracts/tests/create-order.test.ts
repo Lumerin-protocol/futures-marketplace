@@ -5,6 +5,9 @@ import { getAddress, parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { warpPastDeliveryWithFreshOracle } from "./utils.ts";
 import { TimeInForce } from "./timeInForce.ts";
+import {
+  getUserOrders,
+} from "./lib/viewHelpers.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -576,7 +579,7 @@ describe("Order Creation", () => {
     assert.equal(newOrderEvents.length, 1);
     assert.equal(newOrderEvents[0].args.expirationAt, newDeliveryDate);
 
-    const sellerOrders = await futures.read.getUserOrders([seller.account.address]);
+    const sellerOrders = await getUserOrders(futures, seller.account.address);
     assert.deepEqual(sellerOrders, [newOrderEvents[0].args.orderId]);
     assert.deepEqual(
       await futures.read.getUserOrdersAtExpiration([seller.account.address, oldDeliveryDate]),

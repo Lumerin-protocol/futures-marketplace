@@ -5,6 +5,9 @@ import { parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { quantizePrice, refreshHashprice } from "./utils.ts";
 import { TimeInForce } from "./timeInForce.ts";
+import {
+  getNetPositionDelta,
+} from "./lib/viewHelpers.ts";
 
 const { networkHelpers } = await network.getOrCreate();
 
@@ -43,12 +46,12 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
       account: buyer.account,
     });
 
-    const sellerDeltaSinglePosition = await futures.read.getNetPositionDelta([
+    const sellerDeltaSinglePosition = await getNetPositionDelta(futures, 
       seller.account.address,
-    ]);
-    const buyerDeltaSinglePosition = await futures.read.getNetPositionDelta([
+    );
+    const buyerDeltaSinglePosition = await getNetPositionDelta(futures, 
       buyer.account.address,
-    ]);
+    );
     assert.ok(sellerDeltaSinglePosition < 0n, "seller is short → negative delta");
     assert.ok(buyerDeltaSinglePosition > 0n, "buyer is long → positive delta");
     assert.equal(
@@ -81,8 +84,8 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
       account: buyer.account,
     });
 
-    const sellerDeltaAfterReopen = await futures.read.getNetPositionDelta([seller.account.address]);
-    const buyerDeltaAfterReopen = await futures.read.getNetPositionDelta([buyer.account.address]);
+    const sellerDeltaAfterReopen = await getNetPositionDelta(futures, seller.account.address);
+    const buyerDeltaAfterReopen = await getNetPositionDelta(futures, buyer.account.address);
 
     assert.equal(
       sellerDeltaAfterReopen,
@@ -119,8 +122,8 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
       account: buyer.account,
     });
 
-    const sellerDeltaBefore = await futures.read.getNetPositionDelta([seller.account.address]);
-    const buyerDeltaBefore = await futures.read.getNetPositionDelta([buyer.account.address]);
+    const sellerDeltaBefore = await getNetPositionDelta(futures, seller.account.address);
+    const buyerDeltaBefore = await getNetPositionDelta(futures, buyer.account.address);
     assert.ok(sellerDeltaBefore < 0n, "seller is short");
     assert.ok(buyerDeltaBefore > 0n, "buyer is long");
 
@@ -146,8 +149,8 @@ describe("Portfolio-margin trackers — net delta / unrealized PnL", () => {
 
     // The position's expiration date is still in the future-iteration window of
     // `getNetPositionDelta`, so any tracker leak is directly observable.
-    const sellerDeltaAfter = await futures.read.getNetPositionDelta([seller.account.address]);
-    const buyerDeltaAfter = await futures.read.getNetPositionDelta([buyer.account.address]);
+    const sellerDeltaAfter = await getNetPositionDelta(futures, seller.account.address);
+    const buyerDeltaAfter = await getNetPositionDelta(futures, buyer.account.address);
     const sellerPnlAfter = await futures.read.getUnrealizedPnl([seller.account.address]);
     const buyerPnlAfter = await futures.read.getUnrealizedPnl([buyer.account.address]);
 

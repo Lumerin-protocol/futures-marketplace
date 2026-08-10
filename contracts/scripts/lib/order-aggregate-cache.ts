@@ -5,9 +5,19 @@ import { HashPowerFuturesAbi } from "../../abi/HashPowerFutures.ts";
 export const ORDER_CACHE_ABI = [
   {
     type: "function",
-    name: "getUserOrders",
+    name: "getExpirationDates",
     stateMutability: "view",
-    inputs: [{ name: "user", type: "address" }],
+    inputs: [],
+    outputs: [{ name: "", type: "uint256[]" }],
+  },
+  {
+    type: "function",
+    name: "getUserOrdersAtExpiration",
+    stateMutability: "view",
+    inputs: [
+      { name: "user", type: "address" },
+      { name: "expirationAt", type: "uint256" },
+    ],
     outputs: [{ name: "orderIds", type: "bytes32[]" }],
   },
   {
@@ -82,7 +92,8 @@ export type OrderAggregate = {
 };
 
 export type AggregateVerificationReader = {
-  getUserOrders(user: Address): Promise<readonly Hex[]>;
+  getExpirationDates(): Promise<readonly bigint[]>;
+  getUserOrdersAtExpiration(user: Address, expirationAt: bigint): Promise<readonly Hex[]>;
   getOrder(orderId: Hex): Promise<FuturesOrder>;
   getOrderAggregate(user: Address, expirationAt: bigint): Promise<OrderAggregate>;
 };
@@ -203,13 +214,19 @@ export async function verifyOrderAggregateCache(
   let expirationCount = 0;
 
   for (const user of sortAddresses(users)) {
-    const orderIds = await reader.getUserOrders(user);
+    const expirationAts = await reader.getExpirationDates();
+    const perExpiryIds = await mapConcurrently(expirationAts, readConcurrency, (expirationAt) =>
+      reader.getUserOrdersAtExpiration(user, expirationAt),
+    );
+    const orderIds = perExpiryIds.flat();
     const orders = await mapConcurrently(orderIds, readConcurrency, (orderId) =>
       reader.getOrder(orderId),
     );
     for (const order of orders) {
       if (getAddress(order.participant) !== user) {
-        throw new Error(`getUserOrders(${user}) returned an order owned by ${order.participant}`);
+        throw new Error(
+          `getUserOrdersAtExpiration(${user}) returned an order owned by ${order.participant}`,
+        );
       }
     }
 
@@ -236,12 +253,19 @@ export function createOnChainVerificationReader(
 ): AggregateVerificationReader {
   const block = blockNumber === undefined ? {} : { blockNumber };
   return {
-    getUserOrders: (user) =>
+    getExpirationDates: () =>
       readContract(pc, {
         address: futuresAddress,
         abi: ORDER_CACHE_ABI,
-        functionName: "getUserOrders",
-        args: [user],
+        functionName: "getExpirationDates",
+        ...block,
+      }),
+    getUserOrdersAtExpiration: (user, expirationAt) =>
+      readContract(pc, {
+        address: futuresAddress,
+        abi: ORDER_CACHE_ABI,
+        functionName: "getUserOrdersAtExpiration",
+        args: [user, expirationAt],
         ...block,
       }),
     getOrder: (orderId) =>
@@ -270,14 +294,24 @@ export async function filterUsersWithPhysicalOrders(
   readConcurrency: number,
 ): Promise<Address[]> {
   const sorted = sortAddresses(candidates);
-  const orders = await mapConcurrently(sorted, readConcurrency, (user) =>
-    readContract(pc, {
-      address: futuresAddress,
-      abi: ORDER_CACHE_ABI,
-      functionName: "getUserOrders",
-      args: [user],
-    }),
-  );
+  const expirationAts = await readContract(pc, {
+    address: futuresAddress,
+    abi: ORDER_CACHE_ABI,
+    functionName: "getExpirationDates",
+  });
+  if (expirationAts.length === 0) return [];
+
+  const orders = await mapConcurrently(sorted, readConcurrency, async (user) => {
+    const perExpiry = await mapConcurrently(expirationAts, readConcurrency, (expirationAt) =>
+      readContract(pc, {
+        address: futuresAddress,
+        abi: ORDER_CACHE_ABI,
+        functionName: "getUserOrdersAtExpiration",
+        args: [user, expirationAt],
+      }),
+    );
+    return perExpiry.flat();
+  });
   return sorted.filter((_, index) => orders[index].length > 0);
 }
 

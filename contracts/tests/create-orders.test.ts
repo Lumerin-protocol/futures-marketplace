@@ -5,6 +5,9 @@ import { getAddress, parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { warpPastDeliveryWithFreshOracle } from "./utils.ts";
 import { TimeInForce } from "./timeInForce.ts";
+import {
+  getUserOrders,
+} from "./lib/viewHelpers.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -141,7 +144,7 @@ describe("Futures.createOrders (batch placement)", () => {
     );
 
     // Nothing should have landed; the seller's order set must remain empty.
-    const sellerOrders = await futures.read.getUserOrders([seller.account.address]);
+    const sellerOrders = await getUserOrders(futures, seller.account.address);
     assert.equal(sellerOrders.length, 0);
 
     // Sanity: matching tx-cost gas via a successful baseline call.
@@ -186,7 +189,7 @@ describe("Futures.createOrders (batch placement)", () => {
       "InsufficientMarginBalance",
     );
 
-    const sellerOrders = await futures.read.getUserOrders([seller.account.address]);
+    const sellerOrders = await getUserOrders(futures, seller.account.address);
     assert.equal(sellerOrders.length, 0);
   });
 
@@ -211,7 +214,7 @@ describe("Futures.createOrders (batch placement)", () => {
     );
 
     // The stale order remains physically stored but leaves the active-window view.
-    const ordersBefore = await futures.read.getUserOrders([seller.account.address]);
+    const ordersBefore = await getUserOrders(futures, seller.account.address);
     assert.equal(ordersBefore.length, 0);
     assert.equal(
       (await futures.read.getUserOrdersAtExpiration([seller.account.address, dd])).length,
@@ -246,7 +249,7 @@ describe("Futures.createOrders (batch placement)", () => {
     });
     assert.equal(closed.length, 0, "createOrders must not implicitly close expired orders");
 
-    const ordersAfter = await futures.read.getUserOrders([seller.account.address]);
+    const ordersAfter = await getUserOrders(futures, seller.account.address);
     assert.equal(ordersAfter.length, 1, "only the new active-delivery order is returned");
   });
 

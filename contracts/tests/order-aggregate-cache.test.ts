@@ -6,6 +6,10 @@ import type { Address } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { TimeInForce } from "./timeInForce.ts";
 import { refreshHashprice, scaleHashprice } from "./utils.ts";
+import {
+  getUserOrders,
+  getOrderAggregate,
+} from "./lib/viewHelpers.ts";
 
 const { networkHelpers } = await network.getOrCreate();
 
@@ -31,7 +35,7 @@ async function assertCacheMatchesOrders(
   const expected = new Map<bigint, [bigint, bigint, bigint, bigint]>();
   for (const expirationAt of expirationAts) expected.set(expirationAt, [0n, 0n, 0n, 0n]);
 
-  for (const orderId of await futures.read.getUserOrders([user])) {
+  for (const orderId of await getUserOrders(futures, user)) {
     const order = await futures.read.getOrder([orderId]);
     const aggregate = expected.get(order.expirationAt) ?? [0n, 0n, 0n, 0n];
     const absQty = order.quantity > 0n ? order.quantity : -order.quantity;
@@ -85,7 +89,7 @@ describe("Futures per-expiration order aggregate cache", () => {
     );
     await assertCacheMatchesOrders(futures, seller.account.address, expirationAts);
 
-    const ids = await futures.read.getUserOrders([seller.account.address]);
+    const ids = await getUserOrders(futures, seller.account.address);
     const reduced = await futures.read.getOrder([ids[0]]);
     const reducedQty = reduced.quantity > 0n ? 1n : -1n;
     await futures.write.updateOrders(
@@ -105,7 +109,7 @@ describe("Futures per-expiration order aggregate cache", () => {
     );
     await assertCacheMatchesOrders(futures, seller.account.address, expirationAts);
 
-    const beforeIds = await futures.read.getUserOrders([seller.account.address]);
+    const beforeIds = await getUserOrders(futures, seller.account.address);
     const beforeAggregates = await Promise.all(
       expirationAts.map((expirationAt) =>
         futures.read.getOrderAggregateAtExpiration([seller.account.address, expirationAt]),
@@ -129,7 +133,7 @@ describe("Futures per-expiration order aggregate cache", () => {
       ),
       /InvalidPrice/,
     );
-    assert.deepEqual(await futures.read.getUserOrders([seller.account.address]), beforeIds);
+    assert.deepEqual(await getUserOrders(futures, seller.account.address), beforeIds);
     for (let i = 0; i < expirationAts.length; i++) {
       assert.deepEqual(
         await futures.read.getOrderAggregateAtExpiration([
@@ -229,7 +233,7 @@ describe("Futures per-expiration order aggregate cache", () => {
     await futures.write.createOrder([price, expiredAt, -2n, TimeInForce.GTC], {
       account: seller.account,
     });
-    const [expiredOrderId] = await futures.read.getUserOrders([seller.account.address]);
+    const [expiredOrderId] = await getUserOrders(futures, seller.account.address);
 
     await tc.setNextBlockTimestamp({ timestamp: expiredAt + 1n });
     await tc.mine({ blocks: 1 });
@@ -254,7 +258,7 @@ describe("Futures per-expiration order aggregate cache", () => {
       account: seller.account,
     });
     await futures.write.resetState([[seller.account.address]], { account: owner.account });
-    assert.equal((await futures.read.getUserOrders([seller.account.address])).length, 0);
+    assert.equal((await getUserOrders(futures, seller.account.address)).length, 0);
     assert.deepEqual(
       aggregateTuple(
         await futures.read.getOrderAggregateAtExpiration([seller.account.address, laterAt]),
@@ -274,14 +278,14 @@ describe("Futures per-expiration order aggregate cache", () => {
     await futures.write.createOrder([price, expiredAt, -2n, TimeInForce.GTC], {
       account: seller.account,
     });
-    const [expiredOrderId] = await futures.read.getUserOrders([seller.account.address]);
+    const [expiredOrderId] = await getUserOrders(futures, seller.account.address);
 
     await tc.setNextBlockTimestamp({ timestamp: expiredAt + 1n });
     await tc.mine({ blocks: 1 });
     await refreshHashprice(hashpriceUsd, expiredAt + 1n);
     await futures.write.resetState([[seller.account.address]], { account: owner.account });
 
-    assert.equal((await futures.read.getUserOrders([seller.account.address])).length, 0);
+    assert.equal((await getUserOrders(futures, seller.account.address)).length, 0);
     assert.equal((await futures.read.getOrder([expiredOrderId])).quantity, -2n, "physical order remains");
 
     await futures.write.removeOutdatedOrders([[expiredOrderId]], { account: buyer.account });
@@ -299,7 +303,7 @@ describe("Futures per-expiration order aggregate cache", () => {
     await futures.write.createOrder([price, expirationAt, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
-    const [orderId] = await futures.read.getUserOrders([buyer.account.address]);
+    const [orderId] = await getUserOrders(futures, buyer.account.address);
     await scaleHashprice(hashpriceUsd, 1n, 20n);
     assert.equal(await futures.read.isLiquidatable([buyer.account.address]), true);
 
@@ -360,7 +364,7 @@ describe("Futures per-expiration order aggregate cache", () => {
     assert.equal(risk.sellOrderDelta, 2n * unit);
     assert.equal(risk.buyOrderFillLoss, unit);
     assert.equal(risk.sellOrderFillLoss, unit);
-    assert.deepEqual(await futures.read.getOrderAggregate([seller.account.address]), {
+    assert.deepEqual(await getOrderAggregate(futures, seller.account.address), {
       buyQty: 2n,
       sellQty: 2n,
       buyValue: 2n * mark + unit,
@@ -388,7 +392,7 @@ describe("Futures per-expiration order aggregate cache", () => {
     const atBoundary = await futures.read.getRiskView([seller.account.address]);
     assert.equal(atBoundary.buyOrderDelta, 2n * parseUnits("1", 6));
     assert.equal(atBoundary.buyOrderFillLoss, (price - mark) * 2n);
-    assert.deepEqual(await futures.read.getOrderAggregate([seller.account.address]), {
+    assert.deepEqual(await getOrderAggregate(futures, seller.account.address), {
       buyQty: 2n,
       sellQty: 0n,
       buyValue: price * 2n,
@@ -401,7 +405,7 @@ describe("Futures per-expiration order aggregate cache", () => {
     const afterBoundary = await futures.read.getRiskView([seller.account.address]);
     assert.equal(afterBoundary.buyOrderDelta, 0n);
     assert.equal(afterBoundary.buyOrderFillLoss, 0n);
-    assert.deepEqual(await futures.read.getOrderAggregate([seller.account.address]), {
+    assert.deepEqual(await getOrderAggregate(futures, seller.account.address), {
       buyQty: 0n,
       sellQty: 0n,
       buyValue: 0n,

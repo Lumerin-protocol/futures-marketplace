@@ -5,6 +5,10 @@ import { parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { refreshHashprice } from "./utils.ts";
 import { TimeInForce } from "./timeInForce.ts";
+import {
+  getUserOrders,
+  getNetPositionDelta,
+} from "./lib/viewHelpers.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -44,7 +48,7 @@ describe("MM views", () => {
     await refreshHashprice(contracts.hashpriceUsd);
     await futures.write.createOrder([p2, dd, 2n, TimeInForce.GTC], { account: seller.account });
 
-    const ids = await futures.read.getUserOrders([seller.account.address]);
+    const ids = await getUserOrders(futures, seller.account.address);
     assert.equal(ids.length, 2, "two resting orders");
     assert.deepEqual(await futures.read.getUserOrdersAtExpiration([seller.account.address, dd]), ids);
   });
@@ -137,7 +141,7 @@ describe("MM views", () => {
     assert.equal(asks.length, 1);
     assert.equal(await futures.read.getQuantityAtPrice([dd, price, false]), 2n);
 
-    const ids = await futures.read.getUserOrders([seller.account.address]);
+    const ids = await getUserOrders(futures, seller.account.address);
     assert.equal(ids.length, 2);
 
     await futures.write.cancelOrder([ids[0]], { account: seller.account });
@@ -167,9 +171,9 @@ describe("MM views", () => {
 
     // 3 matched contracts → long buyer +3·10^6, short seller −3·10^6, independent
     // of the (now-removed) delivery-duration multiplier.
-    assert.equal(await futures.read.getNetPositionDelta([buyer.account.address]), 3n * DELTA_SCALE);
+    assert.equal(await getNetPositionDelta(futures, buyer.account.address), 3n * DELTA_SCALE);
     assert.equal(
-      await futures.read.getNetPositionDelta([seller.account.address]),
+      await getNetPositionDelta(futures, seller.account.address),
       -3n * DELTA_SCALE,
     );
   });
@@ -185,7 +189,7 @@ describe("MM views", () => {
     await futures.write.createOrder([parseUnits("100", 6), dd, -1n, TimeInForce.GTC], {
       account: seller.account,
     });
-    const ids = await futures.read.getUserOrders([seller.account.address]);
+    const ids = await getUserOrders(futures, seller.account.address);
 
     await viem.assertions.revertWithCustomError(
       futures.write.cancelOrder([ids[0]], { account: buyer.account }),

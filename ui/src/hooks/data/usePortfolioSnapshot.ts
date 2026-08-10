@@ -34,6 +34,13 @@ type ReadResult = { status: "success"; result: unknown } | { status: "failure" }
 /// The `getRiskView` tuple, narrowed to the fields the margin model reads.
 type RiskView = { pendingFunding: bigint; buyOrderDelta: bigint; sellOrderDelta: bigint };
 
+type OrderAggregate = {
+  buyQty: bigint;
+  sellQty: bigint;
+  buyValue: bigint;
+  sellValue: bigint;
+};
+
 /// Reads every input `PortfolioMarginEngine._computeMargin` consumes, so the
 /// margin requirement can be re-evaluated off-chain at an arbitrary price by
 /// `@hashpower/portfolio-margin` — the same model the keeper runs.
@@ -42,9 +49,9 @@ type RiskView = { pendingFunding: bigint; buyOrderDelta: bigint; sellOrderDelta:
 /// to be read before those aggregates can be fetched, so the reads happen in
 /// two waves. Wagmi batches each wave through multicall.
 ///
-/// Resting orders come from two calls per venue rather than one. `getRiskView`
-/// carries the per-side order delta while `getOrderAggregate` supplies the
-/// unclamped limit-price totals needed to evaluate fill loss at arbitrary prices.
+/// Resting orders come from risk deltas plus unclamped limit-price totals.
+/// Perps still exposes `getOrderAggregate`; futures sums
+/// `getOrderAggregateAtExpiration` over `getExpirationDates()`.
 ///
 /// The snapshot stays `undefined` until every read has succeeded — a partial
 /// one would silently understate the margin requirement.
@@ -69,14 +76,13 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
       {
         address: futuresAddress,
         abi: withErrors(HashPowerFuturesAbi),
-        functionName: "getOrderAggregate",
+        functionName: "getActiveExpirationDates",
         args: [address as `0x${string}`],
       },
       {
         address: futuresAddress,
         abi: withErrors(HashPowerFuturesAbi),
-        functionName: "getActiveExpirationDates",
-        args: [address as `0x${string}`],
+        functionName: "getExpirationDates",
       },
     ],
     query: { enabled: !!address && !!futuresAddress, refetchInterval: 10000 },
@@ -108,34 +114,51 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
     query: { enabled: !!address && !!perpsAddress, refetchInterval: 10000 },
   });
 
-  const expirationAts = useMemo(() => {
+  const positionExpirationAts = useMemo(() => {
+    const result = (futuresQuery.data as ReadResult[] | undefined)?.[1];
+    if (result?.status !== "success") return undefined;
+    return result.result as readonly bigint[];
+  }, [futuresQuery.data]);
+
+  const orderExpirationAts = useMemo(() => {
     const result = (futuresQuery.data as ReadResult[] | undefined)?.[2];
     if (result?.status !== "success") return undefined;
     return result.result as readonly bigint[];
   }, [futuresQuery.data]);
 
-  const hasExpiries = (expirationAts?.length ?? 0) > 0;
+  const hasPositions = (positionExpirationAts?.length ?? 0) > 0;
+  const hasOrderWindow = (orderExpirationAts?.length ?? 0) > 0;
 
   const aggregatesQuery = useReadContracts({
-    contracts: (expirationAts ?? []).map((expirationAt) => ({
+    contracts: (positionExpirationAts ?? []).map((expirationAt) => ({
       address: futuresAddress,
       abi: withErrors(HashPowerFuturesAbi),
       functionName: "getUserPosition" as const,
       args: [address as `0x${string}`, expirationAt] as const,
     })),
-    query: { enabled: !!address && !!futuresAddress && hasExpiries, refetchInterval: 10000 },
+    query: { enabled: !!address && !!futuresAddress && hasPositions, refetchInterval: 10000 },
   });
 
   // A settled expiry marks at its recorded price rather than spot, so its PnL
   // is constant in `P` and it drops out of the stress delta.
   const settlementQuery = useReadContracts({
-    contracts: (expirationAts ?? []).map((expirationAt) => ({
+    contracts: (positionExpirationAts ?? []).map((expirationAt) => ({
       address: futuresAddress,
       abi: withErrors(HashPowerFuturesAbi),
       functionName: "settlementPrice" as const,
       args: [expirationAt] as const,
     })),
-    query: { enabled: !!futuresAddress && hasExpiries, refetchInterval: 10000 },
+    query: { enabled: !!futuresAddress && hasPositions, refetchInterval: 10000 },
+  });
+
+  const orderAggregatesQuery = useReadContracts({
+    contracts: (orderExpirationAts ?? []).map((expirationAt) => ({
+      address: futuresAddress,
+      abi: withErrors(HashPowerFuturesAbi),
+      functionName: "getOrderAggregateAtExpiration" as const,
+      args: [address as `0x${string}`, expirationAt] as const,
+    })),
+    query: { enabled: !!address && !!futuresAddress && hasOrderWindow, refetchInterval: 10000 },
   });
 
   const perps = useMemo(
@@ -148,14 +171,19 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
       readPositions(
         aggregatesQuery.data as ReadResult[] | undefined,
         settlementQuery.data as ReadResult[] | undefined,
-        expirationAts,
+        positionExpirationAts,
       ),
-    [aggregatesQuery.data, settlementQuery.data, expirationAts],
+    [aggregatesQuery.data, settlementQuery.data, positionExpirationAts],
   );
 
   const futuresOrders = useMemo(
-    () => readOrders(futuresQuery.data as ReadResult[] | undefined),
-    [futuresQuery.data],
+    () =>
+      readFuturesOrders(
+        futuresQuery.data as ReadResult[] | undefined,
+        orderAggregatesQuery.data as ReadResult[] | undefined,
+        orderExpirationAts,
+      ),
+    [futuresQuery.data, orderAggregatesQuery.data, orderExpirationAts],
   );
 
   const snapshot = useMemo<AccountSnapshot | undefined>(() => {
@@ -182,13 +210,15 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
       futuresQuery.isLoading ||
       perpsQuery.isLoading ||
       aggregatesQuery.isLoading ||
-      settlementQuery.isLoading,
+      settlementQuery.isLoading ||
+      orderAggregatesQuery.isLoading,
     isError:
       balanceQuery.isError ||
       futuresQuery.isError ||
       perpsQuery.isError ||
       aggregatesQuery.isError ||
-      settlementQuery.isError,
+      settlementQuery.isError ||
+      orderAggregatesQuery.isError,
   };
 }
 
@@ -205,13 +235,30 @@ function restingOrders(
   };
 }
 
-function readOrders(results: ReadResult[] | undefined): RestingOrders | undefined {
-  const values = allSucceeded(results, 3);
-  if (!values) return undefined;
-  return restingOrders(
-    values[0] as RiskView,
-    values[1] as { buyValue: bigint; sellValue: bigint },
-  );
+function readFuturesOrders(
+  wave1: ReadResult[] | undefined,
+  orderAggregates: ReadResult[] | undefined,
+  orderExpirationAts: readonly bigint[] | undefined,
+): RestingOrders | undefined {
+  const values = allSucceeded(wave1, 3);
+  if (!values || orderExpirationAts === undefined) return undefined;
+
+  if (orderExpirationAts.length === 0) {
+    return restingOrders(values[0] as RiskView, { buyValue: 0n, sellValue: 0n });
+  }
+
+  const aggregates = allSucceeded(orderAggregates, orderExpirationAts.length);
+  if (!aggregates) return undefined;
+
+  let buyValue = 0n;
+  let sellValue = 0n;
+  for (const entry of aggregates) {
+    const aggregate = entry as OrderAggregate;
+    buyValue += aggregate.buyValue;
+    sellValue += aggregate.sellValue;
+  }
+
+  return restingOrders(values[0] as RiskView, { buyValue, sellValue });
 }
 
 function readPerps(

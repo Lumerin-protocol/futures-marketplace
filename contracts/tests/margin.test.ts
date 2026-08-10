@@ -5,6 +5,9 @@ import { parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { refreshHashprice, scaleHashprice } from "./utils.ts";
 import { TimeInForce } from "./timeInForce.ts";
+import {
+  getUserOrders,
+} from "./lib/viewHelpers.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -191,7 +194,7 @@ describe("Futures - portfolio margin (PME)", () => {
     await futures.write.createOrder([entryPricePerDay + step, deliveryDate, -1n, TimeInForce.GTC], {
       account: buyer.account,
     });
-    const orders = await futures.read.getUserOrders([buyer.account.address]);
+    const orders = await getUserOrders(futures, buyer.account.address);
     assert.equal(orders.length, 1, "reduce-only closing order should rest");
   });
 

@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { TimeInForce } from "./timeInForce.ts";
+import {
+  getNetPositionDelta,
+} from "./lib/viewHelpers.ts";
 
 const { networkHelpers } = await network.getOrCreate();
 
@@ -89,9 +92,9 @@ describe("Position Exit", () => {
     assert.equal(partAPos.netQuantity, -1n);
     assert.equal(partCPos.netQuantity, 1n);
 
-    const partADelta = await futures.read.getNetPositionDelta([partA.account.address]);
-    const partBDelta = await futures.read.getNetPositionDelta([partB.account.address]);
-    const partCDelta = await futures.read.getNetPositionDelta([partC.account.address]);
+    const partADelta = await getNetPositionDelta(futures, partA.account.address);
+    const partBDelta = await getNetPositionDelta(futures, partB.account.address);
+    const partCDelta = await getNetPositionDelta(futures, partC.account.address);
     assert.equal(partBDelta, 0n);
     assert.equal(partADelta, -partCDelta);
     assert.notEqual(partADelta, 0n);

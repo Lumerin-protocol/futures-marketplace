@@ -4,6 +4,9 @@ import { network } from "hardhat";
 import { getAddress, parseUnits, zeroAddress } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { TimeInForce } from "./timeInForce.ts";
+import {
+  getUserOrders,
+} from "./lib/viewHelpers.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -63,7 +66,7 @@ describe("Futures per-delivery order-index cutover", () => {
     await tc.setNextBlockTimestamp({ timestamp: expiredAt + 1n });
     await tc.mine({ blocks: 1 });
 
-    assert.deepEqual(await upgraded.read.getUserOrders([seller.account.address]), []);
+    assert.deepEqual(await getUserOrders(upgraded, seller.account.address), []);
     await upgraded.write.dropActiveOrders([[seller.account.address]], { account: owner.account });
     await upgraded.write.dropActiveOrders([[seller.account.address]], { account: owner.account });
 
