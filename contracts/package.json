@@ -14,8 +14,8 @@
   "scripts": {
     "format:sol": "forge fmt ./contracts/**/*.sol",
     "compile": "hardhat compile",
-    "test": "hardhat test",
-    "test:gas": "hardhat test tests/gas/futures-gas.test.ts",
+    "test": "hardhat test --network hardhat",
+    "test:gas": "hardhat test --network hardhat tests/gas/futures-gas.test.ts",
     "typecheck": "tsgo --noEmit",
     "lint": "biome lint .",
     "lint:fix": "biome check --write .",

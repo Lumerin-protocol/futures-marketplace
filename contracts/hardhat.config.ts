@@ -72,6 +72,7 @@ export default defineConfig({
   networks: {
     hardhat: {
       type: "edr-simulated",
+      allowUnlimitedContractSize: true,
       mining: {
         auto: true,
       },
