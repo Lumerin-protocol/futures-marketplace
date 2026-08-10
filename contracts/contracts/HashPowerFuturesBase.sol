@@ -65,12 +65,12 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     uint8 public liquidationMarginPercent;
     uint8 private __gap8;
     string private __gap9;
-    uint256 public collectedFeesBalance;
     uint256 private __gap10;
+    uint256 private __gap11;
     /// @dev Reserved — formerly `addressFeeDiscountPercent`.
-    mapping(address => uint8) private __gap11;
+    mapping(address => uint8) private __gap12;
     /// @dev Dead — former hashpriceScalingDivisor. Oracle scaling now via M.scaleDecimals.
-    uint256 private __gap12;
+    uint256 private __gap13;
 
     IPortfolioMarginEngine public portfolioMargin;
     /// @notice Canonical net position quantity per (participant, expirationAt). +long / -short.
@@ -84,10 +84,10 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     mapping(uint256 => StructuredLinkedList.List) internal activeAskPrices;
 
     /// @dev Dead — former liquidationFee (flat). Now bps-based via liquidationFeeBps.
-    uint256 private __gap13;
+    uint256 private __gap14;
 
     /// @dev Dead — former makerFee (flat). Now bps-based, appended at end of storage.
-    uint256 private __gap14;
+    uint256 private __gap15;
 
     IPointsHook public hook;
 
@@ -121,7 +121,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     uint8 internal oracleDecimals;
 
     /// @dev Dead — former vault. Moved to immutable.
-    address private __gap15;
+    address private __gap16;
 
     struct OrderAggregate {
         uint256 buyQty;
@@ -578,8 +578,13 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         }
     }
 
+    /// @notice Fee pot size: the venue's vault balance (match + liquidation exchange share).
+    function collectedFeesBalance() public view returns (uint256) {
+        return vault.balanceOf(address(this));
+    }
+
     /// @dev Move a signed trading fee between a participant and the fee pot
-    ///      (`collectedFeesBalance`, held on this contract's vault account).
+    ///      (this contract's vault account — see {collectedFeesBalance}).
     ///
     ///      Both directions clamp, matching {_transferPnl} and {_chargeLiquidationFee}. The
     ///      hazard is an ordering one inside the fill, not keeper latency: {_executeMatch}
@@ -601,7 +606,6 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
             uint256 available = vault.balanceOf(_participant);
             uint256 paid = M.min(owed, available);
             if (paid > 0) {
-                collectedFeesBalance += paid;
                 _internalTransfer(_participant, address(this), paid);
             }
             if (paid < owed) {
@@ -610,10 +614,8 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
             return;
         }
 
-        uint256 rebate = M.min(uint256(-_fee), collectedFeesBalance);
-        rebate = M.min(rebate, vault.balanceOf(address(this)));
+        uint256 rebate = M.min(uint256(-_fee), vault.balanceOf(address(this)));
         if (rebate > 0) {
-            collectedFeesBalance -= rebate;
             _internalTransfer(address(this), _participant, rebate);
         }
     }
@@ -786,6 +788,11 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         if (_makerFeeBps > MAX_FEE_BPS || _makerFeeBps < -MAX_FEE_BPS) revert InvalidFee();
         if (_takerFeeBps > MAX_FEE_BPS || _takerFeeBps < -MAX_FEE_BPS) revert InvalidFee();
         if (int256(_makerFeeBps) + int256(_takerFeeBps) < 0) revert InvalidFee();
+    }
+
+    /// @dev Inclusive `[0, BPS]` bound for liquidation fee / share knobs (100% of notional).
+    function _validateBPS(uint16 _bps) internal pure {
+        if (_bps > BPS) revert ValueOutOfRange(0, int256(BPS));
     }
 
     // ── Internal helpers: points hook ─────────────────────────────────────────
@@ -1094,7 +1101,6 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
 
         if (liquidatorShare != 0) _internalTransfer(_user, liquidator, liquidatorShare);
         if (exchangeShare != 0) {
-            collectedFeesBalance += exchangeShare;
             _internalTransfer(_user, address(this), exchangeShare);
         }
     }

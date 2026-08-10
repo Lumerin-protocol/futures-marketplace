@@ -9,7 +9,7 @@ import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts
 import { SafeWallet } from "../lib/safe.ts";
 
 const DEFAULT_SAFE_GAS_OVERHEAD = 150_000n;
-const TARGET_CODE_VERSION = "5.0.0";
+const TARGET_CODE_VERSION = "6.5.0";
 const UPGRADE_CONFIRMATIONS = 5;
 
 async function main() {

@@ -65,7 +65,7 @@
     },
     {
       "function": "collectedFeesBalance()",
-      "gas": "28809",
+      "gas": "37439",
       "id": "collectedFeesBalance()::representative",
       "kind": "view",
       "scenario": "representative"
@@ -324,21 +324,21 @@
     },
     {
       "function": "liquidateOrder(address,bytes32)",
-      "gas": "225405",
+      "gas": "203238",
       "id": "liquidateOrder(address,bytes32)::one underwater resting order",
       "kind": "transaction",
       "scenario": "one underwater resting order"
     },
     {
       "function": "liquidateOrders(address,bytes32[])",
-      "gas": "288840",
+      "gas": "270893",
       "id": "liquidateOrders(address,bytes32[])::batch-2",
       "kind": "transaction",
       "scenario": "batch-2"
     },
     {
       "function": "liquidateOrders(address,bytes32[])",
-      "gas": "304131",
+      "gas": "286184",
       "id": "liquidateOrders(address,bytes32[])::three stale ids then batch-2",
       "kind": "transaction",
       "scenario": "three stale ids then batch-2"
@@ -604,7 +604,7 @@
     },
     {
       "function": "withdrawCollectedFees()",
-      "gas": "128479",
+      "gas": "129800",
       "id": "withdrawCollectedFees()::nonzero fee balance",
       "kind": "transaction",
       "scenario": "nonzero fee balance"

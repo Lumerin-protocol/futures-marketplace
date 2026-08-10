@@ -106,6 +106,20 @@ describe("Futures - permissionless liquidation entry points", function () {
 
       assert.equal(await futures.read.liquidationFeeBps(), 50);
     });
+
+    it("accepts the inclusive BPS range and rejects above it", async function () {
+      const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures } = contracts;
+      const { owner } = accounts;
+
+      await futures.write.setLiquidationFeeBps([10_000], { account: owner.account });
+      assert.equal(await futures.read.liquidationFeeBps(), 10_000);
+      await viem.assertions.revertWithCustomError(
+        futures.write.setLiquidationFeeBps([10_001], { account: owner.account }),
+        futures,
+        "ValueOutOfRange",
+      );
+    });
   });
 
   describe("liquidateOrder", function () {

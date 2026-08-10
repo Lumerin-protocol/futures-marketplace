@@ -7,7 +7,7 @@ import { verifyContract } from "../lib/verify.ts";
 import { addrUrl, txUrl } from "../lib/explorer.ts";
 import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts";
 
-const TARGET_CODE_VERSION = "5.0.0";
+const TARGET_CODE_VERSION = "6.5.0";
 
 /** Minimal AggregatorV3 slice used to sanity-check HashpriceUSD before deploy. */
 const aggregatorV3Abi = [
