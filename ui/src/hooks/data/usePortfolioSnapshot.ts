@@ -7,6 +7,27 @@ import { PAYMENT_TOKEN_DECIMALS, QUANTITY_DECIMALS } from "../../lib/units";
 import { useGetFutureBalance } from "./useGetFutureBalance";
 import { withErrors } from "../../lib/withErrors";
 
+// The pinned derivatives ABI still exposes the legacy averaged-entry tuple.
+// Keep this narrow override local until the exact-position ABI is published.
+const PERPS_EXACT_POSITION_ABI = [
+  {
+    type: "function",
+    name: "getUserPosition",
+    stateMutability: "view",
+    inputs: [{ name: "_user", type: "address" }],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "netQuantity", type: "int256" },
+          { name: "netEntryValue", type: "int256" },
+        ],
+      },
+    ],
+  },
+] as const;
+
 /// A single `useReadContracts` entry, narrowed to what we actually consume.
 type ReadResult = { status: "success"; result: unknown } | { status: "failure" };
 
@@ -66,7 +87,7 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
     contracts: [
       {
         address: perpsAddress,
-        abi: withErrors(HashPowerPerpsDEXAbi),
+        abi: withErrors(PERPS_EXACT_POSITION_ABI),
         functionName: "getUserPosition",
         args: [address as `0x${string}`],
       },
@@ -211,13 +232,18 @@ function readPerps(
   const values = allSucceeded(results, 4);
   if (!values) return undefined;
 
-  const position = values[0] as { netQuantity: bigint; aggregatedEntryPrice: bigint };
+  const position = values[0] as { netQuantity: bigint; netEntryValue: bigint };
   const risk = values[1] as RiskView;
+  const absNetQuantity =
+    position.netQuantity < 0n ? -position.netQuantity : position.netQuantity;
+  const absNetEntryValue =
+    position.netEntryValue < 0n ? -position.netEntryValue : position.netEntryValue;
 
   return {
     perp: {
       netQty: position.netQuantity,
-      entryPrice: position.aggregatedEntryPrice,
+      entryPrice:
+        absNetQuantity === 0n ? 0n : (absNetEntryValue * 1_000_000n) / absNetQuantity,
       orders: restingOrders(
         risk,
         values[2] as { buyValue: bigint; sellValue: bigint },
