@@ -147,6 +147,10 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     // constants
     /// @notice One contract settles 1 PH/s/day (hashes/s·day). Matches the hashprice oracle quote basis.
     uint256 public constant CONTRACT_SIZE_HPS_DAY = 1e15;
+    /// @notice Number of decimal places used by order and position quantities.
+    /// @dev Whole contracts (no fractional qty). Lives here with the other venue constants so the
+    ///      main contract only carries `VERSION` — same shape as {HashPowerPerpsDEXBase}.
+    uint8 public constant QUANTITY_DECIMALS = 0;
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION = 100;
     uint256 public constant MAX_PRICE_LEVELS_PER_SIDE = 200;
     uint256 internal constant BPS = 10_000; // Basis points denominator
@@ -742,6 +746,37 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         if (target.code.length == 0) revert InvalidDependency();
     }
 
+    /// @dev Validate every read the venue relies on before adopting a portfolio margin
+    ///      engine. Probe order matches Perps: code → vault → linearOrderMargin → shocks.
+    function _setPortfolioMargin(IPortfolioMarginEngine _pm) internal {
+        address pm = address(_pm);
+        _requireContract(pm);
+
+        try _pm.vault() returns (ICollateralVault pinned) {
+            if (address(pinned) != address(vault)) revert VaultMismatch();
+        } catch {
+            revert InvalidDependency();
+        }
+
+        try _pm.linearOrderMargin(0) returns (uint256) { }
+        catch {
+            revert InvalidDependency();
+        }
+
+        try _pm.imSpotShock() returns (uint256) { }
+        catch {
+            revert InvalidDependency();
+        }
+
+        try _pm.mmSpotShock() returns (uint256) { }
+        catch {
+            revert InvalidDependency();
+        }
+
+        portfolioMargin = _pm;
+        emit PortfolioMarginUpdated(pm);
+    }
+
     /// @dev Validates a proposed (maker, taker) fee pair. Both bounds matter:
     ///      `MAX_FEE_BPS` keeps the unreserved fee small relative to the MM floor, and the
     ///      non-negative sum keeps a match from being a net outflow — without it a maker
@@ -772,6 +807,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
 
     function _refPriceForPoints() internal view returns (uint256) {
         (, int256 answer,, uint256 updatedAt,) = priceOracle.latestRoundData();
+        // Soft path: never revert on a bad round — points just drop the bonus.
         if (answer <= 0 || updatedAt == 0 || updatedAt > block.timestamp) return 0;
         if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) return 0;
         return _getMarketPrice(uint256(answer));
@@ -932,14 +968,17 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         }
     }
 
+    /// @dev Hard path for mark price / admin probes. Reverts `InvalidOracle` or
+    ///      `OracleStale`; returns when the round is usable. Soft callers that must
+    ///      not revert (points ref) check the same predicates and return 0 instead.
+    function _validateOracleRound(int256 answer, uint256 updatedAt) internal view {
+        if (answer <= 0 || updatedAt == 0 || updatedAt > block.timestamp) revert InvalidOracle();
+        if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) revert OracleStale();
+    }
+
     function _getPrice() internal view returns (uint256) {
         (, int256 answer,, uint256 updatedAt,) = priceOracle.latestRoundData();
-        if (answer <= 0 || updatedAt == 0 || updatedAt > block.timestamp) {
-            revert InvalidOracle();
-        }
-        if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) {
-            revert OracleStale();
-        }
+        _validateOracleRound(answer, updatedAt);
         return uint256(answer);
     }
 
@@ -1053,7 +1092,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         uint256 liquidatorShare = totalFee * uint256(liqShareBps) / BPS;
         uint256 exchangeShare = totalFee - liquidatorShare;
 
-        _internalTransfer(_user, liquidator, liquidatorShare);
+        if (liquidatorShare != 0) _internalTransfer(_user, liquidator, liquidatorShare);
         if (exchangeShare != 0) {
             collectedFeesBalance += exchangeShare;
             _internalTransfer(_user, address(this), exchangeShare);

@@ -96,12 +96,8 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
     ///      null-checks it, so a wrong address here bricks the book. The engine must also
     ///      aggregate this venue's own vault.
     function setPortfolioMargin(IPortfolioMarginEngine _pm) external onlyOwner {
-        _validateAddressNotZero(address(_pm));
-        _validatePortfolioMargin(_pm);
-        _validateVaultMatch(_pm);
-
-        portfolioMargin = _pm;
-        emit PortfolioMarginUpdated(address(_pm));
+        if (address(_pm) == address(0)) revert ZeroAddress();
+        _setPortfolioMargin(_pm);
     }
 
     function setHook(address _hook) external onlyOwner {
@@ -199,10 +195,7 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
         } catch {
             revert InvalidDependency();
         }
-        if (answer <= 0 || updatedAt == 0 || updatedAt > block.timestamp) {
-            revert InvalidOracle();
-        }
-        if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) revert OracleStale();
+        _validateOracleRound(answer, updatedAt);
 
         uint8 dec;
         try _oracle.decimals() returns (uint8 _dec) {
@@ -211,41 +204,5 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
             revert InvalidDependency();
         }
         return dec;
-    }
-
-    /// @dev Probes plain storage reads rather than `computePortfolioIM`: the margin path needs
-    ///      the engine's own oracle, and wiring a venue must not depend on that being set yet.
-    function _validatePortfolioMargin(IPortfolioMarginEngine _pm) private view {
-        _requireContract(address(_pm));
-
-        try _pm.imSpotShock() returns (uint256) { }
-        catch {
-            revert InvalidDependency();
-        }
-
-        try _pm.mmSpotShock() returns (uint256) { }
-        catch {
-            revert InvalidDependency();
-        }
-
-        try _pm.linearOrderMargin(0) returns (uint256) { }
-        catch {
-            revert InvalidDependency();
-        }
-    }
-
-    /// @dev The engine must aggregate this venue's own vault, or margin is computed elsewhere.
-    function _validateVaultMatch(IPortfolioMarginEngine _pm) private view {
-        try _pm.vault() returns (ICollateralVault pinned) {
-            if (address(pinned) != address(vault)) revert VaultMismatch();
-        } catch {
-            revert InvalidDependency();
-        }
-    }
-
-    function _validateAddressNotZero(address addr) private pure {
-        if (addr == address(0)) {
-            revert ZeroAddress();
-        }
     }
 }
