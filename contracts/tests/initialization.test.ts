@@ -32,14 +32,58 @@ describe("Futures - Initialization", () => {
     assert.equal(await futures.read.MAX_ORACLE_STALENESS(), 3600n);
   });
 
-  it("exposes whole-unit quantity scale in the runtime and generated ABI", async function () {
+  it("exposes v5 metadata in the runtime and generated ABI", async function () {
     const { contracts } = await networkHelpers.loadFixture(deployFuturesFixture);
 
+    assert.equal(await contracts.futures.read.VERSION(), "5.0.0");
     assert.equal(await contracts.futures.read.QUANTITY_DECIMALS(), 0);
+    assert.ok(
+      FuturesAbi.some((item) => item.type === "function" && item.name === "VERSION"),
+    );
     assert.ok(
       FuturesAbi.some(
         (item) => item.type === "function" && item.name === "QUANTITY_DECIMALS",
       ),
+    );
+  });
+
+  it("keeps the converged public ABI vocabulary", function () {
+    const functionOutputs = (name: string) => {
+      const item = FuturesAbi.find(
+        (candidate) => candidate.type === "function" && candidate.name === name,
+      );
+      assert.ok(item && "outputs" in item, `missing function ${name}`);
+      return item.outputs.map((output) => output.name);
+    };
+
+    assert.deepEqual(functionOutputs("getOrderBookPrices"), ["bids", "asks"]);
+    assert.deepEqual(functionOutputs("getUserOrders"), ["orderIds"]);
+    assert.deepEqual(functionOutputs("getOrderAggregate"), ["aggregate_"]);
+    assert.deepEqual(functionOutputs("getQuantityAtPrice"), [""]);
+    assert.deepEqual(functionOutputs("getRiskView"), ["view_"]);
+    assert.deepEqual(functionOutputs("getUnrealizedPnl"), [""]);
+
+    for (const name of ["InvalidQty", "InsufficientMarginBalance", "ValueOutOfRange"]) {
+      assert.ok(
+        FuturesAbi.some((item) => item.type === "error" && item.name === name),
+        `missing error ${name}`,
+      );
+    }
+
+    const liquidation = FuturesAbi.find(
+      (item) => item.type === "event" && item.name === "PositionLiquidated",
+    );
+    assert.ok(liquidation && "inputs" in liquidation);
+    assert.deepEqual(
+      liquidation.inputs.map(({ name, indexed }) => ({ name, indexed })),
+      [
+        { name: "user", indexed: true },
+        { name: "liquidator", indexed: true },
+        { name: "expirationAt", indexed: false },
+        { name: "closedQuantity", indexed: false },
+        { name: "pnl", indexed: false },
+        { name: "liquidatorFee", indexed: false },
+      ],
     );
   });
 });

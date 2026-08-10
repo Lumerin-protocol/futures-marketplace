@@ -22,7 +22,7 @@ contract Futures is FuturesAdmin {
     /// @dev Lives here rather than in {FuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `Futures.sol` to require a bump.
-    string public constant VERSION = "4.4.0";
+    string public constant VERSION = "5.0.0";
 
     /// @notice Number of decimal places used by order and position quantities.
     uint8 public constant QUANTITY_DECIMALS = 0;

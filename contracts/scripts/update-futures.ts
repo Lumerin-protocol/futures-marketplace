@@ -9,6 +9,7 @@ import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts
 import { SafeWallet } from "../lib/safe.ts";
 
 const DEFAULT_SAFE_GAS_OVERHEAD = 150_000n;
+const TARGET_CODE_VERSION = "5.0.0";
 const UPGRADE_CONFIRMATIONS = 5;
 
 async function main() {
@@ -74,6 +75,9 @@ async function main() {
 
   const newVersion = await futuresImpl.read.VERSION();
   logInfo("version", { current: currentVersion, new: newVersion });
+  if (newVersion !== TARGET_CODE_VERSION) {
+    throw new Error(`Implementation VERSION is ${newVersion}, expected ${TARGET_CODE_VERSION}`);
+  }
   if (newVersion === currentVersion) {
     throw new Error("New version is the same as the current version. Aborting.");
   }
@@ -203,9 +207,9 @@ async function main() {
       Version: upgradedVersion,
       Block: receipt.blockNumber.toString(),
     });
-    if (upgradedVersion !== newVersion) {
+    if (upgradedVersion !== TARGET_CODE_VERSION) {
       throw new Error(
-        `Proxy VERSION at block ${receipt.blockNumber} is ${upgradedVersion}, expected ${newVersion}`,
+        `Proxy VERSION at block ${receipt.blockNumber} is ${upgradedVersion}, expected ${TARGET_CODE_VERSION}`,
       );
     }
     // ── 3. Post-upgrade config ──────────────────────────────────────────

@@ -7,6 +7,8 @@ import { verifyContract } from "../lib/verify.ts";
 import { addrUrl, txUrl } from "../lib/explorer.ts";
 import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts";
 
+const TARGET_CODE_VERSION = "5.0.0";
+
 /** Minimal AggregatorV3 slice used to sanity-check HashpriceUSD before deploy. */
 const aggregatorV3Abi = [
   {
@@ -110,6 +112,12 @@ async function main() {
     confirmations: 5,
   });
   logStep("Deployed", addrUrl(pc, futuresImpl.address));
+  const implementationVersion = await futuresImpl.read.VERSION();
+  if (implementationVersion !== TARGET_CODE_VERSION) {
+    throw new Error(
+      `Implementation VERSION is ${implementationVersion}, expected ${TARGET_CODE_VERSION}`,
+    );
+  }
   await verifyContract(futuresImpl.address, [collateralVaultAddress]);
   logStep("Verified", addrUrl(pc, futuresImpl.address));
 
