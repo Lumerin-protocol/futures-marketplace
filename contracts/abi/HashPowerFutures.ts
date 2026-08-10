@@ -1,4 +1,4 @@
-export const FuturesAbi = [
+export const HashPowerFuturesAbi = [
   {
     "inputs": [
       {
@@ -887,7 +887,7 @@ export const FuturesAbi = [
         "type": "int256"
       },
       {
-        "internalType": "enum FuturesBase.TimeInForce",
+        "internalType": "enum HashPowerFuturesBase.TimeInForce",
         "name": "_tif",
         "type": "uint8"
       }
@@ -917,12 +917,12 @@ export const FuturesAbi = [
             "type": "int256"
           },
           {
-            "internalType": "enum FuturesBase.TimeInForce",
+            "internalType": "enum HashPowerFuturesBase.TimeInForce",
             "name": "timeInForce",
             "type": "uint8"
           }
         ],
-        "internalType": "struct FuturesBase.OrderIntent[]",
+        "internalType": "struct HashPowerFuturesBase.OrderIntent[]",
         "name": "_intents",
         "type": "tuple[]"
       }
@@ -1119,7 +1119,7 @@ export const FuturesAbi = [
             "type": "uint256"
           }
         ],
-        "internalType": "struct FuturesBase.Order",
+        "internalType": "struct HashPowerFuturesBase.Order",
         "name": "",
         "type": "tuple"
       }
@@ -1160,7 +1160,7 @@ export const FuturesAbi = [
             "type": "uint256"
           }
         ],
-        "internalType": "struct FuturesBase.OrderAggregate",
+        "internalType": "struct HashPowerFuturesBase.OrderAggregate",
         "name": "aggregate_",
         "type": "tuple"
       }
@@ -1206,7 +1206,7 @@ export const FuturesAbi = [
             "type": "uint256"
           }
         ],
-        "internalType": "struct FuturesBase.OrderAggregate",
+        "internalType": "struct HashPowerFuturesBase.OrderAggregate",
         "name": "",
         "type": "tuple"
       }
@@ -1418,7 +1418,7 @@ export const FuturesAbi = [
             "type": "int256"
           }
         ],
-        "internalType": "struct FuturesBase.Position",
+        "internalType": "struct HashPowerFuturesBase.Position",
         "name": "",
         "type": "tuple"
       }
@@ -2050,7 +2050,7 @@ export const FuturesAbi = [
             "type": "int256"
           }
         ],
-        "internalType": "struct FuturesBase.ReduceIntent[]",
+        "internalType": "struct HashPowerFuturesBase.ReduceIntent[]",
         "name": "_reduces",
         "type": "tuple[]"
       },
@@ -2072,12 +2072,12 @@ export const FuturesAbi = [
             "type": "int256"
           },
           {
-            "internalType": "enum FuturesBase.TimeInForce",
+            "internalType": "enum HashPowerFuturesBase.TimeInForce",
             "name": "timeInForce",
             "type": "uint8"
           }
         ],
-        "internalType": "struct FuturesBase.OrderIntent[]",
+        "internalType": "struct HashPowerFuturesBase.OrderIntent[]",
         "name": "_intents",
         "type": "tuple[]"
       }

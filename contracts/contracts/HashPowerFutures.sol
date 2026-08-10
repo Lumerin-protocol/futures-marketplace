@@ -7,28 +7,28 @@ import { StructuredLinkedList } from "solidity-linked-list/contracts/StructuredL
 import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
 import { ILinearMarket } from "collateral-margin/contracts/contracts/interfaces/ILinearMarket.sol";
 import { MathLib as M } from "./libs/MathLib.sol";
-import { FuturesBase } from "./FuturesBase.sol";
-import { FuturesAdmin } from "./FuturesAdmin.sol";
+import { HashPowerFuturesBase } from "./HashPowerFuturesBase.sol";
+import { HashPowerFuturesAdmin } from "./HashPowerFuturesAdmin.sol";
 
-/// @title Futures — cash-settled hashrate futures CLOB (v3: aggregate positions + qty-bearing orders)
+/// @title HashPowerFutures — cash-settled hashrate futures CLOB (v3: aggregate positions + qty-bearing orders)
 /// @dev The permissionless surface: trading, liquidation and views. Storage and internal
-///      helpers live in {FuturesBase}; the owner-only surface lives in {FuturesAdmin}.
-contract Futures is FuturesAdmin {
+///      helpers live in {HashPowerFuturesBase}; the owner-only surface lives in {HashPowerFuturesAdmin}.
+contract HashPowerFutures is HashPowerFuturesAdmin {
     using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableSet for EnumerableSet.Bytes32Set;
     using StructuredLinkedList for StructuredLinkedList.List;
 
     /// @notice Implementation version, bumped on every deployed change.
-    /// @dev Lives here rather than in {FuturesBase} so that a diff to this file
+    /// @dev Lives here rather than in {HashPowerFuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
-    ///      straight out of `Futures.sol` to require a bump.
+    ///      straight out of `HashPowerFutures.sol` to require a bump.
     string public constant VERSION = "5.0.0";
 
     /// @notice Number of decimal places used by order and position quantities.
     uint8 public constant QUANTITY_DECIMALS = 0;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(ICollateralVault _vault) FuturesBase(_vault) { }
+    constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) { }
 
     function initialize(
         AggregatorV3Interface _priceOracle,

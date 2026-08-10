@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { getAddress, zeroAddress } from "viem";
-import { FuturesAbi } from "../abi/Futures.ts";
+import { HashPowerFuturesAbi } from "../abi/HashPowerFutures.ts";
 import { deployFuturesFixture } from "./fixtures.ts";
 
 const { networkHelpers, viem } = await network.getOrCreate();
@@ -38,10 +38,10 @@ describe("Futures - Initialization", () => {
     assert.equal(await contracts.futures.read.VERSION(), "5.0.0");
     assert.equal(await contracts.futures.read.QUANTITY_DECIMALS(), 0);
     assert.ok(
-      FuturesAbi.some((item) => item.type === "function" && item.name === "VERSION"),
+      HashPowerFuturesAbi.some((item) => item.type === "function" && item.name === "VERSION"),
     );
     assert.ok(
-      FuturesAbi.some(
+      HashPowerFuturesAbi.some(
         (item) => item.type === "function" && item.name === "QUANTITY_DECIMALS",
       ),
     );
@@ -49,7 +49,7 @@ describe("Futures - Initialization", () => {
 
   it("keeps the converged public ABI vocabulary", function () {
     const functionOutputs = (name: string) => {
-      const item = FuturesAbi.find(
+      const item = HashPowerFuturesAbi.find(
         (candidate) => candidate.type === "function" && candidate.name === name,
       );
       assert.ok(item && "outputs" in item, `missing function ${name}`);
@@ -65,12 +65,12 @@ describe("Futures - Initialization", () => {
 
     for (const name of ["InvalidQty", "InsufficientMarginBalance", "ValueOutOfRange"]) {
       assert.ok(
-        FuturesAbi.some((item) => item.type === "error" && item.name === name),
+        HashPowerFuturesAbi.some((item) => item.type === "error" && item.name === name),
         `missing error ${name}`,
       );
     }
 
-    const liquidation = FuturesAbi.find(
+    const liquidation = HashPowerFuturesAbi.find(
       (item) => item.type === "event" && item.name === "PositionLiquidated",
     );
     assert.ok(liquidation && "inputs" in liquidation);

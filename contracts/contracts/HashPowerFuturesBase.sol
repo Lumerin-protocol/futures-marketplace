@@ -14,10 +14,10 @@ import { IPointsHook } from "collateral-margin/contracts/contracts/interfaces/IP
 import { PriceLadderLib } from "./libs/PriceLadderLib.sol";
 import { MathLib as M } from "./libs/MathLib.sol";
 
-/// @title FuturesBase — storage layout and internal helpers for {Futures}
+/// @title HashPowerFuturesBase — storage layout and internal helpers for {HashPowerFutures}
 /// @dev Owns the full UUPS storage layout (declaration order is part of the layout — do not reorder).
-///      {Futures} declares no state of its own; append new storage here, at the end.
-abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionable {
+///      {HashPowerFutures} declares no state of its own; append new storage here, at the end.
+abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionable {
     using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableSet for EnumerableSet.Bytes32Set;
     using StructuredLinkedList for StructuredLinkedList.List;
@@ -116,7 +116,7 @@ abstract contract FuturesBase is UUPSUpgradeable, OwnableUpgradeable, Versionabl
 
     /// @notice Decimals of the oracle feed (cached for gas).
     /// @dev Appended at end of storage to preserve the upgradeable layout.
-    /// @dev `internal` so {FuturesAdmin-setOracle} can refresh it alongside `priceOracle`.
+    /// @dev `internal` so {HashPowerFuturesAdmin-setOracle} can refresh it alongside `priceOracle`.
     ///      Visibility does not affect the slot, so the layout is unchanged.
     uint8 internal oracleDecimals;
 

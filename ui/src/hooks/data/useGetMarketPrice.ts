@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useReadContract } from "wagmi";
-import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
+import { HashPowerFuturesAbi } from "futures-marketplace-abi/HashPowerFutures.ts";
 import { withErrors } from "../../lib/withErrors";
 
 /**
@@ -12,7 +12,7 @@ export function useGetMarketPrice() {
     address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS,
     // Merge the custom error ABI so viem can decode reverts (e.g. OracleStale,
     // InvalidPrice) into named errors instead of opaque hex data.
-    abi: withErrors(FuturesAbi),
+    abi: withErrors(HashPowerFuturesAbi),
     functionName: "getMarketPrice",
     query: {
       refetchInterval: 10000, // Poll every 10 seconds

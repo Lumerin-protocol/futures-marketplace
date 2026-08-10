@@ -36,7 +36,7 @@ describe("Futures - dependency validation", function () {
     const vault = await deployVault(token.address);
 
     await assert.rejects(
-      viem.deployContract("Futures", [vault.address]),
+      viem.deployContract("HashPowerFutures", [vault.address]),
       /UnsupportedTokenDecimals/,
     );
   });

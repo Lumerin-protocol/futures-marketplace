@@ -69,8 +69,8 @@ importers:
         specifier: ^1.6.2
         version: 1.8.0
       futures-marketplace-abi:
-        specifier: github:Lumerin-protocol/futures-marketplace#05e97deb&path:/contracts/abi
-        version: https://codeload.github.com/Lumerin-protocol/futures-marketplace/tar.gz/05e97deb86a59e6be45fa0aa2ac10b8cb070c303#path:/contracts/abi
+        specifier: link:../contracts/abi
+        version: link:../contracts/abi
       graphql:
         specifier: ^16.11.0
         version: 16.14.2
@@ -3173,10 +3173,6 @@ packages:
 
   functions-have-names@1.2.3:
     resolution: {integrity: sha512-xckBUXyTIqT97tq2x2AMb+g163b5JFysYk0x4qxNFwbfQkmNZoiRHb6sPzI9/QV33WeuvVYBUIiD4NzNIyqaRQ==}
-
-  futures-marketplace-abi@https://codeload.github.com/Lumerin-protocol/futures-marketplace/tar.gz/05e97deb86a59e6be45fa0aa2ac10b8cb070c303#path:/contracts/abi:
-    resolution: {gitHosted: true, integrity: sha512-RBtliijc/lnFFwrenZDCaeUYvA4O4G35ix93QuKxaDqAREvhTk4Lcbi9IDn/yDYpbYPQB7QXKpxfM5+kGfTlHg==, path: /contracts/abi, tarball: https://codeload.github.com/Lumerin-protocol/futures-marketplace/tar.gz/05e97deb86a59e6be45fa0aa2ac10b8cb070c303}
-    version: 0.0.0
 
   generator-function@2.0.1:
     resolution: {integrity: sha512-SFdFmIJi+ybC0vjlHN0ZGVGHc3lgE0DxPAT0djjVg+kjOnSqclqmj0KQ7ykTOLP6YxoqOvuAODGdcHJn+43q3g==}
@@ -9889,8 +9885,6 @@ snapshots:
   functional-red-black-tree@1.0.1: {}
 
   functions-have-names@1.2.3: {}
-
-  futures-marketplace-abi@https://codeload.github.com/Lumerin-protocol/futures-marketplace/tar.gz/05e97deb86a59e6be45fa0aa2ac10b8cb070c303#path:/contracts/abi: {}
 
   generator-function@2.0.1: {}
 

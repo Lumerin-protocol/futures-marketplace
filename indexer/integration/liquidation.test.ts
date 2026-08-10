@@ -40,7 +40,7 @@ describe("liquidatePosition: PositionLiquidated, seller netQty=0", () => {
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    matchstick.bind("Futures", futures.address, futures.abi);
+    matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await matchstick.captureViewMocks();
 
     await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
@@ -179,7 +179,7 @@ describe("BadDebt: BadDebtEvent when losses exceed participant balance + insuran
 
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
-    matchstick.bind("Futures", futures.address, futures.abi);
+    matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await matchstick.captureViewMocks();
     await matchstick.anchor();
 
@@ -298,7 +298,7 @@ describe("multi-position permissionless liquidation: per-tx dedup", () => {
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    matchstick.bind("Futures", futures.address, futures.abi);
+    matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await matchstick.captureViewMocks();
 
     await futures.write.createOrder([price1, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
@@ -383,7 +383,7 @@ describe("multi-leg liquidation in one tx: liquidatedQuantity counts units", () 
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    matchstick.bind("Futures", futures.address, futures.abi);
+    matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await matchstick.captureViewMocks();
 
     // Seller shorts two units at distinct prices on the SAME deliveryDate → one

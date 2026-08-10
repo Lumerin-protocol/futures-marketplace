@@ -7,7 +7,7 @@ import {
 } from "matchstick-as/assembly/index";
 import { newTypedMockEventWithParams } from "matchstick-as/assembly/defaults";
 import { BigInt } from "@graphprotocol/graph-ts";
-import { BadDebt } from "../generated/Futures/Futures";
+import { BadDebt } from "../generated/HashPowerFutures/HashPowerFutures";
 import { handleBadDebt } from "../src/handlers/liquidation";
 import {
   eventIdHex,

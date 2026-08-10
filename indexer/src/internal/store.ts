@@ -1,5 +1,5 @@
 import { Address, BigInt, Bytes, dataSource } from "@graphprotocol/graph-ts";
-import { Futures as FuturesContract } from "../../generated/Futures/Futures";
+import { HashPowerFutures as HashPowerFuturesContract } from "../../generated/HashPowerFutures/HashPowerFutures";
 import {
   Futures,
   FuturesExpiration,
@@ -58,7 +58,7 @@ function readStartBlockFromContext(): BigInt {
 /// Refresh on-chain config snapshot via getter eth_calls. Best-effort: any
 /// reverted call leaves the existing field untouched.
 export function loadFuturesFromContract(futures: Futures): void {
-  const contract = FuturesContract.bind(dataSource.address());
+  const contract = HashPowerFuturesContract.bind(dataSource.address());
 
   const oracle = contract.try_priceOracle();
   if (!oracle.reverted) futures.hashrateOracleAddress = oracle.value;

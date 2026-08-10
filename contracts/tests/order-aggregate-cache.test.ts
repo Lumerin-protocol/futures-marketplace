@@ -9,7 +9,7 @@ import { refreshHashprice, scaleHashprice } from "./utils.ts";
 
 const { networkHelpers } = await network.getOrCreate();
 
-type FuturesContract = Awaited<ReturnType<typeof deployFuturesFixture>>["contracts"]["futures"];
+type HashPowerFuturesContract = Awaited<ReturnType<typeof deployFuturesFixture>>["contracts"]["futures"];
 type OrderAggregate = {
   readonly buyQty: bigint;
   readonly sellQty: bigint;
@@ -24,7 +24,7 @@ function aggregateTuple(
 }
 
 async function assertCacheMatchesOrders(
-  futures: FuturesContract,
+  futures: HashPowerFuturesContract,
   user: Address,
   expirationAts: readonly bigint[],
 ) {

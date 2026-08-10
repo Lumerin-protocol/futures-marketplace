@@ -27,7 +27,7 @@ describe("Futures fee config events", () => {
     const { futures } = contracts;
     const { owner } = accounts;
 
-    conn.matchstick.bind("Futures", futures.address, futures.abi);
+    conn.matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
@@ -58,7 +58,7 @@ describe("Futures: full config + address surface populated by loadFuturesFromCon
     const { futures, hashpriceUsd, portfolioMarginEngine } = contracts;
     const { owner } = accounts;
 
-    conn.matchstick.bind("Futures", futures.address, futures.abi);
+    conn.matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
@@ -161,7 +161,7 @@ describe("Trade.tradingFee and PositionSession.tradingFees reflect makerFeeBps/t
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    conn.matchstick.bind("Futures", futures.address, futures.abi);
+    conn.matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 

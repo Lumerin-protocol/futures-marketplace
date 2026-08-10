@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 /// @title PriceFeedMock
-/// @notice Test-only mock of an `AggregatorV3Interface` price feed used to drive `Futures.getMarketPrice()`
+/// @notice Test-only mock of an `AggregatorV3Interface` price feed used to drive `HashPowerFutures.getMarketPrice()`
 ///         without standing up a live HashpriceUSD feed. Tests can move the price by calling
 ///         `setPrice` (auto-bumps roundId/timestamps) or `setRound` for full control.
 /// @dev Defaults to 8 decimals and the description of `HashpriceUSD` so it is a drop-in stand-in for the

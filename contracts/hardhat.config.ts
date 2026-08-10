@@ -12,7 +12,7 @@ export default defineConfig({
     // Keepers and the UI install `abi/` as this package name; do not rename casually.
     packageJson: { name: "futures-marketplace-abi" },
     contracts: [
-      "Futures",
+      "HashPowerFutures",
       "USDCMock",
       "Multicall3",
       "BTCPriceOracleMock",

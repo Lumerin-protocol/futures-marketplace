@@ -6,21 +6,21 @@ import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/inte
 import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
 import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/interfaces/IPortfolioMarginEngine.sol";
 import { IPointsHook } from "collateral-margin/contracts/contracts/interfaces/IPointsHook.sol";
-import { FuturesBase } from "./FuturesBase.sol";
+import { HashPowerFuturesBase } from "./HashPowerFuturesBase.sol";
 
-/// @title FuturesAdmin — owner-only governance surface for {Futures}
+/// @title HashPowerFuturesAdmin — owner-only governance surface for {HashPowerFutures}
 /// @notice Every entry point here is `onlyOwner`, plus the UUPS upgrade authorization
-///         hook. Splitting them out keeps {Futures} to the permissionless surface —
+///         hook. Splitting them out keeps {HashPowerFutures} to the permissionless surface —
 ///         trading, liquidation and views — so a reader can tell at a glance which
 ///         calls a counterparty can make and which only governance can.
-/// @dev Declares **no storage**. It sits between {FuturesBase} and {Futures} purely to
+/// @dev Declares **no storage**. It sits between {HashPowerFuturesBase} and {HashPowerFutures} purely to
 ///      partition the function surface, and a stateless layer cannot move a slot: state
 ///      is laid out in linearization order and every variable is declared in
-///      {FuturesBase}. That property is load-bearing — this contract is deployed behind
+///      {HashPowerFuturesBase}. That property is load-bearing — this contract is deployed behind
 ///      a UUPS proxy, so any reordering here would corrupt live storage on upgrade.
 ///      Keep it stateless. If admin-only state is ever needed, declare it in
-///      {FuturesBase} at the end alongside the existing gap slots.
-abstract contract FuturesAdmin is FuturesBase {
+///      {HashPowerFuturesBase} at the end alongside the existing gap slots.
+abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
     using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableSet for EnumerableSet.Bytes32Set;
 
@@ -28,7 +28,7 @@ abstract contract FuturesAdmin is FuturesBase {
 
     // ── Risk parameters ───────────────────────────────────────────────────────
 
-    /// @dev Vestigial — see {FuturesBase-liquidationMarginPercent}. Setting this changes no
+    /// @dev Vestigial — see {HashPowerFuturesBase-liquidationMarginPercent}. Setting this changes no
     ///      on-chain behaviour; margin comes from the portfolio margin engine.
     function setLiquidationMarginPercent(uint8 _liquidationMarginPercent) external onlyOwner {
         liquidationMarginPercent = _liquidationMarginPercent;

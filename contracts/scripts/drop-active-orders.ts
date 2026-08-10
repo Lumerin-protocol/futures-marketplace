@@ -17,14 +17,14 @@ const DEFAULT_SAFE_GAS_OVERHEAD = 150_000n;
 const CONFIRMATIONS = 5;
 
 async function main(): Promise<void> {
-  logTitle("Drop Active Legacy Futures Orders");
+  logTitle("Drop Active Legacy HashPowerFutures Orders");
 
   const { viem } = await hre.network.getOrCreate();
   const pc = await viem.getPublicClient();
   const [deployer, proposer] = await viem.getWalletClients();
   const futuresAddress = requireAddress("FUTURES_ADDRESS");
   const safeOwnerAddress = readOptionalAddress("SAFE_OWNER_ADDRESS");
-  const futures = await viem.getContractAt("Futures", futuresAddress);
+  const futures = await viem.getContractAt("HashPowerFutures", futuresAddress);
   const owner = getAddress(await futures.read.owner());
   const caller = getAddress(safeOwnerAddress ?? deployer.account.address);
   const latestBlock = await pc.getBlock();
@@ -51,7 +51,7 @@ async function main(): Promise<void> {
   const users = discovery.addresses;
 
   logInfo("cutover", {
-    Futures: addrUrl(pc, futuresAddress),
+    HashPowerFutures: addrUrl(pc, futuresAddress),
     Version: await futures.read.VERSION().catch(() => "unknown"),
     Owner: addrUrl(pc, owner),
     Caller: caller,
@@ -66,7 +66,7 @@ async function main(): Promise<void> {
     return;
   }
   if (caller !== owner) {
-    throw new Error(`Configured caller ${caller} is not Futures owner ${owner}`);
+    throw new Error(`Configured caller ${caller} is not HashPowerFutures owner ${owner}`);
   }
   if (safeOwnerAddress && !proposer) {
     throw new Error("PROPOSER_PRIVATEKEY is required when SAFE_OWNER_ADDRESS is set");

@@ -5,7 +5,7 @@ import { addrUrl, txUrl } from "../lib/explorer.ts";
 import { logInfo, logStep, logSuccess, logTitle } from "../lib/log.ts";
 
 async function main() {
-  logTitle("Futures Settle Position (3.0)");
+  logTitle("HashPowerFutures Settle Position (3.0)");
 
   const { viem } = await hre.network.getOrCreate();
 
@@ -19,13 +19,13 @@ async function main() {
   const pc = await viem.getPublicClient();
 
   logInfo("inputs", {
-    Futures: addrUrl(pc, futuresAddress),
+    HashPowerFutures: addrUrl(pc, futuresAddress),
     User: user,
     ExpirationAt: new Date(Number(expirationAt) * 1000).toISOString(),
     Caller: keeper.account.address,
   });
 
-  const futures = await viem.getContractAt("Futures", futuresAddress);
+  const futures = await viem.getContractAt("HashPowerFutures", futuresAddress);
 
   const position = await futures.read.getUserPosition([user, expirationAt]);
   logInfo("position", {

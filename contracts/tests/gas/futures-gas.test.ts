@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { assertAbiFunctionCoverage, GasRecorder, writeSnapshot } from "@lsheva/evm-gas-benchmark";
 import { network } from "hardhat";
 import { type Address, encodeFunctionData, type Hash, type PublicClient, parseUnits } from "viem";
-import { FuturesAbi } from "../../abi/Futures.ts";
+import { HashPowerFuturesAbi } from "../../abi/HashPowerFutures.ts";
 import type { FuturesFixture } from "../fixtures.ts";
 import { TimeInForce } from "../timeInForce.ts";
 import { refreshHashprice, scaleHashprice } from "../utils.ts";
@@ -17,7 +17,7 @@ const SNAPSHOT_PATH = fileURLToPath(new URL("../../benchmarks/futures-gas.json",
 const TRADING_BALANCE = parseUnits("5000", 6);
 
 type GasFixture = FuturesFixture;
-type FuturesContract = GasFixture["contracts"]["futures"];
+type HashPowerFuturesContract = GasFixture["contracts"]["futures"];
 type OrderIntent = {
   price: bigint;
   expirationAt: bigint;
@@ -53,7 +53,7 @@ async function recordTransaction(
 
 async function recordView(
   pc: PublicClient,
-  futures: FuturesContract,
+  futures: HashPowerFuturesContract,
   signature: string,
   functionName: string,
   args: readonly unknown[] = [],
@@ -61,7 +61,7 @@ async function recordView(
   account?: Address,
 ) {
   const data = encodeFunctionData({
-    abi: FuturesAbi,
+    abi: HashPowerFuturesAbi,
     functionName,
     args,
   } as never);
@@ -908,7 +908,7 @@ async function benchmarkAdminAndLifecycle() {
     const data = await fresh();
     const { futures, collateralVault } = data.contracts;
     const { owner, pc } = data.accounts;
-    const implementation = await viem.deployContract("Futures", [collateralVault.address]);
+    const implementation = await viem.deployContract("HashPowerFutures", [collateralVault.address]);
     await recordTransaction(
       pc,
       "upgradeToAndCall(address,bytes)",
@@ -953,7 +953,7 @@ describe("Futures gas benchmark", () => {
     await benchmarkAdminAndLifecycle();
 
     const snapshot = gas.snapshot();
-    const coverage = assertAbiFunctionCoverage(FuturesAbi, snapshot, exclusions);
+    const coverage = assertAbiFunctionCoverage(HashPowerFuturesAbi, snapshot, exclusions);
     assert.equal(coverage.covered.length, 72);
     assert.deepEqual(coverage.excluded, [
       "initialize(address,uint8,uint8,uint256)",

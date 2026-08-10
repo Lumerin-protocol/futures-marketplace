@@ -1,6 +1,6 @@
 # Futures Subgraph
 
-This subgraph indexes the Futures contract (including its HashpriceUSD / AggregatorV3 oracle address) to track positions, orders, and market activity.
+This subgraph indexes the HashPowerFutures contract (including its HashpriceUSD / AggregatorV3 oracle address) to track positions, orders, and market activity.
 
 > **Cash settlement (contract `2.15.0`).** Futures are cash-settled at maturity. Settlement
 > surfaces as `LotClosed` with `reason = SETTLED`, emitted by the permissionless `settlePosition`.
@@ -55,14 +55,14 @@ This subgraph indexes the Futures contract (including its HashpriceUSD / Aggrega
 
 The subgraph is configured in `subgraph.template.yaml` with:
 
-- Futures contract address and ABI
+- HashPowerFutures contract address and ABI
 - Event handlers for all relevant events
-- `HASHPRICE_USD_ADDRESS` is read from the Futures contract (`hashrateOracle()` getter) and stored on the Futures entity
+- `HASHPRICE_USD_ADDRESS` is read from the HashPowerFutures contract (`hashrateOracle()` getter) and stored on the Futures entity
 
 ## Usage
 
 1. Deploy the subgraph using the template configuration
-2. The subgraph will automatically index Futures events
+2. The subgraph will automatically index HashPowerFutures events
 3. Query the entities to get position and order data
 
 ## Example Queries

@@ -1,4 +1,4 @@
-/** Mirrors `FuturesBase.TimeInForce`. GTD is not supported. */
+/** Mirrors `HashPowerFuturesBase.TimeInForce`. GTD is not supported. */
 export const TimeInForce = {
   GTC: 0,
   IOC: 1,

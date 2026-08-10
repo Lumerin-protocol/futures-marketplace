@@ -26,7 +26,7 @@ export function userAddress(id: i32): Address {
   return Address.fromString("0x" + hex);
 }
 
-/// Futures contract address used for `dataSource.address()`.
+/// HashPowerFutures contract address used for `dataSource.address()`.
 export function contractAddress(): Address {
   return userAddress(255);
 }

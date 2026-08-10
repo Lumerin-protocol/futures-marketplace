@@ -1,6 +1,6 @@
 import { type Address, getAbiItem, getAddress, type Hex, type PublicClient } from "viem";
 import { readContract } from "viem/actions";
-import { FuturesAbi } from "../../abi/Futures.ts";
+import { HashPowerFuturesAbi } from "../../abi/HashPowerFutures.ts";
 
 export const ORDER_CACHE_ABI = [
   {
@@ -52,7 +52,7 @@ export const ORDER_CACHE_ABI = [
 ] as const;
 
 const ORDER_CREATED_EVENT = getAbiItem({
-  abi: FuturesAbi,
+  abi: HashPowerFuturesAbi,
   name: "OrderCreated",
 });
 

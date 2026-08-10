@@ -9,14 +9,14 @@ import {
   LiquidatorShareBpsUpdated,
   OracleUpdated,
   PortfolioMarginUpdated,
-} from "../../generated/Futures/Futures";
+} from "../../generated/HashPowerFutures/HashPowerFutures";
 import { flushFuturesCounters } from "../internal/match";
 import { getOrCreateFutures, loadFuturesFromContract } from "../internal/store";
 import { stringifyParameters } from "../internal/utils";
 
 export function handleInitialized(event: Initialized): void {
   log.debug("initialized event ", [stringifyParameters(event)]);
-  log.info("Futures initialized: version {}", [event.params.version.toString()]);
+  log.info("HashPowerFutures initialized: version {}", [event.params.version.toString()]);
   const futures = getOrCreateFutures();
   flushFuturesCounters(futures);
   futures.initializedAt = event.block.timestamp;
@@ -27,7 +27,7 @@ export function handleInitialized(event: Initialized): void {
 
 export function handleUpgraded(event: Upgraded): void {
   log.debug("upgraded event ", [stringifyParameters(event)]);
-  log.info("Futures upgraded to {}", [event.params.implementation.toHexString()]);
+  log.info("HashPowerFutures upgraded to {}", [event.params.implementation.toHexString()]);
   const futures = getOrCreateFutures();
   flushFuturesCounters(futures);
   futures.lastUpdatedAt = event.block.timestamp;

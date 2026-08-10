@@ -1,6 +1,6 @@
-# Futures.sol — Value Placement Review
+# HashPowerFutures.sol — Value Placement Review
 
-All values in `Futures.sol` categorized by storage mechanism and update path.
+All values in `HashPowerFutures.sol` categorized by storage mechanism and update path.
 
 ---
 

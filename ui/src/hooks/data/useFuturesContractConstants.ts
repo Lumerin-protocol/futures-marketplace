@@ -1,5 +1,5 @@
 import { useReadContracts } from "wagmi";
-import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
+import { HashPowerFuturesAbi } from "futures-marketplace-abi/HashPowerFutures.ts";
 import { withErrors } from "../../lib/withErrors";
 
 const FUTURES_PER_DELIVERY_ORDER_LIMIT_ABI = [
@@ -24,12 +24,12 @@ export function useFuturesContractConstants() {
     contracts: [
       {
         address: futuresAddress,
-        abi: withErrors(FuturesAbi),
+        abi: withErrors(HashPowerFuturesAbi),
         functionName: "futureExpirationDatesCount",
       },
       {
         address: futuresAddress,
-        abi: withErrors(FuturesAbi),
+        abi: withErrors(HashPowerFuturesAbi),
         functionName: "expirationIntervalDays",
       },
       {
@@ -39,12 +39,12 @@ export function useFuturesContractConstants() {
       },
       {
         address: futuresAddress,
-        abi: withErrors(FuturesAbi),
+        abi: withErrors(HashPowerFuturesAbi),
         functionName: "makerFeeBps",
       },
       {
         address: futuresAddress,
-        abi: withErrors(FuturesAbi),
+        abi: withErrors(HashPowerFuturesAbi),
         functionName: "takerFeeBps",
       },
     ],

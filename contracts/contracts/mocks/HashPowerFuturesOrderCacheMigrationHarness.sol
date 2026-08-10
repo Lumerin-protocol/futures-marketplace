@@ -3,16 +3,16 @@ pragma solidity ^0.8.20;
 
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
-import { FuturesBase } from "../FuturesBase.sol";
+import { HashPowerFuturesBase } from "../HashPowerFuturesBase.sol";
 
 /// @dev Test-only implementation used to move newly created fixture orders into
 ///      the legacy global participant index before exercising the v4.3 cutover.
-contract FuturesOrderCacheMigrationHarness is FuturesBase {
+contract HashPowerFuturesOrderCacheMigrationHarness is HashPowerFuturesBase {
     using EnumerableSet for EnumerableSet.Bytes32Set;
 
     string public constant VERSION = "test";
 
-    constructor(ICollateralVault _vault) FuturesBase(_vault) { }
+    constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) { }
 
     function _authorizeUpgrade(address) internal override onlyOwner { }
 

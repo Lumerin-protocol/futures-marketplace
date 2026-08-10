@@ -1,7 +1,7 @@
 {
   "name": "@hashpower/futures-abi",
   "version": "0.1.0",
-  "description": "ABIs and deployment addresses for the Hashpower hashprice futures marketplace (Futures) on Base",
+  "description": "ABIs and deployment addresses for the Hashpower hashprice futures marketplace (HashPowerFutures) on Base",
   "license": "MIT",
   "type": "module",
   "repository": {

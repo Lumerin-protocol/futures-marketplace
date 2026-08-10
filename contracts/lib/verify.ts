@@ -12,7 +12,7 @@ const DEFAULT_PROVIDERS = ["etherscan", "blockscout", "sourcify"] as const;
 type Provider = NonNullable<VerifyContractArgs["provider"]>;
 
 export type VerifyOpts = {
-  /** Fully qualified name, e.g. `contracts/Futures.sol:Futures`. */
+  /** Fully qualified name, e.g. `contracts/HashPowerFutures.sol:HashPowerFutures`. */
   contract?: string;
   force?: boolean;
 };

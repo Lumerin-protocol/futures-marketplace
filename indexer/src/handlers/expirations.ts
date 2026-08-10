@@ -1,5 +1,5 @@
 import { BigInt } from "@graphprotocol/graph-ts";
-import { SettlementPriceRecorded } from "../../generated/Futures/Futures";
+import { SettlementPriceRecorded } from "../../generated/HashPowerFutures/HashPowerFutures";
 import { getOrCreateFuturesExpiration } from "../internal/store";
 
 /// Pins the cash-settlement price onto the expiration entity. The contract emits this

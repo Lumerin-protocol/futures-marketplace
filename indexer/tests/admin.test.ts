@@ -15,7 +15,7 @@ import {
   OracleUpdated,
   PortfolioMarginUpdated,
   TakerFeeBpsUpdated,
-} from "../generated/Futures/Futures";
+} from "../generated/HashPowerFutures/HashPowerFutures";
 import {
   handleFutureExpirationDatesCountUpdated,
   handleLiquidationFeeBpsUpdated,

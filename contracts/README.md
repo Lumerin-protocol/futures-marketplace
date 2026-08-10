@@ -26,7 +26,7 @@ operation uses `SAFE_OWNER_ADDRESS`, `PROPOSER_PRIVATEKEY`, and optionally
 
 ## Gas benchmark
 
-Run the deterministic Futures ABI benchmark from this directory:
+Run the deterministic HashPowerFutures ABI benchmark from this directory:
 
 ```sh
 pnpm test:gas
@@ -34,7 +34,7 @@ pnpm test:gas
 
 It writes `benchmarks/futures-gas.json`. State-changing scenarios record gas from
 transaction receipts; view and pure scenarios use viem gas estimates. The suite
-also fails if a callable Futures ABI function is missing a measurement of the
+also fails if a callable HashPowerFutures ABI function is missing a measurement of the
 correct kind.
 
 The benchmark helper and reusable GitHub Action are pinned to

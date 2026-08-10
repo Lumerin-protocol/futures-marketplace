@@ -7,7 +7,7 @@ import {
   OrderUpdated,
   PositionLiquidated,
   PositionSettled,
-} from "../../generated/Futures/Futures";
+} from "../../generated/HashPowerFutures/HashPowerFutures";
 import { Order, OrderEntry, PositionSession, Trade, User } from "../../generated/schema";
 import { OrderEntryStatus, OrderStatus } from "../enums";
 import { orderAggregateId } from "../ids";
@@ -246,7 +246,7 @@ export function handleOrderMatched(event: OrderMatched): void {
     1,
   );
 
-  // Futures emits OrderUpdated then OrderMatched for the maker. Reclassify the
+  // HashPowerFutures emits OrderUpdated then OrderMatched for the maker. Reclassify the
   // tentative cancel stash into a fill so reduce-only amends (no match) stay cancels.
   const makerOidHex = event.params.makerOrderId.toHexString();
   if (

@@ -37,7 +37,7 @@ describe("qty=3 single sell order: Order aggregate and OrderEntry promotion", ()
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    conn.matchstick.bind("Futures", futures.address, futures.abi);
+    conn.matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
@@ -192,7 +192,7 @@ describe("order cancellation: OrderEntry CANCELLED, PriceLevel and Futures decre
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    conn.matchstick.bind("Futures", futures.address, futures.abi);
+    conn.matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
@@ -268,7 +268,7 @@ describe("partial fill: Order PARTIAL, unfilled quantity stays ACTIVE", () => {
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    conn.matchstick.bind("Futures", futures.address, futures.abi);
+    conn.matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 

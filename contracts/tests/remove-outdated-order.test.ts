@@ -8,7 +8,7 @@ import { TimeInForce } from "./timeInForce.ts";
 
 const { networkHelpers } = await network.getOrCreate();
 
-describe("Futures.removeOutdatedOrders", () => {
+describe("HashPowerFutures.removeOutdatedOrders", () => {
   it("bulk-cleans expired orders while skipping stale and live ids", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;

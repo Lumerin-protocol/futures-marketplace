@@ -6,7 +6,7 @@ import { deployFuturesFixture } from "./fixtures.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
-/** Mirrors `Futures.TimeInForce`. */
+/** Mirrors `HashPowerFutures.TimeInForce`. */
 const TimeInForce = { GTC: 0, IOC: 1, FOK: 2 } as const;
 
 describe("Futures - createOrder time-in-force", () => {

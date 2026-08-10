@@ -7,7 +7,7 @@ import {
 } from "matchstick-as/assembly/index";
 import { newTypedMockEventWithParams } from "matchstick-as/assembly/defaults";
 import { Address, BigInt, Bytes } from "@graphprotocol/graph-ts";
-import { OrderCreated } from "../generated/Futures/Futures";
+import { OrderCreated } from "../generated/HashPowerFutures/HashPowerFutures";
 import { handleOrderCreated } from "../src/handlers/orders";
 import {
   bytes32Id,

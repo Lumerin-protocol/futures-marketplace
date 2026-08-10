@@ -8,7 +8,7 @@ import { TimeInForce } from "./timeInForce.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
-// Reusable per-intent shape that matches `Futures.OrderIntent` exactly.
+// Reusable per-intent shape that matches `HashPowerFutures.OrderIntent` exactly.
 type OrderIntent = {
   price: bigint;
   expirationAt: bigint;

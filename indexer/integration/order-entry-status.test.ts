@@ -38,7 +38,7 @@ describe("OrderEntryStatus.EXPIRED: removeOutdatedOrders", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    matchstick.bind("Futures", futures.address, futures.abi);
+    matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await matchstick.captureViewMocks();
     await matchstick.anchor();
 
@@ -129,7 +129,7 @@ describe("OrderEntryStatus.LIQUIDATED: liquidateOrders force-cancels resting ord
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    matchstick.bind("Futures", futures.address, futures.abi);
+    matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await matchstick.captureViewMocks();
 
     // 1. Seller opens an underwater short position (to be liquidatable).

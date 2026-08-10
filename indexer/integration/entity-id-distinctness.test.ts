@@ -45,7 +45,7 @@ describe("PositionSession ID rotation: close → re-open on same (user, expirati
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    conn.matchstick.bind("Futures", futures.address, futures.abi);
+    conn.matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
@@ -141,7 +141,7 @@ describe("Trade.id is per-tx: two trade txs by one user", () => {
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    conn.matchstick.bind("Futures", futures.address, futures.abi);
+    conn.matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
@@ -213,7 +213,7 @@ describe("Order.id is per-tx: identical-shape orders in different txs", () => {
 
     await collateralVault.write.deposit([margin], { account: seller.account });
 
-    conn.matchstick.bind("Futures", futures.address, futures.abi);
+    conn.matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 

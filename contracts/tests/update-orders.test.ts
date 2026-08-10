@@ -19,7 +19,7 @@ type ReduceIntent = {
   newQuantity: bigint;
 };
 
-describe("Futures.updateOrders (cancel + reduce + create batch)", () => {
+describe("HashPowerFutures.updateOrders (cancel + reduce + create batch)", () => {
   it("cancels then places in one call with a single IM check", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;

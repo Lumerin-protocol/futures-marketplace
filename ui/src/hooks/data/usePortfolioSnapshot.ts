@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useReadContracts } from "wagmi";
 import type { AccountSnapshot, RestingOrders } from "@hashpower/portfolio-margin";
-import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
+import { HashPowerFuturesAbi } from "futures-marketplace-abi/HashPowerFutures.ts";
 import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
 import { PAYMENT_TOKEN_DECIMALS, QUANTITY_DECIMALS } from "../../lib/units";
 import { useGetFutureBalance } from "./useGetFutureBalance";
@@ -62,19 +62,19 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
     contracts: [
       {
         address: futuresAddress,
-        abi: withErrors(FuturesAbi),
+        abi: withErrors(HashPowerFuturesAbi),
         functionName: "getRiskView",
         args: [address as `0x${string}`],
       },
       {
         address: futuresAddress,
-        abi: withErrors(FuturesAbi),
+        abi: withErrors(HashPowerFuturesAbi),
         functionName: "getOrderAggregate",
         args: [address as `0x${string}`],
       },
       {
         address: futuresAddress,
-        abi: withErrors(FuturesAbi),
+        abi: withErrors(HashPowerFuturesAbi),
         functionName: "getActiveExpirationDates",
         args: [address as `0x${string}`],
       },
@@ -119,7 +119,7 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
   const aggregatesQuery = useReadContracts({
     contracts: (expirationAts ?? []).map((expirationAt) => ({
       address: futuresAddress,
-      abi: withErrors(FuturesAbi),
+      abi: withErrors(HashPowerFuturesAbi),
       functionName: "getUserPosition" as const,
       args: [address as `0x${string}`, expirationAt] as const,
     })),
@@ -131,7 +131,7 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
   const settlementQuery = useReadContracts({
     contracts: (expirationAts ?? []).map((expirationAt) => ({
       address: futuresAddress,
-      abi: withErrors(FuturesAbi),
+      abi: withErrors(HashPowerFuturesAbi),
       functionName: "settlementPrice" as const,
       args: [expirationAt] as const,
     })),

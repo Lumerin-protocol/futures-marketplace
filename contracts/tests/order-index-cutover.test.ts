@@ -41,24 +41,24 @@ describe("Futures per-delivery order-index cutover", () => {
     ]);
     const positionBefore = await futures.read.getUserPosition([seller.account.address, activeAt]);
 
-    const harnessImplementation = await viem.deployContract("FuturesOrderCacheMigrationHarness", [
+    const harnessImplementation = await viem.deployContract("HashPowerFuturesOrderCacheMigrationHarness", [
       collateralVault.address,
     ]);
     await futures.write.upgradeToAndCall([harnessImplementation.address, "0x"], {
       account: owner.account,
     });
-    const harness = await viem.getContractAt("FuturesOrderCacheMigrationHarness", futures.address);
+    const harness = await viem.getContractAt("HashPowerFuturesOrderCacheMigrationHarness", futures.address);
     await harness.write.moveOrdersToLegacyIndex([seller.account.address, expiredAt], {
       account: owner.account,
     });
     await harness.write.moveOrdersToLegacyIndex([seller.account.address, activeAt], {
       account: owner.account,
     });
-    const futuresImplementation = await viem.deployContract("Futures", [collateralVault.address]);
+    const futuresImplementation = await viem.deployContract("HashPowerFutures", [collateralVault.address]);
     await harness.write.upgradeToAndCall([futuresImplementation.address, "0x"], {
       account: owner.account,
     });
-    const upgraded = await viem.getContractAt("Futures", futures.address);
+    const upgraded = await viem.getContractAt("HashPowerFutures", futures.address);
 
     await tc.setNextBlockTimestamp({ timestamp: expiredAt + 1n });
     await tc.mine({ blocks: 1 });

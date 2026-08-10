@@ -13,7 +13,7 @@ const TARGET_CODE_VERSION = "5.0.0";
 const UPGRADE_CONFIRMATIONS = 5;
 
 async function main() {
-  logTitle("Futures Upgrade");
+  logTitle("HashPowerFutures Upgrade");
 
   const { viem } = await hre.network.getOrCreate();
 
@@ -30,7 +30,7 @@ async function main() {
     logInfo("safe owner", { Address: SAFE_OWNER_ADDRESS });
   }
 
-  const futuresProxy = await viem.getContractAt("Futures", futuresAddress);
+  const futuresProxy = await viem.getContractAt("HashPowerFutures", futuresAddress);
   const currentVersion = await futuresProxy.read.VERSION().catch(() => "unknown");
   const owner = getAddress(await futuresProxy.read.owner());
   const upgradeCaller = getAddress(SAFE_OWNER_ADDRESS ?? deployer.account.address);
@@ -41,7 +41,7 @@ async function main() {
     HASHPRICE_USD: await futuresProxy.read.priceOracle(),
   });
   if (upgradeCaller !== owner) {
-    throw new Error(`Configured upgrade caller ${upgradeCaller} is not Futures owner ${owner}`);
+    throw new Error(`Configured upgrade caller ${upgradeCaller} is not HashPowerFutures owner ${owner}`);
   }
   if (SAFE_OWNER_ADDRESS && !proposer) {
     throw new Error("PROPOSER_PRIVATEKEY is required when SAFE_OWNER_ADDRESS is set");
@@ -61,15 +61,15 @@ async function main() {
   await logPrompt("Review the configuration above. Proceed with upgrade?");
 
   // ── 1. Deploy new implementation ────────────────────────────────────────
-  logInfo("Deploy new Futures implementation", { contract: "Futures" });
+  logInfo("Deploy new HashPowerFutures implementation", { contract: "HashPowerFutures" });
   await logPrompt("Proceed?");
-  const futuresImpl = await viem.deployContract("Futures", [vaultAddress], {
+  const futuresImpl = await viem.deployContract("HashPowerFutures", [vaultAddress], {
     confirmations: UPGRADE_CONFIRMATIONS,
   });
 
   logStep("Deployed", addrUrl(pc, futuresImpl.address));
   await verifyContract(futuresImpl.address, [vaultAddress], undefined, {
-    contract: "contracts/Futures.sol:Futures",
+    contract: "contracts/HashPowerFutures.sol:HashPowerFutures",
   });
   logStep("Verified", addrUrl(pc, futuresImpl.address));
 
@@ -181,7 +181,7 @@ async function main() {
       logStep("Safe UI URL", safe.getSafeUITxUrl(setHookTxHash));
     }
   } else {
-    logInfo("Upgrade Futures proxy", { newImpl: futuresImpl.address });
+    logInfo("Upgrade HashPowerFutures proxy", { newImpl: futuresImpl.address });
     await logPrompt("Proceed?");
     const tx = await futuresProxy.write.upgradeToAndCall(upgradeArgs);
     const receipt = await pc.waitForTransactionReceipt({
@@ -196,7 +196,7 @@ async function main() {
     // Read post-upgrade state at the receipt block — "latest" can still be the
     // pre-upgrade tip on some RPCs right after waitForTransactionReceipt.
     const atUpgradeBlock = { blockNumber: receipt.blockNumber } as const;
-    const upgraded = await viem.getContractAt("Futures", futuresAddress);
+    const upgraded = await viem.getContractAt("HashPowerFutures", futuresAddress);
     const upgradedVersion = await upgraded.read.VERSION(atUpgradeBlock);
     logInfo("upgraded futures", {
       Vault: await upgraded.read.vault(atUpgradeBlock),
@@ -242,7 +242,7 @@ async function main() {
     }
   }
 
-  logSuccess(`Futures upgraded ${futuresAddress} → impl ${futuresImpl.address}`);
+  logSuccess(`HashPowerFutures upgraded ${futuresAddress} → impl ${futuresImpl.address}`);
 }
 
 main().catch((error) => {
