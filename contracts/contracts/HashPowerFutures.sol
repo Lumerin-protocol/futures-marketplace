@@ -22,7 +22,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev Lives here rather than in {HashPowerFuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `HashPowerFutures.sol` to require a bump.
-    string public constant VERSION = "5.0.0";
+    string public constant VERSION = "6.0.0";
 
     /// @notice Number of decimal places used by order and position quantities.
     uint8 public constant QUANTITY_DECIMALS = 0;
@@ -226,17 +226,13 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
 
     // ── Order liquidation ─────────────────────────────────────────────────────
 
-    /// @notice True when the participant has resting orders or an active position and is below portfolio MM.
-    /// @dev The state check is what separates this from `_underwater`: an account holding
-    ///      nothing has an MM of zero, so it is never "liquidatable" even at a zero balance.
-    function isLiquidatable(address _participant) public view returns (bool) {
-        bool hasState =
-            hasRestingOrderDelta(_participant) || participantActiveExpirationAts[_participant].length() > 0;
-        return hasState && _underwater(_participant);
-    }
-
     /// @notice Whether the participant has margin-relevant orders in the tradable window.
-    function hasRestingOrderDelta(address _participant) public view returns (bool) {
+    /// @dev Part of the ILinearMarket surface read by the portfolio margin engine. The
+    ///      liquidatability predicate itself lives on the engine
+    ///      ({IPortfolioMarginEngine-isLiquidatable}) — it is a property of the portfolio,
+    ///      not of any single venue. Combine it with this view and the position views to
+    ///      tell whether this venue holds anything actionable.
+    function hasRestingOrderDelta(address _participant) external view returns (bool) {
         (, uint256 count) = _activeOrderExpirations(_participant);
         return count != 0;
     }
@@ -287,9 +283,11 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
 
     /// @notice Force-close up to `closeQty` contracts of an underwater user's net at `expirationAt`.
     /// @dev Orders-first, portfolio-wide: any resting order delta at any venue gates this call,
-    ///      not just this book's. Keeper sizes `closeQty` off-chain; partial closes revert `OverLiquidation`
-    ///      if leftover balance sits above IM when a real IM>MM buffer exists. Full closes skip
-    ///      that guard (bad-debt / deep-underwater path).
+    ///      not just this book's. Keeper sizes `closeQty` off-chain; the end-of-call
+    ///      `OverLiquidation` guard reverts if leftover balance sits above IM while a real
+    ///      IM>MM buffer exists. The guard runs after full closes too — a full close of one
+    ///      expiry is still a partial close of the portfolio — but it is vacuous once no
+    ///      portfolio risk remains (IM == MM == 0), which is the bad-debt / deep-underwater path.
     function liquidatePosition(address _user, uint256 _expirationAt, uint256 _closeQty) external {
         if (portfolioMargin.hasRestingOrderDelta(_user)) revert OrdersStillOpen();
         if (!_underwater(_user)) revert NotLiquidatable();

@@ -294,7 +294,7 @@ describe("Futures per-expiration order aggregate cache", () => {
 
   it("removes the cached order aggregate during order liquidation", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault, hashpriceUsd } = contracts;
+    const { futures, collateralVault, hashpriceUsd, portfolioMarginEngine } = contracts;
     const { buyer, buyer2 } = accounts;
     const expirationAt = config.deliveryDates[0];
     const price = await futures.read.getMarketPrice();
@@ -305,7 +305,7 @@ describe("Futures per-expiration order aggregate cache", () => {
     });
     const [orderId] = await getUserOrders(futures, buyer.account.address);
     await scaleHashprice(hashpriceUsd, 1n, 20n);
-    assert.equal(await futures.read.isLiquidatable([buyer.account.address]), true);
+    assert.equal(await portfolioMarginEngine.read.isLiquidatable([buyer.account.address]), true);
 
     await futures.write.liquidateOrder([buyer.account.address, orderId], {
       account: buyer2.account,

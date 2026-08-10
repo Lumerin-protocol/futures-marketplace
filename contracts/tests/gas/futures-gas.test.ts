@@ -137,7 +137,10 @@ async function setupOrderLiquidation() {
   );
   await futures.write.setLiquidationFeeBps([50], { account: owner.account });
   await scaleHashprice(data.contracts.hashpriceUsd, 1n, 20n);
-  assert.equal(await futures.read.isLiquidatable([buyer.account.address]), true);
+  assert.equal(
+    await data.contracts.portfolioMarginEngine.read.isLiquidatable([buyer.account.address]),
+    true,
+  );
   return data;
 }
 
@@ -158,7 +161,10 @@ async function setupPositionLiquidation() {
   await collateralVault.write.deposit([price * 100n], { account: buyer2.account });
   await openPosition(data, expirationAt, quantity, price);
   await scaleHashprice(data.contracts.hashpriceUsd, 85n, 100n);
-  assert.equal(await futures.read.isLiquidatable([buyer.account.address]), true);
+  assert.equal(
+    await portfolioMarginEngine.read.isLiquidatable([buyer.account.address]),
+    true,
+  );
   return { ...data, liquidation: { expirationAt, quantity } };
 }
 
@@ -225,7 +231,6 @@ async function benchmarkViews() {
       [buyer.account.address, thirdExpiration],
     ],
     ["hook()", "hook"],
-    ["isLiquidatable(address)", "isLiquidatable", [buyer.account.address]],
     ["liquidationFeeBps()", "liquidationFeeBps"],
     ["liquidationMarginPercent()", "liquidationMarginPercent"],
     ["liquidatorShareBps()", "liquidatorShareBps"],
@@ -931,7 +936,7 @@ describe("Futures gas benchmark", () => {
 
     const snapshot = gas.snapshot();
     const coverage = assertAbiFunctionCoverage(HashPowerFuturesAbi, snapshot, exclusions);
-    assert.equal(coverage.covered.length, 66);
+    assert.equal(coverage.covered.length, 65);
     assert.deepEqual(coverage.excluded, [
       "initialize(address,uint8,uint8,uint256)",
       "proxiableUUID()",

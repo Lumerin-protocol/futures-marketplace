@@ -10,7 +10,7 @@ ABIs and deployment addresses for the Hashpower hashprice futures marketplace on
 | Batch place | `createOrders(OrderIntent[])` |
 | Cancel a resting order | `closeOrder(orderId)` |
 | Read the book | `getBidPrices`, `getAskPrices`, `getQuantityAtPrice`, `getMarketPrice` |
-| Margin / PnL | `getFuturesOrderMargin`, `getFuturesUnrealizedPnl`, `isLiquidatable` |
+| Margin / PnL | `getFuturesOrderMargin`, `getFuturesUnrealizedPnl` (liquidatability lives on the portfolio margin engine: `isLiquidatable`) |
 | Delivery | `depositDeliveryPayment`, `withdrawDeliveryPayment`, `closeDelivery` |
 
 Collateral flows through the shared `CollateralVault` (see `@hashpower/collateral-abi`) — deposit USDC there before trading.

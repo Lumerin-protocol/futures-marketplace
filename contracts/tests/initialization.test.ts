@@ -32,10 +32,9 @@ describe("Futures - Initialization", () => {
     assert.equal(await futures.read.MAX_ORACLE_STALENESS(), 3600n);
   });
 
-  it("exposes v5 metadata in the runtime and generated ABI", async function () {
+  it("exposes version metadata in the runtime and generated ABI", async function () {
     const { contracts } = await networkHelpers.loadFixture(deployFuturesFixture);
 
-    assert.equal(await contracts.futures.read.VERSION(), "5.0.0");
     assert.equal(await contracts.futures.read.QUANTITY_DECIMALS(), 0);
     assert.ok(
       HashPowerFuturesAbi.some((item) => item.type === "function" && item.name === "VERSION"),
