@@ -253,7 +253,7 @@ describe("Futures per-expiration order aggregate cache", () => {
     await futures.write.createOrder([price, laterAt, 3n, TimeInForce.GTC], {
       account: seller.account,
     });
-    await futures.write.resetState([[seller.account.address]], { account: owner.account });
+    await futures.write.resetParticipantState([[seller.account.address]], { account: owner.account });
     assert.equal((await futures.read.getUserOrders([seller.account.address])).length, 0);
     assert.deepEqual(
       aggregateTuple(

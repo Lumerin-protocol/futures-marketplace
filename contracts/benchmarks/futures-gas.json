@@ -2,14 +2,14 @@
   "measurements": [
     {
       "function": "CONTRACT_SIZE_HPS_DAY()",
-      "gas": "27214",
+      "gas": "27236",
       "id": "CONTRACT_SIZE_HPS_DAY()::representative",
       "kind": "view",
       "scenario": "representative"
     },
     {
       "function": "EXPIRATION_INTERVAL_DAYS()",
-      "gas": "27481",
+      "gas": "27503",
       "id": "EXPIRATION_INTERVAL_DAYS()::representative",
       "kind": "view",
       "scenario": "representative"
@@ -44,14 +44,14 @@
     },
     {
       "function": "UPGRADE_INTERFACE_VERSION()",
-      "gas": "27564",
+      "gas": "27586",
       "id": "UPGRADE_INTERFACE_VERSION()::representative",
       "kind": "view",
       "scenario": "representative"
     },
     {
       "function": "VERSION()",
-      "gas": "27936",
+      "gas": "27958",
       "id": "VERSION()::representative",
       "kind": "view",
       "scenario": "representative"
@@ -72,49 +72,49 @@
     },
     {
       "function": "createOrder(uint256,uint256,int256,uint8)",
-      "gas": "379705",
+      "gas": "379727",
       "id": "createOrder(uint256,uint256,int256,uint8)::full match",
       "kind": "transaction",
       "scenario": "full match"
     },
     {
       "function": "createOrder(uint256,uint256,int256,uint8)",
-      "gas": "520205",
+      "gas": "520227",
       "id": "createOrder(uint256,uint256,int256,uint8)::portfolio-reducing resting order",
       "kind": "transaction",
       "scenario": "portfolio-reducing resting order"
     },
     {
       "function": "createOrder(uint256,uint256,int256,uint8)",
-      "gas": "335679",
+      "gas": "335701",
       "id": "createOrder(uint256,uint256,int256,uint8)::resting existing price in 10-level ask ladder",
       "kind": "transaction",
       "scenario": "resting existing price in 10-level ask ladder"
     },
     {
       "function": "createOrder(uint256,uint256,int256,uint8)",
-      "gas": "409430",
+      "gas": "409452",
       "id": "createOrder(uint256,uint256,int256,uint8)::resting head of 10-level ask ladder",
       "kind": "transaction",
       "scenario": "resting head of 10-level ask ladder"
     },
     {
       "function": "createOrder(uint256,uint256,int256,uint8)",
-      "gas": "436402",
+      "gas": "436424",
       "id": "createOrder(uint256,uint256,int256,uint8)::resting middle of 10-level ask ladder",
       "kind": "transaction",
       "scenario": "resting middle of 10-level ask ladder"
     },
     {
       "function": "createOrder(uint256,uint256,int256,uint8)",
-      "gas": "510272",
+      "gas": "510294",
       "id": "createOrder(uint256,uint256,int256,uint8)::resting order",
       "kind": "transaction",
       "scenario": "resting order"
     },
     {
       "function": "createOrder(uint256,uint256,int256,uint8)",
-      "gas": "410078",
+      "gas": "410100",
       "id": "createOrder(uint256,uint256,int256,uint8)::resting tail of 10-level ask ladder",
       "kind": "transaction",
       "scenario": "resting tail of 10-level ask ladder"
@@ -149,14 +149,14 @@
     },
     {
       "function": "dropActiveOrders(address[])",
-      "gas": "29765",
+      "gas": "29787",
       "id": "dropActiveOrders(address[])::empty post-upgrade cutover",
       "kind": "transaction",
       "scenario": "empty post-upgrade cutover"
     },
     {
       "function": "expirationIntervalDays()",
-      "gas": "27503",
+      "gas": "27525",
       "id": "expirationIntervalDays()::representative",
       "kind": "view",
       "scenario": "representative"
@@ -177,14 +177,14 @@
     },
     {
       "function": "getActiveExpirationDates(address)",
-      "gas": "33040",
+      "gas": "33062",
       "id": "getActiveExpirationDates(address)::representative",
       "kind": "view",
       "scenario": "representative"
     },
     {
       "function": "getBestAskPrice(uint256)",
-      "gas": "34826",
+      "gas": "34849",
       "id": "getBestAskPrice(uint256)::representative",
       "kind": "view",
       "scenario": "representative"
@@ -247,7 +247,7 @@
     },
     {
       "function": "getQuantityAtPrice(uint256,uint256,bool)",
-      "gas": "42546",
+      "gas": "42568",
       "id": "getQuantityAtPrice(uint256,uint256,bool)::representative",
       "kind": "view",
       "scenario": "representative"
@@ -380,7 +380,7 @@
     },
     {
       "function": "liquidatePosition(address,uint256,uint256)",
-      "gas": "184391",
+      "gas": "184413",
       "id": "liquidatePosition(address,uint256,uint256)::partial close",
       "kind": "transaction",
       "scenario": "partial close"
@@ -394,14 +394,14 @@
     },
     {
       "function": "liquidationFeeBps()",
-      "gas": "29683",
+      "gas": "29705",
       "id": "liquidationFeeBps()::representative",
       "kind": "view",
       "scenario": "representative"
     },
     {
       "function": "liquidationMarginPercent()",
-      "gas": "29531",
+      "gas": "29553",
       "id": "liquidationMarginPercent()::representative",
       "kind": "view",
       "scenario": "representative"
@@ -415,14 +415,14 @@
     },
     {
       "function": "makerFeeBps()",
-      "gas": "29556",
+      "gas": "29578",
       "id": "makerFeeBps()::representative",
       "kind": "view",
       "scenario": "representative"
     },
     {
       "function": "minimumPriceIncrement()",
-      "gas": "27390",
+      "gas": "27412",
       "id": "minimumPriceIncrement()::representative",
       "kind": "view",
       "scenario": "representative"
@@ -464,7 +464,7 @@
     },
     {
       "function": "removeOutdatedOrders(bytes32[])",
-      "gas": "165460",
+      "gas": "165477",
       "id": "removeOutdatedOrders(bytes32[])::permissionless expired order batch-2",
       "kind": "transaction",
       "scenario": "permissionless expired order batch-2"
@@ -477,8 +477,15 @@
       "scenario": "current owner"
     },
     {
+      "function": "resetParticipantState(address[])",
+      "gas": "168485",
+      "id": "resetParticipantState(address[])::two participants with order-and-position state",
+      "kind": "transaction",
+      "scenario": "two participants with order-and-position state"
+    },
+    {
       "function": "resetState(address[])",
-      "gas": "168365",
+      "gas": "168432",
       "id": "resetState(address[])::two participants with order-and-position state",
       "kind": "transaction",
       "scenario": "two participants with order-and-position state"
@@ -520,7 +527,7 @@
     },
     {
       "function": "setMakerFeeBps(int16)",
-      "gas": "36278",
+      "gas": "36300",
       "id": "setMakerFeeBps(int16)::zero-to-5",
       "kind": "transaction",
       "scenario": "zero-to-5"
@@ -555,35 +562,35 @@
     },
     {
       "function": "settlePositions(address[],uint256[])",
-      "gas": "136046",
+      "gas": "136064",
       "id": "settlePositions(address[],uint256[])::batch-2",
       "kind": "transaction",
       "scenario": "batch-2"
     },
     {
       "function": "settlementPrice(uint256)",
-      "gas": "29566",
+      "gas": "29588",
       "id": "settlementPrice(uint256)::representative",
       "kind": "view",
       "scenario": "representative"
     },
     {
       "function": "simulateOrder(uint256,uint256,int256)",
-      "gas": "53529",
+      "gas": "53552",
       "id": "simulateOrder(uint256,uint256,int256)::one-level fill",
       "kind": "view",
       "scenario": "one-level fill"
     },
     {
       "function": "takerFeeBps()",
-      "gas": "29600",
+      "gas": "29622",
       "id": "takerFeeBps()::representative",
       "kind": "view",
       "scenario": "representative"
     },
     {
       "function": "transferOwnership(address)",
-      "gas": "34831",
+      "gas": "34853",
       "id": "transferOwnership(address)::owner-to-seller",
       "kind": "transaction",
       "scenario": "owner-to-seller"
@@ -632,14 +639,14 @@
     },
     {
       "function": "vault()",
-      "gas": "27634",
+      "gas": "27656",
       "id": "vault()::representative",
       "kind": "view",
       "scenario": "representative"
     },
     {
       "function": "withdrawCollectedFees()",
-      "gas": "128595",
+      "gas": "128617",
       "id": "withdrawCollectedFees()::nonzero fee balance",
       "kind": "transaction",
       "scenario": "nonzero fee balance"
