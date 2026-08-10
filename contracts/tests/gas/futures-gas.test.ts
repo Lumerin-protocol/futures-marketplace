@@ -873,27 +873,6 @@ async function benchmarkAdminAndLifecycle() {
     const price = await futures.read.getMarketPrice();
     const expirationAt = data.config.deliveryDates[0];
     await fund(data, [seller, buyer]);
-    await openPosition(data, expirationAt, 1n, price);
-    await futures.write.createOrder(
-      [price + data.config.priceLadderStep, expirationAt, -1n, TimeInForce.GTC],
-      { account: seller.account },
-    );
-    await recordTransaction(
-      pc,
-      "resetParticipantState(address[])",
-      "two participants with order-and-position state",
-      futures.write.resetParticipantState([[seller.account.address, buyer.account.address]], {
-        account: owner.account,
-      }),
-    );
-  }
-  {
-    const data = await fresh();
-    const { futures } = data.contracts;
-    const { owner, seller, buyer, pc } = data.accounts;
-    const price = await futures.read.getMarketPrice();
-    const expirationAt = data.config.deliveryDates[0];
-    await fund(data, [seller, buyer]);
     await futures.write.setTakerFeeBps([100], { account: owner.account });
     await openPosition(data, expirationAt, 1n, price);
     assert.ok((await futures.read.collectedFeesBalance()) > 0n);
@@ -954,7 +933,7 @@ describe("Futures gas benchmark", () => {
 
     const snapshot = gas.snapshot();
     const coverage = assertAbiFunctionCoverage(HashPowerFuturesAbi, snapshot, exclusions);
-    assert.equal(coverage.covered.length, 72);
+    assert.equal(coverage.covered.length, 71);
     assert.deepEqual(coverage.excluded, [
       "initialize(address,uint8,uint8,uint256)",
       "proxiableUUID()",

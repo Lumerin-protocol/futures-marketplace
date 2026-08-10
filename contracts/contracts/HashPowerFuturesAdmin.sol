@@ -136,16 +136,7 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
     /// @dev Expired v4.3+ orders are already inert and remain available to optional permissionless
     ///      cleanup. Does not walk legacy lots for economics — zeros `netDelta` / `netEntryValue` /
     ///      `activeExpirationAts` directly. Also purges dead lot indexes and active order queues.
-    function resetParticipantState(address[] calldata _participants) external onlyOwner {
-        _resetParticipantState(_participants);
-    }
-
-    /// @notice Compatibility wrapper for {resetParticipantState}.
     function resetState(address[] calldata _participants) external onlyOwner {
-        _resetParticipantState(_participants);
-    }
-
-    function _resetParticipantState(address[] calldata _participants) private {
         for (uint256 p = 0; p < _participants.length; p++) {
             address participant = _participants[p];
             (uint256[] memory orderExpirationAts, uint256 orderExpirationCount) =
