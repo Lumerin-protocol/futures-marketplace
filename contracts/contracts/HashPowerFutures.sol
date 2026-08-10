@@ -200,7 +200,9 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev Unindex a resting order and announce it cancelled. Callers own the authorization
     ///      decision; this only performs the removal.
     function _dropRestingOrder(bytes32 _orderId, Order memory _order) private {
-        _removeRestingOrder(_orderId, _order.expirationAt, _order.price, _order.participant, _order.quantity > 0);
+        _removeRestingOrder(
+            _orderId, _order.expirationAt, _order.price, _order.participant, _order.quantity > 0, true
+        );
         emit OrderCancelled(_orderId, _order.participant);
     }
 
@@ -267,7 +269,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     function _doLiquidateOrder(address _user, bytes32 _orderId, Order memory _order) internal {
         uint256 orderNotional = _order.price * M.abs(_order.quantity);
         bool isBuy = _order.quantity > 0;
-        _removeRestingOrder(_orderId, _order.expirationAt, _order.price, _order.participant, isBuy);
+        _removeRestingOrder(_orderId, _order.expirationAt, _order.price, _order.participant, isBuy, true);
 
         uint256 liqFee = _chargeLiquidationFee(_user, orderNotional);
 
@@ -295,7 +297,6 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
 
         uint256 mark = _getMarketPrice(_getPrice());
         if (!_closePosition(_user, _expirationAt, netQty, _closeQty, mark)) revert NotLiquidatable();
-        _revertIfOverLiquidated(_user);
     }
 
     /// @notice Batch liquidate across expiries. Keeper chooses legs; keeps prior closes.
@@ -320,10 +321,11 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         }
 
         if (closed == 0) revert NotLiquidatable();
-        _revertIfOverLiquidated(_user);
     }
 
     /// @dev Close up to `_closeQty` at `_expirationAt`. Returns false when no positive close.
+    ///      Runs the portfolio OverLiquidation guard before emit/notify so an oversize close
+    ///      does not pay log/hook gas on the revert path (matches Perps).
     function _closePosition(address _user, uint256 _expirationAt, int256 _netQty, uint256 _closeQty, uint256 _mark)
         internal
         returns (bool)
@@ -333,7 +335,10 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         if (closeAbs == 0) return false;
 
         if (closeAbs == absNet) {
-            _doLiquidateFullPosition(_user, _expirationAt, _netQty, _mark);
+            (int256 pnl, uint256 liqFee) = _doLiquidateFullPosition(_user, _expirationAt, _netQty, _mark);
+            _revertIfOverLiquidated(_user);
+            emit PositionLiquidated(_user, _msgSender(), _expirationAt, _netQty, pnl, liqFee);
+            _notifyLiquidation(_msgSender(), liqFee);
             return true;
         }
 
@@ -343,6 +348,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         uint256 closedNotional = _mark * closeAbs;
         uint256 liqFee = _chargeLiquidationFee(_user, closedNotional);
 
+        _revertIfOverLiquidated(_user);
         emit PositionLiquidated(_user, _msgSender(), _expirationAt, signedClose, pnl, liqFee);
         _notifyLiquidation(_msgSender(), liqFee);
         return true;

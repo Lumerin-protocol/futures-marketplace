@@ -125,7 +125,7 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
                 if (!_isActiveExpirationAt(order.expirationAt)) continue;
 
                 bool isBuy = order.quantity > 0;
-                _removeRestingOrder(orderId, order.expirationAt, order.price, participant, isBuy);
+                _removeRestingOrder(orderId, order.expirationAt, order.price, participant, isBuy, true);
                 emit OrderCancelled(orderId, participant);
             }
         }
@@ -146,7 +146,7 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
                 bytes32 orderId = legacyOrders.at(i - 1);
                 Order storage order = orders[orderId];
                 bool isBuy = order.quantity > 0;
-                _removeRestingOrder(orderId, order.expirationAt, order.price, order.participant, isBuy);
+                _removeRestingOrder(orderId, order.expirationAt, order.price, order.participant, isBuy, true);
                 emit OrderCancelled(orderId, participant);
             }
             for (uint256 d = 0; d < orderExpirationCount; d++) {
@@ -156,7 +156,7 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
                     bytes32 orderId = deliveryOrders.at(deliveryOrders.length() - 1);
                     Order storage order = orders[orderId];
                     bool isBuy = order.quantity > 0;
-                    _removeRestingOrder(orderId, order.expirationAt, order.price, participant, isBuy);
+                    _removeRestingOrder(orderId, order.expirationAt, order.price, participant, isBuy, true);
                     emit OrderCancelled(orderId, participant);
                 }
             }

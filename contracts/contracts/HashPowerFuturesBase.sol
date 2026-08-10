@@ -470,7 +470,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         bool isBuy = _makerOrder.quantity > 0;
 
         if (cancelAmt == makerAbs) {
-            _removeRestingOrder(_makerOrderId, _expirationAt, _makerOrder.price, _makerOrder.participant, isBuy);
+            _removeRestingOrder(_makerOrderId, _expirationAt, _makerOrder.price, _makerOrder.participant, isBuy, false);
             emit OrderCancelled(_makerOrderId, _taker);
         } else {
             uint256 reducedMakerAbs = makerAbs - cancelAmt;
@@ -507,8 +507,6 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         _applyFill(_taker, takerFillQty, _price, _expirationAt);
 
         uint256 notional = _price * fill;
-        // Signed throughout: the former `uint256(uint16(makerFeeBps))` cast turned a −1 bps
-        // rebate into 65535 bps (655%).
         int256 makerFeeAmt = int256(notional) * int256(makerFeeBps) / int256(BPS);
         int256 takerFeeAmt = int256(notional) * int256(takerFeeBps) / int256(BPS);
         _chargeMatchFees(makerParticipant, _taker, makerFeeAmt, takerFeeAmt);
@@ -517,7 +515,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         uint256 leftoverMakerAbs = makerAbs - fill;
         int256 newMakerQty = M.toSigned(isBuy, leftoverMakerAbs);
         if (leftoverMakerAbs == 0) {
-            _removeRestingOrder(_makerOrderId, _expirationAt, makerPrice, makerParticipant, isBuy);
+            _removeRestingOrder(_makerOrderId, _expirationAt, makerPrice, makerParticipant, isBuy, false);
         } else {
             _decreaseOrderAggregate(makerParticipant, _expirationAt, makerPrice, fill, isBuy);
             _makerOrder.quantity = newMakerQty;
@@ -650,21 +648,25 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
             return;
         }
 
-        // Opposite direction: reduce / close / flip
+        // Opposite direction: reduce / close / flip.
+        // Realize against the exact entry-value slice (not a floored average entry) so
+        // remaining entry + realized entry ties out to the original — matches Perps and
+        // Futures full-close / settlement paths.
         uint256 absDq = M.abs(_signedQty);
         uint256 absNet = M.abs(netQty);
         uint256 closedAbs = M.min(absDq, absNet);
-        uint256 avgEntry = M.abs(netEntry) / absNet;
-
         int256 signedClosed = M.toSigned(netQty > 0, closedAbs);
-        int256 pnl = (int256(_tradePrice) - int256(avgEntry)) * signedClosed;
+        int256 remainingEntryValue;
+        if (closedAbs < absNet) {
+            remainingEntryValue = netEntry * int256(absNet - closedAbs) / int256(absNet);
+        }
+        int256 pnl = int256(_tradePrice) * signedClosed - (netEntry - remainingEntryValue);
         _transferPnl(_insuranceFundAccount(), _user, pnl);
 
         if (absDq < absNet) {
             // Partial reduce
             participantExpirationAtNetDelta[_user][_expirationAt] = netQty + _signedQty;
-            participantExpirationAtNetEntryValue[_user][_expirationAt] =
-                netEntry * int256(absNet - closedAbs) / int256(absNet);
+            participantExpirationAtNetEntryValue[_user][_expirationAt] = remainingEntryValue;
         } else if (absDq == absNet) {
             // Flat
             participantExpirationAtNetDelta[_user][_expirationAt] = 0;
@@ -681,15 +683,22 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
 
     // ── Internal helpers: cancel / reduce / book upkeep ───────────────────────
 
+    /// @param cleanupPriceLevel When true, drop the price ladder entry if the queue is empty.
+    ///        Match walks a whole level and cleans once at the end (pass false); cancel /
+    ///        liquidate / admin remove a single order and must clean immediately (pass true).
     function _removeRestingOrder(
         bytes32 orderId,
         uint256 expirationAt,
         uint256 price,
         address participant,
-        bool isBuy
+        bool isBuy,
+        bool cleanupPriceLevel
     ) internal {
         StructuredLinkedList.List storage orderIndexId = _expirationAtPriceOrderIds(expirationAt, price, isBuy);
-        _removeOrderFromQueue(orderIndexId, orderId, expirationAt, price, isBuy);
+        orderIndexId.remove(uint256(orderId));
+        if (cleanupPriceLevel) {
+            _removePriceLevelIfEmpty(orderIndexId, expirationAt, price, isBuy);
+        }
         participantOrderIdsIndex[participant].remove(orderId);
         participantExpirationAtOrderIdsIndex[participant][expirationAt].remove(orderId);
         _decreaseOrderAggregate(participant, expirationAt, price, M.abs(orders[orderId].quantity), isBuy);
@@ -706,17 +715,6 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         bool newPriceLevel = orderIndexId.sizeOf() == 0;
         orderIndexId.pushBack(uint256(_orderId));
         if (newPriceLevel) _addPriceLevel(_expirationAt, _price, _isBuy);
-    }
-
-    function _removeOrderFromQueue(
-        StructuredLinkedList.List storage orderIndexId,
-        bytes32 _orderId,
-        uint256 _expirationAt,
-        uint256 _price,
-        bool _isBuy
-    ) internal {
-        orderIndexId.remove(uint256(_orderId));
-        _removePriceLevelIfEmpty(orderIndexId, _expirationAt, _price, _isBuy);
     }
 
     /// @notice Insert a new `_price` into the sorted ladder for `_expirationAt`.
@@ -828,21 +826,23 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
 
     // ── Internal helpers: margin / liquidation ────────────────────────────────
 
-    function _doLiquidateFullPosition(address _user, uint256 _expirationAt, int256 _netQty, uint256 _mark) internal {
+    /// @dev Settles full-close PnL and fee; does not emit — caller runs OverLiquidation
+    ///      then emits/notifies (guard-before-emit, matches Perps).
+    function _doLiquidateFullPosition(address _user, uint256 _expirationAt, int256 _netQty, uint256 _mark)
+        internal
+        returns (int256 pnl, uint256 liqFee)
+    {
         int256 netEntry = participantExpirationAtNetEntryValue[_user][_expirationAt];
-        int256 pnl = int256(_mark) * _netQty - netEntry;
+        pnl = int256(_mark) * _netQty - netEntry;
 
         _transferPnl(_insuranceFundAccount(), _user, pnl);
 
         uint256 closedNotional = _mark * M.abs(_netQty);
-        uint256 liqFee = _chargeLiquidationFee(_user, closedNotional);
+        liqFee = _chargeLiquidationFee(_user, closedNotional);
 
         participantExpirationAtNetDelta[_user][_expirationAt] = 0;
         participantExpirationAtNetEntryValue[_user][_expirationAt] = 0;
         participantActiveExpirationAts[_user].remove(_expirationAt);
-
-        emit PositionLiquidated(_user, _msgSender(), _expirationAt, _netQty, pnl, liqFee);
-        _notifyLiquidation(_msgSender(), liqFee);
     }
 
     function _doPartialLiquidatePosition(
@@ -854,16 +854,14 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     ) internal returns (int256 pnl, int256 signedClose) {
         int256 netEntry = participantExpirationAtNetEntryValue[_user][_expirationAt];
         uint256 absNet = M.abs(_netQty);
-        uint256 avgEntry = M.abs(netEntry) / absNet;
         signedClose = M.toSigned(_netQty > 0, _closeAbs);
-        pnl = (int256(_mark) - int256(avgEntry)) * signedClose;
+        int256 remainingEntryValue = netEntry * int256(absNet - _closeAbs) / int256(absNet);
+        pnl = int256(_mark) * signedClose - (netEntry - remainingEntryValue);
         _transferPnl(_insuranceFundAccount(), _user, pnl);
 
-        // Reduce toward zero; scale netEntryValue proportionally.
-        participantExpirationAtNetDelta[_user][_expirationAt] =
-            _netQty - M.toSigned(_netQty > 0, _closeAbs);
-        participantExpirationAtNetEntryValue[_user][_expirationAt] =
-            netEntry * int256(absNet - _closeAbs) / int256(absNet);
+        // Reduce toward zero; keep the exact remaining entry-value slice.
+        participantExpirationAtNetDelta[_user][_expirationAt] = _netQty - signedClose;
+        participantExpirationAtNetEntryValue[_user][_expirationAt] = remainingEntryValue;
     }
 
     // ── Internal helpers: pricing / views ─────────────────────────────────────
