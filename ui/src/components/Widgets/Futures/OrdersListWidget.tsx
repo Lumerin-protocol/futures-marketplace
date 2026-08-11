@@ -45,6 +45,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
     pricePerDay: bigint;
     expirationAt: bigint;
     amount: number;
+    orderIds: string[];
   } | null>(null);
   const _getStatusColor = (isActive: boolean, closedAt: string | null) => {
     if (closedAt) {
@@ -96,6 +97,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
     pricePerDay: bigint;
     expirationAt: bigint;
     amount: number;
+    orderIds: string[];
   }) => {
     setSelectedCloseOrder(groupedOrder);
     closeModal.open();
@@ -262,6 +264,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
             pricePerDay={selectedCloseOrder.pricePerDay}
             expirationAt={selectedCloseOrder.expirationAt}
             amount={selectedCloseOrder.amount}
+            orderIds={selectedCloseOrder.orderIds}
             contractMode={contractMode}
             closeForm={() => {
               closeModal.close();
