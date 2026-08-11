@@ -55,7 +55,7 @@ const fetchParticipantAsync = async (
     id: order.id,
     // Cancel/modify must use OrderEntry.id (on-chain bytes32), never Order.id
     // (composite indexer key: txHash++user++price++expiration++side).
-    entryIds: order.entries.map((entry) => entry.id),
+    entryIds: (order.entries ?? []).map((entry) => entry.id),
     isBuy: order.isBuy,
     isActive: isActiveStatus(order.status),
     pricePerDay: BigInt(order.price),
