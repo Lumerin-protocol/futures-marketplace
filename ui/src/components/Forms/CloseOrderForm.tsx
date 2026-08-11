@@ -2,8 +2,8 @@ import { waitForOrderBookBlockNumber, getOrderBookQueryKey } from "../../hooks/d
 import { useQueryClient } from "@tanstack/react-query";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import type { TransactionReceipt } from "viem";
-import { useCreateOrder } from "../../hooks/data/useCreateOrder";
-import { useCreatePerpsOrder } from "../../hooks/data/perps/useCreatePerpsOrder";
+import { useCloseOrder } from "../../hooks/data/useCloseOrder";
+import { useCancelPerpsOrder } from "../../hooks/data/perps/useCancelPerpsOrder";
 import { useAccount } from "wagmi";
 import { PARTICIPANT_QK } from "../../hooks/data/getUserFuturesOrders";
 import { POSITION_BOOK_QK } from "../../hooks/data/getUserFuturesPositions";
@@ -22,21 +22,25 @@ export interface CloseOrderFormProps {
   pricePerDay: bigint;
   expirationAt: bigint;
   amount: number;
+  /** On-chain order ids (indexer `Order.id`) for the grouped row being cancelled. */
+  orderIds: string[];
   closeForm: () => void;
   contractMode?: ContractMode;
 }
 
-export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, expirationAt, amount, closeForm, contractMode = "futures" }) => {
+export const CloseOrderForm: FC<CloseOrderFormProps> = ({
+  isBuy,
+  pricePerDay,
+  expirationAt,
+  amount,
+  orderIds,
+  closeForm,
+  contractMode = "futures",
+}) => {
   const qc = useQueryClient();
   const { address } = useAccount();
-  
-  // Conditionally use futures or perps create order hook
-  const futuresCreateOrder = useCreateOrder();
-  const perpsCreateOrder = useCreatePerpsOrder();
-  // Create an order with opposite sign to close the existing orders
-  // If buy orders (isBuy = true), create sell order with negative quantity
-  // If sell orders (isBuy = false), create buy order with positive quantity
-  const oppositeQuantity = isBuy ? -amount : amount;
+  const { closeOrdersAsync } = useCloseOrder();
+  const { cancelOrderAsync } = useCancelPerpsOrder();
 
   const formatPrice = (price: bigint) => {
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
@@ -76,47 +80,48 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({ isBuy, pricePerDay, ex
             </div>
           </div>
           <p className="text-gray-400 text-sm">
-            You are about to close this order. An opposite order will be created to close the existing order.
+            You are about to cancel this resting order. It will be removed from the order book.
           </p>
         </>
       )}
       resultForm={(_props) => (
         <>
           <p className="w-6/6 text-left font-normal text-s mt-5">
-            Your order has been closed and will be removed from the order book shortly.
+            Your order has been cancelled and will be removed from the order book shortly.
           </p>
         </>
       )}
       transactionSteps={[
         {
-          label: "Close Order",
+          label: "Cancel Order",
           action: async () => {
+            if (orderIds.length === 0) {
+              throw new Error("No order ids to cancel");
+            }
+            const ids = orderIds.map((id) => id as `0x${string}`);
+
             let txhash: `0x${string}` | undefined;
             if (contractMode === "perpetual") {
-              // Perps only needs price and quantity
-              txhash = await perpsCreateOrder.createOrderAsync({
-                price: pricePerDay,
-                quantity: oppositeQuantity,
-              });
+              // Perps cancel is one id per call; cancel the grouped row sequentially.
+              for (const orderId of ids) {
+                const hash = await cancelOrderAsync({ orderId });
+                if (!hash) throw new Error("Wallet not ready. Please try again.");
+                txhash = hash;
+              }
             } else {
-              txhash = await futuresCreateOrder.createOrderAsync({
-                price: pricePerDay,
-                expirationAt: expirationAt,
-                quantity: oppositeQuantity,
-              });
+              const txs = await closeOrdersAsync({ orderIds: ids });
+              txhash = txs?.[0];
+              if (!txhash) throw new Error("Wallet not ready. Please try again.");
             }
             return { txhash, isSkipped: false };
           },
           postConfirmation: async (receipt: TransactionReceipt) => {
-            // Wait for block number to ensure indexer has updated
             await waitForOrderBookBlockNumber(receipt.blockNumber, qc, contractMode, Number(expirationAt));
 
-            // Refetch order book, positions, and participant data
             await Promise.all([
               qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
               address && qc.invalidateQueries({ queryKey: [POSITION_BOOK_QK] }),
               address && qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
-              // Reset history tables back to their newest page after closing.
               ...(contractMode === "perpetual"
                 ? [
                     address && qc.resetQueries({ queryKey: [PERPS_ORDER_HISTORY_QK, address] }),
