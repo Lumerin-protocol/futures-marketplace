@@ -53,6 +53,9 @@ const fetchParticipantAsync = async (
 
   const orders: ParticipantOrder[] = response.orders.map((order) => ({
     id: order.id,
+    // Cancel/modify must use OrderEntry.id (on-chain bytes32), never Order.id
+    // (composite indexer key: txHash++user++price++expiration++side).
+    entryIds: order.entries.map((entry) => entry.id),
     isBuy: order.isBuy,
     isActive: isActiveStatus(order.status),
     pricePerDay: BigInt(order.price),
@@ -117,7 +120,10 @@ export type ParticipantOrder = {
   closedAt: string | null;
   closedBy: string | null;
   expirationAt: bigint;
+  /** Indexer Order aggregate id (not a valid on-chain bytes32). */
   id: string;
+  /** On-chain order ids (`OrderEntry.id`) still ACTIVE under this aggregate. */
+  entryIds: string[];
   isActive: boolean;
   isBuy: boolean;
   participant: {
@@ -160,5 +166,10 @@ type UserFuturesOrdersResponse = {
     status: string;
     transactionHash: `0x${string}`;
     updatedAt: string;
+    entries: {
+      id: string;
+      remainingQuantity: number;
+      status: string;
+    }[];
   }[];
 };
