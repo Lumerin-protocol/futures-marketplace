@@ -35,6 +35,13 @@ export const UserFuturesOrdersByStatusQuery = gql`
       status
       transactionHash
       updatedAt
+      # On-chain bytes32 order ids live on OrderEntry, not the Order aggregate id
+      # (which is txHash++user++price++expiration++side and is not a valid bytes32).
+      entries(where: { status_in: [ACTIVE] }) {
+        id
+        remainingQuantity
+        status
+      }
     }
     _meta {
       block {
