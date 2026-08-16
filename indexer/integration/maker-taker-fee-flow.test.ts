@@ -55,7 +55,8 @@ describe("Futures: full config + address surface populated by loadFuturesFromCon
     const { contracts, accounts, config } = await conn.networkHelpers.loadFixture(
       deployFuturesFixture,
     );
-    const { futures, hashpriceUsd, portfolioMarginEngine } = contracts;
+    const { futures, hashpriceUsd, portfolioMarginEngine, collateralVault } =
+      contracts;
     const { owner } = accounts;
 
     conn.matchstick.bind("HashPowerFutures", futures.address, futures.abi);
@@ -78,12 +79,16 @@ describe("Futures: full config + address surface populated by loadFuturesFromCon
       "contractAddress mirrors the proxy address Matchstick is bound to",
     );
     assert.equal(
-      String(entity.hashrateOracleAddress).toLowerCase(),
+      String(entity.priceOracle).toLowerCase(),
       hashpriceUsd.address.toLowerCase(),
     );
     assert.equal(
-      String(entity.portfolioMarginAddress).toLowerCase(),
+      String(entity.portfolioMargin).toLowerCase(),
       portfolioMarginEngine.address.toLowerCase(),
+    );
+    assert.equal(
+      String(entity.collateralVault).toLowerCase(),
+      collateralVault.address.toLowerCase(),
     );
 
     // === scalar config ===

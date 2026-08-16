@@ -75,7 +75,7 @@ const ID_SEP: Bytes = Bytes.fromHexString("0xff") as Bytes;
 /// PositionSession (a flip closes one session and opens another) produces one
 /// Trade row per session — preventing the new session's first trade from
 /// inheriting the prior session's realizedPnl.
-export function tradeAggregateId(txHash: Bytes, user: Address, sessionId: string): Bytes {
+export function tradeId(txHash: Bytes, user: Address, sessionId: string): Bytes {
   return txHash
     .concat(ID_SEP)
     .concat(changetype<Bytes>(user))

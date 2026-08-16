@@ -198,7 +198,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     if (openSessions.length === 0) return null;
     let sum = 0n;
     for (const s of openSessions) {
-      sum += s.user.netQuantity;
+      sum += s.netQuantity;
     }
     return sum;
   }, [contractMode, positionSessionsQuery.data?.positionSessions]);
@@ -237,7 +237,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
       let totalPnL = 0n;
       openSessions.forEach((session) => {
-        const netQuantity = session.user.netQuantity;
+        const netQuantity = session.netQuantity;
         if (netQuantity === 0n) return;
         const priceDiff = marketPrice - session.entryPrice;
         const unrealizedPnL = (priceDiff * netQuantity) / QUANTITY_SCALE;

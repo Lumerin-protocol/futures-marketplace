@@ -103,6 +103,7 @@ export function pointerKey(user: Address, expirationAt: BigInt): string {
 export function mockFuturesContractCallsAsReverted(): void {
   const addr = contractAddress();
   const getters: string[][] = [
+    ["vault", "vault():(address)"],
     ["priceOracle", "priceOracle():(address)"],
     ["minimumPriceIncrement", "minimumPriceIncrement():(uint256)"],
     ["makerFeeBps", "makerFeeBps():(int16)"],
@@ -111,6 +112,7 @@ export function mockFuturesContractCallsAsReverted(): void {
     ["liquidatorShareBps", "liquidatorShareBps():(uint16)"],
     ["portfolioMargin", "portfolioMargin():(address)"],
     ["CONTRACT_SIZE_HPS_DAY", "CONTRACT_SIZE_HPS_DAY():(uint256)"],
+    ["QUANTITY_DECIMALS", "QUANTITY_DECIMALS():(uint8)"],
     ["expirationIntervalDays", "expirationIntervalDays():(uint8)"],
     ["futureExpirationDatesCount", "futureExpirationDatesCount():(uint8)"],
     ["firstFutureExpirationDate", "firstFutureExpirationDate():(uint256)"],
@@ -126,8 +128,9 @@ export function mockFuturesContractCallsAsReverted(): void {
 export function setupFutures(): void {
   const f = new Futures(0);
   f.contractAddress = changetype<Bytes>(contractAddress());
-  f.hashrateOracleAddress = Bytes.empty();
-  f.portfolioMarginAddress = Bytes.empty();
+  f.collateralVault = Bytes.empty();
+  f.priceOracle = Bytes.empty();
+  f.portfolioMargin = Bytes.empty();
   f.startBlock = BigInt.zero();
   f.minimumPriceIncrement = BigInt.zero();
   f.makerFeeBps = 0;
@@ -147,6 +150,7 @@ export function setupFutures(): void {
   f.totalFills = 0;
   f.totalVolume = BigInt.zero();
   f.totalLiquidations = 0;
+  f.totalLiquidatedValue = BigInt.zero();
   f.totalBadDebt = BigInt.zero();
   f.initializedAt = BigInt.zero();
   f.lastUpdatedAt = BigInt.zero();
@@ -193,7 +197,7 @@ export function sessionKey(blockNumber: BigInt, logIndex: BigInt, leg: i32): str
 }
 
 /// Trade aggregate id: tx hash ++ sep ++ user ++ sep ++ sessionId.
-/// Mirrors `src/ids.ts#tradeAggregateId`.
+/// Mirrors `src/ids.ts#tradeId`.
 export function tradeAggKey(txHashBytes: Bytes, user: Address, sessionId: string): string {
   return txHashBytes
     .concat(ID_SEP)

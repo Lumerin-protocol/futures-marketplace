@@ -146,13 +146,13 @@ export const UserPositionSessionsQuery = gql`
       id
       lastTradeAt
       maxQuantity
+      netQuantity
       openedAt
       realizedPnl
       status
       tradingFees
       user {
         id
-        netQuantity
       }
       trades {
         aggregatedEntryPriceAfter
@@ -190,13 +190,13 @@ export const UserClosedPositionSessionsQuery = gql`
       id
       lastTradeAt
       maxQuantity
+      netQuantity
       openedAt
       realizedPnl
       status
       tradingFees
       user {
         id
-        netQuantity
       }
       trades {
         aggregatedEntryPriceAfter

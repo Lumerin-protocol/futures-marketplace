@@ -146,6 +146,19 @@ describe("liquidatePosition: PositionLiquidated, seller netQty=0", () => {
       "Trade.liquidationFee must mirror the on-chain PositionLiquidated.liquidatorFee",
     );
 
+    // The flagged Trade carries the forced exit price and signed size, so the
+    // singleton's value metric must be exitPrice * abs(closed qty).
+    const forcedNotional =
+      BigInt(String(sellerTrade.tradePrice)) *
+      (BigInt(String(sellerTrade.tradeQuantity)) < 0n
+        ? -BigInt(String(sellerTrade.tradeQuantity))
+        : BigInt(String(sellerTrade.tradeQuantity)));
+    assert.equal(
+      String(futuresEntity.totalLiquidatedValue),
+      String(forcedNotional),
+      "Futures.totalLiquidatedValue must be the forced exit notional",
+    );
+
     const sellerSession = snap.entity(
       "PositionSession",
       String(sellerTrade.positionSession),

@@ -5,8 +5,12 @@ type Futures @entity(immutable: false) {
 
   # Contract addresses
   contractAddress: Bytes!
-  hashrateOracleAddress: Bytes!
-  portfolioMarginAddress: Bytes!
+  "Vault holding user collateral; the ERC-20 itself is read off the vault."
+  collateralVault: Bytes!
+  "Oracle the contract prices against; matches the `priceOracle()` getter."
+  priceOracle: Bytes!
+  "Margin engine the contract defers to; matches the `portfolioMargin()` getter."
+  portfolioMargin: Bytes!
 
   "Block number the indexer was configured to start from (sourced from the data source context, set via START_BLOCK_FUTURES)."
   startBlock: BigInt!
@@ -24,7 +28,7 @@ type Futures @entity(immutable: false) {
   expirationIntervalDays: Int!
   futureExpirationDatesCount: Int!
   firstFutureExpirationDate: BigInt!
-  "Contracts are whole units, so quantities carry no decimals. Mirrors Perps.quantityDecimals (6 there) so both markets expose the same scaling knob."
+  "Contracts are whole units, so quantities carry no decimals. Mirrors Perps.quantityDecimals (6 there, divisible positions) so both markets expose the same scaling knob."
   quantityDecimals: Int!
 
   # Pool balances
@@ -40,8 +44,12 @@ type Futures @entity(immutable: false) {
   totalTrades: Int!
   "Fill rows ever created. One per (OrderMatched, side); cash settlement and forced closes have no matched counterparty order and so no Fill."
   totalFills: Int!
+  "Matched notional: sum of tradePrice * abs(quantity). No divisor since quantities are whole contracts; perps divides by 10^quantityDecimals."
   totalVolume: BigInt!
+  "Liquidation transactions, not legs: one keeper tx closing several orders or positions counts once."
   totalLiquidations: Int!
+  "Notional closed by force, in the same units as totalVolume: sum of exitPrice * abs(closedQuantity) over every PositionLiquidated."
+  totalLiquidatedValue: BigInt!
   totalBadDebt: BigInt!
 
   # Timestamps
@@ -74,7 +82,10 @@ type FuturesExpiration @entity(immutable: false) {
   priceLevels: [PriceLevel!]! @derivedFrom(field: "expiration")
 }
 
-# User entity (replaces former Participant)
+# User entity (replaces former Participant).
+# Net position is per-expiration, so unlike perps' User it lives on
+# UserDeliverySessionPointer rather than here — a user can be long one
+# expiration and short another at the same time.
 type User @entity(immutable: false) {
   id: Bytes! # user address
   address: Bytes!
@@ -83,7 +94,9 @@ type User @entity(immutable: false) {
   orderCount: Int!
   "Orders currently resting in the book (status ACTIVE or PARTIALLY_FILLED)."
   activeOrderCount: Int!
+  "Trade rows: one per (tx, position session)."
   tradeCount: Int!
+  "Fill rows: one per matched leg."
   fillCount: Int!
   realizedPnl: BigInt!
 
@@ -120,9 +133,9 @@ type Order @entity(immutable: false) {
   originalQuantity: BigInt!
   "Contracts that became fills."
   filledQuantity: BigInt!
-  "Contracts that left the book without matching (amend shrink, cancel, expiry, liquidation)."
+  "Contracts that left the book without matching (amend shrink, cancel, self-cross, IOC remainder, expiry, liquidation)."
   cancelledQuantity: BigInt!
-  "Volume-weighted average price across all fills against this order. Zero if no fills."
+  "Quantity-weighted average price across all fills against this order. Zero if no fills."
   averageFillPrice: BigInt!
   status: OrderStatus!
   "EOA that sent the tx where this order closed (tx.from). NOT necessarily the participant — for liquidations it's the keeper, for expiry it's whoever called removeOutdatedOrders. Use `liquidator` for semantic close attribution."
@@ -150,9 +163,9 @@ enum OrderStatus {
   PARTIALLY_FILLED
   "Terminal: left the book fully matched."
   FILLED
-  "Terminal: left the book unmatched (cancel, amend-to-zero, or self-cross)."
+  "Terminal: left the book with zero fills — user cancel, amend-to-zero, or an IOC/FOK order whose size was fully absorbed by self-crossing. A partially filled IOC ends FILLED instead, with its unmatched remainder in `cancelledQuantity`."
   CANCELLED
-  "Terminal: force-cancelled by a keeper via liquidateOrders."
+  "Terminal: force-cancelled by a keeper via liquidateOrder / liquidateOrders."
   LIQUIDATED
   "Terminal, futures-only: swept by removeOutdatedOrders after `expirationAt` passed."
   EXPIRED
@@ -168,12 +181,12 @@ type Trade @entity(immutable: false) {
   "Expiration metadata for `expirationAt` (settlement price, etc.). Nullable, backward-compatible add-on."
   expiration: FuturesExpiration
 
-  tradePrice: BigInt! # qty-weighted average fill price
+  tradePrice: BigInt! # quantity-weighted average fill price
   tradeQuantity: BigInt! # signed sum of fill quantities
   tradingFee: BigInt!
   realizedPnl: BigInt!
-  netQuantityAfter: BigInt!
-  aggregatedEntryPriceAfter: BigInt!
+  netQuantityAfter: BigInt! # position after the last fill
+  aggregatedEntryPriceAfter: BigInt! # entry price after the last fill
   fillCount: Int!
 
   "True when this Trade was a forced liquidation against the market."
@@ -228,15 +241,15 @@ enum FillSide {
 # Open→close cycle for a (user, expirationAt) pair.
 # A user can have multiple sessions concurrently — one per expiration date.
 type PositionSession @entity(immutable: false) {
-  id: String! # blockNumber (12 digits) + logIndex (6 digits) + side; deterministic
+  id: String! # blockNumber (12 digits) + logIndex (6 digits) + side (2 digits); deterministic
   status: PositionSessionStatus!
   user: User!
   expirationAt: BigInt!
   "Expiration metadata for `expirationAt` (settlement price, etc.). Nullable, backward-compatible add-on."
   expiration: FuturesExpiration
 
-  entryPrice: BigInt! # qty-weighted average entry price
-  closePrice: BigInt! # qty-weighted average exit price
+  entryPrice: BigInt! # quantity-weighted average entry price
+  closePrice: BigInt! # quantity-weighted average exit price (updated as we close)
   "Signed running net qty. Mirrors UserDeliverySessionPointer.netQuantity while OPEN; 0 once CLOSE."
   netQuantity: BigInt!
   maxQuantity: BigInt! # max absolute qty reached during the session
@@ -244,7 +257,7 @@ type PositionSession @entity(immutable: false) {
   "Cumulative absolute quantity closed via liquidation in this session (default 0). 'Was liquidated' = liquidatedQuantity > 0."
   liquidatedQuantity: BigInt! # default 0
   realizedPnl: BigInt!
-  tradingFees: BigInt!
+  tradingFees: BigInt! # signed: positive = paid, negative = rebate received
 
   openedAt: BigInt!
   lastTradeAt: BigInt!

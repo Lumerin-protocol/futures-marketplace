@@ -92,7 +92,7 @@ export function handleOracleUpdated(event: OracleUpdated): void {
   log.info("OracleUpdated: {}", [event.params.newOracle.toHexString()]);
   const futures = getOrCreateFutures();
   flushFuturesCounters(futures);
-  futures.hashrateOracleAddress = event.params.newOracle;
+  futures.priceOracle = event.params.newOracle;
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
 }
@@ -101,7 +101,7 @@ export function handlePortfolioMarginUpdated(event: PortfolioMarginUpdated): voi
   log.info("PortfolioMarginUpdated: {}", [event.params.newPortfolioMargin.toHexString()]);
   const futures = getOrCreateFutures();
   flushFuturesCounters(futures);
-  futures.portfolioMarginAddress = event.params.newPortfolioMargin;
+  futures.portfolioMargin = event.params.newPortfolioMargin;
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
 }

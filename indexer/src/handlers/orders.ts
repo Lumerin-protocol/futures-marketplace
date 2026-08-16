@@ -308,6 +308,11 @@ export function handlePositionLiquidated(event: PositionLiquidated): void {
   if (markLiquidationTx(event.transaction.hash)) {
     futures.totalLiquidations++;
   }
+  // Per position leg, not per tx: same scaling as totalVolume (contracts are
+  // indivisible, so no divisor) so the two are directly comparable.
+  futures.totalLiquidatedValue = futures.totalLiquidatedValue.plus(
+    exitPrice.times(absBigInt(closedQty)),
+  );
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
 }

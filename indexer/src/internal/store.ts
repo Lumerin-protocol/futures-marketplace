@@ -17,8 +17,9 @@ export function getOrCreateFutures(): Futures {
   if (!futures) {
     futures = new Futures(0);
     futures.contractAddress = dataSource.address();
-    futures.hashrateOracleAddress = Bytes.empty();
-    futures.portfolioMarginAddress = Bytes.empty();
+    futures.collateralVault = Bytes.empty();
+    futures.priceOracle = Bytes.empty();
+    futures.portfolioMargin = Bytes.empty();
     futures.startBlock = readStartBlockFromContext();
     futures.minimumPriceIncrement = BigInt.zero();
     futures.makerFeeBps = 0;
@@ -40,6 +41,7 @@ export function getOrCreateFutures(): Futures {
     futures.totalFills = 0;
     futures.totalVolume = BigInt.zero();
     futures.totalLiquidations = 0;
+    futures.totalLiquidatedValue = BigInt.zero();
     futures.totalBadDebt = BigInt.zero();
     futures.initializedAt = BigInt.zero();
     futures.lastUpdatedAt = BigInt.zero();
@@ -63,8 +65,11 @@ function readStartBlockFromContext(): BigInt {
 export function loadFuturesFromContract(futures: Futures): void {
   const contract = HashPowerFuturesContract.bind(dataSource.address());
 
+  const vault = contract.try_vault();
+  if (!vault.reverted) futures.collateralVault = vault.value;
+
   const oracle = contract.try_priceOracle();
-  if (!oracle.reverted) futures.hashrateOracleAddress = oracle.value;
+  if (!oracle.reverted) futures.priceOracle = oracle.value;
 
   const minPx = contract.try_minimumPriceIncrement();
   if (!minPx.reverted) futures.minimumPriceIncrement = minPx.value;
@@ -82,10 +87,13 @@ export function loadFuturesFromContract(futures: Futures): void {
   if (!liquidatorShareBps.reverted) futures.liquidatorShareBps = liquidatorShareBps.value;
 
   const portfolioMargin = contract.try_portfolioMargin();
-  if (!portfolioMargin.reverted) futures.portfolioMarginAddress = portfolioMargin.value;
+  if (!portfolioMargin.reverted) futures.portfolioMargin = portfolioMargin.value;
 
   const contractSizeHpsDay = contract.try_CONTRACT_SIZE_HPS_DAY();
   if (!contractSizeHpsDay.reverted) futures.contractSizeHpsDay = contractSizeHpsDay.value;
+
+  const quantityDecimals = contract.try_QUANTITY_DECIMALS();
+  if (!quantityDecimals.reverted) futures.quantityDecimals = quantityDecimals.value;
 
   const deliveryInterval = contract.try_expirationIntervalDays();
   if (!deliveryInterval.reverted) futures.expirationIntervalDays = deliveryInterval.value;

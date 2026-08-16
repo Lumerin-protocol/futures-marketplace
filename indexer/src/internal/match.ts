@@ -9,7 +9,7 @@ import {
 } from "../../generated/schema";
 import { PositionSessionStatus } from "../enums";
 import { absBigInt, isSameSign, minBigInt } from "../lib";
-import { fillId, positionSessionId, tradeAggregateId } from "../ids";
+import { fillId, positionSessionId, tradeId } from "../ids";
 import { getOrCreateFuturesExpiration, getOrCreatePointer } from "./store";
 
 // ============================================================================
@@ -204,9 +204,9 @@ function processUserMatch(
   const oldEntry = pointer.aggregatedEntryPrice;
   const flipped = !oldNet.isZero() && !newNet.isZero() && !isSameSign(oldNet, newNet);
 
-  let tradeId: Bytes;
+  let id: Bytes;
   if (flipped) {
-    tradeId = handleFlip(
+    id = handleFlip(
       user,
       pointer,
       leg,
@@ -223,7 +223,7 @@ function processUserMatch(
       sideIndex,
     );
   } else {
-    tradeId = handleNonFlip(
+    id = handleNonFlip(
       user,
       pointer,
       leg,
@@ -250,7 +250,7 @@ function processUserMatch(
   }
   user.save();
 
-  return tradeId;
+  return id;
 }
 
 // ============================================================================
@@ -521,11 +521,11 @@ function recordLeg(
   ctx: FillContext,
   legIndex: i32,
 ): Bytes {
-  const tradeId = tradeAggregateId(ctx.txHash, changetype<Address>(user.id), session.id);
-  let trade = Trade.load(tradeId);
+  const id = tradeId(ctx.txHash, changetype<Address>(user.id), session.id);
+  let trade = Trade.load(id);
   const isNewTrade = trade == null;
   if (!trade) {
-    trade = new Trade(tradeId);
+    trade = new Trade(id);
     trade.user = user.id;
     trade.positionSession = session.id;
     trade.expirationAt = expirationAt;
@@ -546,7 +546,7 @@ function recordLeg(
   if (leg) {
     const matched = leg as MatchLeg;
     const fill = new Fill(fillId(ctx.txHash, ctx.logIndex, legIndex));
-    fill.trade = tradeId;
+    fill.trade = id;
     fill.side = matched.side;
     fill.user = user.id;
     fill.counterparty = matched.counterpartyId;
@@ -591,5 +591,5 @@ function recordLeg(
     user.tradeCount++;
   }
 
-  return tradeId;
+  return id;
 }

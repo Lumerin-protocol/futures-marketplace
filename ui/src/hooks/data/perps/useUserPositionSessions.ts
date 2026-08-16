@@ -42,13 +42,13 @@ const fetchUserPositionSessionsAsync = async (
       id: session.id,
       lastTradeAt: session.lastTradeAt,
       maxQuantity: BigInt(session.maxQuantity),
+      netQuantity: BigInt(session.netQuantity),
       openedAt: session.openedAt,
       realizedPnl: BigInt(session.realizedPnl),
       status: session.status,
       tradingFees: BigInt(session.tradingFees),
       user: {
         id: session.user.id,
-        netQuantity: BigInt(session.user.netQuantity),
       },
       trades: session.trades.map((trade) => ({
         aggregatedEntryPriceAfter: BigInt(trade.aggregatedEntryPriceAfter),
@@ -81,13 +81,14 @@ export type PositionSession = {
   id: string;
   lastTradeAt: string;
   maxQuantity: bigint;
+  /// Signed net quantity for this session: live while OPEN, zero once CLOSE.
+  netQuantity: bigint;
   openedAt: string;
   realizedPnl: bigint;
   status: string;
   tradingFees: bigint;
   user: {
     id: string;
-    netQuantity: bigint;
   };
   trades: Trade[];
 };
@@ -115,13 +116,13 @@ type UserPositionSessionsResponse = {
     id: string;
     lastTradeAt: string;
     maxQuantity: string;
+    netQuantity: string;
     openedAt: string;
     realizedPnl: string;
     status: string;
     tradingFees: string;
     user: {
       id: string;
-      netQuantity: string;
     };
     trades: {
       aggregatedEntryPriceAfter: string;

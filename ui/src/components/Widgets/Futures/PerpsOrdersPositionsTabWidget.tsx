@@ -706,8 +706,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, liqPric
           </thead>
           <tbody>
             {openPositions.map((session) => {
-              // For status OPEN, use netQuantity from user object
-              const displayQuantity = session.user.netQuantity;
+              const displayQuantity = session.netQuantity;
               const isLong = displayQuantity > 0n || (displayQuantity === 0n && session.maxQuantity > 0n);
               const realizedPnlValue = Number(session.realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
               const unrealizedPnl = calculateUnrealizedPnL(session.entryPrice, displayQuantity);

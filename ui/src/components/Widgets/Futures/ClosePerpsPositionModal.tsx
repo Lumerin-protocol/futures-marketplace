@@ -60,7 +60,7 @@ export const ClosePerpsPositionModal = ({
   const queryClient = useQueryClient();
   const publicClient = usePublicClient();
 
-  const netQty = session?.user.netQuantity ?? 0n;
+  const netQty = session?.netQuantity ?? 0n;
   const isLong = netQty > 0n;
   const absNetQty = netQty < 0n ? -netQty : netQty;
   const maxQuantity = Number(absNetQty) / PAYMENT_TOKEN_SCALE_NUM;
