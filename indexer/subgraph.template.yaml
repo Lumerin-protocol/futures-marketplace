@@ -25,12 +25,12 @@ dataSources:
         - Futures
         - User
         - Order
-        - OrderEntry
         - Trade
         - Fill
         - PositionSession
         - PriceLevel
-        - Liquidation
+        - FuturesExpiration
+        - LiquidationTx
         - BadDebtEvent
         - UserDeliverySessionPointer
       abis:

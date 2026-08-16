@@ -29,6 +29,9 @@ export function getOrCreateFutures(): Futures {
     futures.expirationIntervalDays = 0;
     futures.futureExpirationDatesCount = 0;
     futures.firstFutureExpirationDate = BigInt.zero();
+    // Contracts are indivisible whole units, so there is no on-chain getter to
+    // read: the constant is 0 by construction (perps reads 6 off the contract).
+    futures.quantityDecimals = 0;
     futures.collectedFeesBalance = BigInt.zero();
     futures.totalUsers = 0;
     futures.totalOrders = 0;
@@ -147,7 +150,8 @@ export function getOrCreatePriceLevel(
     level.expiration = getOrCreateFuturesExpiration(expirationAt).id;
     level.price = price;
     level.isBid = isBid;
-    level.totalQuantity = 0;
+    level.totalQuantity = BigInt.zero();
+    level.orderCount = 0;
   }
   return level;
 }
@@ -177,7 +181,7 @@ export function getOrCreatePointer(
     pointer = new UserDeliverySessionPointer(id);
     pointer.user = user;
     pointer.expirationAt = expirationAt;
-    pointer.netQuantity = 0;
+    pointer.netQuantity = BigInt.zero();
     pointer.aggregatedEntryPrice = BigInt.zero();
     pointer.currentSessionId = "";
     pointer.lastClosedSessionId = "";

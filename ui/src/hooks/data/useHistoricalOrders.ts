@@ -15,11 +15,9 @@ export type HistoricalOrder = {
   originalQuantity: number;
   filledQuantity: number;
   cancelledQuantity: number;
-  /// True if any unit (OrderEntry) of this aggregate order was force-cancelled
-  /// by liquidation. The aggregate `status` can't express this (no LIQUIDATED
-  /// state), so it's derived from the order's LIQUIDATED entries.
+  /// True when a keeper force-cancelled the order (status LIQUIDATED).
   wasLiquidated: boolean;
-  /// Count of liquidated units within this aggregate order.
+  /// Contracts that left the book on the force-cancel.
   liquidatedQuantity: number;
   participant: {
     address: `0x${string}`;
@@ -44,11 +42,8 @@ type RawOrder = {
   status: string;
   transactionHash: `0x${string}`;
   updatedAt: string;
-  liquidatedEntries: {
-    id: string;
-    liquidator: string | null;
-    liquidationFee: string | null;
-  }[];
+  liquidator: string | null;
+  liquidationFee: string | null;
 };
 
 type HistoricalOrdersResponse = {
@@ -62,15 +57,15 @@ const mapOrder = (order: RawOrder): HistoricalOrder => ({
   pricePerDay: BigInt(order.price),
   isBuy: order.isBuy,
   // Anything coming back from this query is in a terminal state (FILLED,
-  // PARTIALLY_FILLED, or CANCELLED) — never active.
+  // CANCELLED, LIQUIDATED, or EXPIRED) — never active.
   isActive: false,
   status: order.status,
   closedAt: order.closedAt,
   originalQuantity: order.originalQuantity,
   filledQuantity: order.filledQuantity,
   cancelledQuantity: order.cancelledQuantity,
-  wasLiquidated: order.liquidatedEntries.length > 0,
-  liquidatedQuantity: order.liquidatedEntries.length,
+  wasLiquidated: order.status === "LIQUIDATED",
+  liquidatedQuantity: order.status === "LIQUIDATED" ? order.cancelledQuantity : 0,
   participant: {
     address: order.user.id as `0x${string}`,
   },

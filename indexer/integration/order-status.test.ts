@@ -1,7 +1,7 @@
 /**
- * Integration tests: under-exercised `OrderEntryStatus` transitions.
+ * Integration tests: under-exercised terminal `OrderStatus` transitions.
  *
- * The order-lifecycle suite covers the common ACTIVE → MATCHED / CANCELLED
+ * The order-lifecycle suite covers the common ACTIVE → FILLED / CANCELLED
  * paths. This file pins down the rarer terminal states the indexer must
  * still map correctly:
  *   - EXPIRED:    after `expirationAt`, anyone can permissionlessly call
@@ -22,10 +22,10 @@ import { TimeInForce } from "../../contracts/tests/timeInForce.ts";
 const conn = await network.create({ override: { loggingEnabled: true } });
 const { matchstick } = conn;
 
-describe("OrderEntryStatus.EXPIRED: removeOutdatedOrders", () => {
+describe("OrderStatus.EXPIRED: removeOutdatedOrders", () => {
   after(() => matchstick.reset());
 
-  it("closes a stale resting order and flips OrderEntry.status to EXPIRED", async () => {
+  it("closes a stale resting order and flips Order.status to EXPIRED", async () => {
     const { contracts, accounts, config } = await conn.networkHelpers.loadFixture(
       deployFuturesFixture,
     );
@@ -71,36 +71,26 @@ describe("OrderEntryStatus.EXPIRED: removeOutdatedOrders", () => {
     const sellerAddr = seller.account.address.toLowerCase() as `0x${string}`;
     const level = priceLevelId(deliveryDate, price, false);
     const snap = await matchstick.indexSnapshot([
-      read("OrderEntry", restingOrderId),
+      read("Order", restingOrderId),
       read("PriceLevel", level),
       read("User", sellerAddr),
       read("Futures", "0"),
     ]);
 
-    const expiredEntry = snap.entity("OrderEntry", restingOrderId);
-    assert.ok(expiredEntry);
+    const expired = snap.entity("Order", restingOrderId);
+    assert.ok(expired, `Order ${restingOrderId} must exist`);
     // Handler maps OrderCancelled → EXPIRED when order.expirationAt < block.timestamp.
-    // matchstick-ts does not forward receipt timestamps onto mock events, so the
-    // harness always sees the default timestamp and lands on CANCELLED here.
-    // Production Graph Node stamps real block.timestamp → EXPIRED. Covered by
-    // the matchstick-as unit test in tests/order-closed.test.ts.
+    assert.equal(expired.status, "EXPIRED");
+    assert.equal(String(expired.cancelledQuantity), "1");
+    assert.equal(String(expired.quantity), "0");
     assert.ok(
-      expiredEntry.status === "EXPIRED" || expiredEntry.status === "CANCELLED",
-      `stale OrderCancelled must close the entry (got ${expiredEntry.status})`,
+      expired.closedAt != null && BigInt(String(expired.closedAt)) > 0n,
+      "Order.closedAt is set on stale close",
     );
-    assert.ok(
-      expiredEntry.closedAt != null && BigInt(String(expiredEntry.closedAt)) > 0n,
-      "OrderEntry.closedAt is set on stale close",
-    );
-    assertHexHash(expiredEntry.closedByTx, "OrderEntry.closedByTx after stale close");
-
-    const [order] = snap.saved("Order");
-    assert.ok(order);
-    assert.equal(order.status, "CANCELLED");
-    assert.equal(String(order.cancelledQuantity), "1");
-    assert.equal(String(order.quantity), "0");
+    assertHexHash(expired.closedByTx, "Order.closedByTx after stale close");
 
     assert.equal(String(snap.entity("PriceLevel", level)?.totalQuantity), "0");
+    assert.equal(String(snap.entity("PriceLevel", level)?.orderCount), "0");
 
     assert.equal(String(snap.entity("Futures", "0")?.activeOrders), "0");
     assert.equal(
@@ -111,10 +101,10 @@ describe("OrderEntryStatus.EXPIRED: removeOutdatedOrders", () => {
   });
 });
 
-describe("OrderEntryStatus.LIQUIDATED: liquidateOrders force-cancels resting orders", () => {
+describe("OrderStatus.LIQUIDATED: liquidateOrders force-cancels resting orders", () => {
   after(() => matchstick.reset());
 
-  it("flips a resting OrderEntry.status to LIQUIDATED via permissionless liquidateOrders", async () => {
+  it("flips a resting Order.status to LIQUIDATED via permissionless liquidateOrders", async () => {
     const { contracts, accounts, config } = await conn.networkHelpers.loadFixture(
       deployFuturesFixture,
     );
@@ -167,21 +157,26 @@ describe("OrderEntryStatus.LIQUIDATED: liquidateOrders force-cancels resting ord
     );
     assert.ok(liquidatedEvent, "the resting order must be liquidated during liquidateOrders");
 
-    const snap = await matchstick.indexSnapshot([read("OrderEntry", restingOrderId)]);
-    const liqEntry = snap.entity("OrderEntry", restingOrderId);
-    assert.ok(liqEntry);
+    const snap = await matchstick.indexSnapshot([read("Order", restingOrderId)]);
+    const liquidated = snap.entity("Order", restingOrderId);
+    assert.ok(liquidated, `Order ${restingOrderId} must exist`);
     assert.equal(
-      liqEntry.status,
+      liquidated.status,
       "LIQUIDATED",
-      "OrderEntry must map OrderLiquidated to status=LIQUIDATED",
+      "Order must map OrderLiquidated to status=LIQUIDATED",
     );
     assert.equal(
-      String(liqEntry.liquidator).toLowerCase(),
+      String(liquidated.quantity),
+      "0",
+      "a force-cancelled order leaves nothing resting",
+    );
+    assert.equal(
+      String(liquidated.liquidator).toLowerCase(),
       validator.account.address.toLowerCase(),
-      "OrderEntry.liquidator = OrderLiquidated.liquidator (validator EOA)",
+      "Order.liquidator = OrderLiquidated.liquidator (validator EOA)",
     );
     assert.equal(
-      String(liqEntry.liquidationFee),
+      String(liquidated.liquidationFee),
       "0",
       "Futures.liquidationFee defaults to 0 in fixture → OrderLiquidated.fee=0",
     );

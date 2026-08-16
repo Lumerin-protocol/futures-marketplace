@@ -226,7 +226,7 @@ export const HistoricalOrdersQuery = gql`
     orders(
       where: {
         user: $address
-        status_in: ["FILLED", "PARTIALLY_FILLED", "CANCELLED"]
+        status_in: ["FILLED", "CANCELLED", "LIQUIDATED", "EXPIRED"]
       }
       first: $first
       skip: $skip
@@ -250,14 +250,9 @@ export const HistoricalOrdersQuery = gql`
       status
       transactionHash
       updatedAt
-      # Liquidated units of this aggregate order. The aggregate Order.status has
-      # no LIQUIDATED state (it lands in CANCELLED/PARTIALLY_FILLED); liquidation
-      # lives on the per-unit OrderEntry, so detect it via these entries.
-      liquidatedEntries: entries(where: { status: LIQUIDATED }) {
-        id
-        liquidator
-        liquidationFee
-      }
+      # Populated only when a keeper force-cancelled the order (status LIQUIDATED).
+      liquidator
+      liquidationFee
     }
     _meta {
       block {

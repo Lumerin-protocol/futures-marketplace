@@ -3,7 +3,7 @@
  * keeper flow.
  *
  * Verifies that `PositionLiquidated` + `OrderLiquidated` populate the
- * PositionSession / OrderEntry entities, that `BadDebtEvent` is created when
+ * PositionSession / Order entities, that `BadDebtEvent` is created when
  * losses exceed coverage, and that `Futures.totalLiquidations` is incremented
  * once per tx via the `LiquidationTx` dedup sentinel (regardless of how many
  * legs the tx contained).
@@ -68,7 +68,6 @@ describe("liquidatePosition: PositionLiquidated, seller netQty=0", () => {
     assert.equal(positionLiquidated.args.expirationAt, deliveryDate);
 
     const sellerAddr = seller.account.address.toLowerCase() as `0x${string}`;
-    const buyerAddr = buyer.account.address.toLowerCase() as `0x${string}`;
     const validatorAddr = validator.account.address.toLowerCase() as `0x${string}`;
 
     const snap = await matchstick.indexSnapshot([

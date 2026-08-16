@@ -24,15 +24,21 @@ type Futures @entity(immutable: false) {
   expirationIntervalDays: Int!
   futureExpirationDatesCount: Int!
   firstFutureExpirationDate: BigInt!
+  "Contracts are whole units, so quantities carry no decimals. Mirrors Perps.quantityDecimals (6 there) so both markets expose the same scaling knob."
+  quantityDecimals: Int!
 
   # Pool balances
   collectedFeesBalance: BigInt!
 
   # Stats
   totalUsers: Int!
-  totalOrders: Int! # aggregate Order entities created
-  activeOrders: Int! # count of currently-ACTIVE OrderEntry units (per on-chain orderId), NOT Order aggregates
+  "Orders ever created; one per on-chain orderId."
+  totalOrders: Int!
+  "Orders currently resting in the book (status ACTIVE or PARTIALLY_FILLED)."
+  activeOrders: Int!
+  "Trade rows ever created. One per (tx, user, position session), so a two-sided match bumps it by 2 and a flip by 3."
   totalTrades: Int!
+  "Fill rows ever created. One per (OrderMatched, side); cash settlement and forced closes have no matched counterparty order and so no Fill."
   totalFills: Int!
   totalVolume: BigInt!
   totalLiquidations: Int!
@@ -74,13 +80,14 @@ type User @entity(immutable: false) {
   address: Bytes!
 
   # Stats
-  orderCount: Int! # aggregate Orders ever created
-  activeOrderCount: Int! # count of currently-ACTIVE OrderEntry units (per on-chain orderId), NOT Order aggregates
+  orderCount: Int!
+  "Orders currently resting in the book (status ACTIVE or PARTIALLY_FILLED)."
+  activeOrderCount: Int!
   tradeCount: Int!
   fillCount: Int!
   realizedPnl: BigInt!
 
-  "Transient: orderId of the user's most recent OrderCreated. Used to attribute taker fills on OrderMatched."
+  "Transient: orderId of the user's most recent OrderCreated. Used by the indexer to attribute taker-side fills (OrderMatched only carries makerOrderId). Not intended for client queries."
   lastCreatedOrderId: Bytes!
 
   # Relations
@@ -97,25 +104,36 @@ type User @entity(immutable: false) {
   lastActivityAt: BigInt!
 }
 
-# Aggregate of OrderCreated events for one (user, price, expirationAt, side) within a single tx.
-# In 3.0 one createOrder emits one OrderCreated with abs qty; same-price placements in one tx
-# still collapse into a single Order aggregate when they share the aggregate key.
+# One per on-chain orderId, so `id` is what cancelOrder / liquidateOrders take.
 type Order @entity(immutable: false) {
-  id: Bytes! # tx hash + user + price + expirationAt + side
+  id: Bytes! # on-chain orderId
   user: User!
   price: BigInt!
   expirationAt: BigInt!
   "Expiration metadata for `expirationAt` (settlement price, etc.). Nullable, backward-compatible add-on."
   expiration: FuturesExpiration
-  isBuy: Boolean!
-
+  isBuy: Boolean! # true = long/buy, false = short/sell
   # Counts (contracts)
-  quantity: Int! # ACTIVE remaining contracts
-  originalQuantity: Int! # initial qty across all entries
-  filledQuantity: Int! # contracts that became fills
-  cancelledQuantity: Int! # contracts closed without matching
+  "Remaining open contracts resting in the book; zero once terminal."
+  quantity: BigInt!
+  "Contracts requested by the OrderCreated event that opened this order."
+  originalQuantity: BigInt!
+  "Contracts that became fills."
+  filledQuantity: BigInt!
+  "Contracts that left the book without matching (amend shrink, cancel, expiry, liquidation)."
+  cancelledQuantity: BigInt!
+  "Volume-weighted average price across all fills against this order. Zero if no fills."
+  averageFillPrice: BigInt!
   status: OrderStatus!
-  entries: [OrderEntry!]! @derivedFrom(field: "order")
+  "EOA that sent the tx where this order closed (tx.from). NOT necessarily the participant — for liquidations it's the keeper, for expiry it's whoever called removeOutdatedOrders. Use `liquidator` for semantic close attribution."
+  closedByTx: Bytes
+  "Keeper that force-cancelled this order; populated only when status = LIQUIDATED (from the paired OrderLiquidated event)."
+  liquidator: Bytes
+  "Fee paid by the order's participant to `liquidator`; populated only when status = LIQUIDATED."
+  liquidationFee: BigInt
+
+  # Relations
+  fills: [Fill!]! @derivedFrom(field: "order")
 
   # Metadata
   createdAt: BigInt!
@@ -126,47 +144,24 @@ type Order @entity(immutable: false) {
 }
 
 enum OrderStatus {
-  "Still ACTIVE entries left; no terminal events yet."
+  "Resting with no fills yet."
   ACTIVE
-  "Non-terminal: still has ACTIVE entries plus at least one filled or cancelled."
-  PARTIAL
-  "Terminal: every entry matched."
-  FILLED
-  "Terminal: at least one entry matched AND at least one was cancelled."
+  "Resting with at least one fill; still has remaining quantity."
   PARTIALLY_FILLED
-  "Terminal: every entry cancelled (no fills)."
+  "Terminal: left the book fully matched."
+  FILLED
+  "Terminal: left the book unmatched (cancel, amend-to-zero, or self-cross)."
   CANCELLED
-}
-
-# One per on-chain orderId (qty-bearing resting placement).
-type OrderEntry @entity(immutable: false) {
-  id: Bytes! # on-chain orderId
-  order: Order!
-  "Remaining open contracts on this resting order."
-  remainingQuantity: Int!
-  status: OrderEntryStatus!
-  closedAt: BigInt
-  "EOA that sent the tx where this entry closed (tx.from). NOT necessarily the participant — for liquidations it's the keeper, for expiry it's whoever called removeOutdatedOrder. Use `liquidator` for semantic close attribution."
-  closedByTx: Bytes
-  "Keeper that triggered the close, populated only when status = LIQUIDATED (from the paired OrderLiquidated event)."
-  liquidator: Bytes
-  "Fee paid by the order's participant to `liquidator`; populated only when status = LIQUIDATED."
-  liquidationFee: BigInt
-}
-
-enum OrderEntryStatus {
-  ACTIVE
-  MATCHED
-  CANCELLED
-  EXPIRED
+  "Terminal: force-cancelled by a keeper via liquidateOrders."
   LIQUIDATED
-  RESET
+  "Terminal, futures-only: swept by removeOutdatedOrders after `expirationAt` passed."
+  EXPIRED
 }
 
-# Aggregate of all fills (across counterparties) in a single tx for one user.
-# Mirrors perps' Trade entity.
+# Aggregate of all fills (across counterparties) in a single tx for one user and
+# PositionSession. Mirrors perps' Trade entity.
 type Trade @entity(immutable: false) {
-  id: Bytes! # tx hash + user address
+  id: Bytes! # tx hash + user + positionSession id
   user: User!
   positionSession: PositionSession!
   expirationAt: BigInt!
@@ -174,10 +169,11 @@ type Trade @entity(immutable: false) {
   expiration: FuturesExpiration
 
   tradePrice: BigInt! # qty-weighted average fill price
-  tradeQuantity: Int! # signed sum of fill quantities
+  tradeQuantity: BigInt! # signed sum of fill quantities
   tradingFee: BigInt!
   realizedPnl: BigInt!
-  netQuantityAfter: Int!
+  netQuantityAfter: BigInt!
+  aggregatedEntryPriceAfter: BigInt!
   fillCount: Int!
 
   "True when this Trade was a forced liquidation against the market."
@@ -195,23 +191,38 @@ type Trade @entity(immutable: false) {
   transactionHash: Bytes!
 }
 
-# Aggregate of OrderMatched (or exit) legs with the same (tx, user, counterparty, session).
-type Fill @entity(immutable: false) {
-  id: Bytes! # tx hash + user + counterparty + sessionId
+# One per user per OrderMatched leg. Individual execution against a counterparty.
+# Cash-settlement and liquidation exits have no matched counterparty order, so
+# they produce a Trade but no Fill.
+type Fill @entity(immutable: true) {
+  id: Bytes! # tx hash + log index + leg suffix
   trade: Trade!
+  "Whether `user` was the maker (resting order) or the taker (incoming order) in this match."
+  side: FillSide!
   user: User!
   counterparty: User!
+  "The user's own order in this match (taker order when `side` is TAKER, maker order when `side` is MAKER)."
+  order: Order!
+  "The counterparty's order in this match. The resting/maker order when `side` is TAKER; the incoming/taker order when `side` is MAKER."
+  counterpartyOrder: Order!
   positionSession: PositionSession!
   expirationAt: BigInt!
 
-  fillPrice: BigInt! # qty-weighted average fill price
-  fillQuantity: Int! # signed sum for this user (+buy / -sell)
-  netQuantityAfter: Int! # user's (expirationAt) net qty after this fill
-  realizedPnl: BigInt! # accumulated pnl on this fill aggregation
+  fillPrice: BigInt!
+  fillQuantity: BigInt! # signed: positive = bought/long, negative = sold/short
+  netQuantityAfter: BigInt! # user's (expirationAt) net qty after this fill
+  aggregatedEntryPriceAfter: BigInt!
+  realizedPnl: BigInt! # non-zero when this fill closed (full or partial) size
+  tradingFee: BigInt! # signed: positive = paid, negative = rebate
   # Metadata
   timestamp: BigInt!
   blockNumber: BigInt!
   transactionHash: Bytes!
+}
+
+enum FillSide {
+  MAKER
+  TAKER
 }
 
 # Open→close cycle for a (user, expirationAt) pair.
@@ -227,11 +238,11 @@ type PositionSession @entity(immutable: false) {
   entryPrice: BigInt! # qty-weighted average entry price
   closePrice: BigInt! # qty-weighted average exit price
   "Signed running net qty. Mirrors UserDeliverySessionPointer.netQuantity while OPEN; 0 once CLOSE."
-  netQuantity: Int!
-  maxQuantity: Int! # max absolute qty reached during the session
-  closedQuantity: Int! # cumulative qty closed
+  netQuantity: BigInt!
+  maxQuantity: BigInt! # max absolute qty reached during the session
+  closedQuantity: BigInt! # cumulative qty closed
   "Cumulative absolute quantity closed via liquidation in this session (default 0). 'Was liquidated' = liquidatedQuantity > 0."
-  liquidatedQuantity: Int! # default 0
+  liquidatedQuantity: BigInt! # default 0
   realizedPnl: BigInt!
   tradingFees: BigInt!
 
@@ -274,7 +285,8 @@ type PriceLevel @entity(immutable: false) {
   expiration: FuturesExpiration
   price: BigInt!
   isBid: Boolean!
-  totalQuantity: Int! # sum of ACTIVE OrderEntry remaining contracts at this level
+  totalQuantity: BigInt! # sum of remaining contracts across resting orders at this level
+  orderCount: Int! # resting orders at this level
 }
 
 # Internal indexer lookup: tracks the open PositionSession + running net qty / entry price
@@ -283,7 +295,7 @@ type UserDeliverySessionPointer @entity(immutable: false) {
   id: Bytes! # user address ++ expirationAt encoded
   user: User!
   expirationAt: BigInt!
-  netQuantity: Int! # signed running net qty
+  netQuantity: BigInt! # signed running net qty
   aggregatedEntryPrice: BigInt!
   "ID of the currently-OPEN PositionSession for this (user, expirationAt). Empty string when flat."
   currentSessionId: String!
