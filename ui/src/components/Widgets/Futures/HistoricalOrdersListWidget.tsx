@@ -30,8 +30,6 @@ export const HistoricalOrdersListWidget = ({
     switch (status) {
       case "ACTIVE":
         return "Active";
-      case "PARTIAL":
-        return "Partial";
       case "FILLED":
         return "Filled";
       case "PARTIALLY_FILLED":
@@ -40,6 +38,8 @@ export const HistoricalOrdersListWidget = ({
         return "Cancelled";
       case "LIQUIDATED":
         return "Liquidated";
+      case "EXPIRED":
+        return "Expired";
       default:
         return status;
     }
@@ -49,16 +49,16 @@ export const HistoricalOrdersListWidget = ({
     switch (status) {
       case "ACTIVE":
         return tokens.trading.long;
-      case "PARTIAL":
-        return tokens.trading.warning;
       case "FILLED":
         return tokens.text.muted;
       case "PARTIALLY_FILLED":
-        return tokens.text.muted;
+        return tokens.trading.warning;
       case "CANCELLED":
         return tokens.trading.short;
       case "LIQUIDATED":
         return tokens.status.error;
+      case "EXPIRED":
+        return tokens.text.muted;
       default:
         return tokens.text.muted;
     }

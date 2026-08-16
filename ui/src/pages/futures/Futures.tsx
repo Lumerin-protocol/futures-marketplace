@@ -100,7 +100,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // here and gate the perps positions/orders polling cadence (15s while open, 60s
   // baseline for positions otherwise).
   const perpsOpenOrdersQuery = useUserPerpsOrders(address, {
-    statuses: ["ACTIVE", "PARTIAL"],
+    statuses: ["ACTIVE", "PARTIALLY_FILLED"],
     refetch: hasOpenPerpsOrders,
   });
   useEffect(() => {
@@ -110,7 +110,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     const orders = perpsOpenOrdersQuery.data?.data?.orders ?? [];
     const openCount = orders.filter(
       (order) =>
-        (order.status === "ACTIVE" || order.status === "PARTIAL") &&
+        (order.status === "ACTIVE" || order.status === "PARTIALLY_FILLED") &&
         order.filledQuantity !== order.originalQuantity,
     ).length;
     setHasOpenPerpsOrders(openCount > 0);

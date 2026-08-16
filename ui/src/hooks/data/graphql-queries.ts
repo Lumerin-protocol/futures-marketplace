@@ -309,8 +309,8 @@ export const AggregatedBtcPriceIndexQuery = gql`
 `;
 
 // Per-user futures Trades, mirroring the perps `UserTradesQuery` shape.
-// The futures Trade entity has no `aggregatedEntryPriceAfter` (perps-only)
-// but does carry `expirationAt` and `fillCount` (futures-only).
+// The futures Trade entity additionally carries `expirationAt`, which the perps
+// one has no equivalent for.
 export const UserFuturesTradesQuery = gql`
   query UserFuturesTrades($address: ID!, $first: Int!, $skip: Int!) {
     trades(

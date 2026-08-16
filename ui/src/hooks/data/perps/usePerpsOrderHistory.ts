@@ -29,9 +29,10 @@ type Response = {
   orders: RawOrder[];
 };
 
-/// Paginated ("Load More") view of a user's non-active Perps orders (Order
+/// Paginated ("Load More") view of a user's terminal Perps orders (Order
 /// History). The open Orders tab keeps using `useUserPerpsOrders` with the
-/// ACTIVE/PARTIAL status filter.
+/// ACTIVE/PARTIALLY_FILLED status filter, so both resting statuses are excluded
+/// here — a partially filled order is still on the book, not history.
 export const usePerpsOrderHistory = (
   address: `0x${string}` | undefined,
   enabled: boolean = true,
@@ -39,7 +40,7 @@ export const usePerpsOrderHistory = (
   return usePaginatedHistory<Response, PerpsOrder>({
     queryKey: [PERPS_ORDER_HISTORY_QK, address],
     query: UserPerpsOrdersExcludeStatusQuery,
-    variables: { address, statuses: ["ACTIVE"] },
+    variables: { address, statuses: ["ACTIVE", "PARTIALLY_FILLED"] },
     subgraphUrl: process.env.REACT_APP_SUBGRAPH_PERPS_URL,
     selectRows: (response) => response.orders,
     mapRow: (order) => ({
