@@ -139,9 +139,9 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
       // `amount` represents still-open units — what margin / modify / close
       // calculations need. Filled and original are summed separately for
       // the "filled / total" cell.
-      acc[key].amount += order.quantity;
-      acc[key].originalQuantity += order.originalQuantity;
-      acc[key].filledQuantity += order.filledQuantity;
+      acc[key].amount += Number(order.quantity);
+      acc[key].originalQuantity += Number(order.originalQuantity);
+      acc[key].filledQuantity += Number(order.filledQuantity);
       // One Order per on-chain orderId, so the grouped row cancels/modifies the
       // ids of every order it collapsed together.
       acc[key].orderIds.push(order.id);
@@ -168,73 +168,70 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
 
   const groupedOrdersArray = Object.values(groupedOrders);
 
-  if (isLoading) {
-    return (
-      <OrdersContainer>
-        <h3>Orders</h3>
-        <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.muted }}>
-          <p>Loading orders...</p>
-        </div>
-      </OrdersContainer>
-    );
-  }
-
   return (
     <OrdersContainer>
       <h3>Orders</h3>
 
-      <TableContainer>
-        <Table>
-          <thead>
-            <tr>
-              <th>Contract Expiration</th>
-              <th>Side</th>
-              <th>Price (USDC)</th>
-              <th>Filled / Quantity</th>
-              <th>Margin</th>
-              <th>Time</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {groupedOrdersArray.map((groupedOrder, index) => (
-              <TableRow key={`${groupedOrder.isBuy}-${groupedOrder.pricePerDay}-${groupedOrder.expirationAt}-${index}`}>
-                <td><DateTimeCell timestamp={groupedOrder.expirationAt} /></td>
-                <td>
-                  <TypeBadge $type={groupedOrder.isBuy ? "Long" : "Short"}>
-                    {groupedOrder.isBuy ? "Long" : "Short"}
-                  </TypeBadge>
-                </td>
-                <td>{formatPrice(groupedOrder.pricePerDay)}</td>
-                <td>{groupedOrder.filledQuantity} / {groupedOrder.originalQuantity}</td>
-                <td>
-                  {formatMargin(calculateMargin(groupedOrder.pricePerDay, groupedOrder.amount, groupedOrder.isBuy))}
-                </td>
-                <td><DateTimeCell timestamp={groupedOrder.timestamp} /></td>
-                <td>
-                  {groupedOrder.isActive && !groupedOrder.closedAt && (
-                    <ActionButtons>
-                      <ModifyButton
-                        onClick={() =>
-                          handleModifyOrder(groupedOrder.firstOrder, groupedOrder.orderIds, groupedOrder.amount)
-                        }
-                      >
-                        Modify
-                      </ModifyButton>
-                      <CloseButton onClick={() => handleCloseOrder(groupedOrder)}>Close</CloseButton>
-                    </ActionButtons>
-                  )}
-                </td>
-              </TableRow>
-            ))}
-          </tbody>
-        </Table>
-      </TableContainer>
+      {isLoading ? (
+        <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.muted }}>
+          <p>Loading orders...</p>
+        </div>
+      ) : (
+        <>
+          <TableContainer>
+            <Table>
+              <thead>
+                <tr>
+                  <th>Contract Expiration</th>
+                  <th>Side</th>
+                  <th>Price (USDC)</th>
+                  <th>Filled / Quantity</th>
+                  <th>Margin</th>
+                  <th>Time</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupedOrdersArray.map((groupedOrder, index) => (
+                  <TableRow key={`${groupedOrder.isBuy}-${groupedOrder.pricePerDay}-${groupedOrder.expirationAt}-${index}`}>
+                    <td><DateTimeCell timestamp={groupedOrder.expirationAt} /></td>
+                    <td>
+                      <TypeBadge $type={groupedOrder.isBuy ? "Long" : "Short"}>
+                        {groupedOrder.isBuy ? "Long" : "Short"}
+                      </TypeBadge>
+                    </td>
+                    <td>{formatPrice(groupedOrder.pricePerDay)}</td>
+                    <td>{groupedOrder.filledQuantity} / {groupedOrder.originalQuantity}</td>
+                    <td>
+                      {formatMargin(calculateMargin(groupedOrder.pricePerDay, groupedOrder.amount, groupedOrder.isBuy))}
+                    </td>
+                    <td><DateTimeCell timestamp={groupedOrder.timestamp} /></td>
+                    <td>
+                      {groupedOrder.isActive && !groupedOrder.closedAt && (
+                        <ActionButtons>
+                          <ModifyButton
+                            onClick={() =>
+                              handleModifyOrder(groupedOrder.firstOrder, groupedOrder.orderIds, groupedOrder.amount)
+                            }
+                          >
+                            Modify
+                          </ModifyButton>
+                          <CloseButton onClick={() => handleCloseOrder(groupedOrder)}>Close</CloseButton>
+                        </ActionButtons>
+                      )}
+                    </td>
+                  </TableRow>
+                ))}
+              </tbody>
+            </Table>
+          </TableContainer>
 
-      {groupedOrdersArray.length === 0 && (
-        <EmptyState>
-          <p>No orders found</p>
-        </EmptyState>
+          {groupedOrdersArray.length === 0 && (
+            <EmptyState>
+              <p>No orders found</p>
+            </EmptyState>
+          )}
+        </>
       )}
 
       {selectedOrder && (

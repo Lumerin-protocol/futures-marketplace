@@ -29,15 +29,15 @@ type RawOrder = {
     id: string;
   };
   blockNumber: string;
-  cancelledQuantity: number;
+  cancelledQuantity: string;
   closedAt: string | null;
   expirationAt: string;
   createdAt: string;
-  filledQuantity: number;
+  filledQuantity: string;
   id: string;
   isBuy: boolean;
-  originalQuantity: number;
-  quantity: number;
+  originalQuantity: string;
+  quantity: string;
   price: string;
   status: string;
   transactionHash: `0x${string}`;
@@ -61,11 +61,11 @@ const mapOrder = (order: RawOrder): HistoricalOrder => ({
   isActive: false,
   status: order.status,
   closedAt: order.closedAt,
-  originalQuantity: order.originalQuantity,
-  filledQuantity: order.filledQuantity,
-  cancelledQuantity: order.cancelledQuantity,
+  originalQuantity: Number(order.originalQuantity),
+  filledQuantity: Number(order.filledQuantity),
+  cancelledQuantity: Number(order.cancelledQuantity),
   wasLiquidated: order.status === "LIQUIDATED",
-  liquidatedQuantity: order.status === "LIQUIDATED" ? order.cancelledQuantity : 0,
+  liquidatedQuantity: order.status === "LIQUIDATED" ? Number(order.cancelledQuantity) : 0,
   participant: {
     address: order.user.id as `0x${string}`,
   },

@@ -10,6 +10,14 @@ import { TabSwitch } from "../../TabSwitch";
 import { useCancelPerpsOrder } from "../../../hooks/data/perps/useCancelPerpsOrder";
 import { useQueryClient } from "@tanstack/react-query";
 import { USER_PERPS_ORDERS_QK } from "../../../hooks/data/perps/useUserPerpsOrders";
+import { USER_POSITION_SESSIONS_QK } from "../../../hooks/data/perps/useUserPositionSessions";
+import { PERPS_ORDER_HISTORY_QK } from "../../../hooks/data/perps/usePerpsOrderHistory";
+import { PERPS_POSITION_HISTORY_QK } from "../../../hooks/data/perps/usePerpsPositionHistory";
+import { USER_TRADES_QK } from "../../../hooks/data/perps/useUserTrades";
+import { getOrderBookQueryKey, waitForOrderBookBlockNumber } from "../../../hooks/data/orderBookHelpers";
+import type { TransactionReceipt } from "viem";
+import { TransactionFormV2 as TransactionForm } from "../../Forms/Shared/MultistepForm";
+import { PerpsModalCard } from "./PerpsOrderFormFields";
 import type { PositionSession } from "../../../hooks/data/perps/useUserPositionSessions";
 import { useUserTrades } from "../../../hooks/data/perps/useUserTrades";
 import type { UserTrade } from "../../../hooks/data/perps/useUserTrades";
@@ -66,8 +74,7 @@ export const PerpsOrdersPositionsTabWidget = ({
   const [openOrdersVisibleCount, setOpenOrdersVisibleCount] = useState(10);
   const [closePositionSession, setClosePositionSession] = useState<PositionSession | null>(null);
   const [modifyOrder, setModifyOrder] = useState<PerpsOrder | null>(null);
-  const queryClient = useQueryClient();
-  const { cancelOrderAsync, isPending: isCancelling } = useCancelPerpsOrder();
+  const [cancelOrder, setCancelOrder] = useState<PerpsOrder | null>(null);
 
   // Paginated ("Load More") Order History — all non-ACTIVE perps orders.
   const orderHistoryQuery = usePerpsOrderHistory(participantAddress);
@@ -81,18 +88,10 @@ export const PerpsOrdersPositionsTabWidget = ({
     { refetch: activeTab === "TRADES" }
   );
 
-  // Handle cancel order
-  const handleCancelOrder = async (orderId: string) => {
-    try {
-      await cancelOrderAsync({ orderId: orderId as `0x${string}` });
-      // Invalidate open orders and reset the history tables to the newest page.
-      queryClient.invalidateQueries({ queryKey: [USER_PERPS_ORDERS_QK, participantAddress] });
-      orderHistoryQuery.refresh();
-      positionHistoryQuery.refresh();
-      tradesQuery.refresh();
-    } catch (error) {
-      console.error("Failed to cancel order:", error);
-    }
+  const refreshPerpsHistory = () => {
+    orderHistoryQuery.refresh();
+    positionHistoryQuery.refresh();
+    tradesQuery.refresh();
   };
 
   // Count perps orders still resting on the book, excluding fully filled
@@ -151,9 +150,8 @@ export const PerpsOrdersPositionsTabWidget = ({
             <PerpsOpenOrdersTable
               orders={perpsOpenOrders}
               isLoading={perpsOpenOrdersLoading}
-              onCancelOrder={handleCancelOrder}
               onModifyOrder={setModifyOrder}
-              isCancelling={isCancelling}
+              onCancelOrder={setCancelOrder}
               visibleCount={openOrdersVisibleCount}
               onLoadMore={() => setOpenOrdersVisibleCount(c => c + 10)}
             />
@@ -235,6 +233,17 @@ export const PerpsOrdersPositionsTabWidget = ({
           order={modifyOrder}
           marketPrice={marketPrice}
           participantAddress={participantAddress}
+          onConfirmed={refreshPerpsHistory}
+        />
+      )}
+
+      {cancelOrder && (
+        <CancelOrderConfirmModal
+          open
+          order={cancelOrder}
+          participantAddress={participantAddress}
+          onClose={() => setCancelOrder(null)}
+          onConfirmed={refreshPerpsHistory}
         />
       )}
     </TabContainer>
@@ -255,18 +264,20 @@ interface PerpsOpenOrdersTableProps {
     updatedAt: string;
   }>;
   isLoading?: boolean;
-  onCancelOrder: (orderId: string) => Promise<void>;
   onModifyOrder: (order: PerpsOrder) => void;
-  isCancelling: boolean;
+  onCancelOrder: (order: PerpsOrder) => void;
   visibleCount: number;
   onLoadMore: () => void;
 }
 
-type OpenOrder = PerpsOpenOrdersTableProps["orders"][number];
-
-const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder, isCancelling, visibleCount, onLoadMore }: PerpsOpenOrdersTableProps) => {
-  const [pendingCancelOrder, setPendingCancelOrder] = useState<OpenOrder | null>(null);
-
+const PerpsOpenOrdersTable = ({
+  orders,
+  isLoading,
+  onModifyOrder,
+  onCancelOrder,
+  visibleCount,
+  onLoadMore,
+}: PerpsOpenOrdersTableProps) => {
   const formatPrice = (price: bigint) => {
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
@@ -365,18 +376,8 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
               </td>
               <td>
                 <ActionButtons>
-                  <ModifyButton
-                    onClick={() => onModifyOrder(order as PerpsOrder)}
-                    disabled={isCancelling}
-                  >
-                    Modify
-                  </ModifyButton>
-                  <CancelButton 
-                    onClick={() => setPendingCancelOrder(order)}
-                    disabled={isCancelling}
-                  >
-                    Cancel
-                  </CancelButton>
+                  <ModifyButton onClick={() => onModifyOrder(order as PerpsOrder)}>Modify</ModifyButton>
+                  <CancelButton onClick={() => onCancelOrder(order as PerpsOrder)}>Cancel</CancelButton>
                 </ActionButtons>
               </td>
             </TableRow>
@@ -384,19 +385,6 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
         </tbody>
       </Table>
       <LoadMoreButton hasMore={visibleCount < activeOrders.length} onClick={onLoadMore} />
-
-      {pendingCancelOrder && (
-        <CancelOrderConfirmModal
-          open={true}
-          order={pendingCancelOrder}
-          onClose={() => setPendingCancelOrder(null)}
-          onConfirm={async () => {
-            await onCancelOrder(pendingCancelOrder.id);
-            setPendingCancelOrder(null);
-          }}
-          isCancelling={isCancelling}
-        />
-      )}
     </TableContainer>
   );
 };
@@ -404,59 +392,94 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
 // Cancel Order Confirmation Modal
 interface CancelOrderConfirmModalProps {
   open: boolean;
-  order: OpenOrder;
+  order: PerpsOrder;
+  participantAddress?: `0x${string}`;
   onClose: () => void;
-  onConfirm: () => Promise<void>;
-  isCancelling: boolean;
+  onConfirmed?: () => void | Promise<void>;
 }
 
-const CancelOrderConfirmModal = ({ open, order, onClose, onConfirm, isCancelling }: CancelOrderConfirmModalProps) => {
-  const formatPrice = (price: bigint) => (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+const CancelOrderConfirmModal = ({ open, order, participantAddress, onClose, onConfirmed }: CancelOrderConfirmModalProps) => {
+  const { cancelOrderAsync } = useCancelPerpsOrder();
+  const queryClient = useQueryClient();
 
-  const filledValue = ((Number(order.price) / PAYMENT_TOKEN_SCALE_NUM) * (Number(order.filledQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2);
-  const totalValue = ((Number(order.price) / PAYMENT_TOKEN_SCALE_NUM) * (Number(order.originalQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2);
+  const price = Number(order.price) / PAYMENT_TOKEN_SCALE_NUM;
+  const filledValue = (price * (Number(order.filledQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2);
+  const totalValue = (price * (Number(order.originalQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2);
+  const remainingQty = Number(order.originalQuantity - order.filledQuantity) / PAYMENT_TOKEN_SCALE_NUM;
 
   return (
     <Modal open={open} onClose={onClose}>
-      <CloseAllModalCard>
+      <PerpsModalCard>
         <IconButton className="close" sx={{ color: "white" }} onClick={onClose}>
           <CloseIcon />
         </IconButton>
 
-        <h2>Cancel Order</h2>
-
-        <CloseAllDescription>
-          Are you sure you want to cancel this order?
-        </CloseAllDescription>
-
-        <CloseAllSummary>
-          <SummaryRow>
-            <SummaryLabel>Side</SummaryLabel>
-            <SummaryValue>
-              <TypeBadge $type={order.isBuy ? "Long" : "Short"}>{order.isBuy ? "Long" : "Short"}</TypeBadge>
-            </SummaryValue>
-          </SummaryRow>
-          <SummaryRow>
-            <SummaryLabel>Price</SummaryLabel>
-            <SummaryValue>{formatPrice(order.price)} USDC</SummaryValue>
-          </SummaryRow>
-          <SummaryRow>
-            <SummaryLabel>Filled / Size (USDC)</SummaryLabel>
-            <SummaryValue>{filledValue} / {totalValue}</SummaryValue>
-          </SummaryRow>
-          <SummaryRow>
-            <SummaryLabel>Status</SummaryLabel>
-            <SummaryValue>{order.status === "PARTIALLY_FILLED" ? "Partially Filled" : "Active"}</SummaryValue>
-          </SummaryRow>
-        </CloseAllSummary>
-
-        <CloseAllActions>
-          <ModalCancelButton onClick={onClose}>Go Back</ModalCancelButton>
-          <ModalConfirmButton onClick={onConfirm} disabled={isCancelling}>
-            {isCancelling ? "Cancelling..." : "Confirm"}
-          </ModalConfirmButton>
-        </CloseAllActions>
-      </CloseAllModalCard>
+        <TransactionForm
+          onClose={onClose}
+          title="Cancel Order"
+          description=""
+          reviewForm={() => (
+            <>
+              <div className="mb-4">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Side:</span>
+                    <span className="text-white">{order.isBuy ? "Long" : "Short"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Price:</span>
+                    <span className="text-white">{price.toFixed(2)} USDC</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Filled / Size:</span>
+                    <span className="text-white">
+                      {filledValue} / {totalValue} USDC
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Quantity to Cancel:</span>
+                    <span className="text-white">{remainingQty.toFixed(6)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Status:</span>
+                    <span className="text-white">
+                      {order.status === "PARTIALLY_FILLED" ? "Partially Filled" : "Active"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <p className="text-gray-400 text-sm">You are about to cancel this order.</p>
+            </>
+          )}
+          resultForm={() => (
+            <p className="w-6/6 text-left font-normal text-s mt-5">
+              Your order has been cancelled and will disappear from the order book shortly.
+            </p>
+          )}
+          transactionSteps={[
+            {
+              label: "Cancel Order",
+              action: async () => {
+                const txhash = await cancelOrderAsync({ orderId: order.id as `0x${string}` });
+                if (!txhash) throw new Error("Wallet not ready. Please try again.");
+                return { txhash, isSkipped: false };
+              },
+              postConfirmation: async (receipt: TransactionReceipt) => {
+                await waitForOrderBookBlockNumber(receipt.blockNumber, queryClient, "perpetual");
+                await Promise.all([
+                  queryClient.invalidateQueries({ queryKey: [getOrderBookQueryKey("perpetual")] }),
+                  queryClient.invalidateQueries({ queryKey: [USER_PERPS_ORDERS_QK, participantAddress] }),
+                  queryClient.invalidateQueries({ queryKey: [USER_POSITION_SESSIONS_QK, participantAddress] }),
+                  queryClient.resetQueries({ queryKey: [PERPS_ORDER_HISTORY_QK, participantAddress] }),
+                  queryClient.resetQueries({ queryKey: [PERPS_POSITION_HISTORY_QK, participantAddress] }),
+                  queryClient.resetQueries({ queryKey: [USER_TRADES_QK, participantAddress] }),
+                ]);
+                if (onConfirmed) await onConfirmed();
+              },
+            },
+          ]}
+        />
+      </PerpsModalCard>
     </Modal>
   );
 };
@@ -1482,100 +1505,10 @@ const TradesTable = styled("table")`
   }
 `;
 
-const CloseAllModalCard = styled(ModalCard)`
-  max-width: 700px;
-
-  h2 {
-    font-size: 1.5rem;
-    font-weight: 500;
-    padding-bottom: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-`;
-
-const CloseAllDescription = styled("p")`
-  color: ${tokens.text.secondary};
-  font-size: 0.875rem;
-  margin: 0 0 1.25rem 0;
-`;
-
-const CloseAllSummary = styled("div")`
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem;
-  background: ${tokens.overlay.white05};
-  border-radius: 8px;
-  margin-bottom: 1.25rem;
-`;
-
-const SummaryRow = styled("div")`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-`;
-
-const SummaryLabel = styled("span")`
-  color: ${tokens.text.secondary};
-  font-size: 0.875rem;
-`;
-
-const SummaryValue = styled("span")`
-  color: ${tokens.text.onDark};
-  font-size: 0.875rem;
-  font-weight: 600;
-`;
-
 const _ErrorText = styled("p")`
   color: ${tokens.trading.short};
   font-size: 0.8125rem;
   margin: 0 0 1rem 0;
-`;
-
-const CloseAllActions = styled("div")`
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  margin-top: 1.25rem;
-`;
-
-const ModalCancelButton = styled("button")`
-  padding: 0.5rem 1rem;
-  background: transparent;
-  color: ${tokens.text.onDark};
-  border: 1px solid ${tokens.border.default};
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease;
-
-  &:hover {
-    background: ${tokens.overlay.white08};
-    border-color: ${tokens.text.secondary};
-  }
-`;
-
-const ModalConfirmButton = styled("button")`
-  padding: 0.5rem 1rem;
-  background: ${tokens.trading.short};
-  color: ${tokens.text.onDark};
-  border: none;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-
-  &:hover:not(:disabled) {
-    background: ${tokens.trading.shortHover};
-  }
-
-  &:disabled {
-    background: ${tokens.text.muted};
-    cursor: not-allowed;
-    opacity: 0.6;
-  }
 `;
 
 const _SimulatingText = styled("p")`

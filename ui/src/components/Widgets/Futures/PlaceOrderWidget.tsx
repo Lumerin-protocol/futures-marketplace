@@ -131,7 +131,9 @@ export const PlaceOrderWidget = ({
   const [price, setPrice] = useState("5.00"); // Will be updated when hashrate data loads
   const [priceInitialized, setPriceInitialized] = useState(false); // Track if price has been initialized from hashrate
   const [amount, setAmount] = useState<number | string>(5); // Can be number or string to support decimals in perpetuals
-  const [amountMode, setAmountMode] = useState<AmountMode>("size"); // "size" = USDC notional, "quantity" = raw contracts
+  const [amountMode, setAmountMode] = useState<AmountMode>(
+    contractMode === "perpetual" ? "size" : "quantity",
+  ); // "size" = USDC notional, "quantity" = raw contracts
   const [sliderValue, setSliderValue] = useState(0); // Slider value 0-100
   const [leverage, setLeverage] = useState(10); // Leverage multiplier (1x to 10x), default 10x
   const [highlightedButton, setHighlightedButton] = useState<"buy" | "sell" | "inputs" | null>(null);
@@ -171,9 +173,15 @@ export const PlaceOrderWidget = ({
 
   useEffect(() => {
     if (externalAmount !== undefined) {
+      // Close-position prefills whole contracts.
+      setAmountMode("quantity");
       setAmount(externalAmount);
     }
   }, [externalAmount]);
+
+  useEffect(() => {
+    setAmountMode(contractMode === "perpetual" ? "size" : "quantity");
+  }, [contractMode]);
 
   const handleOrderTypeChange = (type: "limit" | "market") => {
     setOrderType(type);
@@ -201,6 +209,7 @@ export const PlaceOrderWidget = ({
     minMargin,
     latestPrice,
     amount,
+    amountMode,
     contractMode,
   ]);
 
@@ -213,11 +222,13 @@ export const PlaceOrderWidget = ({
   // Returns the USDC notional size regardless of amountMode
   const getEffectiveSize = (): number => {
     const numAmt = getNumericAmount();
-    if (amountMode === "quantity" && contractMode === "perpetual") {
+    if (amountMode === "quantity") {
       return numAmt * (parseFloat(price) || 0);
     }
     return numAmt;
   };
+
+  const isFuturesIntegerQty = contractMode !== "perpetual" && amountMode === "quantity";
 
   // Switch between Size (USDC) and Quantity (raw contracts), converting the current amount
   const handleAmountModeChange = (mode: AmountMode) => {
@@ -227,8 +238,10 @@ export const PlaceOrderWidget = ({
     setAmountMode(mode);
     if (mode === "size") {
       setAmount((numAmt * priceNum).toFixed(2));
-    } else {
+    } else if (contractMode === "perpetual") {
       setAmount(priceNum > 0 ? (numAmt / priceNum).toFixed(6) : "0");
+    } else {
+      setAmount(priceNum > 0 ? String(Math.round(numAmt / priceNum)) : "0");
     }
   };
 
@@ -242,15 +255,16 @@ export const PlaceOrderWidget = ({
   // Calculate quantity from the current amount, respecting amountMode.
   // Size mode:     quantity = size / price
   // Quantity mode: quantity = value directly (no conversion needed)
+  // Futures contracts are whole units, so size→qty is rounded to the nearest integer.
   const calculateQuantityFromAmount = (value: number, priceValue: number): number => {
-    if (contractMode !== "perpetual" || priceValue <= 0) return value;
-    if (amountMode === "quantity") return value;
-    return value / priceValue;
+    const raw = amountMode === "quantity" || priceValue <= 0 ? value : value / priceValue;
+    if (contractMode !== "perpetual") return Math.round(raw);
+    return raw;
   };
 
-  // Calculate size (notional) from quantity for perps mode (reverse operation)
+  // Calculate size (notional) from quantity (reverse operation)
   const _calculateAmountFromQuantity = (quantityValue: number, priceValue: number): number => {
-    if (contractMode !== "perpetual" || priceValue <= 0) return quantityValue;
+    if (priceValue <= 0) return quantityValue;
     return quantityValue * priceValue;
   };
 
@@ -258,10 +272,7 @@ export const PlaceOrderWidget = ({
   const getExpectedQuantity = (): number => {
     const numericAmount = getNumericAmount();
     const currentPrice = parseFloat(price) || 0;
-    if (contractMode === "perpetual") {
-      return calculateQuantityFromAmount(numericAmount, currentPrice);
-    }
-    return numericAmount;
+    return calculateQuantityFromAmount(numericAmount, currentPrice);
   };
 
   // Calculate maximum available quantity based on current price
@@ -314,7 +325,7 @@ export const PlaceOrderWidget = ({
       }
     }
 
-    return maxQty;
+    return amountMode === "size" ? maxQty * currentPrice : maxQty;
   };
 
   // Highlight button when position is closed and values are substituted
@@ -367,7 +378,10 @@ export const PlaceOrderWidget = ({
       : 0;
   const simFuturesQuantity =
     simNeedsLiquidityCheck && contractMode === "futures" && simNumericAmount > 0
-      ? Math.round(simNumericAmount)
+      ? calculateQuantityFromAmount(
+          simNumericAmount,
+          orderType === "market" ? simMarketPriceDecimal : parseFloat(price) || simMarketPriceDecimal,
+        )
       : 0;
   // Slippage-adjusted sim prices mirror what getEffectivePrice() produces for each side.
   // Snap a bigint price (PAYMENT_TOKEN_SCALE units) to the nearest price-step boundary.
@@ -679,7 +693,7 @@ export const PlaceOrderWidget = ({
 
     const numericAmount = getNumericAmount();
     if (numericAmount <= 0) {
-      alert("Quantity must be greater than 0");
+      alert(amountMode === "size" ? "Size must be greater than 0" : "Quantity must be greater than 0");
       return;
     }
 
@@ -687,6 +701,11 @@ export const PlaceOrderWidget = ({
 
     // Validate balance for buy orders using getMinMarginForPositionManual
     const currentPrice = getEffectivePrice("buy");
+    const quantity = calculateQuantityFromAmount(numericAmount, currentPrice);
+    if (quantity <= 0) {
+      alert("Quantity must be at least 1 contract");
+      return;
+    }
     const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance = minMargin ?? 0n;
@@ -699,13 +718,13 @@ export const PlaceOrderWidget = ({
 
     const requiredMargin = getMinMarginForPositionManual(
       priceInWei,
-      numericAmount, // Positive quantity for Buy
+      quantity, // Positive quantity for Buy
       latestPrice,
       mmSpotShock,
     );
 
     // Reserve the worse of maker/taker fee — see comment on `useMakerTakerFees`.
-    const reservedFee = feeFor(priceInWei * BigInt(Math.ceil(numericAmount)));
+    const reservedFee = feeFor(priceInWei * BigInt(quantity));
     const totalRequired = requiredMargin + reservedFee;
 
     if (totalRequired > availableBalance) {
@@ -740,7 +759,7 @@ export const PlaceOrderWidget = ({
         setPendingOrder({
           price: currentPrice,
           amount: numericAmount,
-          quantity: numericAmount, // Positive for Buy
+          quantity: quantity, // Positive for Buy
         });
         setShowConflictModal(true);
         return;
@@ -754,14 +773,14 @@ export const PlaceOrderWidget = ({
         setPendingOrder({
           price: currentPrice,
           amount: numericAmount,
-          quantity: numericAmount, // Positive for Buy
+          quantity: quantity, // Positive for Buy
         });
         setShowHighPriceModal(true);
         return;
       }
     }
 
-    openOrderForm(currentPrice, numericAmount, numericAmount); // Positive quantity for Buy
+    openOrderForm(currentPrice, numericAmount, quantity); // Positive quantity for Buy
   };
 
   // Futures mode sell handler - uses quantity directly
@@ -773,7 +792,7 @@ export const PlaceOrderWidget = ({
 
     const numericAmount = getNumericAmount();
     if (numericAmount <= 0) {
-      alert("Quantity must be greater than 0");
+      alert(amountMode === "size" ? "Size must be greater than 0" : "Quantity must be greater than 0");
       return;
     }
 
@@ -781,6 +800,11 @@ export const PlaceOrderWidget = ({
 
     // Validate balance for sell orders using getMinMarginForPositionManual
     const currentPrice = getEffectivePrice("sell");
+    const quantity = calculateQuantityFromAmount(numericAmount, currentPrice);
+    if (quantity <= 0) {
+      alert("Quantity must be at least 1 contract");
+      return;
+    }
     const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance = minMargin ?? 0n;
@@ -793,13 +817,13 @@ export const PlaceOrderWidget = ({
 
     const requiredMargin = getMinMarginForPositionManual(
       priceInWei,
-      -numericAmount, // Negative quantity for Sell
+      -quantity, // Negative quantity for Sell
       latestPrice,
       mmSpotShock,
     );
 
     // Reserve the worse of maker/taker fee — see comment on `useMakerTakerFees`.
-    const reservedFee = feeFor(priceInWei * BigInt(Math.ceil(numericAmount)));
+    const reservedFee = feeFor(priceInWei * BigInt(quantity));
     const totalRequired = requiredMargin + reservedFee;
 
     if (totalRequired > availableBalance) {
@@ -834,7 +858,7 @@ export const PlaceOrderWidget = ({
         setPendingOrder({
           price: currentPrice,
           amount: numericAmount,
-          quantity: -numericAmount, // Negative for Sell
+          quantity: -quantity, // Negative for Sell
         });
         setShowConflictModal(true);
         return;
@@ -848,14 +872,14 @@ export const PlaceOrderWidget = ({
         setPendingOrder({
           price: currentPrice,
           amount: numericAmount,
-          quantity: -numericAmount, // Negative for Sell
+          quantity: -quantity, // Negative for Sell
         });
         setShowHighPriceModal(true);
         return;
       }
     }
 
-    openOrderForm(currentPrice, numericAmount, -numericAmount); // Negative quantity for Sell
+    openOrderForm(currentPrice, numericAmount, -quantity); // Negative quantity for Sell
   };
 
 
@@ -895,6 +919,36 @@ export const PlaceOrderWidget = ({
     setConflictingOrderQuantity(null);
     setBypassConflictCheck(false);
   };
+
+  const previewQuantity = getExpectedQuantity();
+  const previewPrice = getEffectivePrice();
+  const futuresRequiredMargin =
+    contractMode !== "perpetual" &&
+    latestPrice &&
+    mmSpotShock !== undefined &&
+    previewQuantity > 0 &&
+    previewPrice > 0
+      ? getMinMarginForPositionManual(
+          BigInt(Math.round(previewPrice * PAYMENT_TOKEN_SCALE_NUM)),
+          previewQuantity,
+          latestPrice,
+          mmSpotShock,
+        )
+      : null;
+  const requiredMarginLabel =
+    contractMode === "perpetual"
+      ? `${(getEffectiveSize() / leverage).toFixed(2)} USDC`
+      : futuresRequiredMargin !== null
+        ? `${(Math.abs(Number(futuresRequiredMargin)) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} USDC`
+        : "—";
+  // Show the converted counterpart of the input: Size mode → Quantity, Quantity mode → Size.
+  const summaryCounterpartLabel = amountMode === "size" ? "Quantity" : "Size";
+  const summaryCounterpartValue =
+    amountMode === "size"
+      ? contractMode === "perpetual"
+        ? previewQuantity.toFixed(6)
+        : String(previewQuantity)
+      : `${getEffectiveSize().toFixed(2)} USDC`;
 
   return (
     <>
@@ -1004,49 +1058,54 @@ export const PlaceOrderWidget = ({
                     +
                   </PriceButton>
                 </PriceInputContainer>
+                {contractMode !== "perpetual" && (
+                  <PriceHint>
+                    <span>ⓘ</span> Orders are matched only at the exact same price. Unmatched orders remain open in the
+                    order book.
+                  </PriceHint>
+                )}
               </InputGroup>
             )}
 
             <InputGroup $isHighlighted={highlightedButton !== null}>
               <label htmlFor={`${fieldId}-amount`}>
-                {contractMode === "perpetual" ? (amountMode === "size" ? "Size" : "Quantity") : "Quantity"}
+                {amountMode === "size" ? "Size" : "Quantity"}
               </label>
-              {contractMode === "perpetual" ? (
-                <AmountInputWrapper>
-                  <input
-                    id={`${fieldId}-amount`}
-                    type="text"
-                    value={amount}
-                    onChange={(e) => handleAmountChange(e.target.value.replace("-", ""))}
-                    onBeforeInput={handleNumericDecimalInput6Decimals}
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    min="0"
-                    disabled={showOrderForm}
-                  />
-                  <AmountModeDropdown
-                    value={amountMode}
-                    onChange={(e) => handleAmountModeChange(e.target.value as AmountMode)}
-                    disabled={showOrderForm}
-                  >
-                    <option value="size">Size</option>
-                    <option value="quantity">Quantity</option>
-                  </AmountModeDropdown>
-                </AmountInputWrapper>
-              ) : (
+              <AmountInputWrapper>
                 <input
                   id={`${fieldId}-amount`}
                   type="text"
                   value={amount}
                   onChange={(e) => {
-                    const digits = e.target.value.replace(/[^0-9]/g, "");
-                    handleAmountChange(digits === "" ? "" : Number(digits));
+                    const raw = e.target.value.replace("-", "");
+                    if (isFuturesIntegerQty) {
+                      const digits = raw.replace(/[^0-9]/g, "");
+                      handleAmountChange(digits === "" ? "" : Number(digits));
+                    } else {
+                      handleAmountChange(raw);
+                    }
                   }}
-                  onBeforeInput={handleNumericIntegerInput}
-                  inputMode="numeric"
-                  placeholder="1"
+                  onBeforeInput={
+                    isFuturesIntegerQty
+                      ? handleNumericIntegerInput
+                      : contractMode !== "perpetual"
+                        ? handleNumericDecimalInput
+                        : handleNumericDecimalInput6Decimals
+                  }
+                  inputMode={isFuturesIntegerQty ? "numeric" : "decimal"}
+                  placeholder={isFuturesIntegerQty ? "1" : "0.00"}
+                  min="0"
+                  disabled={showOrderForm}
                 />
-              )}
+                <AmountModeDropdown
+                  value={amountMode}
+                  onChange={(e) => handleAmountModeChange(e.target.value as AmountMode)}
+                  disabled={showOrderForm}
+                >
+                  <option value="size">Size</option>
+                  <option value="quantity">Quantity</option>
+                </AmountModeDropdown>
+              </AmountInputWrapper>
               {/* {contractMode === "perpetual" && getNumericAmount() > 0 && (
                 <ExpectedQuantityLabel>
                   Expected Quantity: {getExpectedQuantity().toFixed(6)}
@@ -1061,13 +1120,12 @@ export const PlaceOrderWidget = ({
                     
                     const maxQty = calculateMaxQuantity();
                     const newAmount = (maxQty * numValue) / 100;
-                    
-                    if (contractMode === "perpetual") {
+
+                    if (isFuturesIntegerQty) {
+                      setAmount(Math.floor(newAmount));
+                    } else {
                       const decimals = amountMode === "quantity" ? 6 : 2;
                       setAmount(newAmount > 0 ? newAmount.toFixed(decimals) : "0");
-                    } else {
-                      // Round to nearest integer for futures
-                      setAmount(Math.floor(newAmount));
                     }
                   }}
                   disabled={showOrderForm}
@@ -1109,15 +1167,15 @@ export const PlaceOrderWidget = ({
             </SellButton>
           </ButtonSection>
 
-          {contractMode === "perpetual" && getNumericAmount() > 0 && (
+          {getNumericAmount() > 0 && (
             <OrderSummary>
               <OrderSummaryRow>
                 <span>Required Margin</span>
-                <span>{(getEffectiveSize() / leverage).toFixed(2)} USDC</span>
+                <span>{requiredMarginLabel}</span>
               </OrderSummaryRow>
               <OrderSummaryRow>
-                <span>Quantity</span>
-                <span>{getExpectedQuantity().toFixed(6)}</span>
+                <span>{summaryCounterpartLabel}</span>
+                <span>{summaryCounterpartValue}</span>
               </OrderSummaryRow>
             </OrderSummary>
           )}
@@ -1314,7 +1372,10 @@ const ConflictingOrderModal = ({
         <p className="text-white-300 text-sm leading-relaxed">
           <strong>Important:</strong> Your order of{" "}
           <strong>
-            {contractMode === "perpetual" ? pendingOrder.amount.toFixed(6) : pendingOrder.amount} units
+            {contractMode === "perpetual"
+              ? Math.abs(pendingOrder.quantity).toFixed(6)
+              : Math.abs(pendingOrder.quantity)}{" "}
+            units
           </strong>{" "}
           will be placed as specified. However, it will be matched against your existing {oppositeAction} order and
           offset orders will be closed.
@@ -1356,7 +1417,7 @@ const HighPriceConfirmationModal = ({
   const expectedHashrate =
     contractSizeHpsDay !== undefined
       ? formatHashratePHPS(
-          (contractSizeHpsDay * BigInt(Math.round(pendingOrder.amount * QUANTITY_SCALE_NUM))) /
+          (contractSizeHpsDay * BigInt(Math.round(Math.abs(pendingOrder.quantity) * QUANTITY_SCALE_NUM))) /
             QUANTITY_SCALE,
         ).full
       : null;
@@ -1399,7 +1460,7 @@ const HighPriceConfirmationModal = ({
           <div className="flex justify-between">
             <span className="text-gray-300">Size:</span>
             <span className="text-white">
-              {(pendingOrder.price * pendingOrder.amount).toFixed(2)} USDC
+              {(pendingOrder.price * Math.abs(pendingOrder.quantity)).toFixed(2)} USDC
             </span>
           </div>
           {contractMode === "futures" && (
@@ -1484,7 +1545,10 @@ const InputGroup = styled("div")<{ $isHighlighted?: boolean }>`
   }
   
   input {
-    padding: 0.75rem;
+    box-sizing: border-box;
+    height: 48px;
+    padding: 0 0.75rem;
+    line-height: 1;
     border: 1px solid ${tokens.overlay.white20};
     border-radius: 6px;
     color: ${tokens.text.onDark};
@@ -1504,6 +1568,12 @@ const InputGroup = styled("div")<{ $isHighlighted?: boolean }>`
       color: ${tokens.text.muted};
     }
   }
+
+  @media (max-width: 768px) {
+    input {
+      height: auto;
+    }
+  }
 `;
 
 const _MinMarginLabel = styled("div")`
@@ -1511,6 +1581,20 @@ const _MinMarginLabel = styled("div")`
   color: ${tokens.text.secondary};
   margin-top: 0.25rem;
   text-align: center;
+`;
+
+const PriceHint = styled("div")`
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  color: ${tokens.text.secondary};
+  margin-top: 0.375rem;
+
+  span {
+    flex-shrink: 0;
+  }
 `;
 
 const _ExpectedQuantityLabel = styled("div")`
@@ -1524,16 +1608,14 @@ const _ExpectedQuantityLabel = styled("div")`
 
 const PriceInputContainer = styled("div")<{ $isHighlighted?: boolean }>`
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 0.5rem;
-
-  /* MOBILE-ONLY: let the steppers take the input's height instead of their own. */
-  @media (max-width: 768px) {
-    align-items: stretch;
-  }
+  height: 48px;
 
   input {
     flex: 1;
+    height: 100%;
+    min-width: 0;
     border-radius: 0;
     border-left: none;
     border-right: none;
@@ -1547,19 +1629,29 @@ const PriceInputContainer = styled("div")<{ $isHighlighted?: boolean }>`
       border-right: 1px solid ${tokens.accent.main};
     }
   }
+
+  /* MOBILE-ONLY: drop the fixed height so compact padding from the mobile
+     layout can size the row; steppers still stretch with align-items. */
+  @media (max-width: 768px) {
+    height: auto;
+  }
 `;
 
 const PriceButton = styled("button")<{ $isHighlighted?: boolean }>`
-  padding: 0.75rem 1rem;
+  box-sizing: border-box;
+  padding: 0 1rem;
   color: ${tokens.text.onDark};
   border: 1px solid ${tokens.overlay.white20};
   border-radius: 6px;
   font-size: 1.2rem;
   font-weight: 600;
+  line-height: 1;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
   min-width: 44px;
-  height: 48px;
+  min-height: 0;
+  height: auto;
+  align-self: stretch;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1864,6 +1956,8 @@ const _SliderInfo = styled("span")`
 const AmountInputWrapper = styled("div")`
   display: flex;
   align-items: stretch;
+  box-sizing: border-box;
+  height: 48px;
   border: 1px solid ${tokens.overlay.white20};
   border-radius: 6px;
   overflow: hidden;
@@ -1875,10 +1969,15 @@ const AmountInputWrapper = styled("div")`
     background: ${tokens.surface.inputIsland};
   }
 
+  @media (max-width: 768px) {
+    height: auto;
+  }
+
   /* Override InputGroup's generic input styles for the inner input */
   input {
     flex: 1 !important;
     width: auto !important;
+    height: 100% !important;
     border: none !important;
     border-radius: 0 !important;
     background: transparent !important;
