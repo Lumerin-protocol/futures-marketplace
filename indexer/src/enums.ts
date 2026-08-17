@@ -4,19 +4,16 @@
 
 export namespace OrderStatus {
   export const ACTIVE: string = "ACTIVE";
-  export const PARTIAL: string = "PARTIAL";
-  export const FILLED: string = "FILLED";
   export const PARTIALLY_FILLED: string = "PARTIALLY_FILLED";
+  export const FILLED: string = "FILLED";
   export const CANCELLED: string = "CANCELLED";
+  export const LIQUIDATED: string = "LIQUIDATED";
+  export const EXPIRED: string = "EXPIRED";
 }
 
-export namespace OrderEntryStatus {
-  export const ACTIVE: string = "ACTIVE";
-  export const MATCHED: string = "MATCHED";
-  export const CANCELLED: string = "CANCELLED";
-  export const EXPIRED: string = "EXPIRED";
-  export const LIQUIDATED: string = "LIQUIDATED";
-  export const RESET: string = "RESET";
+export namespace FillSide {
+  export const MAKER: string = "MAKER";
+  export const TAKER: string = "TAKER";
 }
 
 export namespace PositionSessionStatus {

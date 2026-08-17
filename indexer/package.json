@@ -39,17 +39,17 @@
     "assemblyscript": "^0.19.23",
     "futures-contracts": "link:../contracts",
     "hardhat": "^3.9.1",
-    "hardhat-matchstick-ts": "github:lsheva/matchstick-ts#6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad&path:packages/hardhat-matchstick-ts",
+    "hardhat-matchstick-ts": "github:lsheva/matchstick-ts#v0.4.2&path:packages/hardhat-matchstick-ts",
     "matchstick-as": "0.6.0",
-    "matchstick-ts": "github:lsheva/matchstick-ts#6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad&path:packages/matchstick-ts",
+    "matchstick-ts": "github:lsheva/matchstick-ts#v0.4.2&path:packages/matchstick-ts",
     "typescript": "^5.9.3",
     "yaml": "^2.5.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",
-      "matchstick-ts@https://codeload.github.com/lsheva/matchstick-ts/tar.gz/6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad#path:packages/matchstick-ts",
-      "hardhat-matchstick-ts@https://codeload.github.com/lsheva/matchstick-ts/tar.gz/6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad#path:packages/hardhat-matchstick-ts"
+      "matchstick-ts@https://codeload.github.com/lsheva/matchstick-ts/tar.gz/d613d674898f6d0d01a880dd4e1b514f707b93b9#path:packages/matchstick-ts",
+      "hardhat-matchstick-ts@https://codeload.github.com/lsheva/matchstick-ts/tar.gz/d613d674898f6d0d01a880dd4e1b514f707b93b9#path:packages/hardhat-matchstick-ts"
     ]
   }
 }

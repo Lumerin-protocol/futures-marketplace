@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
 import { getAddress, zeroAddress } from "viem";
+import { HashPowerFuturesAbi } from "../abi/HashPowerFutures.ts";
 import { deployFuturesFixture } from "./fixtures.ts";
 
 const { networkHelpers, viem } = await network.getOrCreate();
@@ -29,6 +30,60 @@ describe("Futures - Initialization", () => {
     const { futures } = contracts;
 
     assert.equal(await futures.read.MAX_ORACLE_STALENESS(), 3600n);
+  });
+
+  it("exposes version metadata in the runtime and generated ABI", async function () {
+    const { contracts } = await networkHelpers.loadFixture(deployFuturesFixture);
+
+    assert.equal(await contracts.futures.read.QUANTITY_DECIMALS(), 0);
+    assert.ok(
+      HashPowerFuturesAbi.some((item) => item.type === "function" && item.name === "VERSION"),
+    );
+    assert.ok(
+      HashPowerFuturesAbi.some(
+        (item) => item.type === "function" && item.name === "QUANTITY_DECIMALS",
+      ),
+    );
+  });
+
+  it("keeps the converged public ABI vocabulary", function () {
+    const functionOutputs = (name: string) => {
+      const item = HashPowerFuturesAbi.find(
+        (candidate) => candidate.type === "function" && candidate.name === name,
+      );
+      assert.ok(item && "outputs" in item, `missing function ${name}`);
+      return item.outputs.map((output) => output.name);
+    };
+
+    assert.deepEqual(functionOutputs("getOrderBookPrices"), ["bids", "asks"]);
+    assert.deepEqual(functionOutputs("getUserOrdersAtExpiration"), ["orderIds"]);
+    assert.deepEqual(functionOutputs("getOrderAggregateAtExpiration"), [""]);
+    assert.deepEqual(functionOutputs("getQuantityAtPrice"), [""]);
+    assert.deepEqual(functionOutputs("getRiskView"), ["view_"]);
+    assert.deepEqual(functionOutputs("getUnrealizedPnl"), [""]);
+
+    for (const name of ["InvalidQty", "InsufficientMarginBalance", "ValueOutOfRange"]) {
+      assert.ok(
+        HashPowerFuturesAbi.some((item) => item.type === "error" && item.name === name),
+        `missing error ${name}`,
+      );
+    }
+
+    const liquidation = HashPowerFuturesAbi.find(
+      (item) => item.type === "event" && item.name === "PositionLiquidated",
+    );
+    assert.ok(liquidation && "inputs" in liquidation);
+    assert.deepEqual(
+      liquidation.inputs.map(({ name, indexed }) => ({ name, indexed })),
+      [
+        { name: "user", indexed: true },
+        { name: "liquidator", indexed: true },
+        { name: "expirationAt", indexed: false },
+        { name: "closedQuantity", indexed: false },
+        { name: "pnl", indexed: false },
+        { name: "liquidatorFee", indexed: false },
+      ],
+    );
   });
 });
 

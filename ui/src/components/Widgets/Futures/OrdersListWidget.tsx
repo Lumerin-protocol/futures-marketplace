@@ -142,8 +142,9 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
       acc[key].amount += order.quantity;
       acc[key].originalQuantity += order.originalQuantity;
       acc[key].filledQuantity += order.filledQuantity;
-      // Futures cancel/modify need on-chain OrderEntry ids, not Order aggregate ids.
-      acc[key].orderIds.push(...order.entryIds);
+      // One Order per on-chain orderId, so the grouped row cancels/modifies the
+      // ids of every order it collapsed together.
+      acc[key].orderIds.push(order.id);
 
       return acc;
     },

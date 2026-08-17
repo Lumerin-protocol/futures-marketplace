@@ -1,11 +1,21 @@
 import { useReadContracts } from "wagmi";
-import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
+import { HashPowerFuturesAbi } from "futures-marketplace-abi/HashPowerFutures.ts";
 import { withErrors } from "../../lib/withErrors";
+
+const FUTURES_PER_DELIVERY_ORDER_LIMIT_ABI = [
+  {
+    type: "function",
+    name: "MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint8" }],
+  },
+] as const;
 
 /**
  * Hook to get additional futures contract constants
  * Fetches: futureExpirationDatesCount, expirationIntervalDays,
- *          MAX_ORDERS_PER_PARTICIPANT, makerFeeBps, takerFeeBps
+ *          MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION, makerFeeBps, takerFeeBps
  */
 export function useFuturesContractConstants() {
   const futuresAddress = process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`;
@@ -14,27 +24,27 @@ export function useFuturesContractConstants() {
     contracts: [
       {
         address: futuresAddress,
-        abi: withErrors(FuturesAbi),
+        abi: withErrors(HashPowerFuturesAbi),
         functionName: "futureExpirationDatesCount",
       },
       {
         address: futuresAddress,
-        abi: withErrors(FuturesAbi),
+        abi: withErrors(HashPowerFuturesAbi),
         functionName: "expirationIntervalDays",
       },
       {
         address: futuresAddress,
-        abi: withErrors(FuturesAbi),
-        functionName: "MAX_ORDERS_PER_PARTICIPANT",
+        abi: withErrors(FUTURES_PER_DELIVERY_ORDER_LIMIT_ABI),
+        functionName: "MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION",
       },
       {
         address: futuresAddress,
-        abi: withErrors(FuturesAbi),
+        abi: withErrors(HashPowerFuturesAbi),
         functionName: "makerFeeBps",
       },
       {
         address: futuresAddress,
-        abi: withErrors(FuturesAbi),
+        abi: withErrors(HashPowerFuturesAbi),
         functionName: "takerFeeBps",
       },
     ],

@@ -1,31 +1,32 @@
 # Futures contracts
 
-## Futures 4.1 order-cache migration
+## Futures 4.3 order-index cutover
 
-`upgrade:futures` only upgrades the implementation. After upgrading from a
-version before 4.1, immediately run:
+Futures 4.3 replaces the global per-participant order index with an index
+bounded independently for each delivery date. Pause order writers, run the
+normal `upgrade:futures`, then execute:
 
 ```sh
-pnpm rebuild:order-aggregate-cache --network <network>
+pnpm drop:active-orders --network <network>
 ```
 
-This is a deliberately non-atomic migration: existing orders have zero
-aggregate cache until the rebuild transactions complete.
+The script discovers every participant from the indexer (with an event-scan
+fallback) and calls `dropActiveOrders(users)` once. That owner-only operation
+cancels legacy orders at currently tradable delivery dates while preserving
+positions and expired historical orders. It estimates the complete transaction
+and aborts if it cannot fit the configured/block gas limit; it never silently
+splits the cutover.
 
-The rebuild script discovers order owners from `OrderCreated` RPC logs over the
-preceding 180 days and confirms candidates through nonempty on-chain
-`getUserOrders`; expired-but-not-removed orders remain included. Set
-`EVENT_LOOKBACK_DAYS` to change the search period. `EVENT_SCAN_CHUNK_SIZE`
-defaults to `100000`, `READ_CONCURRENCY` defaults to `25`, and
-`ORDER_CACHE_WRITE_BATCH_SIZE` defaults to `50`.
-
-`DRY_RUN=true` prints the discovered owners without writing, while
-`VERIFY_ONLY=true` only verifies the cache. Safe operation additionally uses
-`SAFE_OWNER_ADDRESS`, `PROPOSER_PRIVATEKEY`, and optionally `SAFE_API_KEY`.
+Set `FUTURES_INDEXER_URL` (or `SUBGRAPH_URL`) for indexer discovery. Event
+discovery requires `FUTURES_START_BLOCK` or `ETHERSCAN_API_KEY`;
+`EVENT_SCAN_CHUNK_SIZE` defaults to `100000`.
+`DRY_RUN=true` performs discovery and gas preflight without writing. Safe
+operation uses `SAFE_OWNER_ADDRESS`, `PROPOSER_PRIVATEKEY`, and optionally
+`SAFE_EXECUTION_GAS_OVERHEAD`.
 
 ## Gas benchmark
 
-Run the deterministic Futures ABI benchmark from this directory:
+Run the deterministic HashPowerFutures ABI benchmark from this directory:
 
 ```sh
 pnpm test:gas
@@ -33,7 +34,7 @@ pnpm test:gas
 
 It writes `benchmarks/futures-gas.json`. State-changing scenarios record gas from
 transaction receipts; view and pure scenarios use viem gas estimates. The suite
-also fails if a callable Futures ABI function is missing a measurement of the
+also fails if a callable HashPowerFutures ABI function is missing a measurement of the
 correct kind.
 
 The benchmark helper and reusable GitHub Action are pinned to

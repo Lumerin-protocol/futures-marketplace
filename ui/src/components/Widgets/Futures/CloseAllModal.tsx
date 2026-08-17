@@ -44,7 +44,7 @@ export const CloseAllModal = ({ open, onClose, positionSessions, marketPrice }: 
 
   const totalSize = useMemo(() => {
     return openPositions.reduce((sum, s) => {
-      const qty = s.user.netQuantity < 0n ? -s.user.netQuantity : s.user.netQuantity;
+      const qty = s.netQuantity < 0n ? -s.netQuantity : s.netQuantity;
       return sum + qty;
     }, 0n);
   }, [openPositions]);
@@ -64,7 +64,7 @@ export const CloseAllModal = ({ open, onClose, positionSessions, marketPrice }: 
       const results: SimulationResult[] = [];
 
       for (const session of openPositions) {
-        const netQty = session.user.netQuantity;
+        const netQty = session.netQuantity;
         if (netQty === 0n) continue;
 
         const closeQuantity = -netQty;

@@ -95,11 +95,11 @@ export const PerpsOrdersPositionsTabWidget = ({
     }
   };
 
-  // Count perps orders (ACTIVE + FILLED, excluding fully filled)
+  // Count perps orders still resting on the book, excluding fully filled
   const ordersCount = useMemo(() => {
     return perpsOpenOrders.filter(
       (order) =>
-        (order.status === "ACTIVE" || order.status === "PARTIAL") &&
+        (order.status === "ACTIVE" || order.status === "PARTIALLY_FILLED") &&
         order.filledQuantity !== order.originalQuantity
     ).length;
   }, [perpsOpenOrders]);
@@ -282,8 +282,8 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
     switch (status) {
       case "ACTIVE":
         return "Active";
-      case "PARTIAL":
-        return "Partial";
+      case "PARTIALLY_FILLED":
+        return "Partially Filled";
       case "FILLED":
         return "Filled";
       case "CANCELLED":
@@ -297,7 +297,7 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
     switch (status) {
       case "ACTIVE":
         return tokens.trading.long;
-      case "PARTIAL":
+      case "PARTIALLY_FILLED":
         return tokens.trading.warning;
       case "FILLED":
         return tokens.text.muted;
@@ -309,7 +309,7 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
   };
 
   const activeOrders = [...orders]
-    .filter((order) => (order.status === "ACTIVE" || order.status === "PARTIAL") && order.filledQuantity !== order.originalQuantity)
+    .filter((order) => (order.status === "ACTIVE" || order.status === "PARTIALLY_FILLED") && order.filledQuantity !== order.originalQuantity)
     .sort((a, b) => Number(b.createdAt) - Number(a.createdAt));
 
   const displayedOrders = activeOrders.slice(0, visibleCount);
@@ -446,7 +446,7 @@ const CancelOrderConfirmModal = ({ open, order, onClose, onConfirm, isCancelling
           </SummaryRow>
           <SummaryRow>
             <SummaryLabel>Status</SummaryLabel>
-            <SummaryValue>{order.status === "PARTIAL" ? "Partial" : "Active"}</SummaryValue>
+            <SummaryValue>{order.status === "PARTIALLY_FILLED" ? "Partially Filled" : "Active"}</SummaryValue>
           </SummaryRow>
         </CloseAllSummary>
 
@@ -497,8 +497,8 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, hasMore = false, isFetching
     switch (status) {
       case "ACTIVE":
         return "Active";
-      case "PARTIAL":
-        return "Partial";
+      case "PARTIALLY_FILLED":
+        return "Partially Filled";
       case "FILLED":
         return "Filled";
       case "CANCELLED":
@@ -514,7 +514,7 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, hasMore = false, isFetching
     switch (status) {
       case "ACTIVE":
         return tokens.trading.long;
-      case "PARTIAL":
+      case "PARTIALLY_FILLED":
         return tokens.trading.warning;
       case "FILLED":
         return tokens.text.muted;
@@ -689,8 +689,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, liqPric
           </thead>
           <tbody>
             {openPositions.map((session) => {
-              // For status OPEN, use netQuantity from user object
-              const displayQuantity = session.user.netQuantity;
+              const displayQuantity = session.netQuantity;
               const isLong = displayQuantity > 0n || (displayQuantity === 0n && session.maxQuantity > 0n);
               const realizedPnlValue = Number(session.realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
               const unrealizedPnl = calculateUnrealizedPnL(session.entryPrice, displayQuantity);

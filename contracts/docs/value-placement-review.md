@@ -1,6 +1,6 @@
-# Futures.sol — Value Placement Review
+# HashPowerFutures.sol — Value Placement Review
 
-All values in `Futures.sol` categorized by storage mechanism and update path.
+All values in `HashPowerFutures.sol` categorized by storage mechanism and update path.
 
 ---
 
@@ -19,7 +19,7 @@ Set at compile time. Change = new implementation deploy + proxy upgrade.
 
 | Name | Current Value | Why move |
 |------|---------------|----------|
-| `MAX_ORDERS_PER_PARTICIPANT` | `100` | UX/gas limit. Raising it doesn't break positions. Should be adjustable without redeploy. |
+| `MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION` | `100` | Per-delivery UX/gas limit. Raising it doesn't break positions. Should be adjustable without redeploy. |
 | `MAX_PRICE_LEVELS_PER_SIDE` | `200` | Order book density limit. Same reasoning — operational knob, not fundamental. |
 
 ### 🟡 Requires position wipe if changed
@@ -112,7 +112,7 @@ These are trading state, not configuration:
 | `CONTRACT_SIZE_HPS_DAY` | `constant` | `constant` ✅ | Fundamental unit |
 | `SECONDS_PER_DAY` | `constant` | `constant` ✅ | Math |
 | `MAX_ORACLE_STALENESS` | `constant` | `constant` ✅ | Protocol safety |
-| **`MAX_ORDERS_PER_PARTICIPANT`** | `constant` | ➡️ **proxy + setter** | Operational knob |
+| **`MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION`** | `constant` | ➡️ **proxy + setter** | Operational knob |
 | **`MAX_PRICE_LEVELS_PER_SIDE`** | `constant` | ➡️ **proxy + setter** | Operational knob |
 | `EXPIRATION_INTERVAL_DAYS` | `constant` | `constant` ✅ | Breaks calendar if changed |
 | `collateralVault` | proxy (init) | proxy (init) ✅ | Matches Perps pattern. Set in `initialize`, no setter. |
@@ -141,7 +141,7 @@ These are trading state, not configuration:
 | `EXPIRATION_INTERVAL_DAYS` | `getExpirationDates()` shifts. Orders at old expirations can't be placed. | **Requires wipe** or careful migration |
 | `firstFutureExpirationDate` | Same as above | **Requires wipe** |
 | `minimumPriceIncrement` | All resting orders fail `validatePrice()` | **Requires full order cancellation** |
-| `MAX_ORDERS_PER_PARTICIPANT` | No existing state impact. Users with > new cap keep their orders; new orders rejected at cap. | None needed |
+| `MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION` | No existing position impact. The cap applies independently to each delivery index. | None needed |
 | `MAX_PRICE_LEVELS_PER_SIDE` | No existing state impact. New levels rejected at cap; existing levels untouched. | None needed |
 | `liquidationMarginPercent` | Instant re-evaluation of all positions against new MM | Keeper monitors; liquidates where needed |
 | All fee params | Only new matches/liquidations affected | None needed |

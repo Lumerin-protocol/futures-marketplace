@@ -1,5 +1,5 @@
 import { useReadContract } from "wagmi";
-import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
+import { HashPowerFuturesAbi } from "futures-marketplace-abi/HashPowerFutures.ts";
 import { withErrors } from "../../lib/withErrors";
 
 /**
@@ -12,7 +12,7 @@ import { withErrors } from "../../lib/withErrors";
 export function useSettlementPrice(expirationAt: bigint | undefined) {
   return useReadContract({
     address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS,
-    abi: withErrors(FuturesAbi),
+    abi: withErrors(HashPowerFuturesAbi),
     functionName: "settlementPrice",
     args: expirationAt !== undefined ? [expirationAt] : undefined,
     query: {

@@ -7,6 +7,8 @@ import { verifyContract } from "../lib/verify.ts";
 import { addrUrl, txUrl } from "../lib/explorer.ts";
 import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts";
 
+const TARGET_CODE_VERSION = "6.5.0";
+
 /** Minimal AggregatorV3 slice used to sanity-check HashpriceUSD before deploy. */
 const aggregatorV3Abi = [
   {
@@ -32,17 +34,17 @@ const aggregatorV3Abi = [
 ] as const;
 
 async function main() {
-  logTitle("Futures Deployment");
+  logTitle("HashPowerFutures Deployment");
 
   const { viem } = await hre.network.getOrCreate();
 
-  // The Futures contract reads its underlying ERC20 (and decimals) from the
+  // The HashPowerFutures contract reads its underlying ERC20 (and decimals) from the
   // collateral vault, so `USDC_TOKEN_ADDRESS` is no longer a deploy-time input.
   const collateralVaultAddress = requireAddress("VAULT_ADDRESS");
   const hashpriceUsdAddress = requireAddress("HASHPRICE_USD_ADDRESS");
   const SAFE_OWNER_ADDRESS = readOptionalAddress("SAFE_OWNER_ADDRESS");
-  // Optional: when set, wire the Futures contract into the cross-product
-  // PortfolioMarginEngine end-to-end (Futures.setPortfolioMargin + PME.addLinearMarket
+  // Optional: when set, wire the HashPowerFutures contract into the cross-product
+  // PortfolioMarginEngine end-to-end (HashPowerFutures.setPortfolioMargin + PME.addLinearMarket
   // + Vault.setAuthorizedCaller). When the deployer doesn't own the PME or the
   // vault, the script logs the required calldata for the current owner Safe
   // instead of executing the call.
@@ -50,8 +52,6 @@ async function main() {
 
   const env = requireEnvsSet(
     "LIQUIDATION_MARGIN_PERCENT",
-    "MINIMUM_PRICE_INCREMENT",
-    "EXPIRATION_INTERVAL_DAYS",
     "FUTURE_DELIVERY_DATES_COUNT",
   );
 
@@ -103,15 +103,21 @@ async function main() {
   await logPrompt("Review the configuration above. Proceed with deployment?");
 
   // ── 1. Deploy implementation ────────────────────────────────────────────
-  logInfo("Deploy Futures implementation", {
-    contract: "Futures",
+  logInfo("Deploy HashPowerFutures implementation", {
+    contract: "HashPowerFutures",
     collateralVault: collateralVaultAddress,
   });
   await logPrompt("Proceed?");
-  const futuresImpl = await viem.deployContract("Futures", [collateralVaultAddress], {
+  const futuresImpl = await viem.deployContract("HashPowerFutures", [collateralVaultAddress], {
     confirmations: 5,
   });
   logStep("Deployed", addrUrl(pc, futuresImpl.address));
+  const implementationVersion = await futuresImpl.read.VERSION();
+  if (implementationVersion !== TARGET_CODE_VERSION) {
+    throw new Error(
+      `Implementation VERSION is ${implementationVersion}, expected ${TARGET_CODE_VERSION}`,
+    );
+  }
   await verifyContract(futuresImpl.address, [collateralVaultAddress]);
   logStep("Verified", addrUrl(pc, futuresImpl.address));
 
@@ -127,14 +133,12 @@ async function main() {
     args: [
       hashpriceUsdAddress,
       Number(env.LIQUIDATION_MARGIN_PERCENT),
-      0n, // was minimumPriceIncrement — now constant = 1e4
-      0,  // was expirationIntervalDays — now EXPIRATION_INTERVAL_DAYS constant
       Number(env.FUTURE_DELIVERY_DATES_COUNT),
       firstFutureExpirationDate,
     ],
   });
 
-  logInfo("Deploy Futures proxy", {
+  logInfo("Deploy HashPowerFutures proxy", {
     implementation: futuresImpl.address,
     firstDeliveryDate: nearestMonday.toISOString(),
   });
@@ -146,7 +150,7 @@ async function main() {
   await verifyContract(futuresProxy.address, [futuresImpl.address, initData]);
   logStep("Verified", addrUrl(pc, futuresProxy.address));
 
-  const futures = await viem.getContractAt("Futures", futuresProxy.address);
+  const futures = await viem.getContractAt("HashPowerFutures", futuresProxy.address);
 
   // ── 3. Wire the PortfolioMarginEngine (optional) ────────────────────────
   if (MARGIN_ENGINE_ADDRESS) {
@@ -154,7 +158,7 @@ async function main() {
     const pmeOwner = await pme.read.owner();
     const deployerIsPmeOwner = getAddress(pmeOwner) === getAddress(deployer.account.address);
 
-    logInfo("Futures.setPortfolioMargin", { portfolioMargin: MARGIN_ENGINE_ADDRESS });
+    logInfo("HashPowerFutures.setPortfolioMargin", { portfolioMargin: MARGIN_ENGINE_ADDRESS });
     await logPrompt("Proceed?");
     {
       const sim = await futures.simulate.setPortfolioMargin([MARGIN_ENGINE_ADDRESS]);
@@ -212,21 +216,21 @@ async function main() {
 
   // ── 5. Transfer ownership (optional) ────────────────────────────────────
   if (SAFE_OWNER_ADDRESS) {
-    logInfo("Transfer Futures ownership", { owner: SAFE_OWNER_ADDRESS });
+    logInfo("Transfer HashPowerFutures ownership", { owner: SAFE_OWNER_ADDRESS });
     await logPrompt("Proceed?");
     const sim = await futures.simulate.transferOwnership([SAFE_OWNER_ADDRESS]);
     const receipt = await writeAndWait(deployer, sim);
-    logStep("Futures ownership", txUrl(pc, receipt.transactionHash));
+    logStep("HashPowerFutures ownership", txUrl(pc, receipt.transactionHash));
   }
 
   // ── Summary ─────────────────────────────────────────────────────────────
   logInfo("addresses", {
-    Futures: futures.address,
+    HashPowerFutures: futures.address,
     "  futures impl": futuresImpl.address,
     HASHPRICE_USD: hashpriceUsdAddress,
   });
 
-  logSuccess(`Futures ${futures.address}`);
+  logSuccess(`HashPowerFutures ${futures.address}`);
 
   fs.writeFileSync("futures-addr.tmp", futures.address);
 }

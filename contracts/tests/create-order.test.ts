@@ -5,6 +5,9 @@ import { getAddress, parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { warpPastDeliveryWithFreshOracle } from "./utils.ts";
 import { TimeInForce } from "./timeInForce.ts";
+import {
+  getUserOrders,
+} from "./lib/viewHelpers.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -576,16 +579,21 @@ describe("Order Creation", () => {
     assert.equal(newOrderEvents.length, 1);
     assert.equal(newOrderEvents[0].args.expirationAt, newDeliveryDate);
 
-    const sellerOrders = await futures.read.getUserOrders([seller.account.address]);
-    assert.equal(sellerOrders.length, 2, "stale order is still resting next to the new one");
+    const sellerOrders = await getUserOrders(futures, seller.account.address);
+    assert.deepEqual(sellerOrders, [newOrderEvents[0].args.orderId]);
+    assert.deepEqual(
+      await futures.read.getUserOrdersAtExpiration([seller.account.address, oldDeliveryDate]),
+      [oldOrderId],
+      "expired order remains available only through the explicit delivery view",
+    );
   });
 
-  it("should enforce maximum orders per participant", async () => {
+  it("should enforce maximum orders independently per delivery date", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller } = accounts;
 
-    const numOrders = await futures.read.MAX_ORDERS_PER_PARTICIPANT();
+    const numOrders = await futures.read.MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION();
     const price = await futures.read.getMarketPrice();
     const margin = price * BigInt(numOrders);
     const deliveryDate = config.deliveryDates[0];
@@ -607,7 +615,17 @@ describe("Order Creation", () => {
         },
       ),
       futures,
-      "MaxOrdersPerParticipantReached",
+      "MaxOrdersPerParticipantPerExpirationReached",
+    );
+
+    const secondDeliveryDate = config.deliveryDates[1];
+    await futures.write.createOrder([price, secondDeliveryDate, 1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
+    assert.equal(
+      (await futures.read.getUserOrdersAtExpiration([seller.account.address, secondDeliveryDate]))
+        .length,
+      1,
     );
   });
 });

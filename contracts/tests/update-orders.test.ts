@@ -4,6 +4,9 @@ import { network } from "hardhat";
 import { parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { TimeInForce } from "./timeInForce.ts";
+import {
+  getUserOrders,
+} from "./lib/viewHelpers.ts";
 
 const { networkHelpers } = await network.connect();
 
@@ -19,7 +22,7 @@ type ReduceIntent = {
   newQuantity: bigint;
 };
 
-describe("Futures.updateOrders (cancel + reduce + create batch)", () => {
+describe("HashPowerFutures.updateOrders (cancel + reduce + create batch)", () => {
   it("cancels then places in one call with a single IM check", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
@@ -36,7 +39,7 @@ describe("Futures.updateOrders (cancel + reduce + create batch)", () => {
       { price: mp + 2n * step, expirationAt: dd, quantity: -1n, timeInForce: TimeInForce.GTC },
     ];
     await futures.write.createOrders([resting], { account: seller.account });
-    const before = await futures.read.getUserOrders([seller.account.address]);
+    const before = await getUserOrders(futures, seller.account.address);
     assert.equal(before.length, 2);
 
     const next: OrderIntent[] = [
@@ -60,7 +63,7 @@ describe("Futures.updateOrders (cancel + reduce + create batch)", () => {
     assert.equal(cancelled.length, 2);
     assert.equal(created.length, 2);
 
-    const after = await futures.read.getUserOrders([seller.account.address]);
+    const after = await getUserOrders(futures, seller.account.address);
     assert.equal(after.length, 2);
     for (const id of after) {
       assert.ok(!before.includes(id), "old ids must be gone");
@@ -82,7 +85,7 @@ describe("Futures.updateOrders (cancel + reduce + create batch)", () => {
       { price: mp + step, expirationAt: dd, quantity: -1n, timeInForce: TimeInForce.GTC },
     ];
     await futures.write.updateOrders([[], [], createOnly], { account: seller.account });
-    const placed = await futures.read.getUserOrders([seller.account.address]);
+    const placed = await getUserOrders(futures, seller.account.address);
     assert.equal(placed.length, 1);
 
     const cancelTx = await futures.write.updateOrders([placed, [], []], {
@@ -90,7 +93,7 @@ describe("Futures.updateOrders (cancel + reduce + create batch)", () => {
     });
     const cancelReceipt = await pc.waitForTransactionReceipt({ hash: cancelTx });
     assert.equal(cancelReceipt.status, "success");
-    assert.equal((await futures.read.getUserOrders([seller.account.address])).length, 0);
+    assert.equal((await getUserOrders(futures, seller.account.address)).length, 0);
   });
 
   it("reduces size in place and keeps FIFO membership", async () => {
@@ -114,7 +117,7 @@ describe("Futures.updateOrders (cancel + reduce + create batch)", () => {
       ],
       { account: seller.account },
     );
-    const ids = await futures.read.getUserOrders([seller.account.address]);
+    const ids = await getUserOrders(futures, seller.account.address);
     assert.equal(ids.length, 2);
     const head = ids[0];
 
@@ -138,7 +141,7 @@ describe("Futures.updateOrders (cancel + reduce + create batch)", () => {
     assert.equal(updated[0].args.orderId, head);
     assert.equal(updated[0].args.newQuantity, -3n);
 
-    const afterIds = await futures.read.getUserOrders([seller.account.address]);
+    const afterIds = await getUserOrders(futures, seller.account.address);
     assert.deepEqual(afterIds, ids, "order ids unchanged");
     assert.equal((await futures.read.getOrder([head])).quantity, -3n);
 
@@ -159,7 +162,7 @@ describe("Futures.updateOrders (cancel + reduce + create batch)", () => {
     await futures.write.createOrder([mp + step, dd, -4n, TimeInForce.GTC], {
       account: seller.account,
     });
-    const [id] = await futures.read.getUserOrders([seller.account.address]);
+    const [id] = await getUserOrders(futures, seller.account.address);
 
     await assert.rejects(
       () => futures.write.reduceOrderSize([id, 0n], { account: seller.account }),
@@ -193,7 +196,7 @@ describe("Futures.updateOrders (cancel + reduce + create batch)", () => {
       { price: mp + 3n * step, expirationAt: dd, quantity: -1n, timeInForce: TimeInForce.GTC },
     ];
     await futures.write.createOrders([sellerResting], { account: seller.account });
-    const sellerIds = await futures.read.getUserOrders([seller.account.address]);
+    const sellerIds = await getUserOrders(futures, seller.account.address);
 
     const buyerResting: OrderIntent[] = [
       { price: mp - step, expirationAt: dd, quantity: 1n, timeInForce: TimeInForce.GTC },
@@ -201,7 +204,7 @@ describe("Futures.updateOrders (cancel + reduce + create batch)", () => {
       { price: mp - 3n * step, expirationAt: dd, quantity: 1n, timeInForce: TimeInForce.GTC },
     ];
     await futures.write.createOrders([buyerResting], { account: buyer.account });
-    const buyerIds = await futures.read.getUserOrders([buyer.account.address]);
+    const buyerIds = await getUserOrders(futures, buyer.account.address);
 
     let baselineGas = 0n;
     for (const id of sellerIds) {

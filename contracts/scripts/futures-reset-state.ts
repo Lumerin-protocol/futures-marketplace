@@ -48,7 +48,7 @@ type ParticipantScanCache = {
 };
 
 async function main() {
-  logTitle("Futures Reset State");
+  logTitle("HashPowerFutures Reset State");
 
   const { viem } = await hre.network.getOrCreate();
   const pc = await viem.getPublicClient();
@@ -67,7 +67,7 @@ async function main() {
   const [deployer, proposer] = await viem.getWalletClients();
 
   logInfo("inputs", {
-    Futures: addrUrl(pc, futuresAddress),
+    HashPowerFutures: addrUrl(pc, futuresAddress),
     StartBlock: `${startBlock}${startBlockOverride === undefined ? " (deployment block via Etherscan)" : ""}`,
     EndBlock: endBlock.toString(),
     BlockChunk: blockChunk.toString(),
@@ -110,7 +110,7 @@ async function main() {
 
   await logPrompt(`About to reset state for ${participants.length} participants. Proceed?`);
 
-  const futures = await viem.getContractAt("Futures", futuresAddress);
+  const futures = await viem.getContractAt("HashPowerFutures", futuresAddress);
 
   if (SAFE_OWNER_ADDRESS) {
     if (!proposer) {

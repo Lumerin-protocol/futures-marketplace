@@ -22,7 +22,7 @@ export interface CloseOrderFormProps {
   pricePerDay: bigint;
   expirationAt: bigint;
   amount: number;
-  /** On-chain order ids (indexer `OrderEntry.id` / bytes32) for the grouped row. */
+  /** On-chain bytes32 order ids collapsed into the grouped row. */
   orderIds: string[];
   closeForm: () => void;
   contractMode?: ContractMode;

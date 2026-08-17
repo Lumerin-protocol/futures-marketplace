@@ -9,7 +9,7 @@ async function main() {
   const env = requireEnvsSet("FUTURES_DEPLOY_BLOCK");
   const deployBlock = BigInt(env.FUTURES_DEPLOY_BLOCK);
 
-  const futures = await viem.getContractAt("Futures", futuresAddress);
+  const futures = await viem.getContractAt("HashPowerFutures", futuresAddress);
   const makerFee = await futures.read.makerFeeBps();
   const takerFee = await futures.read.takerFeeBps();
   const pc = await viem.getPublicClient();

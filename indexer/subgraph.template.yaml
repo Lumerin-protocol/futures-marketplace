@@ -7,12 +7,12 @@ schema:
   file: ./schema.graphql
 dataSources:
   - kind: ethereum
-    name: Futures
+    name: HashPowerFutures
     network: "${NETWORK}"
     source:
       address: "${FUTURES_ADDRESS}"
       startBlock: ${START_BLOCK_FUTURES}
-      abi: Futures
+      abi: HashPowerFutures
     context:
       startBlock:
         type: BigInt
@@ -25,17 +25,17 @@ dataSources:
         - Futures
         - User
         - Order
-        - OrderEntry
         - Trade
         - Fill
         - PositionSession
         - PriceLevel
-        - Liquidation
+        - FuturesExpiration
+        - LiquidationTx
         - BadDebtEvent
         - UserDeliverySessionPointer
       abis:
-        - name: Futures
-          file: ../contracts/abi/Futures.json
+        - name: HashPowerFutures
+          file: ../contracts/abi/HashPowerFutures.json
       eventHandlers:
         - event: Initialized(uint64)
           handler: handleInitialized

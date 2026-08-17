@@ -4,6 +4,10 @@ import { network } from "hardhat";
 import { parseEventLogs, parseUnits } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { TimeInForce } from "./timeInForce.ts";
+import {
+  getBestBidPrice,
+  getBestAskPrice,
+} from "./lib/viewHelpers.ts";
 
 const { networkHelpers } = await network.getOrCreate();
 
@@ -47,8 +51,8 @@ describe("Futures - limit order book", () => {
 
     const [, asks] = await futures.read.getOrderBookPrices([dd, 50n]);
     assert.deepEqual([...asks], [askHi]);
-    assert.equal(await futures.read.getBestAskPrice([dd]), askHi);
-    assert.equal(await futures.read.getBestBidPrice([dd]), 0n);
+    assert.equal(await getBestAskPrice(futures, dd), askHi);
+    assert.equal(await getBestBidPrice(futures, dd), 0n);
   });
 
   it("sell walks bids down to limit and fills at each maker price", async () => {
@@ -86,8 +90,8 @@ describe("Futures - limit order book", () => {
 
     const [bids] = await futures.read.getOrderBookPrices([dd, 50n]);
     assert.deepEqual([...bids], [bidLo]);
-    assert.equal(await futures.read.getBestBidPrice([dd]), bidLo);
-    assert.equal(await futures.read.getBestAskPrice([dd]), 0n);
+    assert.equal(await getBestBidPrice(futures, dd), bidLo);
+    assert.equal(await getBestAskPrice(futures, dd), 0n);
   });
 
   it("partial multi-level fill rests remainder at taker limit", async () => {
@@ -122,7 +126,7 @@ describe("Futures - limit order book", () => {
     assert.equal(asks.length, 0);
     assert.deepEqual([...bids], [buyLimit]);
     assert.equal(await futures.read.getQuantityAtPrice([dd, buyLimit, true]), 2n);
-    assert.equal(await futures.read.getBestBidPrice([dd]), buyLimit);
+    assert.equal(await getBestBidPrice(futures, dd), buyLimit);
 
     const created = parseEventLogs({
       logs: receipt.logs,
@@ -178,8 +182,8 @@ describe("Futures - limit order book", () => {
     assert.equal(cancelled[0].args.orderId, askCreated.args.orderId);
 
     assert.equal(await collateralVault.read.balanceOf([seller.account.address]), balBefore);
-    assert.equal(await futures.read.getBestAskPrice([dd]), 0n);
-    assert.equal(await futures.read.getBestBidPrice([dd]), 0n);
+    assert.equal(await getBestAskPrice(futures, dd), 0n);
+    assert.equal(await getBestBidPrice(futures, dd), 0n);
   });
 
   it("getOrderBookPrices returns bids high-to-low and asks low-to-high", async () => {
@@ -209,8 +213,8 @@ describe("Futures - limit order book", () => {
     const [bids, asks] = await futures.read.getOrderBookPrices([dd, 50n]);
     assert.deepEqual([...asks], [ask0, ask1, ask2]);
     assert.deepEqual([...bids], [bid0, bid1, bid2]);
-    assert.equal(await futures.read.getBestAskPrice([dd]), ask0);
-    assert.equal(await futures.read.getBestBidPrice([dd]), bid0);
+    assert.equal(await getBestAskPrice(futures, dd), ask0);
+    assert.equal(await getBestBidPrice(futures, dd), bid0);
   });
 
   it("simulateOrder reports multi-level VWAP and remainder", async () => {

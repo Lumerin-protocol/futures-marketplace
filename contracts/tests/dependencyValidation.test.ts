@@ -31,6 +31,16 @@ async function deployEngine(vaultAddress: `0x${string}`) {
 }
 
 describe("Futures - dependency validation", function () {
+  it("rejects collateral tokens that do not use six decimals", async function () {
+    const token = await viem.deployContract("TokenDecimalsMock", [18]);
+    const vault = await deployVault(token.address);
+
+    await assert.rejects(
+      viem.deployContract("HashPowerFutures", [vault.address]),
+      /UnsupportedTokenDecimals/,
+    );
+  });
+
   describe("setPortfolioMargin", function () {
     it("rejects the zero address", async function () {
       const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
@@ -153,6 +163,58 @@ describe("Futures - dependency validation", function () {
 
       await futures.write.setOracle([feed.address], { account: owner.account });
       assert.equal(await futures.read.priceOracle(), getAddress(feed.address));
+    });
+
+    it("accepts oracle precision below collateral precision and scales upward", async function () {
+      const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures } = contracts;
+      const { owner } = accounts;
+      const feed = await viem.deployContract("PriceFeedMock", [4, "low precision"]);
+      await feed.write.setPrice([parseUnits("34.4", 4)]);
+
+      await futures.write.setOracle([feed.address], { account: owner.account });
+      assert.equal(await futures.read.getMarketPrice(), parseUnits("34.4", 6));
+    });
+
+    it("rejects stale and future-dated rounds during wiring", async function () {
+      const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures } = contracts;
+      const { owner, pc } = accounts;
+      const now = (await pc.getBlock()).timestamp;
+      const feed = await viem.deployContract("PriceFeedMock", [FEED_DECIMALS, "invalid time"]);
+      const answer = parseUnits("34.4", FEED_DECIMALS);
+
+      await feed.write.setRound([1n, answer, now - 3601n, now - 3601n, 1n]);
+      await viem.assertions.revertWithCustomError(
+        futures.write.setOracle([feed.address], { account: owner.account }),
+        futures,
+        "OracleStale",
+      );
+
+      await feed.write.setRound([2n, answer, now + 3600n, now + 3600n, 2n]);
+      await viem.assertions.revertWithCustomError(
+        futures.write.setOracle([feed.address], { account: owner.account }),
+        futures,
+        "InvalidOracle",
+      );
+    });
+
+    it("rejects a future-dated round after a feed is wired", async function () {
+      const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
+      const { futures } = contracts;
+      const { owner, pc } = accounts;
+      const feed = await viem.deployContract("PriceFeedMock", [FEED_DECIMALS, "future runtime"]);
+      const answer = parseUnits("34.4", FEED_DECIMALS);
+      await feed.write.setPrice([answer]);
+      await futures.write.setOracle([feed.address], { account: owner.account });
+
+      const now = (await pc.getBlock()).timestamp;
+      await feed.write.setRound([2n, answer, now + 3600n, now + 3600n, 2n]);
+      await viem.assertions.revertWithCustomError(
+        futures.read.getMarketPrice(),
+        futures,
+        "InvalidOracle",
+      );
     });
   });
 });

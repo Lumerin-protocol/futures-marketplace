@@ -44,6 +44,11 @@
   },
   {
     "inputs": [],
+    "name": "EmptyBatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "ExpirationDateNotAvailable",
     "type": "error"
   },
@@ -109,7 +114,7 @@
   },
   {
     "inputs": [],
-    "name": "MaxOrdersPerParticipantReached",
+    "name": "MaxOrdersPerParticipantPerExpirationReached",
     "type": "error"
   },
   {
@@ -150,11 +155,6 @@
   {
     "inputs": [],
     "name": "OrderNotExists",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "OrderNotExpired",
     "type": "error"
   },
   {
@@ -780,7 +780,7 @@
   },
   {
     "inputs": [],
-    "name": "MAX_ORDERS_PER_PARTICIPANT",
+    "name": "MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION",
     "outputs": [
       {
         "internalType": "uint8",
@@ -799,6 +799,19 @@
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "QUANTITY_DECIMALS",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
       }
     ],
     "stateMutability": "view",
@@ -874,7 +887,7 @@
         "type": "int256"
       },
       {
-        "internalType": "enum FuturesBase.TimeInForce",
+        "internalType": "enum HashPowerFuturesBase.TimeInForce",
         "name": "_tif",
         "type": "uint8"
       }
@@ -904,17 +917,30 @@
             "type": "int256"
           },
           {
-            "internalType": "enum FuturesBase.TimeInForce",
+            "internalType": "enum HashPowerFuturesBase.TimeInForce",
             "name": "timeInForce",
             "type": "uint8"
           }
         ],
-        "internalType": "struct FuturesBase.OrderIntent[]",
+        "internalType": "struct HashPowerFuturesBase.OrderIntent[]",
         "name": "_intents",
         "type": "tuple[]"
       }
     ],
     "name": "createOrders",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address[]",
+        "name": "_participants",
+        "type": "address[]"
+      }
+    ],
+    "name": "dropActiveOrders",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -978,44 +1004,6 @@
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_expirationAt",
-        "type": "uint256"
-      }
-    ],
-    "name": "getBestAskPrice",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_expirationAt",
-        "type": "uint256"
-      }
-    ],
-    "name": "getBestBidPrice",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [],
     "name": "getExpirationDates",
     "outputs": [
@@ -1036,25 +1024,6 @@
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_participant",
-        "type": "address"
-      }
-    ],
-    "name": "getNetPositionDelta",
-    "outputs": [
-      {
-        "internalType": "int256",
-        "name": "",
-        "type": "int256"
       }
     ],
     "stateMutability": "view",
@@ -1093,49 +1062,8 @@
             "type": "uint256"
           }
         ],
-        "internalType": "struct FuturesBase.Order",
+        "internalType": "struct HashPowerFuturesBase.Order",
         "name": "",
-        "type": "tuple"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_user",
-        "type": "address"
-      }
-    ],
-    "name": "getOrderAggregate",
-    "outputs": [
-      {
-        "components": [
-          {
-            "internalType": "uint256",
-            "name": "buyQty",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "sellQty",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "buyValue",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "sellValue",
-            "type": "uint256"
-          }
-        ],
-        "internalType": "struct FuturesBase.OrderAggregate",
-        "name": "aggregate_",
         "type": "tuple"
       }
     ],
@@ -1180,7 +1108,7 @@
             "type": "uint256"
           }
         ],
-        "internalType": "struct FuturesBase.OrderAggregate",
+        "internalType": "struct HashPowerFuturesBase.OrderAggregate",
         "name": "",
         "type": "tuple"
       }
@@ -1215,25 +1143,6 @@
       }
     ],
     "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "getPendingFunding",
-    "outputs": [
-      {
-        "internalType": "int256",
-        "name": "",
-        "type": "int256"
-      }
-    ],
-    "stateMutability": "pure",
     "type": "function"
   },
   {
@@ -1346,13 +1255,18 @@
         "internalType": "address",
         "name": "_user",
         "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_expirationAt",
+        "type": "uint256"
       }
     ],
-    "name": "getUserOrders",
+    "name": "getUserOrdersAtExpiration",
     "outputs": [
       {
         "internalType": "bytes32[]",
-        "name": "",
+        "name": "orderIds",
         "type": "bytes32[]"
       }
     ],
@@ -1387,9 +1301,28 @@
             "type": "int256"
           }
         ],
-        "internalType": "struct FuturesBase.Position",
+        "internalType": "struct HashPowerFuturesBase.Position",
         "name": "",
         "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_participant",
+        "type": "address"
+      }
+    ],
+    "name": "hasRestingOrderDelta",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
       }
     ],
     "stateMutability": "view",
@@ -1421,16 +1354,6 @@
         "type": "uint8"
       },
       {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint8",
-        "name": "",
-        "type": "uint8"
-      },
-      {
         "internalType": "uint8",
         "name": "_futureExpirationDatesCount",
         "type": "uint8"
@@ -1444,25 +1367,6 @@
     "name": "initialize",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_participant",
-        "type": "address"
-      }
-    ],
-    "name": "isLiquidatable",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -1667,19 +1571,6 @@
   {
     "inputs": [
       {
-        "internalType": "address[]",
-        "name": "_users",
-        "type": "address[]"
-      }
-    ],
-    "name": "rebuildOrderAggregateCache",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
         "internalType": "uint256",
         "name": "expirationAt",
         "type": "uint256"
@@ -1710,19 +1601,6 @@
       }
     ],
     "name": "reduceOrderSize",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "_orderId",
-        "type": "bytes32"
-      }
-    ],
-    "name": "removeOutdatedOrder",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -2023,7 +1901,7 @@
             "type": "int256"
           }
         ],
-        "internalType": "struct FuturesBase.ReduceIntent[]",
+        "internalType": "struct HashPowerFuturesBase.ReduceIntent[]",
         "name": "_reduces",
         "type": "tuple[]"
       },
@@ -2045,12 +1923,12 @@
             "type": "int256"
           },
           {
-            "internalType": "enum FuturesBase.TimeInForce",
+            "internalType": "enum HashPowerFuturesBase.TimeInForce",
             "name": "timeInForce",
             "type": "uint8"
           }
         ],
-        "internalType": "struct FuturesBase.OrderIntent[]",
+        "internalType": "struct HashPowerFuturesBase.OrderIntent[]",
         "name": "_intents",
         "type": "tuple[]"
       }

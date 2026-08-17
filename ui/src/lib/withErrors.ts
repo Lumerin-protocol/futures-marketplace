@@ -40,7 +40,7 @@ const cache = new WeakMap<object, unknown>();
  * `functionName`, `args` and return types from your contract's functions; the extra
  * error entries only exist at runtime for decoding.
  *
- * Usage: `abi: withErrors(FuturesAbi)`.
+ * Usage: `abi: withErrors(HashPowerFuturesAbi)`.
  */
 export function withErrors<const TAbi extends Abi | readonly unknown[]>(
   abi: TAbi,

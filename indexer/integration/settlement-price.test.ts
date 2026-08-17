@@ -32,7 +32,7 @@ async function openMatchedPosition() {
   await collateralVault.write.deposit([margin], { account: seller.account });
   await collateralVault.write.deposit([margin], { account: buyer.account });
 
-  conn.matchstick.bind("Futures", futures.address, futures.abi);
+  conn.matchstick.bind("HashPowerFutures", futures.address, futures.abi);
   await conn.matchstick.captureViewMocks();
   await conn.matchstick.anchor();
 

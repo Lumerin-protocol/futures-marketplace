@@ -147,28 +147,19 @@ describe("order aggregate cache tooling", () => {
       [1n, { buyQty: 3n, sellQty: 2n, buyValue: 15n, sellValue: 14n }],
       [2n, { buyQty: 4n, sellQty: 0n, buyValue: 44n, sellValue: 0n }],
     ]);
-    const result = await verifyOrderAggregateCache(
-      [alice],
-      {
-        getUserOrders: async () => [orderA, orderB, orderC],
-        getOrder: async (id) => orders.get(id)!,
-        getOrderAggregate: async (_user, expiration) => aggregates.get(expiration)!,
-      },
-      2,
-    );
+    const reader = {
+      getExpirationDates: async () => [1n, 2n],
+      getUserOrdersAtExpiration: async (_user: typeof alice, expiration: bigint) =>
+        expiration === 1n ? [orderA, orderB] : expiration === 2n ? [orderC] : [],
+      getOrder: async (id: Hex) => orders.get(id)!,
+      getOrderAggregate: async (_user: typeof alice, expiration: bigint) => aggregates.get(expiration)!,
+    };
+    const result = await verifyOrderAggregateCache([alice], reader, 2);
     assert.deepEqual(result, { users: 1, orders: 3, expirations: 2 });
 
     aggregates.set(2n, { buyQty: 99n, sellQty: 0n, buyValue: 44n, sellValue: 0n });
     await assert.rejects(
-      verifyOrderAggregateCache(
-        [alice],
-        {
-          getUserOrders: async () => [orderA, orderB, orderC],
-          getOrder: async (id) => orders.get(id)!,
-          getOrderAggregate: async (_user, expiration) => aggregates.get(expiration)!,
-        },
-        2,
-      ),
+      verifyOrderAggregateCache([alice], reader, 2),
       /buyQty=99, expected 4/,
     );
   });

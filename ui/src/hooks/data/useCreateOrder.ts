@@ -1,6 +1,6 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { getContract } from "viem";
-import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
+import { HashPowerFuturesAbi } from "futures-marketplace-abi/HashPowerFutures.ts";
 import { contractErrors } from "futures-marketplace-abi/ContractErrors.ts";
 import { TimeInForce, type TimeInForceValue } from "../../types/timeInForce";
 
@@ -23,7 +23,7 @@ export function useCreateOrder() {
 
     const futuresContract = getContract({
       address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`,
-      abi: [...FuturesAbi, ...contractErrors],
+      abi: [...HashPowerFuturesAbi, ...contractErrors],
       client: publicClient,
     });
 

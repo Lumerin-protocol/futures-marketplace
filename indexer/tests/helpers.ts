@@ -26,7 +26,7 @@ export function userAddress(id: i32): Address {
   return Address.fromString("0x" + hex);
 }
 
-/// Futures contract address used for `dataSource.address()`.
+/// HashPowerFutures contract address used for `dataSource.address()`.
 export function contractAddress(): Address {
   return userAddress(255);
 }
@@ -103,6 +103,7 @@ export function pointerKey(user: Address, expirationAt: BigInt): string {
 export function mockFuturesContractCallsAsReverted(): void {
   const addr = contractAddress();
   const getters: string[][] = [
+    ["vault", "vault():(address)"],
     ["priceOracle", "priceOracle():(address)"],
     ["minimumPriceIncrement", "minimumPriceIncrement():(uint256)"],
     ["makerFeeBps", "makerFeeBps():(int16)"],
@@ -111,6 +112,7 @@ export function mockFuturesContractCallsAsReverted(): void {
     ["liquidatorShareBps", "liquidatorShareBps():(uint16)"],
     ["portfolioMargin", "portfolioMargin():(address)"],
     ["CONTRACT_SIZE_HPS_DAY", "CONTRACT_SIZE_HPS_DAY():(uint256)"],
+    ["QUANTITY_DECIMALS", "QUANTITY_DECIMALS():(uint8)"],
     ["expirationIntervalDays", "expirationIntervalDays():(uint8)"],
     ["futureExpirationDatesCount", "futureExpirationDatesCount():(uint8)"],
     ["firstFutureExpirationDate", "firstFutureExpirationDate():(uint256)"],
@@ -126,8 +128,9 @@ export function mockFuturesContractCallsAsReverted(): void {
 export function setupFutures(): void {
   const f = new Futures(0);
   f.contractAddress = changetype<Bytes>(contractAddress());
-  f.hashrateOracleAddress = Bytes.empty();
-  f.portfolioMarginAddress = Bytes.empty();
+  f.collateralVault = Bytes.empty();
+  f.priceOracle = Bytes.empty();
+  f.portfolioMargin = Bytes.empty();
   f.startBlock = BigInt.zero();
   f.minimumPriceIncrement = BigInt.zero();
   f.makerFeeBps = 0;
@@ -138,6 +141,7 @@ export function setupFutures(): void {
   f.expirationIntervalDays = 0;
   f.futureExpirationDatesCount = 0;
   f.firstFutureExpirationDate = BigInt.zero();
+  f.quantityDecimals = 0;
   f.collectedFeesBalance = BigInt.zero();
   f.totalUsers = 0;
   f.totalOrders = 0;
@@ -146,6 +150,7 @@ export function setupFutures(): void {
   f.totalFills = 0;
   f.totalVolume = BigInt.zero();
   f.totalLiquidations = 0;
+  f.totalLiquidatedValue = BigInt.zero();
   f.totalBadDebt = BigInt.zero();
   f.initializedAt = BigInt.zero();
   f.lastUpdatedAt = BigInt.zero();
@@ -169,74 +174,40 @@ export function nudgeTx(event: ethereum.Event, seed: i32): void {
 
 const ID_SEP: Bytes = Bytes.fromHexString("0xff") as Bytes;
 
-/// Like `fillAggKeyDefaultTx` but with a custom tx hash (set via `nudgeTx`).
-/// `sessionId` matches the deterministic PositionSession id (see `positionSessionId`).
-export function fillAggKey(
-  txHashBytes: Bytes,
-  user: Address,
-  counterparty: Address,
-  sessionId: string,
-): string {
-  return txHashBytes
-    .concat(ID_SEP)
-    .concat(changetype<Bytes>(user))
-    .concat(ID_SEP)
-    .concat(changetype<Bytes>(counterparty))
-    .concat(ID_SEP)
-    .concat(Bytes.fromUTF8(sessionId))
-    .toHexString();
-}
-
 /// Tx hash that matches the `nudgeTx` helper above for predictable reads.
 export function nudgedTxHash(seed: i32): Bytes {
   const hex = padLeft(seed.toString(16), 40, "0");
   return Bytes.fromHexString("0x" + hex) as Bytes;
 }
 
-/// Event id used by Liquidation / BadDebtEvent: txHash.concatI32(logIndex).
+/// Event id used by BadDebtEvent: txHash.concatI32(logIndex).
 /// Default matchstick logIndex is 1.
 export function eventIdHex(logIndex: i32 = 1): string {
   return MOCK_TX_HASH.concatI32(logIndex).toHexString();
 }
 
-/// Order aggregate id: tx hash ++ user ++ price (32B) ++ expirationAt (32B) ++ side (1B).
-/// Mirrors `src/ids.ts#orderAggregateId` so tests can predict it.
-export function orderAggKeyDefaultTx(
-  user: Address,
-  price: BigInt,
-  expirationAt: BigInt,
-  isBuy: boolean,
-): string {
-  const priceBytes = Bytes.fromHexString("0x" + bigIntHex32(price)) as Bytes;
-  const deliveryBytes = Bytes.fromHexString("0x" + bigIntHex32(expirationAt)) as Bytes;
-  const sideBytes = Bytes.fromHexString(isBuy ? "0x01" : "0x00") as Bytes;
-  return MOCK_TX_HASH.concat(changetype<Bytes>(user))
-    .concat(priceBytes)
-    .concat(deliveryBytes)
-    .concat(sideBytes)
-    .toHexString();
+/// PositionSession id: blockNumber (12) + logIndex (6) + leg (2).
+/// Mirrors `src/ids.ts#positionSessionId`.
+export function sessionKey(blockNumber: BigInt, logIndex: BigInt, leg: i32): string {
+  return (
+    padLeft(blockNumber.toString(), 12, "0") +
+    padLeft(logIndex.toString(), 6, "0") +
+    padLeft(leg.toString(), 2, "0")
+  );
 }
 
 /// Trade aggregate id: tx hash ++ sep ++ user ++ sep ++ sessionId.
-export function tradeAggKeyDefaultTx(user: Address, sessionId: string): string {
-  return MOCK_TX_HASH.concat(ID_SEP)
+/// Mirrors `src/ids.ts#tradeId`.
+export function tradeAggKey(txHashBytes: Bytes, user: Address, sessionId: string): string {
+  return txHashBytes
+    .concat(ID_SEP)
     .concat(changetype<Bytes>(user))
     .concat(ID_SEP)
     .concat(Bytes.fromUTF8(sessionId))
     .toHexString();
 }
 
-/// Fill aggregate id: tx hash ++ sep ++ user ++ sep ++ counterparty ++ sep ++ sessionId.
-export function fillAggKeyDefaultTx(
-  user: Address,
-  counterparty: Address,
-  sessionId: string,
-): string {
-  return MOCK_TX_HASH.concat(ID_SEP)
-    .concat(changetype<Bytes>(user))
-    .concat(ID_SEP)
-    .concat(changetype<Bytes>(counterparty))
-    .concat(ID_SEP)
-    .concat(Bytes.fromUTF8(sessionId))
-    .toHexString();
+/// Per-leg Fill id: tx hash ++ log index ++ leg index. Mirrors `src/ids.ts#fillId`.
+export function fillKey(txHashBytes: Bytes, logIndex: BigInt, leg: i32): string {
+  return txHashBytes.concatI32(logIndex.toI32()).concatI32(leg).toHexString();
 }

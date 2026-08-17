@@ -7,7 +7,7 @@ export const PARTICIPANT_QK = "Participant";
 
 /// Statuses that count as "open" on the order book — i.e. orders the UI shows
 /// in the active list and uses for conflict detection in PlaceOrder/ModifyOrder.
-const ACTIVE_STATUSES = ["ACTIVE", "PARTIAL"] as const;
+const ACTIVE_STATUSES = ["ACTIVE", "PARTIALLY_FILLED"] as const;
 
 export const getUserFuturesOrders = (
   participantAddress: `0x${string}` | undefined,
@@ -53,17 +53,14 @@ const fetchParticipantAsync = async (
 
   const orders: ParticipantOrder[] = response.orders.map((order) => ({
     id: order.id,
-    // Cancel/modify must use OrderEntry.id (on-chain bytes32), never Order.id
-    // (composite indexer key: txHash++user++price++expiration++side).
-    entryIds: (order.entries ?? []).map((entry) => entry.id),
     isBuy: order.isBuy,
     isActive: isActiveStatus(order.status),
     pricePerDay: BigInt(order.price),
     expirationAt: BigInt(order.expirationAt),
     timestamp: order.createdAt,
     closedAt: order.closedAt,
-    // 3.0: one createOrder → one OrderEntry with abs qty; aggregates may still
-    // collapse same-tx same-price placements. `quantity` is remaining contracts.
+    // One Order row per on-chain orderId; `quantity` is the contracts still
+    // resting in the book.
     quantity: order.quantity,
     originalQuantity: order.originalQuantity,
     filledQuantity: order.filledQuantity,
@@ -88,7 +85,7 @@ const fetchParticipantAsync = async (
 };
 
 const isActiveStatus = (status: string): boolean =>
-  status === "ACTIVE" || status === "PARTIAL";
+  status === "ACTIVE" || status === "PARTIALLY_FILLED";
 
 export const waitForBlockNumber = async (blockNumber: bigint, participantAddress: `0x${string}`) => {
   const delay = 1000;
@@ -120,23 +117,21 @@ export type ParticipantOrder = {
   closedAt: string | null;
   closedBy: string | null;
   expirationAt: bigint;
-  /** Indexer Order aggregate id (not a valid on-chain bytes32). */
+  /** On-chain bytes32 orderId — what cancelOrder / updateOrders take. */
   id: string;
-  /** On-chain order ids (`OrderEntry.id`) still ACTIVE under this aggregate. */
-  entryIds: string[];
   isActive: boolean;
   isBuy: boolean;
   participant: {
     address: `0x${string}`;
   };
   pricePerDay: bigint;
-  /// Currently-open units = originalQuantity − filledQuantity − cancelledQuantity.
+  /// Contracts still resting = originalQuantity − filledQuantity − cancelledQuantity.
   quantity: number;
-  /// Initial units across all entries when the Order was first emitted.
+  /// Contracts requested by the OrderCreated event that opened this order.
   originalQuantity: number;
-  /// Number of underlying entries that have matched (i.e. became Fills).
+  /// Contracts that became fills.
   filledQuantity: number;
-  /// Number of underlying entries that closed without matching.
+  /// Contracts that left the book without matching.
   cancelledQuantity: number;
   timestamp: string;
 };
@@ -166,10 +161,5 @@ type UserFuturesOrdersResponse = {
     status: string;
     transactionHash: `0x${string}`;
     updatedAt: string;
-    entries: {
-      id: string;
-      remainingQuantity: number;
-      status: string;
-    }[];
   }[];
 };

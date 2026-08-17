@@ -3,7 +3,7 @@
  * keeper flow.
  *
  * Verifies that `PositionLiquidated` + `OrderLiquidated` populate the
- * PositionSession / OrderEntry entities, that `BadDebtEvent` is created when
+ * PositionSession / Order entities, that `BadDebtEvent` is created when
  * losses exceed coverage, and that `Futures.totalLiquidations` is incremented
  * once per tx via the `LiquidationTx` dedup sentinel (regardless of how many
  * legs the tx contained).
@@ -40,7 +40,7 @@ describe("liquidatePosition: PositionLiquidated, seller netQty=0", () => {
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    matchstick.bind("Futures", futures.address, futures.abi);
+    matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await matchstick.captureViewMocks();
 
     await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
@@ -68,7 +68,6 @@ describe("liquidatePosition: PositionLiquidated, seller netQty=0", () => {
     assert.equal(positionLiquidated.args.expirationAt, deliveryDate);
 
     const sellerAddr = seller.account.address.toLowerCase() as `0x${string}`;
-    const buyerAddr = buyer.account.address.toLowerCase() as `0x${string}`;
     const validatorAddr = validator.account.address.toLowerCase() as `0x${string}`;
 
     const snap = await matchstick.indexSnapshot([
@@ -147,6 +146,19 @@ describe("liquidatePosition: PositionLiquidated, seller netQty=0", () => {
       "Trade.liquidationFee must mirror the on-chain PositionLiquidated.liquidatorFee",
     );
 
+    // The flagged Trade carries the forced exit price and signed size, so the
+    // singleton's value metric must be exitPrice * abs(closed qty).
+    const forcedNotional =
+      BigInt(String(sellerTrade.tradePrice)) *
+      (BigInt(String(sellerTrade.tradeQuantity)) < 0n
+        ? -BigInt(String(sellerTrade.tradeQuantity))
+        : BigInt(String(sellerTrade.tradeQuantity)));
+    assert.equal(
+      String(futuresEntity.totalLiquidatedValue),
+      String(forcedNotional),
+      "Futures.totalLiquidatedValue must be the forced exit notional",
+    );
+
     const sellerSession = snap.entity(
       "PositionSession",
       String(sellerTrade.positionSession),
@@ -179,7 +191,7 @@ describe("BadDebt: BadDebtEvent when losses exceed participant balance + insuran
 
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
-    matchstick.bind("Futures", futures.address, futures.abi);
+    matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await matchstick.captureViewMocks();
     await matchstick.anchor();
 
@@ -298,7 +310,7 @@ describe("multi-position permissionless liquidation: per-tx dedup", () => {
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    matchstick.bind("Futures", futures.address, futures.abi);
+    matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await matchstick.captureViewMocks();
 
     await futures.write.createOrder([price1, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
@@ -383,7 +395,7 @@ describe("multi-leg liquidation in one tx: liquidatedQuantity counts units", () 
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    matchstick.bind("Futures", futures.address, futures.abi);
+    matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await matchstick.captureViewMocks();
 
     // Seller shorts two units at distinct prices on the SAME deliveryDate → one

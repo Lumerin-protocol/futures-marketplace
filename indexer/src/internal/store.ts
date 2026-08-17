@@ -1,5 +1,5 @@
 import { Address, BigInt, Bytes, dataSource } from "@graphprotocol/graph-ts";
-import { Futures as FuturesContract } from "../../generated/Futures/Futures";
+import { HashPowerFutures as HashPowerFuturesContract } from "../../generated/HashPowerFutures/HashPowerFutures";
 import {
   Futures,
   FuturesExpiration,
@@ -17,8 +17,9 @@ export function getOrCreateFutures(): Futures {
   if (!futures) {
     futures = new Futures(0);
     futures.contractAddress = dataSource.address();
-    futures.hashrateOracleAddress = Bytes.empty();
-    futures.portfolioMarginAddress = Bytes.empty();
+    futures.collateralVault = Bytes.empty();
+    futures.priceOracle = Bytes.empty();
+    futures.portfolioMargin = Bytes.empty();
     futures.startBlock = readStartBlockFromContext();
     futures.minimumPriceIncrement = BigInt.zero();
     futures.makerFeeBps = 0;
@@ -29,6 +30,9 @@ export function getOrCreateFutures(): Futures {
     futures.expirationIntervalDays = 0;
     futures.futureExpirationDatesCount = 0;
     futures.firstFutureExpirationDate = BigInt.zero();
+    // Contracts are indivisible whole units, so there is no on-chain getter to
+    // read: the constant is 0 by construction (perps reads 6 off the contract).
+    futures.quantityDecimals = 0;
     futures.collectedFeesBalance = BigInt.zero();
     futures.totalUsers = 0;
     futures.totalOrders = 0;
@@ -37,6 +41,7 @@ export function getOrCreateFutures(): Futures {
     futures.totalFills = 0;
     futures.totalVolume = BigInt.zero();
     futures.totalLiquidations = 0;
+    futures.totalLiquidatedValue = BigInt.zero();
     futures.totalBadDebt = BigInt.zero();
     futures.initializedAt = BigInt.zero();
     futures.lastUpdatedAt = BigInt.zero();
@@ -58,10 +63,13 @@ function readStartBlockFromContext(): BigInt {
 /// Refresh on-chain config snapshot via getter eth_calls. Best-effort: any
 /// reverted call leaves the existing field untouched.
 export function loadFuturesFromContract(futures: Futures): void {
-  const contract = FuturesContract.bind(dataSource.address());
+  const contract = HashPowerFuturesContract.bind(dataSource.address());
+
+  const vault = contract.try_vault();
+  if (!vault.reverted) futures.collateralVault = vault.value;
 
   const oracle = contract.try_priceOracle();
-  if (!oracle.reverted) futures.hashrateOracleAddress = oracle.value;
+  if (!oracle.reverted) futures.priceOracle = oracle.value;
 
   const minPx = contract.try_minimumPriceIncrement();
   if (!minPx.reverted) futures.minimumPriceIncrement = minPx.value;
@@ -79,10 +87,13 @@ export function loadFuturesFromContract(futures: Futures): void {
   if (!liquidatorShareBps.reverted) futures.liquidatorShareBps = liquidatorShareBps.value;
 
   const portfolioMargin = contract.try_portfolioMargin();
-  if (!portfolioMargin.reverted) futures.portfolioMarginAddress = portfolioMargin.value;
+  if (!portfolioMargin.reverted) futures.portfolioMargin = portfolioMargin.value;
 
   const contractSizeHpsDay = contract.try_CONTRACT_SIZE_HPS_DAY();
   if (!contractSizeHpsDay.reverted) futures.contractSizeHpsDay = contractSizeHpsDay.value;
+
+  const quantityDecimals = contract.try_QUANTITY_DECIMALS();
+  if (!quantityDecimals.reverted) futures.quantityDecimals = quantityDecimals.value;
 
   const deliveryInterval = contract.try_expirationIntervalDays();
   if (!deliveryInterval.reverted) futures.expirationIntervalDays = deliveryInterval.value;
@@ -147,7 +158,8 @@ export function getOrCreatePriceLevel(
     level.expiration = getOrCreateFuturesExpiration(expirationAt).id;
     level.price = price;
     level.isBid = isBid;
-    level.totalQuantity = 0;
+    level.totalQuantity = BigInt.zero();
+    level.orderCount = 0;
   }
   return level;
 }
@@ -177,7 +189,7 @@ export function getOrCreatePointer(
     pointer = new UserDeliverySessionPointer(id);
     pointer.user = user;
     pointer.expirationAt = expirationAt;
-    pointer.netQuantity = 0;
+    pointer.netQuantity = BigInt.zero();
     pointer.aggregatedEntryPrice = BigInt.zero();
     pointer.currentSessionId = "";
     pointer.lastClosedSessionId = "";

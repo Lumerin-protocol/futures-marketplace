@@ -1,5 +1,5 @@
 import { useReadContract } from "wagmi";
-import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
+import { HashPowerFuturesAbi } from "futures-marketplace-abi/HashPowerFutures.ts";
 import { withErrors } from "../../lib/withErrors";
 
 /// Reads the `hook` (IPointsHook) address from the Futures contract.
@@ -8,7 +8,7 @@ import { withErrors } from "../../lib/withErrors";
 export function useFuturesHook() {
   return useReadContract({
     address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`,
-    abi: withErrors(FuturesAbi),
+    abi: withErrors(HashPowerFuturesAbi),
     functionName: "hook",
   });
 }

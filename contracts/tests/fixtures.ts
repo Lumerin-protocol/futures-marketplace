@@ -149,7 +149,7 @@ export async function deployTokenOraclesAndMulticall3(conn: NetworkConnection) {
 
 export type TokenOraclesFixture = Awaited<ReturnType<typeof deployTokenOraclesAndMulticall3>>;
 
-/** Full Futures stack — vault, PME, Futures proxy, validator config, approvals. */
+/** Full Futures stack — vault, PME, HashPowerFutures proxy, validator config, approvals. */
 export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: TokenOraclesFixture) {
   const { viem } = conn;
   const { contracts, accounts, config } = data;
@@ -158,7 +158,7 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
   const { oracle } = config;
 
   const liquidationMarginPercent = 20;
-  // Compile-time constant CONTRACT_SIZE_HPS_DAY on Futures.sol; mirrored here for expected-price math in tests.
+  // Compile-time constant CONTRACT_SIZE_HPS_DAY on HashPowerFutures.sol; mirrored here for expected-price math in tests.
   const contractSizeHpsDay = parseUnits("1000", 12); // 1e15 = 1 PH/s over a day (hashes/s·day) → one unit = 1 PH/s/day
   const expirationIntervalDays = 30;
   const expirationIntervalSeconds = expirationIntervalDays * 24 * 3600;
@@ -202,10 +202,10 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
   });
   await collateralVault.write.depositInsuranceFund([collateralAmount], { account: owner.account });
 
-  const futuresImpl = await deployContract<"Futures">(
+  const futuresImpl = await deployContract<"HashPowerFutures">(
     walletClient,
     pc,
-    "../artifacts/contracts/Futures.sol/Futures.json",
+    "../artifacts/contracts/HashPowerFutures.sol/HashPowerFutures.json",
     [collateralVault.address],
   );
   const futuresProxy = await deployContract<"ERC1967Proxy">(
@@ -220,8 +220,6 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
         args: [
           hashpriceUsd.address,
           liquidationMarginPercent,
-          0n, // was minimumPriceIncrement — now constant
-          0, // was expirationIntervalDays — now constant
           futureExpirationDatesCount,
           firstFutureExpirationDate,
         ],
@@ -300,7 +298,7 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
   await futures.write.setTakerFeeBps([takerFeeBps]);
   const deliveryDates = await futures.read.getExpirationDates();
 
-  // `depositFor` pulls USDC via the vault — approve the vault, not Futures.
+  // `depositFor` pulls USDC via the vault — approve the vault, not HashPowerFutures.
   for (const w of [seller, buyer, buyer2, validator, owner]) {
     await usdcMock.write.approve([collateralVault.address, maxUint256], {
       account: w.account,

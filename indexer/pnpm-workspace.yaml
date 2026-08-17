@@ -2,11 +2,13 @@
 # field is ignored by newer pnpm). Kept in sync with package.json for older pnpm.
 onlyBuiltDependencies:
   - esbuild
-  - matchstick-ts@https://codeload.github.com/lsheva/matchstick-ts/tar.gz/6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad#path:packages/matchstick-ts
-  - hardhat-matchstick-ts@https://codeload.github.com/lsheva/matchstick-ts/tar.gz/6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad#path:packages/hardhat-matchstick-ts
+  - matchstick-ts@https://codeload.github.com/lsheva/matchstick-ts/tar.gz/d613d674898f6d0d01a880dd4e1b514f707b93b9#path:packages/matchstick-ts
+  - hardhat-matchstick-ts@https://codeload.github.com/lsheva/matchstick-ts/tar.gz/d613d674898f6d0d01a880dd4e1b514f707b93b9#path:packages/hardhat-matchstick-ts
 
-# git-hosted packages that must run their prepare/build scripts to compile from source
+# git-hosted packages that must run their prepare/build scripts to compile from
+# source. Keyed on the resolved tarball URL, so these stay pinned to the commit
+# v0.4.2 points at even though package.json depends on the tag.
 allowBuilds:
-  matchstick-ts@https://codeload.github.com/lsheva/matchstick-ts/tar.gz/6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad#path:packages/matchstick-ts: true
-  hardhat-matchstick-ts@https://codeload.github.com/lsheva/matchstick-ts/tar.gz/6c7e4b5d584a9fc75b66d1f6c03820e20313c9ad#path:packages/hardhat-matchstick-ts: true
+  matchstick-ts@https://codeload.github.com/lsheva/matchstick-ts/tar.gz/d613d674898f6d0d01a880dd4e1b514f707b93b9#path:packages/matchstick-ts: true
+  hardhat-matchstick-ts@https://codeload.github.com/lsheva/matchstick-ts/tar.gz/d613d674898f6d0d01a880dd4e1b514f707b93b9#path:packages/hardhat-matchstick-ts: true
   esbuild: true

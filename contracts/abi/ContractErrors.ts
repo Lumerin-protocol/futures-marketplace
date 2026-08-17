@@ -10,11 +10,6 @@ export const contractErrors = [
     "type": "error"
   },
   {
-    "inputs": [],
-    "name": "MaxOrdersPerParticipantReached",
-    "type": "error"
-  },
-  {
     "inputs": [
       {
         "internalType": "string",
@@ -127,11 +122,6 @@ export const contractErrors = [
   },
   {
     "inputs": [],
-    "name": "OrderNotExpired",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "OrderNotBelongToUser",
     "type": "error"
   },
@@ -237,6 +227,11 @@ export const contractErrors = [
   },
   {
     "inputs": [],
+    "name": "MaxOrdersPerParticipantPerExpirationReached",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "SettlementDateNotReached",
     "type": "error"
   },
@@ -248,6 +243,11 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "VaultMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "EmptyBatch",
     "type": "error"
   },
   {

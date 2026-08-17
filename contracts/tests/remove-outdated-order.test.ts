@@ -1,125 +1,17 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { network } from "hardhat";
-import { getAddress, parseEventLogs, parseUnits, zeroHash } from "viem";
+import { parseEventLogs, parseUnits, zeroHash } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
 import { warpPastDeliveryWithFreshOracle } from "./utils.ts";
 import { TimeInForce } from "./timeInForce.ts";
+import {
+  getUserOrders,
+} from "./lib/viewHelpers.ts";
 
-const { viem, networkHelpers } = await network.getOrCreate();
+const { networkHelpers } = await network.getOrCreate();
 
-describe("Futures.removeOutdatedOrder", () => {
-  it("closes a single expired order and emits OrderCancelled", async () => {
-    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault } = contracts;
-    const { seller, pc, tc } = accounts;
-
-    await collateralVault.write.deposit([parseUnits("5000", 6)], { account: seller.account });
-
-    const mp = await futures.read.getMarketPrice();
-    const dd = config.deliveryDates[0];
-
-    const restTx = await futures.write.createOrder([mp, dd, -1n, TimeInForce.GTC], {
-      account: seller.account,
-    });
-    const [created] = parseEventLogs({
-      logs: (await pc.waitForTransactionReceipt({ hash: restTx })).logs,
-      abi: futures.abi,
-      eventName: "OrderCreated",
-    });
-    const orderId = created.args.orderId;
-
-    await tc.setNextBlockTimestamp({
-      timestamp: dd + BigInt(config.expirationIntervalSeconds) + 1n,
-    });
-
-    const tx = await futures.write.removeOutdatedOrder([orderId], { account: seller.account });
-    const receipt = await pc.waitForTransactionReceipt({ hash: tx });
-    const closed = parseEventLogs({
-      logs: receipt.logs,
-      abi: futures.abi,
-      eventName: "OrderCancelled",
-    });
-    assert.equal(closed.length, 1);
-    assert.equal(closed[0].args.orderId, orderId);
-    assert.equal(getAddress(closed[0].args.participant), getAddress(seller.account.address));
-
-    const orders = await futures.read.getUserOrders([seller.account.address]);
-    assert.equal(orders.length, 0);
-  });
-
-  it("reverts OrderNotExists for an unknown / already-closed orderId", async () => {
-    const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
-    const { seller } = accounts;
-
-    await viem.assertions.revertWithCustomError(
-      futures.write.removeOutdatedOrder([zeroHash], { account: seller.account }),
-      futures,
-      "OrderNotExists",
-    );
-  });
-
-  it("reverts OrderNotExpired when the order's expirationAt is still in the future", async () => {
-    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault } = contracts;
-    const { seller, pc } = accounts;
-
-    await collateralVault.write.deposit([parseUnits("5000", 6)], { account: seller.account });
-
-    const mp = await futures.read.getMarketPrice();
-    const dd = config.deliveryDates[0];
-
-    const restTx = await futures.write.createOrder([mp, dd, -1n, TimeInForce.GTC], {
-      account: seller.account,
-    });
-    const [created] = parseEventLogs({
-      logs: (await pc.waitForTransactionReceipt({ hash: restTx })).logs,
-      abi: futures.abi,
-      eventName: "OrderCreated",
-    });
-
-    await viem.assertions.revertWithCustomError(
-      futures.write.removeOutdatedOrder([created.args.orderId], { account: seller.account }),
-      futures,
-      "OrderNotExpired",
-    );
-  });
-
-  it("is callable by any address (permissionless)", async () => {
-    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault } = contracts;
-    const { seller, buyer, pc, tc } = accounts;
-
-    await collateralVault.write.deposit([parseUnits("5000", 6)], { account: seller.account });
-
-    const mp = await futures.read.getMarketPrice();
-    const dd = config.deliveryDates[0];
-
-    const restTx = await futures.write.createOrder([mp, dd, -1n, TimeInForce.GTC], {
-      account: seller.account,
-    });
-    const [created] = parseEventLogs({
-      logs: (await pc.waitForTransactionReceipt({ hash: restTx })).logs,
-      abi: futures.abi,
-      eventName: "OrderCreated",
-    });
-
-    await tc.setNextBlockTimestamp({
-      timestamp: dd + BigInt(config.expirationIntervalSeconds) + 1n,
-    });
-
-    // `buyer`, not the order owner, cleans it up.
-    const tx = await futures.write.removeOutdatedOrder([created.args.orderId], {
-      account: buyer.account,
-    });
-    const receipt = await pc.waitForTransactionReceipt({ hash: tx });
-    assert.equal(receipt.status, "success");
-
-    const orders = await futures.read.getUserOrders([seller.account.address]);
-    assert.equal(orders.length, 0);
-  });
-
+describe("HashPowerFutures.removeOutdatedOrders", () => {
   it("bulk-cleans expired orders while skipping stale and live ids", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
@@ -180,7 +72,7 @@ describe("Futures.removeOutdatedOrder", () => {
       restingIds,
     );
 
-    const finalOrders = await futures.read.getUserOrders([seller.account.address]);
+    const finalOrders = await getUserOrders(futures, seller.account.address);
     assert.deepEqual(finalOrders, [freshCreated.args.orderId]);
   });
 });

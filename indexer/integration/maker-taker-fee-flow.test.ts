@@ -27,7 +27,7 @@ describe("Futures fee config events", () => {
     const { futures } = contracts;
     const { owner } = accounts;
 
-    conn.matchstick.bind("Futures", futures.address, futures.abi);
+    conn.matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
@@ -55,10 +55,11 @@ describe("Futures: full config + address surface populated by loadFuturesFromCon
     const { contracts, accounts, config } = await conn.networkHelpers.loadFixture(
       deployFuturesFixture,
     );
-    const { futures, hashpriceUsd, portfolioMarginEngine } = contracts;
+    const { futures, hashpriceUsd, portfolioMarginEngine, collateralVault } =
+      contracts;
     const { owner } = accounts;
 
-    conn.matchstick.bind("Futures", futures.address, futures.abi);
+    conn.matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 
@@ -78,12 +79,16 @@ describe("Futures: full config + address surface populated by loadFuturesFromCon
       "contractAddress mirrors the proxy address Matchstick is bound to",
     );
     assert.equal(
-      String(entity.hashrateOracleAddress).toLowerCase(),
+      String(entity.priceOracle).toLowerCase(),
       hashpriceUsd.address.toLowerCase(),
     );
     assert.equal(
-      String(entity.portfolioMarginAddress).toLowerCase(),
+      String(entity.portfolioMargin).toLowerCase(),
       portfolioMarginEngine.address.toLowerCase(),
+    );
+    assert.equal(
+      String(entity.collateralVault).toLowerCase(),
+      collateralVault.address.toLowerCase(),
     );
 
     // === scalar config ===
@@ -161,7 +166,7 @@ describe("Trade.tradingFee and PositionSession.tradingFees reflect makerFeeBps/t
     await collateralVault.write.deposit([margin], { account: seller.account });
     await collateralVault.write.deposit([margin], { account: buyer.account });
 
-    conn.matchstick.bind("Futures", futures.address, futures.abi);
+    conn.matchstick.bind("HashPowerFutures", futures.address, futures.abi);
     await conn.matchstick.captureViewMocks();
     await conn.matchstick.anchor();
 

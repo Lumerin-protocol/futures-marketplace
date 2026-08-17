@@ -1,5 +1,5 @@
 import { useReadContract } from "wagmi";
-import { FuturesAbi } from "futures-marketplace-abi/Futures.ts";
+import { HashPowerFuturesAbi } from "futures-marketplace-abi/HashPowerFutures.ts";
 import { withErrors } from "../../lib/withErrors";
 
 interface SimulateFuturesOrderProps {
@@ -11,7 +11,7 @@ interface SimulateFuturesOrderProps {
 }
 
 /**
- * Calls Futures.simulateOrder to preview fill without submitting a transaction.
+ * Calls HashPowerFutures.simulateOrder to preview fill without submitting a transaction.
  */
 export function useSimulateFuturesOrder({
   expirationAt,
@@ -26,7 +26,7 @@ export function useSimulateFuturesOrder({
 
   const result = useReadContract({
     address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`,
-    abi: withErrors(FuturesAbi),
+    abi: withErrors(HashPowerFuturesAbi),
     functionName: "simulateOrder",
     args:
       expirationAt !== undefined && price !== undefined && quantityBigInt !== undefined

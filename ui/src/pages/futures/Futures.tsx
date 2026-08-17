@@ -100,7 +100,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // here and gate the perps positions/orders polling cadence (15s while open, 60s
   // baseline for positions otherwise).
   const perpsOpenOrdersQuery = useUserPerpsOrders(address, {
-    statuses: ["ACTIVE", "PARTIAL"],
+    statuses: ["ACTIVE", "PARTIALLY_FILLED"],
     refetch: hasOpenPerpsOrders,
   });
   useEffect(() => {
@@ -110,7 +110,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     const orders = perpsOpenOrdersQuery.data?.data?.orders ?? [];
     const openCount = orders.filter(
       (order) =>
-        (order.status === "ACTIVE" || order.status === "PARTIAL") &&
+        (order.status === "ACTIVE" || order.status === "PARTIALLY_FILLED") &&
         order.filledQuantity !== order.originalQuantity,
     ).length;
     setHasOpenPerpsOrders(openCount > 0);
@@ -198,7 +198,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     if (openSessions.length === 0) return null;
     let sum = 0n;
     for (const s of openSessions) {
-      sum += s.user.netQuantity;
+      sum += s.netQuantity;
     }
     return sum;
   }, [contractMode, positionSessionsQuery.data?.positionSessions]);
@@ -237,7 +237,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
       let totalPnL = 0n;
       openSessions.forEach((session) => {
-        const netQuantity = session.user.netQuantity;
+        const netQuantity = session.netQuantity;
         if (netQuantity === 0n) return;
         const priceDiff = marketPrice - session.entryPrice;
         const unrealizedPnL = (priceDiff * netQuantity) / QUANTITY_SCALE;

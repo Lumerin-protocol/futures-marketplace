@@ -35,13 +35,6 @@ export const UserFuturesOrdersByStatusQuery = gql`
       status
       transactionHash
       updatedAt
-      # On-chain bytes32 order ids live on OrderEntry, not the Order aggregate id
-      # (which is txHash++user++price++expiration++side and is not a valid bytes32).
-      entries(where: { status_in: [ACTIVE] }) {
-        id
-        remainingQuantity
-        status
-      }
     }
     _meta {
       block {
@@ -128,7 +121,7 @@ export const AggregateOrderBookQuery = gql`
 export const ContractSpecsQuery = gql`
   query ContractSpecs {
     futures(id: "0") {
-      hashrateOracleAddress
+      priceOracle
       minimumPriceIncrement
       contractSizeHpsDay
       contractAddress
@@ -233,7 +226,7 @@ export const HistoricalOrdersQuery = gql`
     orders(
       where: {
         user: $address
-        status_in: ["FILLED", "PARTIALLY_FILLED", "CANCELLED"]
+        status_in: ["FILLED", "CANCELLED", "LIQUIDATED", "EXPIRED"]
       }
       first: $first
       skip: $skip
@@ -257,14 +250,9 @@ export const HistoricalOrdersQuery = gql`
       status
       transactionHash
       updatedAt
-      # Liquidated units of this aggregate order. The aggregate Order.status has
-      # no LIQUIDATED state (it lands in CANCELLED/PARTIALLY_FILLED); liquidation
-      # lives on the per-unit OrderEntry, so detect it via these entries.
-      liquidatedEntries: entries(where: { status: LIQUIDATED }) {
-        id
-        liquidator
-        liquidationFee
-      }
+      # Populated only when a keeper force-cancelled the order (status LIQUIDATED).
+      liquidator
+      liquidationFee
     }
     _meta {
       block {
@@ -321,8 +309,8 @@ export const AggregatedBtcPriceIndexQuery = gql`
 `;
 
 // Per-user futures Trades, mirroring the perps `UserTradesQuery` shape.
-// The futures Trade entity has no `aggregatedEntryPriceAfter` (perps-only)
-// but does carry `expirationAt` and `fillCount` (futures-only).
+// The futures Trade entity additionally carries `expirationAt`, which the perps
+// one has no equivalent for.
 export const UserFuturesTradesQuery = gql`
   query UserFuturesTrades($address: ID!, $first: Int!, $skip: Int!) {
     trades(

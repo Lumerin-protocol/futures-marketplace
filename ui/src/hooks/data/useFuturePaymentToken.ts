@@ -7,7 +7,7 @@ import { withErrors } from "../../lib/withErrors";
 ///
 /// The Futures contract no longer exposes the token directly — it lives on the
 /// CollateralVault. We chain two reads:
-///   1. `Futures.collateralVault()`   -> vault address (cached, immutable)
+///   1. `HashPowerFutures.vault()`          -> vault address (cached, immutable)
 ///   2. `CollateralVault.collateralToken()` -> ERC20 token address (also immutable)
 ///
 /// Cached forever; safe to call from many places (wagmi dedupes the read).

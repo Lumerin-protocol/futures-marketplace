@@ -9,7 +9,7 @@ import { SafeWallet } from "../lib/safe.ts";
 import { writeAndWait } from "../lib/writeContract.ts";
 
 /**
- * Point Futures at a new Chainlink-style hashprice oracle.
+ * Point HashPowerFutures at a new Chainlink-style hashprice oracle.
  *
  * Env:
  *   FUTURES_ADDRESS        — venue proxy (required)
@@ -17,7 +17,7 @@ import { writeAndWait } from "../lib/writeContract.ts";
  *   SAFE_OWNER_ADDRESS     — optional Safe; when set, propose via Safe
  */
 async function main() {
-  logTitle("Futures setOracle");
+  logTitle("HashPowerFutures setOracle");
 
   const { viem } = await hre.network.getOrCreate();
   const futuresAddress = requireAddress("FUTURES_ADDRESS");
@@ -28,12 +28,12 @@ async function main() {
   const pc = await viem.getPublicClient();
   logInfo("deployer", { Address: addrUrl(pc, deployer.account.address) });
 
-  const futures = await viem.getContractAt("Futures", futuresAddress);
+  const futures = await viem.getContractAt("HashPowerFutures", futuresAddress);
   const owner = await futures.read.owner();
   const current = await futures.read.priceOracle();
   const version = await futures.read.VERSION().catch(() => "unknown");
   logInfo("setOracle", {
-    Futures: addrUrl(pc, futuresAddress),
+    HashPowerFutures: addrUrl(pc, futuresAddress),
     Owner: owner,
     Version: version,
     From: addrUrl(pc, current),

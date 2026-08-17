@@ -1,4 +1,4 @@
-import { BadDebt as BadDebtEventLog } from "../../generated/Futures/Futures";
+import { BadDebt as BadDebtEventLog } from "../../generated/HashPowerFutures/HashPowerFutures";
 import { BadDebtEvent } from "../../generated/schema";
 import { createEventId } from "../ids";
 import { flushFuturesCounters } from "../internal/match";

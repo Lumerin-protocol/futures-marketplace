@@ -31,7 +31,7 @@ export async function scaleHashprice(
 
 /// Re-pushes the current price feed answer so its `updatedAt` becomes the next block's
 /// timestamp. Use this after `setNextBlockTimestamp` jumps far enough that the cached
-/// answer would trip `Futures.MAX_ORACLE_STALENESS`.
+/// answer would trip `HashPowerFutures.MAX_ORACLE_STALENESS`.
 ///
 /// When `freshAt` is supplied, the helper instead writes that timestamp directly via
 /// `setRound` without consuming the next block's timestamp slot. Use this overload when

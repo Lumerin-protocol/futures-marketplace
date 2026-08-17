@@ -14,8 +14,8 @@
   "scripts": {
     "format:sol": "forge fmt ./contracts/**/*.sol",
     "compile": "hardhat compile",
-    "test": "hardhat test",
-    "test:gas": "hardhat test tests/gas/futures-gas.test.ts",
+    "test": "hardhat test --network hardhat",
+    "test:gas": "hardhat test --network hardhat tests/gas/futures-gas.test.ts",
     "typecheck": "tsgo --noEmit",
     "lint": "biome lint .",
     "lint:fix": "biome check --write .",
@@ -23,7 +23,7 @@
     "deploy:futures": "hardhat run scripts/deploy-futures.ts",
     "deploy:local": "hardhat run scripts/deploy-local.ts",
     "upgrade:futures": "hardhat run scripts/update-futures.ts",
-    "rebuild:order-aggregate-cache": "hardhat run scripts/rebuild-order-aggregate-cache.ts",
+    "drop:active-orders": "hardhat run scripts/drop-active-orders.ts",
     "futures:close": "hardhat run scripts/futures-close.ts",
     "futures:reset-state": "hardhat run scripts/futures-reset-state.ts",
     "set:btc-price": "hardhat run scripts/set-bitcoin-price.ts"
@@ -41,14 +41,6 @@
     "hardhat-viem-abi": "https://github.com/lsheva/hardhat-viem-abi.git#v1.0.0-alpha.2&path:packages/hardhat-viem-abi",
     "typescript": "^5.8.0"
   },
-  "pnpm": {
-    "patchedDependencies": {
-      "multicall3@0.0.0": "patches/multicall3@0.0.0.patch"
-    },
-    "onlyBuiltDependencies": [
-      "hardhat-viem-abi"
-    ]
-  },
   "dependencies": {
     "@chainlink/contracts": "^1.3.0",
     "@noble/curves": "^1.6.0",
@@ -57,10 +49,10 @@
     "@safe-global/api-kit": "^5.0.1",
     "@safe-global/protocol-kit": "^8.0.4",
     "@safe-global/types-kit": "^4.0.1",
-    "collateral-margin": "github:Lumerin-protocol/collateral-margin#9372f537a57682bb126aede41aac51be004828a6",
+    "collateral-margin": "github:Lumerin-protocol/collateral-margin#d6eea43b8d477d7ebf4e7bde6fba1c0f4047ca9a",
     "multicall3": "github:mds1/multicall3",
     "solidity-linked-list": "6.5.0",
     "viem": "^2.54.6"
   },
-  "packageManager": "pnpm@10.28.1"
+  "packageManager": "pnpm@11.22.0"
 }

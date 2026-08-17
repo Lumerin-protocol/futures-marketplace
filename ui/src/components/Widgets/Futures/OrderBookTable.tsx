@@ -138,7 +138,7 @@ export const OrderBookTable = ({
   //
   // The only schema difference is how `totalQuantity` is denominated:
   //   - perps: scaled BigInt (divide by QUANTITY_SCALE_NUM to get units)
-  //   - futures: raw integer count of OrderEntry units
+  //   - futures: raw integer contract count (quantityDecimals is 0)
   const orderBookData = useMemo(() => {
     const futuresPriceLevels = futuresOrderBookQuery.data?.data?.priceLevels;
     const perpsPriceLevels = perpsOrderBookQuery.data?.data?.priceLevels;

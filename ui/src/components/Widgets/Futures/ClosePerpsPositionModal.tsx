@@ -8,7 +8,6 @@ import { useSimulatePerpsOrder } from "../../../hooks/data/perps/useSimulatePerp
 import { useQueryClient } from "@tanstack/react-query";
 import { USER_PERPS_ORDERS_QK } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { USER_POSITION_SESSIONS_QK } from "../../../hooks/data/perps/useUserPositionSessions";
-import { USER_PERPS_TRADES_QK } from "../../../hooks/data/perps/useUserPerpsTrades";
 import { PERPS_ORDER_HISTORY_QK } from "../../../hooks/data/perps/usePerpsOrderHistory";
 import { PERPS_POSITION_HISTORY_QK } from "../../../hooks/data/perps/usePerpsPositionHistory";
 import { USER_TRADES_QK } from "../../../hooks/data/perps/useUserTrades";
@@ -61,7 +60,7 @@ export const ClosePerpsPositionModal = ({
   const queryClient = useQueryClient();
   const publicClient = usePublicClient();
 
-  const netQty = session?.user.netQuantity ?? 0n;
+  const netQty = session?.netQuantity ?? 0n;
   const isLong = netQty > 0n;
   const absNetQty = netQty < 0n ? -netQty : netQty;
   const maxQuantity = Number(absNetQty) / PAYMENT_TOKEN_SCALE_NUM;
@@ -168,7 +167,6 @@ export const ClosePerpsPositionModal = ({
         queryClient.invalidateQueries({ queryKey: [getOrderBookQueryKey("perpetual")] }),
         queryClient.invalidateQueries({ queryKey: [USER_PERPS_ORDERS_QK, participantAddress] }),
         queryClient.invalidateQueries({ queryKey: [USER_POSITION_SESSIONS_QK, participantAddress] }),
-        queryClient.invalidateQueries({ queryKey: [USER_PERPS_TRADES_QK, participantAddress] }),
         // Reset perps history tables back to their newest page.
         queryClient.resetQueries({ queryKey: [PERPS_ORDER_HISTORY_QK, participantAddress] }),
         queryClient.resetQueries({ queryKey: [PERPS_POSITION_HISTORY_QK, participantAddress] }),

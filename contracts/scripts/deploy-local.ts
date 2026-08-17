@@ -31,7 +31,7 @@ async function main() {
     Multicall3: base.contracts.multicall3.address,
     USDCMock: base.contracts.usdcMock.address,
     HASHPRICE_USD: base.contracts.hashpriceUsd.address,
-    Futures: futures.contracts.futures.address,
+    HashPowerFutures: futures.contracts.futures.address,
     CollateralVault: futures.contracts.collateralVault.address,
     PortfolioMarginEngine: futures.contracts.portfolioMarginEngine.address,
   });

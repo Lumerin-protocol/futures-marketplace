@@ -5,9 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  multicall3@0.0.0:
-    hash: f161cbee6da2788494364d99cafb2d9c802738f56fb89426eebbc0a14a4f4a8f
-    path: patches/multicall3@0.0.0.patch
+  multicall3@0.0.0: f161cbee6da2788494364d99cafb2d9c802738f56fb89426eebbc0a14a4f4a8f
 
 importers:
 
@@ -15,7 +13,7 @@ importers:
     dependencies:
       '@chainlink/contracts':
         specifier: ^1.3.0
-        version: 1.5.0(@types/node@22.19.17)(ethers@6.16.0)
+        version: 1.5.0(@types/node@22.19.17)(ethers@5.8.0)(supports-color@7.2.0)
       '@noble/curves':
         specifier: ^1.6.0
         version: 1.9.7
@@ -35,8 +33,8 @@ importers:
         specifier: ^4.0.1
         version: 4.0.1(typescript@5.9.3)(zod@3.25.76)
       collateral-margin:
-        specifier: github:Lumerin-protocol/collateral-margin#9372f537a57682bb126aede41aac51be004828a6
-        version: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/9372f537a57682bb126aede41aac51be004828a6
+        specifier: github:Lumerin-protocol/collateral-margin#d6eea43b8d477d7ebf4e7bde6fba1c0f4047ca9a
+        version: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/d6eea43b8d477d7ebf4e7bde6fba1c0f4047ca9a
       multicall3:
         specifier: github:mds1/multicall3
         version: https://codeload.github.com/mds1/multicall3/tar.gz/b667d67ecfa5361a81e8f110234ce242613b0012(patch_hash=f161cbee6da2788494364d99cafb2d9c802738f56fb89426eebbc0a14a4f4a8f)
@@ -55,7 +53,7 @@ importers:
         version: https://codeload.github.com/lsheva/evm-gas-benchmark/tar.gz/e12496505e0911fd3596c491c884c8334ecddeae#path:packages/evm-gas-benchmark
       '@nomicfoundation/hardhat-toolbox-viem':
         specifier: ^5.0.7
-        version: 5.0.7(a5f8928738448af8a85cfa179d0634f5)
+        version: 5.0.7(dca42ad381da4a8c8aa5cfbed880247a)
       '@nomicfoundation/hardhat-verify':
         specifier: ^3.0.17
         version: 3.0.17(hardhat@3.9.1)
@@ -130,24 +128,28 @@ packages:
     engines: {node: '>=14.21.3'}
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   '@biomejs/cli-linux-arm64@2.4.13':
     resolution: {integrity: sha512-NzkUDSqfvMBrPplKgVr3aXLHZ2NEELvvF4vZxXulEylKWIGqlvNEcwUcj9OLrn75TD3lJ/GIqCVlBwd1MZCuYQ==}
     engines: {node: '>=14.21.3'}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   '@biomejs/cli-linux-x64-musl@2.4.13':
     resolution: {integrity: sha512-Z601MienRgTBDza/+u2CH3RSrWoXo9rtr8NK6A4KJzqGgfxx+H3VlyLgTJ4sRo40T3pIsqpTmiOQEvYzQvBRvQ==}
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   '@biomejs/cli-linux-x64@2.4.13':
     resolution: {integrity: sha512-Az3ZZedYRBo9EQzNnD9SxFcR1G5QsGo6VEc2hIyVPZ1rdKwee/7E9oeBBZFpE8Z44ekxsDQBqbiWGW5ShOhUSQ==}
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@biomejs/cli-win32-arm64@2.4.13':
     resolution: {integrity: sha512-Px9PS2B5/Q183bUwy/5VHqp3J2lzdOCeVGzMpphYfl8oSa7VDCqenBdqWpy6DCy/en4Rbf/Y1RieZF6dJPcc9A==}
@@ -427,6 +429,12 @@ packages:
   '@ethersproject/hash@5.8.0':
     resolution: {integrity: sha512-ac/lBcTbEWW/VGJij0CNSw/wPcw9bSRgCB0AIBz8CvED/jfvDoV9hsIIiWfvWmFEi8RcXtlNwp2jv6ozWOsooA==}
 
+  '@ethersproject/hdnode@5.8.0':
+    resolution: {integrity: sha512-4bK1VF6E83/3/Im0ERnnUeWOY3P1BZml4ZD3wcH8Ys0/d1h1xaFt6Zc+Dh9zXf9TapGro0T4wvO71UTCp3/uoA==}
+
+  '@ethersproject/json-wallets@5.8.0':
+    resolution: {integrity: sha512-HxblNck8FVUtNxS3VTEYJAcwiKYsBIF77W15HufqlBF9gGfhmYOJtYZp8fSDZtn9y5EaXTE87zDwzxRoTFk11w==}
+
   '@ethersproject/keccak256@5.8.0':
     resolution: {integrity: sha512-A1pkKLZSz8pDaQ1ftutZoaN46I6+jvuqugx5KYNeQOPqq+JZ0Txm7dlWesCHB5cndJSu5vP2VKptKf7cksERng==}
 
@@ -435,6 +443,9 @@ packages:
 
   '@ethersproject/networks@5.8.0':
     resolution: {integrity: sha512-egPJh3aPVAzbHwq8DD7Po53J4OUSsA1MjQp8Vf/OZPav5rlmWUaFLiq8cvQiGK0Z5K6LYzm29+VA/p4RL1FzNg==}
+
+  '@ethersproject/pbkdf2@5.8.0':
+    resolution: {integrity: sha512-wuHiv97BrzCmfEaPbUFpMjlVg/IDkZThp9Ri88BpjRleg4iePJaj2SW8AIyE8cXn5V1tuAaMj6lzvsGJkGWskg==}
 
   '@ethersproject/properties@5.8.0':
     resolution: {integrity: sha512-PYuiEoQ+FMaZZNGrStmN7+lWjlsoufGIHdww7454FIaGdbe/p5rnaCXTr5MtBYl3NkeoVhHZuyzChPeGeKIpQw==}
@@ -454,14 +465,26 @@ packages:
   '@ethersproject/signing-key@5.8.0':
     resolution: {integrity: sha512-LrPW2ZxoigFi6U6aVkFN/fa9Yx/+4AtIUe4/HACTvKJdhm0eeb107EVCIQcrLZkxaSIgc/eCrX8Q1GtbH+9n3w==}
 
+  '@ethersproject/solidity@5.8.0':
+    resolution: {integrity: sha512-4CxFeCgmIWamOHwYN9d+QWGxye9qQLilpgTU0XhYs1OahkclF+ewO+3V1U0mvpiuQxm5EHHmv8f7ClVII8EHsA==}
+
   '@ethersproject/strings@5.8.0':
     resolution: {integrity: sha512-qWEAk0MAvl0LszjdfnZ2uC8xbR2wdv4cDabyHiBh3Cldq/T8dPH3V4BbBsAYJUeonwD+8afVXld274Ls+Y1xXg==}
 
   '@ethersproject/transactions@5.8.0':
     resolution: {integrity: sha512-UglxSDjByHG0TuU17bDfCemZ3AnKO2vYrL5/2n2oXvKzvb7Cz+W9gOWXKARjp2URVwcWlQlPOEQyAviKwT4AHg==}
 
+  '@ethersproject/units@5.8.0':
+    resolution: {integrity: sha512-lxq0CAnc5kMGIiWW4Mr041VT8IhNM+Pn5T3haO74XZWFulk7wH1Gv64HqE96hT4a7iiNMdOCFEBgaxWuk8ETKQ==}
+
+  '@ethersproject/wallet@5.8.0':
+    resolution: {integrity: sha512-G+jnzmgg6UxurVKRKvw27h0kvG75YKXZKdlLYmAHeF32TGUzHkOFd7Zn6QHOTYRFWnfjtSSFjBowKo7vfrXzPA==}
+
   '@ethersproject/web@5.8.0':
     resolution: {integrity: sha512-j7+Ksi/9KfGviws6Qtf9Q7KCqRhpwrYKQPs+JBA/rKVFF/yaWLHJEH3zfVP2plVu+eys0d2DlFmhoQJayFewcw==}
+
+  '@ethersproject/wordlists@5.8.0':
+    resolution: {integrity: sha512-2df9bbXicZws2Sb5S6ET493uJ0Z84Fjr3pC4tu/qlnZERibZCeUVuqdtt+7Tv9xxhUxHoIekIA7avrKUWHrezg==}
 
   '@fastify/busboy@2.1.1':
     resolution: {integrity: sha512-vBZP4NlzfOlerQTnba4aqZoMhE/a9HY7HRqoOPaETQcSQuWEIyZMHGfVu6w9wGtGK5fED5qRs2DteVCjOH60sA==}
@@ -481,7 +504,7 @@ packages:
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
 
   '@lsheva/evm-gas-benchmark@https://codeload.github.com/lsheva/evm-gas-benchmark/tar.gz/e12496505e0911fd3596c491c884c8334ecddeae#path:packages/evm-gas-benchmark':
-    resolution: {path: packages/evm-gas-benchmark, tarball: https://codeload.github.com/lsheva/evm-gas-benchmark/tar.gz/e12496505e0911fd3596c491c884c8334ecddeae}
+    resolution: {gitHosted: true, path: packages/evm-gas-benchmark, tarball: https://codeload.github.com/lsheva/evm-gas-benchmark/tar.gz/e12496505e0911fd3596c491c884c8334ecddeae}
     version: 0.1.0
     engines: {node: '>=24'}
     hasBin: true
@@ -884,6 +907,9 @@ packages:
     resolution: {integrity: sha512-TFi4HBKSGfIKsK5YCkKaaFG2m4PEDyViZmEwof3MTIgzimHLto6muaHVpbrljdIvIrFZzEq/p4nafOeLcYegrg==}
     engines: {node: '>=0.3.0'}
 
+  aes-js@3.0.0:
+    resolution: {integrity: sha512-H7wUZRn8WpTq9jocdxQ2c8x2sKo9ZVmzfRE13GiNJXfp7NcKYEdvl3vspKjXox6RIG2VtaRe4JFvxG4rqp2Zuw==}
+
   aes-js@4.0.0-beta.5:
     resolution: {integrity: sha512-G965FqalsNyrPqgEGON7nIx1e/OVENSgiEIzyC63haUMuvNnwIgIjMs52hlTCKhkBny7A2ORNlfY9Zu+jmGk1Q==}
 
@@ -990,8 +1016,8 @@ packages:
   ci-info@2.0.0:
     resolution: {integrity: sha512-5tK7EtrZ0N+OLFMthtqOj4fI2Jeb88C4CAZPu25LDVUgXJ0A3Js4PMGqrn0JU1W0Mh1/Z8wZzYPxqUrXeBboCQ==}
 
-  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/9372f537a57682bb126aede41aac51be004828a6:
-    resolution: {tarball: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/9372f537a57682bb126aede41aac51be004828a6}
+  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/d6eea43b8d477d7ebf4e7bde6fba1c0f4047ca9a:
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/d6eea43b8d477d7ebf4e7bde6fba1c0f4047ca9a}
     version: 1.0.0
 
   color-convert@2.0.1:
@@ -1052,7 +1078,7 @@ packages:
     engines: {node: '>=6'}
 
   era-contracts@https://codeload.github.com/matter-labs/era-contracts/tar.gz/446d391d34bdb48255d5f8fef8a8248925fc98b9:
-    resolution: {tarball: https://codeload.github.com/matter-labs/era-contracts/tar.gz/446d391d34bdb48255d5f8fef8a8248925fc98b9}
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/matter-labs/era-contracts/tar.gz/446d391d34bdb48255d5f8fef8a8248925fc98b9}
     version: 0.1.0
 
   esbuild@0.28.0:
@@ -1075,6 +1101,9 @@ packages:
 
   ethereum-cryptography@2.2.1:
     resolution: {integrity: sha512-r/W8lkHSiTLxUxW8Rf3u4HGB0xQweG2RyETjywylKZSzLWoWAijRz8WCuOtJ6wah+avllXBqZuk29HCCvhEIRg==}
+
+  ethers@5.8.0:
+    resolution: {integrity: sha512-DUq+7fHrCg1aPDFCHx6UIPb3nmt2XMpM7Y/g2gLhsl3lIBqeAfOJIl1qEvRf2uq3BiKxmh6Fh5pfp2ieyek7Kg==}
 
   ethers@6.16.0:
     resolution: {integrity: sha512-U1wulmetNymijEhpSEQ7Ct/P/Jw9/e7R1j5XIbPRydgV2DjLVMsULDlNksq3RQnFgKoLlZf88ijYtWEXcPa07A==}
@@ -1157,7 +1186,7 @@ packages:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
 
   hardhat-viem-abi@https://codeload.github.com/lsheva/hardhat-viem-abi/tar.gz/54198ea8c9ad9b05c0c23a057ae3b1c7ab82a93a#path:packages/hardhat-viem-abi:
-    resolution: {path: packages/hardhat-viem-abi, tarball: https://codeload.github.com/lsheva/hardhat-viem-abi/tar.gz/54198ea8c9ad9b05c0c23a057ae3b1c7ab82a93a}
+    resolution: {gitHosted: true, path: packages/hardhat-viem-abi, tarball: https://codeload.github.com/lsheva/hardhat-viem-abi/tar.gz/54198ea8c9ad9b05c0c23a057ae3b1c7ab82a93a}
     version: 1.0.0-alpha.2
     engines: {node: '>=22'}
     peerDependencies:
@@ -1339,7 +1368,7 @@ packages:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
   multicall3@https://codeload.github.com/mds1/multicall3/tar.gz/b667d67ecfa5361a81e8f110234ce242613b0012:
-    resolution: {tarball: https://codeload.github.com/mds1/multicall3/tar.gz/b667d67ecfa5361a81e8f110234ce242613b0012}
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/mds1/multicall3/tar.gz/b667d67ecfa5361a81e8f110234ce242613b0012}
     version: 0.0.0
 
   ndjson@2.0.0:
@@ -1528,6 +1557,9 @@ packages:
 
   safer-buffer@2.1.2:
     resolution: {integrity: sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==}
+
+  scrypt-js@3.0.1:
+    resolution: {integrity: sha512-cdwTTnqPu0Hyvf5in5asVdZocVDTNRmR7XEcJuIzMjJeSHybHl7vpB66AzwTaIg6CLSbtjcxc8fqcySfnTkccA==}
 
   semver@5.7.2:
     resolution: {integrity: sha512-cBznnQ9KjJqU67B52RMC65CMarK2600WFnbkcaiwWq3xy/5haFJlshgnpjovMVJ+Hff49d8GEn0b87C5pDQ10g==}
@@ -1826,13 +1858,13 @@ snapshots:
   '@biomejs/cli-win32-x64@2.4.13':
     optional: true
 
-  '@chainlink/contracts@1.5.0(@types/node@22.19.17)(ethers@6.16.0)':
+  '@chainlink/contracts@1.5.0(@types/node@22.19.17)(ethers@5.8.0)(supports-color@7.2.0)':
     dependencies:
       '@arbitrum/nitro-contracts': 3.0.0
       '@changesets/cli': 2.31.0(@types/node@22.19.17)
       '@changesets/get-github-info': 0.6.0
-      '@eslint/eslintrc': 3.3.5
-      '@eth-optimism/contracts': 0.6.0(ethers@6.16.0)
+      '@eslint/eslintrc': 3.3.5(supports-color@7.2.0)
+      '@eth-optimism/contracts': 0.6.0(ethers@5.8.0)
       '@openzeppelin/contracts-4.7.3': '@openzeppelin/contracts@4.7.3'
       '@openzeppelin/contracts-4.8.3': '@openzeppelin/contracts@4.8.3'
       '@openzeppelin/contracts-4.9.6': '@openzeppelin/contracts@4.9.6'
@@ -2078,10 +2110,10 @@ snapshots:
   '@esbuild/win32-x64@0.28.0':
     optional: true
 
-  '@eslint/eslintrc@3.3.5':
+  '@eslint/eslintrc@3.3.5(supports-color@7.2.0)':
     dependencies:
       ajv: 6.15.0
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@7.2.0)
       espree: 10.4.0
       globals: 14.0.0
       ignore: 5.3.2
@@ -2092,12 +2124,12 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@eth-optimism/contracts@0.6.0(ethers@6.16.0)':
+  '@eth-optimism/contracts@0.6.0(ethers@5.8.0)':
     dependencies:
       '@eth-optimism/core-utils': 0.12.0
       '@ethersproject/abstract-provider': 5.8.0
       '@ethersproject/abstract-signer': 5.8.0
-      ethers: 6.16.0
+      ethers: 5.8.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -2218,6 +2250,37 @@ snapshots:
       '@ethersproject/properties': 5.8.0
       '@ethersproject/strings': 5.8.0
 
+  '@ethersproject/hdnode@5.8.0':
+    dependencies:
+      '@ethersproject/abstract-signer': 5.8.0
+      '@ethersproject/basex': 5.8.0
+      '@ethersproject/bignumber': 5.8.0
+      '@ethersproject/bytes': 5.8.0
+      '@ethersproject/logger': 5.8.0
+      '@ethersproject/pbkdf2': 5.8.0
+      '@ethersproject/properties': 5.8.0
+      '@ethersproject/sha2': 5.8.0
+      '@ethersproject/signing-key': 5.8.0
+      '@ethersproject/strings': 5.8.0
+      '@ethersproject/transactions': 5.8.0
+      '@ethersproject/wordlists': 5.8.0
+
+  '@ethersproject/json-wallets@5.8.0':
+    dependencies:
+      '@ethersproject/abstract-signer': 5.8.0
+      '@ethersproject/address': 5.8.0
+      '@ethersproject/bytes': 5.8.0
+      '@ethersproject/hdnode': 5.8.0
+      '@ethersproject/keccak256': 5.8.0
+      '@ethersproject/logger': 5.8.0
+      '@ethersproject/pbkdf2': 5.8.0
+      '@ethersproject/properties': 5.8.0
+      '@ethersproject/random': 5.8.0
+      '@ethersproject/strings': 5.8.0
+      '@ethersproject/transactions': 5.8.0
+      aes-js: 3.0.0
+      scrypt-js: 3.0.1
+
   '@ethersproject/keccak256@5.8.0':
     dependencies:
       '@ethersproject/bytes': 5.8.0
@@ -2228,6 +2291,11 @@ snapshots:
   '@ethersproject/networks@5.8.0':
     dependencies:
       '@ethersproject/logger': 5.8.0
+
+  '@ethersproject/pbkdf2@5.8.0':
+    dependencies:
+      '@ethersproject/bytes': 5.8.0
+      '@ethersproject/sha2': 5.8.0
 
   '@ethersproject/properties@5.8.0':
     dependencies:
@@ -2284,6 +2352,15 @@ snapshots:
       elliptic: 6.6.1
       hash.js: 1.1.7
 
+  '@ethersproject/solidity@5.8.0':
+    dependencies:
+      '@ethersproject/bignumber': 5.8.0
+      '@ethersproject/bytes': 5.8.0
+      '@ethersproject/keccak256': 5.8.0
+      '@ethersproject/logger': 5.8.0
+      '@ethersproject/sha2': 5.8.0
+      '@ethersproject/strings': 5.8.0
+
   '@ethersproject/strings@5.8.0':
     dependencies:
       '@ethersproject/bytes': 5.8.0
@@ -2302,10 +2379,42 @@ snapshots:
       '@ethersproject/rlp': 5.8.0
       '@ethersproject/signing-key': 5.8.0
 
+  '@ethersproject/units@5.8.0':
+    dependencies:
+      '@ethersproject/bignumber': 5.8.0
+      '@ethersproject/constants': 5.8.0
+      '@ethersproject/logger': 5.8.0
+
+  '@ethersproject/wallet@5.8.0':
+    dependencies:
+      '@ethersproject/abstract-provider': 5.8.0
+      '@ethersproject/abstract-signer': 5.8.0
+      '@ethersproject/address': 5.8.0
+      '@ethersproject/bignumber': 5.8.0
+      '@ethersproject/bytes': 5.8.0
+      '@ethersproject/hash': 5.8.0
+      '@ethersproject/hdnode': 5.8.0
+      '@ethersproject/json-wallets': 5.8.0
+      '@ethersproject/keccak256': 5.8.0
+      '@ethersproject/logger': 5.8.0
+      '@ethersproject/properties': 5.8.0
+      '@ethersproject/random': 5.8.0
+      '@ethersproject/signing-key': 5.8.0
+      '@ethersproject/transactions': 5.8.0
+      '@ethersproject/wordlists': 5.8.0
+
   '@ethersproject/web@5.8.0':
     dependencies:
       '@ethersproject/base64': 5.8.0
       '@ethersproject/bytes': 5.8.0
+      '@ethersproject/logger': 5.8.0
+      '@ethersproject/properties': 5.8.0
+      '@ethersproject/strings': 5.8.0
+
+  '@ethersproject/wordlists@5.8.0':
+    dependencies:
+      '@ethersproject/bytes': 5.8.0
+      '@ethersproject/hash': 5.8.0
       '@ethersproject/logger': 5.8.0
       '@ethersproject/properties': 5.8.0
       '@ethersproject/strings': 5.8.0
@@ -2419,25 +2528,25 @@ snapshots:
     dependencies:
       '@nomicfoundation/hardhat-utils': 4.1.5
 
-  '@nomicfoundation/hardhat-ignition-viem@3.1.4(@nomicfoundation/hardhat-ignition@3.1.3(@nomicfoundation/hardhat-verify@3.0.17(hardhat@3.9.1))(hardhat@3.9.1))(@nomicfoundation/hardhat-verify@3.0.17(hardhat@3.9.1))(@nomicfoundation/hardhat-viem@3.0.9(hardhat@3.9.1)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76)))(@nomicfoundation/ignition-core@3.1.3)(hardhat@3.9.1)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76))':
+  '@nomicfoundation/hardhat-ignition-viem@3.1.4(@nomicfoundation/hardhat-ignition@3.1.3(@nomicfoundation/hardhat-verify@3.0.17(hardhat@3.9.1))(hardhat@3.9.1)(supports-color@7.2.0))(@nomicfoundation/hardhat-verify@3.0.17(hardhat@3.9.1))(@nomicfoundation/hardhat-viem@3.0.9(hardhat@3.9.1)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76)))(@nomicfoundation/ignition-core@3.1.3(supports-color@7.2.0))(hardhat@3.9.1)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76))':
     dependencies:
       '@nomicfoundation/hardhat-errors': 3.0.17
-      '@nomicfoundation/hardhat-ignition': 3.1.3(@nomicfoundation/hardhat-verify@3.0.17(hardhat@3.9.1))(hardhat@3.9.1)
+      '@nomicfoundation/hardhat-ignition': 3.1.3(@nomicfoundation/hardhat-verify@3.0.17(hardhat@3.9.1))(hardhat@3.9.1)(supports-color@7.2.0)
       '@nomicfoundation/hardhat-verify': 3.0.17(hardhat@3.9.1)
       '@nomicfoundation/hardhat-viem': 3.0.9(hardhat@3.9.1)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76))
-      '@nomicfoundation/ignition-core': 3.1.3
+      '@nomicfoundation/ignition-core': 3.1.3(supports-color@7.2.0)
       hardhat: 3.9.1
       viem: 2.54.6(typescript@5.9.3)(zod@3.25.76)
 
-  '@nomicfoundation/hardhat-ignition@3.1.3(@nomicfoundation/hardhat-verify@3.0.17(hardhat@3.9.1))(hardhat@3.9.1)':
+  '@nomicfoundation/hardhat-ignition@3.1.3(@nomicfoundation/hardhat-verify@3.0.17(hardhat@3.9.1))(hardhat@3.9.1)(supports-color@7.2.0)':
     dependencies:
       '@nomicfoundation/hardhat-errors': 3.0.17
       '@nomicfoundation/hardhat-utils': 4.1.5
       '@nomicfoundation/hardhat-verify': 3.0.17(hardhat@3.9.1)
-      '@nomicfoundation/ignition-core': 3.1.3
+      '@nomicfoundation/ignition-core': 3.1.3(supports-color@7.2.0)
       '@nomicfoundation/ignition-ui': 3.1.2
       chalk: 5.6.2
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@7.2.0)
       hardhat: 3.9.1
       json5: 2.2.3
       prompts: 2.4.2
@@ -2446,7 +2555,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@nomicfoundation/hardhat-keystore@3.0.7(hardhat@3.9.1)':
+  '@nomicfoundation/hardhat-keystore@3.0.7(hardhat@3.9.1)(supports-color@7.2.0)':
     dependencies:
       '@noble/ciphers': 1.2.1
       '@noble/hashes': 1.7.1
@@ -2454,7 +2563,7 @@ snapshots:
       '@nomicfoundation/hardhat-utils': 4.1.5
       '@nomicfoundation/hardhat-zod-utils': 3.0.5(zod@3.25.76)
       chalk: 5.6.2
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@7.2.0)
       hardhat: 3.9.1
       zod: 3.25.76
     transitivePeerDependencies:
@@ -2481,17 +2590,17 @@ snapshots:
       tsx: 4.22.4
       zod: 3.25.76
 
-  '@nomicfoundation/hardhat-toolbox-viem@5.0.7(a5f8928738448af8a85cfa179d0634f5)':
+  '@nomicfoundation/hardhat-toolbox-viem@5.0.7(dca42ad381da4a8c8aa5cfbed880247a)':
     dependencies:
-      '@nomicfoundation/hardhat-ignition': 3.1.3(@nomicfoundation/hardhat-verify@3.0.17(hardhat@3.9.1))(hardhat@3.9.1)
-      '@nomicfoundation/hardhat-ignition-viem': 3.1.4(@nomicfoundation/hardhat-ignition@3.1.3(@nomicfoundation/hardhat-verify@3.0.17(hardhat@3.9.1))(hardhat@3.9.1))(@nomicfoundation/hardhat-verify@3.0.17(hardhat@3.9.1))(@nomicfoundation/hardhat-viem@3.0.9(hardhat@3.9.1)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76)))(@nomicfoundation/ignition-core@3.1.3)(hardhat@3.9.1)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76))
-      '@nomicfoundation/hardhat-keystore': 3.0.7(hardhat@3.9.1)
+      '@nomicfoundation/hardhat-ignition': 3.1.3(@nomicfoundation/hardhat-verify@3.0.17(hardhat@3.9.1))(hardhat@3.9.1)(supports-color@7.2.0)
+      '@nomicfoundation/hardhat-ignition-viem': 3.1.4(@nomicfoundation/hardhat-ignition@3.1.3(@nomicfoundation/hardhat-verify@3.0.17(hardhat@3.9.1))(hardhat@3.9.1)(supports-color@7.2.0))(@nomicfoundation/hardhat-verify@3.0.17(hardhat@3.9.1))(@nomicfoundation/hardhat-viem@3.0.9(hardhat@3.9.1)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76)))(@nomicfoundation/ignition-core@3.1.3(supports-color@7.2.0))(hardhat@3.9.1)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76))
+      '@nomicfoundation/hardhat-keystore': 3.0.7(hardhat@3.9.1)(supports-color@7.2.0)
       '@nomicfoundation/hardhat-network-helpers': 3.0.6(hardhat@3.9.1)
       '@nomicfoundation/hardhat-node-test-runner': 3.0.14(hardhat@3.9.1)
       '@nomicfoundation/hardhat-verify': 3.0.17(hardhat@3.9.1)
       '@nomicfoundation/hardhat-viem': 3.0.9(hardhat@3.9.1)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76))
       '@nomicfoundation/hardhat-viem-assertions': 3.1.2(@nomicfoundation/hardhat-viem@3.0.9(hardhat@3.9.1)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76)))(hardhat@3.9.1)(viem@2.54.6(typescript@5.9.3)(zod@3.25.76))
-      '@nomicfoundation/ignition-core': 3.1.3
+      '@nomicfoundation/ignition-core': 3.1.3(supports-color@7.2.0)
       hardhat: 3.9.1
       viem: 2.54.6(typescript@5.9.3)(zod@3.25.76)
 
@@ -2548,14 +2657,14 @@ snapshots:
       '@nomicfoundation/hardhat-utils': 4.1.5
       zod: 3.25.76
 
-  '@nomicfoundation/ignition-core@3.1.3':
+  '@nomicfoundation/ignition-core@3.1.3(supports-color@7.2.0)':
     dependencies:
       '@ethersproject/address': 5.6.1
       '@nomicfoundation/hardhat-errors': 3.0.17
       '@nomicfoundation/hardhat-utils': 4.1.5
       '@nomicfoundation/solidity-analyzer': 0.1.2
       cbor2: 1.12.0
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@7.2.0)
       ethers: 6.16.0
       immer: 10.0.2
       lodash-es: 4.17.21
@@ -2770,6 +2879,8 @@ snapshots:
 
   adm-zip@0.4.16: {}
 
+  aes-js@3.0.0: {}
+
   aes-js@4.0.0-beta.5: {}
 
   ajv@6.15.0:
@@ -2866,7 +2977,7 @@ snapshots:
 
   ci-info@2.0.0: {}
 
-  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/9372f537a57682bb126aede41aac51be004828a6: {}
+  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/d6eea43b8d477d7ebf4e7bde6fba1c0f4047ca9a: {}
 
   color-convert@2.0.1:
     dependencies:
@@ -2892,9 +3003,11 @@ snapshots:
 
   dataloader@1.4.0: {}
 
-  debug@4.4.3:
+  debug@4.4.3(supports-color@7.2.0):
     dependencies:
       ms: 2.1.3
+    optionalDependencies:
+      supports-color: 7.2.0
 
   deep-eql@4.1.4:
     dependencies:
@@ -2972,6 +3085,42 @@ snapshots:
       '@noble/hashes': 1.4.0
       '@scure/bip32': 1.4.0
       '@scure/bip39': 1.3.0
+
+  ethers@5.8.0:
+    dependencies:
+      '@ethersproject/abi': 5.8.0
+      '@ethersproject/abstract-provider': 5.8.0
+      '@ethersproject/abstract-signer': 5.8.0
+      '@ethersproject/address': 5.8.0
+      '@ethersproject/base64': 5.8.0
+      '@ethersproject/basex': 5.8.0
+      '@ethersproject/bignumber': 5.8.0
+      '@ethersproject/bytes': 5.8.0
+      '@ethersproject/constants': 5.8.0
+      '@ethersproject/contracts': 5.8.0
+      '@ethersproject/hash': 5.8.0
+      '@ethersproject/hdnode': 5.8.0
+      '@ethersproject/json-wallets': 5.8.0
+      '@ethersproject/keccak256': 5.8.0
+      '@ethersproject/logger': 5.8.0
+      '@ethersproject/networks': 5.8.0
+      '@ethersproject/pbkdf2': 5.8.0
+      '@ethersproject/properties': 5.8.0
+      '@ethersproject/providers': 5.8.0
+      '@ethersproject/random': 5.8.0
+      '@ethersproject/rlp': 5.8.0
+      '@ethersproject/sha2': 5.8.0
+      '@ethersproject/signing-key': 5.8.0
+      '@ethersproject/solidity': 5.8.0
+      '@ethersproject/strings': 5.8.0
+      '@ethersproject/transactions': 5.8.0
+      '@ethersproject/units': 5.8.0
+      '@ethersproject/wallet': 5.8.0
+      '@ethersproject/web': 5.8.0
+      '@ethersproject/wordlists': 5.8.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   ethers@6.16.0:
     dependencies:
@@ -3424,6 +3573,8 @@ snapshots:
   safe-buffer@5.2.1: {}
 
   safer-buffer@2.1.2: {}
+
+  scrypt-js@3.0.1: {}
 
   semver@5.7.2: {}
 

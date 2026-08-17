@@ -21,6 +21,7 @@ export default defineConfig({
   networks: {
     default: {
       type: "edr-simulated",
+      allowUnlimitedContractSize: true,
       mining: {
         auto: true,
       },

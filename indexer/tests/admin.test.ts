@@ -2,6 +2,7 @@ import {
   assert,
   beforeEach,
   clearStore,
+  createMockedFunction,
   describe,
   test,
 } from "matchstick-as/assembly/index";
@@ -15,7 +16,7 @@ import {
   OracleUpdated,
   PortfolioMarginUpdated,
   TakerFeeBpsUpdated,
-} from "../generated/Futures/Futures";
+} from "../generated/HashPowerFutures/HashPowerFutures";
 import {
   handleFutureExpirationDatesCountUpdated,
   handleLiquidationFeeBpsUpdated,
@@ -26,6 +27,7 @@ import {
   handleTakerFeeBpsUpdated,
 } from "../src/handlers/admin";
 import {
+  contractAddress,
   mockFuturesContractCallsAsReverted,
   setupDataSourceMock,
   setupFutures,
@@ -93,22 +95,61 @@ describe("per-field admin config handlers", () => {
     assert.fieldEquals("Futures", "0", "futureExpirationDatesCount", "4");
   });
 
-  test("handleOracleUpdated writes hashrateOracleAddress", () => {
+  test("handleOracleUpdated writes priceOracle", () => {
     const ev = newTypedMockEventWithParams<OracleUpdated>([
       paramAddress("newOracle", userAddress(12)),
     ]);
     handleOracleUpdated(ev);
 
-    assert.fieldEquals("Futures", "0", "hashrateOracleAddress", userAddress(12).toHexString());
+    assert.fieldEquals("Futures", "0", "priceOracle", userAddress(12).toHexString());
   });
 
-  test("handlePortfolioMarginUpdated writes portfolioMarginAddress", () => {
+  test("handlePortfolioMarginUpdated writes portfolioMargin", () => {
     const ev = newTypedMockEventWithParams<PortfolioMarginUpdated>([
       paramAddress("newPortfolioMargin", userAddress(13)),
     ]);
     handlePortfolioMarginUpdated(ev);
 
-    assert.fieldEquals("Futures", "0", "portfolioMarginAddress", userAddress(13).toHexString());
+    assert.fieldEquals("Futures", "0", "portfolioMargin", userAddress(13).toHexString());
+  });
+});
+
+describe("Futures.collateralVault from the contract", () => {
+  beforeEach(() => clearStore());
+
+  test("getOrCreateFutures reads collateralVault off the vault() getter", () => {
+    const vault = userAddress(21);
+    setupDataSourceMock();
+    mockFuturesContractCallsAsReverted();
+    createMockedFunction(contractAddress(), "vault", "vault():(address)").returns([
+      ethereum.Value.fromAddress(vault),
+    ]);
+    // No setupFutures() — the first handler invocation creates the singleton and
+    // pulls the address snapshot off the chain.
+    const ev = newTypedMockEventWithParams<MakerFeeBpsUpdated>([
+      paramI32("newMakerFeeBps", 0),
+    ]);
+    handleMakerFeeBpsUpdated(ev);
+
+    assert.fieldEquals("Futures", "0", "collateralVault", vault.toHexString());
+  });
+
+  // Deliberately not the on-chain 0: the default is also 0, so only a different
+  // value proves the field came off the getter rather than the initializer.
+  test("getOrCreateFutures reads quantityDecimals off the QUANTITY_DECIMALS() getter", () => {
+    setupDataSourceMock();
+    mockFuturesContractCallsAsReverted();
+    createMockedFunction(
+      contractAddress(),
+      "QUANTITY_DECIMALS",
+      "QUANTITY_DECIMALS():(uint8)",
+    ).returns([ethereum.Value.fromI32(3)]);
+    const ev = newTypedMockEventWithParams<MakerFeeBpsUpdated>([
+      paramI32("newMakerFeeBps", 0),
+    ]);
+    handleMakerFeeBpsUpdated(ev);
+
+    assert.fieldEquals("Futures", "0", "quantityDecimals", "3");
   });
 });
 

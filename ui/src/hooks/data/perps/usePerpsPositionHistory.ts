@@ -16,13 +16,13 @@ type RawPositionSession = {
   id: string;
   lastTradeAt: string;
   maxQuantity: string;
+  netQuantity: string;
   openedAt: string;
   realizedPnl: string;
   status: string;
   tradingFees: string;
   user: {
     id: string;
-    netQuantity: string;
   };
   trades: {
     aggregatedEntryPriceAfter: string;
@@ -51,13 +51,13 @@ const mapSession = (session: RawPositionSession): PositionSession => ({
   id: session.id,
   lastTradeAt: session.lastTradeAt,
   maxQuantity: BigInt(session.maxQuantity),
+  netQuantity: BigInt(session.netQuantity),
   openedAt: session.openedAt,
   realizedPnl: BigInt(session.realizedPnl),
   status: session.status,
   tradingFees: BigInt(session.tradingFees),
   user: {
     id: session.user.id,
-    netQuantity: BigInt(session.user.netQuantity),
   },
   trades: session.trades.map((trade) => ({
     aggregatedEntryPriceAfter: BigInt(trade.aggregatedEntryPriceAfter),

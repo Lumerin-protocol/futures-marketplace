@@ -2,7 +2,7 @@
 
 ABIs and deployment addresses for the Hashpower hashprice futures marketplace on Base.
 
-`Futures` is an on-chain order book for dated hashprice futures with physical/cash delivery:
+`HashPowerFutures` is an on-chain order book for dated hashprice futures with physical/cash delivery:
 
 | Action | Function |
 | --- | --- |
@@ -10,7 +10,7 @@ ABIs and deployment addresses for the Hashpower hashprice futures marketplace on
 | Batch place | `createOrders(OrderIntent[])` |
 | Cancel a resting order | `closeOrder(orderId)` |
 | Read the book | `getBidPrices`, `getAskPrices`, `getQuantityAtPrice`, `getMarketPrice` |
-| Margin / PnL | `getFuturesOrderMargin`, `getFuturesUnrealizedPnl`, `isLiquidatable` |
+| Margin / PnL | `getFuturesOrderMargin`, `getFuturesUnrealizedPnl` (liquidatability lives on the portfolio margin engine: `isLiquidatable`) |
 | Delivery | `depositDeliveryPayment`, `withdrawDeliveryPayment`, `closeDelivery` |
 
 Collateral flows through the shared `CollateralVault` (see `@hashpower/collateral-abi`) — deposit USDC there before trading.
@@ -18,7 +18,7 @@ Collateral flows through the shared `CollateralVault` (see `@hashpower/collatera
 ## Usage
 
 ```ts
-import { FuturesAbi } from "@hashpower/futures-abi";
+import { HashPowerFuturesAbi } from "@hashpower/futures-abi";
 import deployments from "@hashpower/futures-abi/deployments.json" with { type: "json" };
 
 // "testnet" (Base Sepolia) or "mainnet" (Base)
@@ -26,8 +26,8 @@ const env = process.env.HASHPOWER_ENV ?? "testnet";
 const { contracts, subgraphs } = deployments.environments[env];
 
 const marketPrice = await client.readContract({
-  address: contracts.Futures,
-  abi: FuturesAbi,
+  address: contracts.HashPowerFutures,
+  abi: HashPowerFuturesAbi,
   functionName: "getMarketPrice",
 });
 ```

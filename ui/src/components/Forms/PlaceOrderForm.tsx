@@ -11,7 +11,6 @@ import { PARTICIPANT_QK } from "../../hooks/data/getUserFuturesOrders";
 import { POSITION_BOOK_QK } from "../../hooks/data/getUserFuturesPositions";
 import { USER_PERPS_ORDERS_QK } from "../../hooks/data/perps/useUserPerpsOrders";
 import { USER_POSITION_SESSIONS_QK } from "../../hooks/data/perps/useUserPositionSessions";
-import { USER_PERPS_TRADES_QK } from "../../hooks/data/perps/useUserPerpsTrades";
 import { HISTORICAL_ORDERS_QK } from "../../hooks/data/useHistoricalOrders";
 import { FUTURES_POSITION_HISTORY_QK } from "../../hooks/data/useFuturesPositionHistory";
 import { USER_FUTURES_TRADES_QK } from "../../hooks/data/useUserFuturesTrades";
@@ -335,7 +334,6 @@ export const PlaceOrderForm: FC<Props> = ({
                 qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
                 address && qc.invalidateQueries({ queryKey: [USER_PERPS_ORDERS_QK, address] }),
                 address && qc.invalidateQueries({ queryKey: [USER_POSITION_SESSIONS_QK, address] }),
-                address && qc.invalidateQueries({ queryKey: [USER_PERPS_TRADES_QK, address] }),
                 // Reset every perps history table back to its newest page.
                 address && qc.resetQueries({ queryKey: [PERPS_ORDER_HISTORY_QK, address] }),
                 address && qc.resetQueries({ queryKey: [PERPS_POSITION_HISTORY_QK, address] }),

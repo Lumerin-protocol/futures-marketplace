@@ -6,21 +6,21 @@ import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/inte
 import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
 import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/interfaces/IPortfolioMarginEngine.sol";
 import { IPointsHook } from "collateral-margin/contracts/contracts/interfaces/IPointsHook.sol";
-import { FuturesBase } from "./FuturesBase.sol";
+import { HashPowerFuturesBase } from "./HashPowerFuturesBase.sol";
 
-/// @title FuturesAdmin — owner-only governance surface for {Futures}
+/// @title HashPowerFuturesAdmin — owner-only governance surface for {HashPowerFutures}
 /// @notice Every entry point here is `onlyOwner`, plus the UUPS upgrade authorization
-///         hook. Splitting them out keeps {Futures} to the permissionless surface —
+///         hook. Splitting them out keeps {HashPowerFutures} to the permissionless surface —
 ///         trading, liquidation and views — so a reader can tell at a glance which
 ///         calls a counterparty can make and which only governance can.
-/// @dev Declares **no storage**. It sits between {FuturesBase} and {Futures} purely to
+/// @dev Declares **no storage**. It sits between {HashPowerFuturesBase} and {HashPowerFutures} purely to
 ///      partition the function surface, and a stateless layer cannot move a slot: state
 ///      is laid out in linearization order and every variable is declared in
-///      {FuturesBase}. That property is load-bearing — this contract is deployed behind
+///      {HashPowerFuturesBase}. That property is load-bearing — this contract is deployed behind
 ///      a UUPS proxy, so any reordering here would corrupt live storage on upgrade.
 ///      Keep it stateless. If admin-only state is ever needed, declare it in
-///      {FuturesBase} at the end alongside the existing gap slots.
-abstract contract FuturesAdmin is FuturesBase {
+///      {HashPowerFuturesBase} at the end alongside the existing gap slots.
+abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
     using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableSet for EnumerableSet.Bytes32Set;
 
@@ -28,7 +28,7 @@ abstract contract FuturesAdmin is FuturesBase {
 
     // ── Risk parameters ───────────────────────────────────────────────────────
 
-    /// @dev Vestigial — see {FuturesBase-liquidationMarginPercent}. Setting this changes no
+    /// @dev Vestigial — see {HashPowerFuturesBase-liquidationMarginPercent}. Setting this changes no
     ///      on-chain behaviour; margin comes from the portfolio margin engine.
     function setLiquidationMarginPercent(uint8 _liquidationMarginPercent) external onlyOwner {
         liquidationMarginPercent = _liquidationMarginPercent;
@@ -59,21 +59,24 @@ abstract contract FuturesAdmin is FuturesBase {
         emit TakerFeeBpsUpdated(_takerFeeBps);
     }
 
+    /// @notice Set the liquidation fee in basis points on the liquidated notional.
+    /// @param _bps Fee in bps (e.g., 50 = 0.5%). Capped at `BPS` (100% of notional).
     function setLiquidationFeeBps(uint16 _bps) external onlyOwner {
+        _validateBPS(_bps);
         liquidationFeeBps = _bps;
         emit LiquidationFeeBpsUpdated(_bps);
     }
 
     function setLiquidatorShareBps(uint16 _bps) external onlyOwner {
-        if (_bps > BPS) revert ValueOutOfRange(0, int256(BPS));
+        _validateBPS(_bps);
         liquidatorShareBps = _bps;
         emit LiquidatorShareBpsUpdated(_bps);
     }
 
+    /// @notice Withdraw accrued trading and liquidation revenue to the venue owner.
+    /// @dev Drains the venue's vault account (the fee pot). No separate accumulator.
     function withdrawCollectedFees() external onlyOwner {
-        uint256 amount = collectedFeesBalance;
-        collectedFeesBalance = 0;
-        vault.withdrawTo(owner(), amount);
+        vault.withdrawTo(owner(), vault.balanceOf(address(this)));
     }
 
     // ── Wiring ────────────────────────────────────────────────────────────────
@@ -87,9 +90,6 @@ abstract contract FuturesAdmin is FuturesBase {
         if (address(_oracle) == address(0)) revert InvalidOracle();
 
         oracleDecimals = _validateOracleContract(_oracle);
-        if (collateralDecimals > oracleDecimals) {
-            revert UnsupportedTokenDecimals();
-        }
 
         priceOracle = _oracle;
         emit OracleUpdated(address(_oracle));
@@ -99,12 +99,8 @@ abstract contract FuturesAdmin is FuturesBase {
     ///      null-checks it, so a wrong address here bricks the book. The engine must also
     ///      aggregate this venue's own vault.
     function setPortfolioMargin(IPortfolioMarginEngine _pm) external onlyOwner {
-        _validateAddressNotZero(address(_pm));
-        _validatePortfolioMargin(_pm);
-        _validateVaultMatch(_pm);
-
-        portfolioMargin = _pm;
-        emit PortfolioMarginUpdated(address(_pm));
+        if (address(_pm) == address(0)) revert ZeroAddress();
+        _setPortfolioMargin(_pm);
     }
 
     function setHook(address _hook) external onlyOwner {
@@ -116,28 +112,53 @@ abstract contract FuturesAdmin is FuturesBase {
 
     // ── Escape hatch ──────────────────────────────────────────────────────────
 
-    /// @notice Rebuild per-expiration resting-order aggregates from canonical order indexes.
-    /// @dev Idempotent and includes expired orders that have not yet been physically removed.
-    function rebuildOrderAggregateCache(address[] calldata _users) external onlyOwner {
-        for (uint256 i = 0; i < _users.length; i++) {
-            _rebuildOrderAggregateCache(_users[i]);
+    /// @notice Drop pre-v4.3 resting orders at currently tradable delivery dates.
+    /// @dev Intended for the one-transaction post-upgrade cutover. Historical expired
+    ///      orders and all positions remain untouched. Repeated calls are harmless.
+    function dropActiveOrders(address[] calldata _participants) external onlyOwner {
+        for (uint256 p = 0; p < _participants.length; p++) {
+            address participant = _participants[p];
+            EnumerableSet.Bytes32Set storage legacyIds = participantOrderIdsIndex[participant];
+            for (uint256 i = legacyIds.length(); i > 0; i--) {
+                bytes32 orderId = legacyIds.at(i - 1);
+                Order storage order = orders[orderId];
+                if (!_isActiveExpirationAt(order.expirationAt)) continue;
+
+                bool isBuy = order.quantity > 0;
+                _removeRestingOrder(orderId, order.expirationAt, order.price, participant, isBuy, true);
+                emit OrderCancelled(orderId, participant);
+            }
         }
     }
 
-    /// @notice Admin escape hatch: clear orders + aggregate positions for the given participants.
-    /// @dev Does not walk legacy lots for economics — zeros `netDelta` / `netEntryValue` /
-    ///      `activeExpirationAts` directly. Also purges dead lot indexes and order queues.
+    /// @notice Admin escape hatch: clear active orders + aggregate positions for the given participants.
+    /// @dev Expired v4.3+ orders are already inert and remain available to optional permissionless
+    ///      cleanup. Does not walk legacy lots for economics — zeros `netDelta` / `netEntryValue` /
+    ///      `activeExpirationAts` directly. Also purges dead lot indexes and active order queues.
     function resetState(address[] calldata _participants) external onlyOwner {
         for (uint256 p = 0; p < _participants.length; p++) {
             address participant = _participants[p];
+            (uint256[] memory orderExpirationAts, uint256 orderExpirationCount) =
+                _activeOrderExpirations(participant);
 
-            EnumerableSet.Bytes32Set storage _orders = participantOrderIdsIndex[participant];
-            for (uint256 i = _orders.length(); i > 0; i--) {
-                bytes32 orderId = _orders.at(i - 1);
+            EnumerableSet.Bytes32Set storage legacyOrders = participantOrderIdsIndex[participant];
+            for (uint256 i = legacyOrders.length(); i > 0; i--) {
+                bytes32 orderId = legacyOrders.at(i - 1);
                 Order storage order = orders[orderId];
                 bool isBuy = order.quantity > 0;
-                _removeRestingOrder(orderId, order.expirationAt, order.price, order.participant, isBuy);
+                _removeRestingOrder(orderId, order.expirationAt, order.price, order.participant, isBuy, true);
                 emit OrderCancelled(orderId, participant);
+            }
+            for (uint256 d = 0; d < orderExpirationCount; d++) {
+                EnumerableSet.Bytes32Set storage deliveryOrders =
+                    participantExpirationAtOrderIdsIndex[participant][orderExpirationAts[d]];
+                while (deliveryOrders.length() > 0) {
+                    bytes32 orderId = deliveryOrders.at(deliveryOrders.length() - 1);
+                    Order storage order = orders[orderId];
+                    bool isBuy = order.quantity > 0;
+                    _removeRestingOrder(orderId, order.expirationAt, order.price, participant, isBuy, true);
+                    emit OrderCancelled(orderId, participant);
+                }
             }
 
             // Clear aggregates + active dates directly (no lot iteration for economics).
@@ -177,9 +198,7 @@ abstract contract FuturesAdmin is FuturesBase {
         } catch {
             revert InvalidDependency();
         }
-        if (answer <= 0 || updatedAt == 0) {
-            revert InvalidOracle();
-        }
+        _validateOracleRound(answer, updatedAt);
 
         uint8 dec;
         try _oracle.decimals() returns (uint8 _dec) {
@@ -188,36 +207,5 @@ abstract contract FuturesAdmin is FuturesBase {
             revert InvalidDependency();
         }
         return dec;
-    }
-
-    /// @dev Probes plain storage reads rather than `computePortfolioIM`: the margin path needs
-    ///      the engine's own oracle, and wiring a venue must not depend on that being set yet.
-    function _validatePortfolioMargin(IPortfolioMarginEngine _pm) private view {
-        _requireContract(address(_pm));
-
-        try _pm.imSpotShock() returns (uint256) { }
-        catch {
-            revert InvalidDependency();
-        }
-
-        try _pm.mmSpotShock() returns (uint256) { }
-        catch {
-            revert InvalidDependency();
-        }
-    }
-
-    /// @dev The engine must aggregate this venue's own vault, or margin is computed elsewhere.
-    function _validateVaultMatch(IPortfolioMarginEngine _pm) private view {
-        try _pm.vault() returns (ICollateralVault pinned) {
-            if (address(pinned) != address(vault)) revert VaultMismatch();
-        } catch {
-            revert InvalidDependency();
-        }
-    }
-
-    function _validateAddressNotZero(address addr) private pure {
-        if (addr == address(0)) {
-            revert ZeroAddress();
-        }
     }
 }

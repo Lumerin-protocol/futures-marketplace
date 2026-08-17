@@ -113,33 +113,6 @@ query UserPerpsOrdersExcludeStatus ($address: ID!, $statuses: [String!]!, $first
 }
     `
 
-export const UserPerpsTradesQuery = gql`
-    query UserPerpsTrades  ($address: ID!){
-  trades(
-    where: {
-      or: [
-        { buyer: $address }
-        { seller: $address }
-      ]
-    }
-  ) {
-    blockNumber
-    makerOrderId
-    id
-    price
-    quantity
-    timestamp
-    transactionHash
-    volume
-    seller {
-      id
-    }
-    buyer {
-      id
-    }
-  }
-}`
-
 export const FundingUpdatesQuery = gql`
   query FundingUpdates {
     fundingUpdates(
@@ -173,13 +146,13 @@ export const UserPositionSessionsQuery = gql`
       id
       lastTradeAt
       maxQuantity
+      netQuantity
       openedAt
       realizedPnl
       status
       tradingFees
       user {
         id
-        netQuantity
       }
       trades {
         aggregatedEntryPriceAfter
@@ -217,13 +190,13 @@ export const UserClosedPositionSessionsQuery = gql`
       id
       lastTradeAt
       maxQuantity
+      netQuantity
       openedAt
       realizedPnl
       status
       tradingFees
       user {
         id
-        netQuantity
       }
       trades {
         aggregatedEntryPriceAfter
