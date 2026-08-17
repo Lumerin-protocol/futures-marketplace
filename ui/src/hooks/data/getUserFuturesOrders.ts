@@ -59,12 +59,12 @@ const fetchParticipantAsync = async (
     expirationAt: BigInt(order.expirationAt),
     timestamp: order.createdAt,
     closedAt: order.closedAt,
-    // One Order row per on-chain orderId; `quantity` is the contracts still
-    // resting in the book.
-    quantity: order.quantity,
-    originalQuantity: order.originalQuantity,
-    filledQuantity: order.filledQuantity,
-    cancelledQuantity: order.cancelledQuantity,
+    // GraphQL BigInt scalars arrive as strings. Coerce here so grouping
+    // (`0 + qty`) cannot concatenate into "01", and Modify Order gets a number.
+    quantity: Number(order.quantity),
+    originalQuantity: Number(order.originalQuantity),
+    filledQuantity: Number(order.filledQuantity),
+    cancelledQuantity: Number(order.cancelledQuantity),
     closedBy: null,
     participant: {
       address: (order.user.id as `0x${string}`) ?? participantAddress,
@@ -148,15 +148,15 @@ type UserFuturesOrdersResponse = {
       id: string;
     };
     blockNumber: string;
-    cancelledQuantity: number;
+    cancelledQuantity: string;
     closedAt: string | null;
     expirationAt: string;
     createdAt: string;
-    filledQuantity: number;
+    filledQuantity: string;
     id: string;
     isBuy: boolean;
-    originalQuantity: number;
-    quantity: number;
+    originalQuantity: string;
+    quantity: string;
     price: string;
     status: string;
     transactionHash: `0x${string}`;

@@ -82,7 +82,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
       reValidateMode: "onBlur",
       defaultValues: {
         price: (Number(order.pricePerDay) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2),
-        quantity: currentQuantity,
+        quantity: Number(currentQuantity),
       },
     });
 

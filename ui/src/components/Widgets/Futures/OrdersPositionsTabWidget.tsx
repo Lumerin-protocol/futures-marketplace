@@ -1,5 +1,5 @@
 import { tokens } from "../../../styles/tokens";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import styled from "@mui/material/styles/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { TabSwitch } from "../../TabSwitch";
@@ -95,9 +95,14 @@ export const OrdersPositionsTabWidget = ({
 
   const positionHistoryCount = historicalPositionsQuery.data.length;
 
-  // Auto-switch to Positions tab when there are no open orders but there are open positions.
+  // Snap to Positions only on the first loaded snapshot. Doing this whenever
+  // open orders later drop to zero (cancel) unmounts OrdersListWidget and
+  // destroys the close/modify transaction-progress modal mid-flight.
+  const didInitialTabSync = useRef(false);
   useEffect(() => {
+    if (didInitialTabSync.current) return;
     if (ordersLoading || positionsLoading) return;
+    didInitialTabSync.current = true;
     if (ordersCount === 0 && positionsCount > 0) {
       setActiveTab("POSITIONS");
     }
@@ -122,19 +127,18 @@ export const OrdersPositionsTabWidget = ({
       </Header>
 
       <Content>
-        {activeTab === "OPEN_ORDERS" && (
-          <OrdersWrapper>
-            <OrdersListWidget
-              orders={orders}
-              isLoading={ordersLoading}
-              participantData={participantData}
-              minMargin={minMargin}
-              accountBalance={accountBalance}
-              contractMode={contractMode}
-              balanceQuery={balanceQuery}
-            />
-          </OrdersWrapper>
-        )}
+        {/* Keep mounted while hidden so a close/modify tx modal survives tab changes. */}
+        <OrdersWrapper hidden={activeTab !== "OPEN_ORDERS"}>
+          <OrdersListWidget
+            orders={orders}
+            isLoading={ordersLoading}
+            participantData={participantData}
+            minMargin={minMargin}
+            accountBalance={accountBalance}
+            contractMode={contractMode}
+            balanceQuery={balanceQuery}
+          />
+        </OrdersWrapper>
         {activeTab === "POSITIONS" && (
           <PositionsWrapper>
             <PositionsListWidget
@@ -336,6 +340,10 @@ const Content = styled("div")`
 
 const OrdersWrapper = styled("div")`
   width: 100%;
+
+  &[hidden] {
+    display: none;
+  }
 
   /* Hide the widget's header since we have tabs */
   h3 {
