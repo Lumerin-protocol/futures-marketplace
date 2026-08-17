@@ -50,7 +50,7 @@ export const WithdrawalForm: FC<WithdrawalFormProps> = ({
   }, [lockedAmount]);
 
   const availableBalance = useMemo(() => {
-    if (!balanceQuery.data || isLoadingLockedAmount || isLockedAmountError) return undefined;
+    if (balanceQuery.data === undefined || isLoadingLockedAmount || isLockedAmountError) return undefined;
     const balance = balanceQuery.data;
     return balance > lockedDisplayAmount ? balance - lockedDisplayAmount : 0n;
   }, [balanceQuery.data, lockedDisplayAmount, isLoadingLockedAmount, isLockedAmountError]);
@@ -68,7 +68,7 @@ export const WithdrawalForm: FC<WithdrawalFormProps> = ({
       if (isLockedAmountError) {
         return "Unable to fetch locked margin. Please try again.";
       }
-      if (!balanceQuery.data || availableBalance === undefined) {
+      if (balanceQuery.data === undefined || availableBalance === undefined) {
         return "Unable to fetch balance. Please try again.";
       }
       const amountBigInt = parseUnits(value, paymentToken.decimals);
@@ -179,7 +179,7 @@ export const WithdrawalForm: FC<WithdrawalFormProps> = ({
       return false;
     }
 
-    if (!balanceQuery.data || availableBalance === undefined) {
+    if (balanceQuery.data === undefined || availableBalance === undefined) {
       form.setError("amount", {
         type: "validation",
         message: "Unable to fetch balance. Please try again.",

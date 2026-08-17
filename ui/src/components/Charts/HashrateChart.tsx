@@ -433,28 +433,27 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   }, []);
 
   useEffect(() => {
+    // Both series are filled before the range is measured on purpose. The time
+    // scale indexes the union of every series' timestamps regardless of
+    // visibility, so measuring while one series still holds the previous
+    // period's denser points sizes the viewport for far more slots than the new
+    // data has, leaving the chart squeezed against the right edge.
     hashSeriesRef.current?.setData(hashrateSeriesData);
-  }, [hashrateSeriesData]);
+    btcSeriesRef.current?.setData(btcSeriesData);
 
-  useEffect(() => {
     // Reframing only on a range switch is what stops background refetches from
     // throwing away a pan or zoom the user just made.
     if (hashrateSeriesData.length === 0 || fittedPeriodRef.current === timePeriod) return;
 
     chartRef.current?.timeScale().fitContent();
 
-    // While the newly picked range is still loading the hook keeps serving the
-    // previous range's points, so this frame is provisional. Leaving the period
-    // unrecorded until the fetch settles means the real data gets framed too,
-    // instead of staying squeezed against the right edge.
-    if (!isFetching) {
+    // Both hooks keep serving the previous range while the new one loads, so this
+    // frame is provisional. Leaving the period unrecorded until every query has
+    // settled means whichever one lands last reframes against the real data.
+    if (!isFetching && !isBtcPriceFetching) {
       fittedPeriodRef.current = timePeriod;
     }
-  }, [hashrateSeriesData, timePeriod, isFetching]);
-
-  useEffect(() => {
-    btcSeriesRef.current?.setData(btcSeriesData);
-  }, [btcSeriesData]);
+  }, [hashrateSeriesData, btcSeriesData, timePeriod, isFetching, isBtcPriceFetching]);
 
   useEffect(() => {
     btcSeriesRef.current?.applyOptions({ visible: isBtcPriceVisible });

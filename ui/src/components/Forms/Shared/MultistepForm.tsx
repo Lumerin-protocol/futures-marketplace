@@ -1,4 +1,4 @@
-import { type FC, type ReactNode, useState } from "react";
+import { type FC, Fragment, type ReactNode, useState } from "react";
 import Button from "@mui/material/Button";
 import Alert from "@mui/material/Alert";
 import styled from "@mui/material/styles/styled";
@@ -443,39 +443,43 @@ export type StepComponentProps = {
 interface MultistepProps {
   steps: {
     label: string;
-    component: FC<StepComponentProps>;
+    // Render function, not a component type. TransactionForm rebuilds
+    // `steps[].component` on every parent render (balance polls, wallet
+    // state, etc.). Using that function as `<StepComponent />` would change
+    // the element type and remount the tree, stealing focus from inputs.
+    component: (props: StepComponentProps) => ReactNode;
   }[];
   onClose: () => void;
 }
 
 export const MultistepForm = (props: MultistepProps) => {
   const [step, _setStep] = useState(0);
-  const StepComponent = props.steps[step].component;
 
-  function setStep(step: number) {
-    if (step < 0) {
+  function setStep(nextStep: number) {
+    if (nextStep < 0) {
       props.onClose();
       _setStep(0);
       return;
     }
 
-    if (step > props.steps.length - 1) {
+    if (nextStep > props.steps.length - 1) {
       props.onClose();
       return;
     }
-    _setStep(step);
+    _setStep(nextStep);
   }
 
   return (
     <>
       <h2>{props.steps[step].label}</h2>
-      <StepComponent
-        key={step}
-        goToStep={setStep}
-        nextStep={() => setStep(step + 1)}
-        prevStep={() => setStep(step - 1)}
-        closeForm={props.onClose}
-      />
+      <Fragment key={step}>
+        {props.steps[step].component({
+          goToStep: setStep,
+          nextStep: () => setStep(step + 1),
+          prevStep: () => setStep(step - 1),
+          closeForm: props.onClose,
+        })}
+      </Fragment>
     </>
   );
 };
