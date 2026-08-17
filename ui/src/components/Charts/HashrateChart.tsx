@@ -1,11 +1,28 @@
-import { type FC, useMemo, useState, useCallback } from "react";
-import Highcharts from "highcharts";
-import HighchartsReact from "highcharts-react-official";
+import { type FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styled from "@mui/material/styles/styled";
+import {
+  ColorType,
+  CrosshairMode,
+  LineSeries,
+  LineStyle,
+  createChart,
+  type IChartApi,
+  type IPriceLine,
+  type ISeriesApi,
+  type LineData,
+  type MouseEventParams,
+  type Time,
+  type UTCTimestamp,
+} from "lightweight-charts";
 import type { TimePeriod } from "../../hooks/data/useHashRateIndexData";
 import { tokens } from "../../styles/tokens";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 import { Spinner } from "../Spinner.styled";
+
+const CHART_HEIGHT = 400;
+
+const HASHPRICE_LABEL = "Hashprice";
+const BTC_LABEL = "BTC Price";
 
 const PeriodSwitch = styled("div")`
   display: flex;
@@ -13,10 +30,6 @@ const PeriodSwitch = styled("div")`
   border: 1px solid ${tokens.border.default};
   border-radius: 6px;
   overflow: hidden;
-  align-self: end;
-  margin-top: 1rem;
-  margin-bottom: 1rem;
-  margin-right: 12px;
 `;
 
 const PeriodButton = styled("button")<{ $active: boolean }>`
@@ -52,10 +65,150 @@ const ChartControls = styled("div")`
   align-items: center;
   width: 100%;
   padding-left: 18px;
-  justify-content: flex-end;
+  padding-right: 12px;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: 1rem;
 `;
+
+const Legend = styled("div")`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+`;
+
+const LegendItem = styled("div")`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: ${tokens.text.primary};
+  font-size: 0.8125rem;
+`;
+
+const LegendButton = styled(LegendItem.withComponent("button"))`
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+`;
+
+const LegendCheckbox = styled("span")<{ $color: string; $checked: boolean }>`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border: 2px solid ${(props) => props.$color};
+  border-radius: 3px;
+  background: ${(props) => (props.$checked ? props.$color : "transparent")};
+  color: ${tokens.text.onDark};
+  font-size: 10px;
+  font-weight: bold;
+  line-height: 1;
+`;
+
+const ChartArea = styled("div")`
+  position: relative;
+  width: 100%;
+`;
+
+const ChartCanvas = styled("div")`
+  width: 100%;
+  height: ${CHART_HEIGHT}px;
+`;
+
+const TooltipBox = styled("div")`
+  position: absolute;
+  z-index: 6;
+  padding: 6px 8px;
+  border: 1px solid ${tokens.chart.tooltipBorder};
+  border-radius: ${tokens.radius.sm};
+  background: ${tokens.chart.tooltipBg};
+  color: ${tokens.text.primary};
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: none;
+`;
+
+const TooltipTime = styled("div")`
+  color: ${tokens.chart.axisMuted};
+  font-size: 10px;
+`;
+
+const StateOverlay = styled("div")`
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 0.25rem;
+  color: ${tokens.text.primary};
+  pointer-events: none;
+`;
+
+/**
+ * Lightweight Charts renders every timestamp in UTC. Shifting each point by the
+ * local UTC offset makes the axis and the crosshair read as local wall-clock
+ * time, which is what the Highcharts version did via `useUTC: false`. The
+ * offset is taken per point so daylight-saving transitions stay correct.
+ */
+const toWallClock = (epochMs: number): UTCTimestamp =>
+  Math.floor((epochMs - new Date(epochMs).getTimezoneOffset() * 60_000) / 1000) as UTCTimestamp;
+
+/** Reads a wall-clock timestamp back as the label the user expects to see. */
+const formatWallClock = (time: UTCTimestamp): string =>
+  new Date(time * 1000).toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+  });
+
+/**
+ * The library rejects series data that is not strictly ascending, and the
+ * oracle can emit several ticks inside the same second; the latest one wins.
+ */
+const toLineData = (points: Array<{ date: Date; value: number }>): LineData<UTCTimestamp>[] => {
+  const sorted = points
+    .map(({ date, value }) => ({ time: toWallClock(date.getTime()), value }))
+    .sort((a, b) => a.time - b.time);
+
+  const deduped: LineData<UTCTimestamp>[] = [];
+  for (const point of sorted) {
+    if (deduped.length > 0 && deduped[deduped.length - 1].time === point.time) {
+      deduped[deduped.length - 1] = point;
+    } else {
+      deduped.push(point);
+    }
+  }
+  return deduped;
+};
+
+const readSeriesValue = (
+  param: MouseEventParams<Time>,
+  series: ISeriesApi<"Line"> | null,
+): number | undefined => {
+  if (!series) return undefined;
+  const point = param.seriesData.get(series);
+  return point && "value" in point ? point.value : undefined;
+};
+
+interface TooltipState {
+  time: UTCTimestamp;
+  hashprice?: number;
+  btc?: number;
+  top: number;
+  offsetX: number;
+  anchorRight: boolean;
+}
 
 interface HashrateChartProps {
   // The index hooks emit `updatedAt` as either a raw subgraph string or an
@@ -100,13 +253,18 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   timePeriod,
   onTimePeriodChange,
 }) => {
-  // State to track BTC Price visibility
   const [isBtcPriceVisible, setIsBtcPriceVisible] = useState(false);
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
 
-  // Handler for BTC Price legend click
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const hashSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const btcSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const priceLinesRef = useRef<IPriceLine[]>([]);
+  const fittedPeriodRef = useRef<TimePeriod | null>(null);
+
   const handleBtcPriceLegendClick = useCallback(() => {
     setIsBtcPriceVisible((prev) => !prev);
-    return false; // We handle visibility via state
   }, []);
 
   // Merge market price with historical data if it differs from the first item
@@ -139,314 +297,235 @@ export const HashrateChart: FC<HashrateChartProps> = ({
     return data;
   }, [data, marketPrice, marketPriceFetchedAt]);
 
-  // Transform data for Highcharts. Hooks return newest-first; Highcharts
-  // requires ascending X (error #15) for line/spline series.
-  const chartData = useMemo(() => {
-    const points: [number, number][] = [];
+  const hashrateSeriesData = useMemo(() => {
+    const points: Array<{ date: Date; value: number }> = [];
     for (const item of enhancedData) {
       if ((!item.updatedAtDate && !item.updatedAt) || item.priceToken <= 0.01) continue;
-      const date = item.updatedAtDate || new Date(Number(item.updatedAt) * 1000);
-      points.push([date.getTime(), item.priceToken]);
+      points.push({
+        date: item.updatedAtDate || new Date(Number(item.updatedAt) * 1000),
+        value: item.priceToken,
+      });
     }
-    points.sort((a, b) => a[0] - b[0]);
-    return points;
+    return toLineData(points);
   }, [enhancedData]);
 
-  const btcPriceChartData = useMemo(() => {
+  const btcSeriesData = useMemo(() => {
     if (!btcPriceData || btcPriceData.length === 0) return [];
 
-    const points: [number, number][] = [];
+    const points: Array<{ date: Date; value: number }> = [];
     for (const item of btcPriceData) {
       if ((!item.updatedAtDate && !item.updatedAt) || item.price <= 0) continue;
-      const date = item.updatedAtDate || new Date(Number(item.updatedAt) * 1000);
-      points.push([date.getTime(), item.price]);
+      points.push({
+        date: item.updatedAtDate || new Date(Number(item.updatedAt) * 1000),
+        value: item.price,
+      });
     }
-    points.sort((a, b) => a[0] - b[0]);
-    return points;
+    return toLineData(points);
   }, [btcPriceData]);
 
-  const options: Highcharts.Options = {
-    accessibility: { enabled: false },
-    time: {
-      useUTC: false, // Display dates in local timezone
-    } as Highcharts.TimeOptions,
-    chart: {
-      type: "spline",
-      backgroundColor: "transparent",
-      style: {
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const chart = createChart(container, {
+      autoSize: true,
+      layout: {
+        background: { type: ColorType.Solid, color: "transparent" },
+        textColor: tokens.text.primary,
         fontFamily: "inherit",
+        // Satisfies the Apache-2.0 attribution link requirement of the library.
+        attributionLogo: true,
       },
-    },
-    title: { text: undefined },
-    xAxis: {
-      type: "datetime",
-      title: {
-        text: null,
-        style: {
+      grid: {
+        vertLines: { color: tokens.chart.grid },
+        horzLines: { color: tokens.chart.grid },
+      },
+      rightPriceScale: {
+        visible: true,
+        borderColor: tokens.chart.grid,
+      },
+      leftPriceScale: {
+        visible: false,
+        borderColor: tokens.chart.grid,
+      },
+      timeScale: {
+        borderColor: tokens.chart.grid,
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      crosshair: {
+        mode: CrosshairMode.Magnet,
+        vertLine: { color: tokens.chart.axisMuted, labelBackgroundColor: tokens.chart.tooltipBg },
+        horzLine: { color: tokens.chart.axisMuted, labelBackgroundColor: tokens.chart.tooltipBg },
+      },
+    });
+
+    const hashSeries = chart.addSeries(LineSeries, {
+      title: HASHPRICE_LABEL,
+      color: tokens.trading.long,
+      lineWidth: 2,
+      priceScaleId: "right",
+      priceLineVisible: false,
+      pointMarkersVisible: false,
+      priceFormat: { type: "price", precision: 2, minMove: 0.01 },
+    });
+
+    const btcSeries = chart.addSeries(LineSeries, {
+      title: BTC_LABEL,
+      color: tokens.chart.seriesBtc,
+      lineWidth: 2,
+      priceScaleId: "left",
+      priceLineVisible: false,
+      lastValueVisible: false,
+      pointMarkersVisible: false,
+      visible: false,
+      priceFormat: {
+        type: "custom",
+        minMove: 1,
+        formatter: (price: number) => Math.round(price).toLocaleString(),
+      },
+    });
+
+    const handleCrosshairMove = (param: MouseEventParams<Time>) => {
+      if (!param.point || param.time === undefined || typeof param.time !== "number") {
+        setTooltip(null);
+        return;
+      }
+
+      const hashprice = readSeriesValue(param, hashSeries);
+      const btc = btcSeries.options().visible ? readSeriesValue(param, btcSeries) : undefined;
+
+      if (hashprice === undefined && btc === undefined) {
+        setTooltip(null);
+        return;
+      }
+
+      // Anchoring to whichever edge the cursor is closest to keeps the tooltip
+      // inside the pane without having to measure it first.
+      const width = container.clientWidth;
+      const anchorRight = param.point.x > width / 2;
+
+      setTooltip({
+        time: param.time as UTCTimestamp,
+        hashprice,
+        btc,
+        top: Math.max(8, param.point.y - 12),
+        offsetX: (anchorRight ? width - param.point.x : param.point.x) + 12,
+        anchorRight,
+      });
+    };
+
+    chart.subscribeCrosshairMove(handleCrosshairMove);
+
+    chartRef.current = chart;
+    hashSeriesRef.current = hashSeries;
+    btcSeriesRef.current = btcSeries;
+
+    return () => {
+      chart.unsubscribeCrosshairMove(handleCrosshairMove);
+      chart.remove();
+      chartRef.current = null;
+      hashSeriesRef.current = null;
+      btcSeriesRef.current = null;
+      priceLinesRef.current = [];
+      fittedPeriodRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    hashSeriesRef.current?.setData(hashrateSeriesData);
+  }, [hashrateSeriesData]);
+
+  useEffect(() => {
+    // Reframing only on a range switch is what stops background refetches from
+    // throwing away a pan or zoom the user just made.
+    if (hashrateSeriesData.length === 0 || fittedPeriodRef.current === timePeriod) return;
+
+    chartRef.current?.timeScale().fitContent();
+
+    // While the newly picked range is still loading the hook keeps serving the
+    // previous range's points, so this frame is provisional. Leaving the period
+    // unrecorded until the fetch settles means the real data gets framed too,
+    // instead of staying squeezed against the right edge.
+    if (!isFetching) {
+      fittedPeriodRef.current = timePeriod;
+    }
+  }, [hashrateSeriesData, timePeriod, isFetching]);
+
+  useEffect(() => {
+    btcSeriesRef.current?.setData(btcSeriesData);
+  }, [btcSeriesData]);
+
+  useEffect(() => {
+    btcSeriesRef.current?.applyOptions({ visible: isBtcPriceVisible });
+    chartRef.current?.applyOptions({ leftPriceScale: { visible: isBtcPriceVisible } });
+  }, [isBtcPriceVisible]);
+
+  useEffect(() => {
+    const series = hashSeriesRef.current;
+    if (!series) return;
+
+    for (const line of priceLinesRef.current) {
+      series.removePriceLine(line);
+    }
+    priceLinesRef.current = [];
+
+    if (entryPrice) {
+      priceLinesRef.current.push(
+        series.createPriceLine({
+          price: entryPrice,
           color: tokens.text.primary,
-        },
-      },
-      labels: {
-        style: {
-          color: tokens.text.primary,
-        },
-      },
-      gridLineColor: tokens.chart.grid,
-    },
-    yAxis: [
-      {
-        // Primary Y-axis for Hashprice (USDC)
-        title: {
-          text: "Hashprice (USDC)",
-          style: {
-            color: tokens.text.primary,
-          },
-        },
-        labels: {
-          style: {
-            color: tokens.text.primary,
-          },
-          formatter: function () {
-            return Number(this.value).toFixed(2);
-          },
-        },
-        gridLineColor: tokens.chart.grid,
-        plotLines: (() => {
-          const lines: Highcharts.YAxisPlotLinesOptions[] = [];
+          lineStyle: LineStyle.Dashed,
+          lineWidth: 1,
+          axisLabelVisible: true,
+          title: `Entry: ${entryPrice.toFixed(2)}`,
+        }),
+      );
+    }
 
-          if (entryPrice) {
-            lines.push({
-              value: entryPrice,
-              color: tokens.text.primary,
-              dashStyle: "Dash",
-              width: 1,
-              zIndex: 5,
-              label: {
-                text: `Entry: ${entryPrice.toFixed(2)}`,
-                align: "right",
-                style: { color: tokens.text.primary },
-              },
-            });
-          }
+    if (liquidationPrice != null && hashrateSeriesData.length > 0) {
+      const values = hashrateSeriesData.map((point) => point.value);
+      const dataMin = Math.min(...values);
+      const dataMax = Math.max(...values);
+      const padding = (dataMax - dataMin) * 0.1;
 
-          if (liquidationPrice != null && chartData.length > 0) {
-            const yValues = chartData.map((p) => (p as [number, number])[1]);
-            const dataMin = Math.min(...yValues);
-            const dataMax = Math.max(...yValues);
-            const padding = (dataMax - dataMin) * 0.1;
-            const visibleMin = dataMin - padding;
-            const visibleMax = dataMax + padding;
+      // Pin an off-range threshold to the edge of the axis. The title carries
+      // the true price, and the arrow says which way spot has to move to reach it.
+      const clampedValue = Math.min(Math.max(liquidationPrice, dataMin - padding), dataMax + padding);
+      const arrow = liquidationDirection === "up" ? "↑" : "↓";
 
-            // Pin an off-range threshold to the edge of the axis. The label
-            // carries the true price, and the arrow says which way spot has to
-            // move to reach it.
-            const clampedValue = Math.min(Math.max(liquidationPrice, visibleMin), visibleMax);
-            const arrow = liquidationDirection === "up" ? "↑" : "↓";
+      priceLinesRef.current.push(
+        series.createPriceLine({
+          price: clampedValue,
+          color: tokens.trading.short,
+          lineStyle: LineStyle.Dashed,
+          lineWidth: 1,
+          axisLabelVisible: true,
+          title: `Liq${arrow}: ${liquidationPrice.toFixed(2)}`,
+        }),
+      );
+    }
+  }, [entryPrice, liquidationPrice, liquidationDirection, hashrateSeriesData]);
 
-            lines.push({
-              value: clampedValue,
-              color: tokens.trading.short,
-              dashStyle: "Dash",
-              width: 1,
-              zIndex: 5,
-              label: {
-                text: `Liq${arrow}: ${liquidationPrice.toFixed(2)}`,
-                align: "right",
-                style: { color: tokens.trading.short },
-              },
-            });
-          }
-
-          return lines;
-        })(),
-      },
-      {
-        // Secondary Y-axis for BTC Price (USD)
-        title: {
-          text: isBtcPriceVisible ? "BTC Price (USD)" : "",
-          style: {
-            color: tokens.text.primary,
-          },
-        },
-        labels: {
-          enabled: isBtcPriceVisible,
-          style: {
-            color: tokens.text.primary,
-          },
-          formatter: function () {
-            return Number(this.value).toLocaleString();
-          },
-        },
-        opposite: true,
-        gridLineWidth: 0,
-      },
-    ],
-    series: [
-      {
-        connectNulls: false,
-        dataSorting: { enabled: false },
-        dataGrouping: { enabled: false },
-        type: "line",
-        name: "Hashprice",
-        showInLegend: true,
-        data: chartData,
-        color: tokens.trading.long,
-        lineWidth: 2,
-        yAxis: 0,
-        marker: {
-          enabled: false,
-          radius: 4,
-        },
-        events: {
-          legendItemClick: function () {
-            if (!this.visible) {
-              this.show();
-            }
-            return false; // Prevent unchecking Hashprice
-          },
-        },
-      },
-      {
-        connectNulls: false,
-        dataSorting: { enabled: false },
-        dataGrouping: { enabled: false },
-        type: "line",
-        name: "BTC Price",
-        showInLegend: true,
-        visible: isBtcPriceVisible,
-        data: btcPriceChartData,
-        color: tokens.chart.seriesBtc,
-        lineWidth: 2,
-        yAxis: 1,
-        marker: {
-          enabled: false,
-          radius: 4,
-        },
-        events: {
-          legendItemClick: handleBtcPriceLegendClick,
-        },
-      },
-    ],
-    legend: {
-      enabled: true,
-      useHTML: true,
-      itemStyle: {
-        color: tokens.text.primary,
-        cursor: "pointer",
-      },
-      itemHoverStyle: {
-        color: tokens.text.primary,
-      },
-      itemHiddenStyle: {
-        color: tokens.chart.axisMuted,
-        textDecoration: "none",
-      },
-      labelFormatter: function () {
-        const series = this as Highcharts.Series;
-        const checked = series.visible;
-        const checkboxStyle = `
-          display: inline-block;
-          width: 14px;
-          height: 14px;
-          border: 2px solid ${series.color};
-          border-radius: 3px;
-          margin-right: 6px;
-          vertical-align: middle;
-          background: ${checked ? series.color : "transparent"};
-          position: relative;
-        `;
-        const checkmark = checked && series.name !== "Hashprice"
-          ? `<span style="position: absolute; top: -1px; left: 0px; color: ${tokens.text.onDark}; font-size: 11px; font-weight: bold;">✓</span>`
-          : "";
-        return `<span style="${checkboxStyle}">${checkmark}</span><span style="vertical-align: middle;">${series.name}</span>`;
-      },
-      symbolWidth: 0,
-      symbolHeight: 0,
-      symbolRadius: 0,
-    },
-    plotOptions: {
-      line: {
-        marker: {
-          enabled: true,
-        },
-      },
-    },
-    tooltip: {
-      shared: true,
-      backgroundColor: tokens.chart.tooltipBg,
-      borderColor: tokens.chart.tooltipBorder,
-      style: {
-        color: tokens.text.primary,
-      },
-      formatter: function () {
-        const date = new Date(this.x as number).toLocaleString(undefined, {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-
-        let tooltipHtml = `<span style="color: ${tokens.chart.axisMuted}; font-size: 10px;">${date}</span><br/>`;
-
-        this.points?.forEach((point) => {
-          const color = point.series.color;
-          const name = point.series.name;
-          const value =
-            name === "BTC Price"
-              ? (point.y as number).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-              : (point.y as number).toFixed(2);
-          tooltipHtml += `<span style="color:${color}">\u25CF</span> <b>${name}:</b> ${value}<br/>`;
-        });
-
-        return tooltipHtml;
-      },
-    },
-    credits: {
-      enabled: false,
-    },
-  };
-
-  if ((isLoading || isBtcPriceLoading) && (!data || data.length === 0)) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "400px",
-          color: tokens.text.primary,
-          fontSize: "18px",
-        }}
-      >
-        <Spinner fontSize="0.35em" />
-        <div>Loading chart data...</div>
-      </div>
-    );
-  }
-
-  if (!data || data.length === 0) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "400px",
-          color: tokens.text.primary,
-          fontSize: "18px",
-        }}
-      >
-        No data available
-      </div>
-    );
-  }
+  const hasData = hashrateSeriesData.length > 0;
+  const isInitialLoad = (isLoading || isBtcPriceLoading) && !hasData;
 
   return (
     <>
       <ChartTitle>Hashprice Index</ChartTitle>
       <ChartControls>
+        <Legend>
+          <LegendItem>
+            <LegendCheckbox $color={tokens.trading.long} $checked />
+            <span>{HASHPRICE_LABEL}</span>
+          </LegendItem>
+          <LegendButton type="button" onClick={handleBtcPriceLegendClick} aria-pressed={isBtcPriceVisible}>
+            <LegendCheckbox $color={tokens.chart.seriesBtc} $checked={isBtcPriceVisible}>
+              {isBtcPriceVisible ? "✓" : null}
+            </LegendCheckbox>
+            <span>{BTC_LABEL}</span>
+          </LegendButton>
+        </Legend>
         <PeriodSwitch>
           <PeriodButton $active={timePeriod === "day"} onClick={() => onTimePeriodChange("day")}>
             1D
@@ -459,31 +538,57 @@ export const HashrateChart: FC<HashrateChartProps> = ({
           </PeriodButton>
         </PeriodSwitch>
       </ChartControls>
-      <div style={{ position: "relative", width: "100%", paddingTop: "1rem" }}>
-        <HighchartsReact highcharts={Highcharts} options={options} containerProps={{ style: { height: "100%" } }} />
-        {(isFetching || isBtcPriceFetching) && (
-          <div
+      <ChartArea>
+        <ChartCanvas ref={containerRef} />
+
+        {tooltip && (
+          <TooltipBox
+            style={
+              tooltip.anchorRight
+                ? { top: tooltip.top, right: tooltip.offsetX }
+                : { top: tooltip.top, left: tooltip.offsetX }
+            }
+          >
+            <TooltipTime>{formatWallClock(tooltip.time)}</TooltipTime>
+            {tooltip.hashprice !== undefined && (
+              <div>
+                <span style={{ color: tokens.trading.long }}>{"\u25CF"}</span> <b>{HASHPRICE_LABEL}:</b>{" "}
+                {tooltip.hashprice.toFixed(2)}
+              </div>
+            )}
+            {tooltip.btc !== undefined && (
+              <div>
+                <span style={{ color: tokens.chart.seriesBtc }}>{"\u25CF"}</span> <b>{BTC_LABEL}:</b>{" "}
+                {Math.round(tooltip.btc).toLocaleString()}
+              </div>
+            )}
+          </TooltipBox>
+        )}
+
+        {isInitialLoad && (
+          <StateOverlay style={{ background: tokens.app.bg, fontSize: "18px" }}>
+            <Spinner fontSize="0.35em" />
+            <div>Loading chart data...</div>
+          </StateOverlay>
+        )}
+
+        {!isInitialLoad && !hasData && (
+          <StateOverlay style={{ background: tokens.app.bg, fontSize: "18px" }}>No data available</StateOverlay>
+        )}
+
+        {hasData && (isFetching || isBtcPriceFetching) && (
+          <StateOverlay
             style={{
-              position: "absolute",
-              inset: 0,
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "center",
-              alignItems: "center",
-              gap: "0.25rem",
               background: "rgba(15, 17, 23, 0.55)",
               backdropFilter: "blur(1px)",
-              color: tokens.text.primary,
               fontSize: "14px",
-              pointerEvents: "none",
-              zIndex: 5,
             }}
           >
             <Spinner fontSize="0.3em" />
             <div>Updating chart…</div>
-          </div>
+          </StateOverlay>
         )}
-      </div>
+      </ChartArea>
     </>
   );
 };
