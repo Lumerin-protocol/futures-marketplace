@@ -54,7 +54,7 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance })
 
   const validateBalance = useCallback(
     (value: string): string | true => {
-      if (!paymentTokenBalance.data) {
+      if (paymentTokenBalance.data === undefined) {
         return "Unable to fetch balance. Please try again.";
       }
       const amountBigInt = parseUnits(value, paymentToken.decimals);
@@ -68,7 +68,7 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance })
   );
 
   const handleMaxClick = useCallback(() => {
-    if (paymentTokenBalance.data) {
+    if (paymentTokenBalance.data !== undefined) {
       const numValue = Number(paymentTokenBalance.data) / PAYMENT_TOKEN_SCALE_NUM;
       const floored = Math.floor(numValue * 100) / 100;
       const maxAmount = floored.toFixed(2);
@@ -83,7 +83,7 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance })
         label="Deposit Amount"
         additionalValidate={validateBalance}
         onMaxClick={handleMaxClick}
-        showMaxButton={!!paymentTokenBalance.data}
+        showMaxButton={paymentTokenBalance.data !== undefined}
       />
     ),
     [form.control, validateBalance, handleMaxClick, paymentTokenBalance.data],
@@ -99,7 +99,7 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance })
       return false;
     }
 
-    if (!paymentTokenBalance.data) {
+    if (paymentTokenBalance.data === undefined) {
       form.setError("amount", {
         type: "validation",
         message: "Unable to fetch balance. Please try again.",
@@ -133,7 +133,7 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance })
                   <span>Loading...</span>
                 ) : (
                   <>
-                    {paymentTokenBalance.data
+                    {paymentTokenBalance.data !== undefined
                       ? (() => {
                           const numValue = Number(paymentTokenBalance.data) / PAYMENT_TOKEN_SCALE_NUM;
                           const floored = Math.floor(numValue * 100) / 100;

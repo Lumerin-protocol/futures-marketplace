@@ -58,10 +58,8 @@ export function useMultistepTx(props: { steps: TransactionStep[] }) {
   const isSuccess = lastStepState.state === "confirmed" || lastStepState.state === "skipped";
   const isPending = !isSuccess && !isError;
 
-  // Lifted here so it persists across parent rerenders. The step components in
-  // TransactionForm are recreated on every render, which causes React to
-  // unmount/remount MultipleTransactionProgress — any local state there would
-  // be reset.
+  // Lifted out of MultipleTransactionProgress so the toggle survives step
+  // remounts (changing steps still remounts via `key={step}`).
   const [showError, setShowError] = useState(false);
   const toggleShowError = () => setShowError((v) => !v);
 

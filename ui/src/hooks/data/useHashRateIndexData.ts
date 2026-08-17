@@ -1,6 +1,6 @@
 import { graphqlRequest } from "./graphql";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { backgroundRefetchOpts } from "./config";
+import { backgroundRefetchOpts, indexGcTimeMs, indexStaleTimeMs } from "./config";
 import { HashrateIndexQuery, AggregatedHashrateIndexQuery } from "./graphql-queries";
 import { prefetchSeed, withSeedFallback } from "./seed-utils";
 
@@ -51,6 +51,8 @@ export const useHashrateIndexData = (props?: { refetch?: boolean; timePeriod?: T
     queryKey: [HASHRATE_INDEX_QK, timePeriod],
     queryFn: () => fetchHashrateIndexData(timePeriod),
     placeholderData: keepPreviousData,
+    staleTime: indexStaleTimeMs[timePeriod],
+    gcTime: indexGcTimeMs,
     ...(props?.refetch ? backgroundRefetchOpts : {}),
   });
 

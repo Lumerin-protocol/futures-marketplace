@@ -1,6 +1,6 @@
 import { graphqlRequest } from "./graphql";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { backgroundRefetchOpts } from "./config";
+import { backgroundRefetchOpts, indexGcTimeMs, indexStaleTimeMs } from "./config";
 import { BtcPriceIndexQuery, AggregatedBtcPriceIndexQuery } from "./graphql-queries";
 import type { TimePeriod } from "./useHashRateIndexData";
 import { prefetchSeed, withSeedFallback } from "./seed-utils";
@@ -46,6 +46,8 @@ export const useBtcPriceIndexData = (props?: { refetch?: boolean; timePeriod?: T
     queryKey: [BTC_PRICE_INDEX_QK, timePeriod],
     queryFn: () => fetchBtcPriceIndexData(timePeriod),
     placeholderData: keepPreviousData,
+    staleTime: indexStaleTimeMs[timePeriod],
+    gcTime: indexGcTimeMs,
     ...(props?.refetch ? backgroundRefetchOpts : {}),
   });
 
