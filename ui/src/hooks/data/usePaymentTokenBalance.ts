@@ -16,7 +16,7 @@ export function useFuturesPaymentTokenBalance(address: `0x${string}` | undefined
     address: paymentTokenAddress,
     abi: withErrors(usdcMockAbi),
     functionName: "balanceOf",
-    args: [address!],
+    args: address ? [address] : undefined,
     query: {
       ...backgroundRefetchOpts,
       enabled: !!address && !!paymentTokenAddress,

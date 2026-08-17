@@ -28,7 +28,10 @@ export function useSimulateFuturesOrder({
     address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`,
     abi: withErrors(HashPowerFuturesAbi),
     functionName: "simulateOrder",
-    args: argsReady ? [expirationAt!, price!, quantityBigInt!] : undefined,
+    args:
+      expirationAt !== undefined && price !== undefined && quantityBigInt !== undefined
+        ? [expirationAt, price, quantityBigInt]
+        : undefined,
     query: {
       enabled: autoFetchEnabled,
     },

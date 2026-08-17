@@ -18,7 +18,7 @@ import { PERPS_ORDER_HISTORY_QK } from "../../hooks/data/perps/usePerpsOrderHist
 import { PERPS_POSITION_HISTORY_QK } from "../../hooks/data/perps/usePerpsPositionHistory";
 import { USER_TRADES_QK } from "../../hooks/data/perps/useUserTrades";
 import { useQueryClient } from "@tanstack/react-query";
-import { useAccount, usePublicClient, useWalletClient } from "wagmi";
+import { useAccount, usePublicClient, } from "wagmi";
 import type { Participant } from "../../hooks/data/getUserFuturesOrders";
 import type { ContractMode } from "../../types/types";
 import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpecs";
@@ -71,11 +71,9 @@ export const PlaceOrderForm: FC<Props> = ({
   // Conditionally use futures or perps create order hook
   const futuresCreateOrder = useCreateOrder();
   const perpsCreateOrder = useCreatePerpsOrder();
-  const { createOrderAsync } = contractMode == "perpetual" ? perpsCreateOrder : futuresCreateOrder;
-
   const qc = useQueryClient();
   const { address } = useAccount();
-  const publicClient = usePublicClient();
+  const _publicClient = usePublicClient();
   const contractSpecsQuery = useFuturesContractSpecs();
   const { makerFeePercent, takerFeePercent, isLoading: isFeesLoading } = useMakerTakerFees();
   const { wMaker, wTaker, weightScale, isLoading: isWeightsLoading } = usePointsHookWeights();
@@ -169,7 +167,7 @@ export const PlaceOrderForm: FC<Props> = ({
       onClose={closeForm}
       title={isBuy ? "Place Bid Order" : "Place Ask Order"}
       description={""}
-      reviewForm={(props) => (
+      reviewForm={(_props) => (
         <>
           <div className="mb-4">
             <div className="space-y-2 text-sm">
@@ -226,19 +224,17 @@ export const PlaceOrderForm: FC<Props> = ({
                 </span>
               </div>
               {contractMode === "perpetual" ? (
-                <>
-                  <div className="flex justify-between">
-                    <span className="text-gray-300">Maker / Taker Fee:</span>
-                    <span className="text-white">
-                      {perpsCollection?.makerFeeBps !== undefined &&
-                      perpsCollection?.takerFeeBps !== undefined
-                        ? `${(perpsCollection.makerFeeBps / 100).toFixed(2)}% / ${(
-                            perpsCollection.takerFeeBps / 100
-                          ).toFixed(2)}%`
-                        : "N/A"}
-                    </span>
-                  </div>
-                </>
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Maker / Taker Fee:</span>
+                  <span className="text-white">
+                    {perpsCollection?.makerFeeBps !== undefined &&
+                    perpsCollection?.takerFeeBps !== undefined
+                      ? `${(perpsCollection.makerFeeBps / 100).toFixed(2)}% / ${(
+                          perpsCollection.takerFeeBps / 100
+                        ).toFixed(2)}%`
+                      : "N/A"}
+                  </span>
+                </div>
               ) : (
                 <div className="flex justify-between">
                   <span className="text-gray-300">Maker / Taker Fee:</span>
@@ -279,7 +275,7 @@ export const PlaceOrderForm: FC<Props> = ({
           </p>
         </>
       )}
-      resultForm={(props) => (
+      resultForm={(_props) => (
         <>
           <p className="w-6/6 text-left font-normal text-s mt-5">
             Your order has been placed and will appear in the order book shortly.
@@ -301,16 +297,16 @@ export const PlaceOrderForm: FC<Props> = ({
               );
             }
 
-            let txhash;
+            let txhash: `0x${string}` | undefined;
             if (contractMode === "perpetual") {
               // Perps only needs price and quantity
-              txhash = await (createOrderAsync as any)({
+              txhash = await perpsCreateOrder.createOrderAsync({
                 price,
                 quantity,
                 timeInForce,
               });
             } else {
-              txhash = await (createOrderAsync as any)({
+              txhash = await futuresCreateOrder.createOrderAsync({
                 price,
                 expirationAt,
                 quantity,

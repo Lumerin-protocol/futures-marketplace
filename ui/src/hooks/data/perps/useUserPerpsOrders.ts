@@ -1,6 +1,6 @@
 import { backgroundRefetchOpts } from "../config";
 import { graphqlRequest } from "../graphql";
-import { QueryClient, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   UserPerpsOrdersQuery,
   UserPerpsOrdersByStatusQuery,
@@ -21,7 +21,10 @@ export const useUserPerpsOrders = (
 
   const query = useQuery({
     queryKey: [USER_PERPS_ORDERS_QK, address, statuses, excludeStatuses],
-    queryFn: () => fetchUserPerpsOrdersAsync(address!, { statuses, excludeStatuses }),
+    queryFn: () => {
+      if (!address) throw new Error("useUserPerpsOrders: address is required");
+      return fetchUserPerpsOrdersAsync(address, { statuses, excludeStatuses });
+    },
     enabled: !!address,
     ...(refetch ? backgroundRefetchOpts : {}),
   });

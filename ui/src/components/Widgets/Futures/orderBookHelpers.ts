@@ -231,8 +231,10 @@ export const createPerpsOrderBookData = (
     }
   }
 
-  // No ladder when market price or tick size is unavailable — show live book only
-  if (calculatedOrderBookData.length === 0) {
+  // No ladder when market price or tick size is unavailable — show live book only.
+  // `calculatedOrderBookData` is only populated when `basePrice` is known, so
+  // testing it here as well is what lets the ladder below rely on a real number.
+  if (calculatedOrderBookData.length === 0 || basePrice === null) {
     return Array.from(liveGroupedMap.entries())
       .sort((a, b) => b[0] - a[0])
       .map(([price, live]) => ({
@@ -243,7 +245,7 @@ export const createPerpsOrderBookData = (
       }));
   }
 
-  const normalizedBasePrice = normalizePrice(basePrice!);
+  const normalizedBasePrice = normalizePrice(basePrice);
   const ladderPriceSet = new Set<number>();
   let ladderMin = Infinity;
   let ladderMax = -Infinity;

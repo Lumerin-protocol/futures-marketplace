@@ -1,5 +1,5 @@
 import { tokens } from "../../../styles/tokens";
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import styled from "@mui/material/styles/styled";
 import Modal from "@mui/material/Modal";
 import CloseIcon from "@mui/icons-material/Close";
@@ -7,9 +7,6 @@ import IconButton from "@mui/material/IconButton";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { ModalCard } from "../../Modal.styled";
 import { TabSwitch } from "../../TabSwitch";
-import type { ParticipantOrder } from "../../../hooks/data/getUserFuturesOrders";
-import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPositions";
-import type { AccountBalance } from "../../../types/types";
 import { useCancelPerpsOrder } from "../../../hooks/data/perps/useCancelPerpsOrder";
 import { useQueryClient } from "@tanstack/react-query";
 import { USER_PERPS_ORDERS_QK } from "../../../hooks/data/perps/useUserPerpsOrders";
@@ -36,14 +33,7 @@ import type { LiquidationDirection } from "../../../lib/portfolioMargin";
 type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "POSITION_HISTORY" | "ORDER_HISTORY";
 
 interface PerpsOrdersPositionsTabWidgetProps {
-  orders: ParticipantOrder[];
-  positions: PositionBookPosition[];
-  ordersLoading?: boolean;
-  positionsLoading?: boolean;
   participantAddress?: `0x${string}`;
-  onClosePosition?: (price: string, amount: number, isBuy: boolean, expirationAt?: number) => void;
-  participantData?: any;
-  accountBalance?: AccountBalance;
   marketPrice?: bigint;
   positionSessions: PositionSession[];
   positionSessionsLoading?: boolean;
@@ -61,14 +51,7 @@ interface PerpsOrdersPositionsTabWidgetProps {
 }
 
 export const PerpsOrdersPositionsTabWidget = ({
-  orders,
-  positions,
-  ordersLoading,
-  positionsLoading,
   participantAddress,
-  onClosePosition,
-  participantData,
-  accountBalance,
   marketPrice,
   positionSessions,
   positionSessionsLoading,
@@ -288,7 +271,7 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
-  const formatQuantity = (quantity: bigint) => {
+  const _formatQuantity = (quantity: bigint) => {
     if(quantity === 0n) {
       return "0";
     }
@@ -503,7 +486,7 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, hasMore = false, isFetching
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
-  const formatQuantity = (quantity: bigint) => {
+  const _formatQuantity = (quantity: bigint) => {
     if(quantity === 0n) {
       return "0";
     }
@@ -631,7 +614,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, liqPric
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
-  const formatQuantity = (quantity: bigint) => {
+  const _formatQuantity = (quantity: bigint) => {
     if(quantity === 0n) {
       return "0";
     }
@@ -807,7 +790,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, hasMore = fals
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
-  const formatQuantity = (quantity: bigint) => {
+  const _formatQuantity = (quantity: bigint) => {
     if(quantity === 0n) {
       return "0";
     }
@@ -957,12 +940,12 @@ interface PerpsTradesTableProps {
   onLoadMore: () => void;
 }
 
-const PerpsTradesTable = ({ trades, isLoading, userAddress, hasMore = false, isFetchingMore, onLoadMore }: PerpsTradesTableProps) => {
+const PerpsTradesTable = ({ trades, isLoading, hasMore = false, isFetchingMore, onLoadMore }: PerpsTradesTableProps) => {
   const formatPrice = (price: bigint) => {
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
-  const formatQuantity = (quantity: bigint) => {
+  const _formatQuantity = (quantity: bigint) => {
     if(quantity === 0n) {
       return "0";
     }
@@ -1069,7 +1052,7 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
-  const formatQuantity = (quantity: bigint) => {
+  const _formatQuantity = (quantity: bigint) => {
     if(quantity === 0n) {
       return "0";
     }
@@ -1228,7 +1211,7 @@ const TradesWrapper = styled("div")`
   width: 100%;
 `;
 
-const PlaceholderText = styled("div")`
+const _PlaceholderText = styled("div")`
   padding: 2rem;
   text-align: center;
   color: ${tokens.overlay.white50};
@@ -1543,7 +1526,7 @@ const SummaryValue = styled("span")`
   font-weight: 600;
 `;
 
-const ErrorText = styled("p")`
+const _ErrorText = styled("p")`
   color: ${tokens.trading.short};
   font-size: 0.8125rem;
   margin: 0 0 1rem 0;
@@ -1595,14 +1578,14 @@ const ModalConfirmButton = styled("button")`
   }
 `;
 
-const SimulatingText = styled("p")`
+const _SimulatingText = styled("p")`
   color: ${tokens.text.secondary};
   font-size: 0.875rem;
   margin: 0;
   text-align: center;
 `;
 
-const SimResultsContainer = styled("div")`
+const _SimResultsContainer = styled("div")`
   width: 100%;
   overflow-x: auto;
   margin-top: 0.5rem;

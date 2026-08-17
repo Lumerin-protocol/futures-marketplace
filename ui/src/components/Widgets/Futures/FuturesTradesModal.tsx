@@ -2,7 +2,6 @@ import styled from "@mui/material/styles/styled";
 import Modal from "@mui/material/Modal";
 import CloseIcon from "@mui/icons-material/Close";
 import IconButton from "@mui/material/IconButton";
-import Tooltip from "@mui/material/Tooltip";
 import { useEffect, useMemo, useState } from "react";
 import { tokens } from "../../../styles/tokens";
 import { ModalCard } from "../../Modal.styled";
@@ -57,7 +56,7 @@ interface NormalizedPosition {
   trades: FuturesSessionTrade[];
 }
 
-const truncateAddress = (address: string) => {
+const _truncateAddress = (address: string) => {
   if (!address || address.length < 10) return address;
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 };
@@ -213,6 +212,8 @@ export const FuturesTradesModal = ({
   const PAGE_SIZE = 10;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   // Reset to the first page whenever the modal opens or the selection changes.
+  // `open` and `selection` are triggers rather than values read in the body.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
   }, [open, selection]);
@@ -320,7 +321,7 @@ const TradesModalCard = styled(ModalCard)`
   }
 `;
 
-const SelectionSummary = styled("div")`
+const _SelectionSummary = styled("div")`
   display: flex;
   flex-wrap: wrap;
   gap: 1.5rem;
@@ -330,20 +331,20 @@ const SelectionSummary = styled("div")`
   margin-bottom: 1rem;
 `;
 
-const SummaryItem = styled("div")`
+const _SummaryItem = styled("div")`
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 `;
 
-const SummaryLabel = styled("span")`
+const _SummaryLabel = styled("span")`
   color: ${tokens.text.secondary};
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 `;
 
-const SummaryValue = styled("span")`
+const _SummaryValue = styled("span")`
   color: ${tokens.text.onDark};
   font-size: 0.875rem;
   font-weight: 600;
@@ -413,7 +414,7 @@ const TypeBadge = styled("span")<{ $type: string }>`
   color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
-const CounterpartyAddress = styled("span")`
+const _CounterpartyAddress = styled("span")`
   font-family: monospace;
   font-size: 0.8125rem;
   color: ${tokens.text.secondary};

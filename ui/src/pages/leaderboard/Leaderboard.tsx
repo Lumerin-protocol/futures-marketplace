@@ -249,20 +249,20 @@ const PageContainer = styled("div")`
   margin-top: 10px;
 `;
 
-const PageHeader = styled("div")`
+const _PageHeader = styled("div")`
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 `;
 
-const PageTitle = styled("h1")`
+const _PageTitle = styled("h1")`
   margin: 0;
   font-size: 1.6rem;
   font-weight: 700;
   color: ${tokens.text.onDark};
 `;
 
-const PageSubtitle = styled("p")`
+const _PageSubtitle = styled("p")`
   margin: 0;
   font-size: 0.9rem;
   color: ${tokens.text.secondary};

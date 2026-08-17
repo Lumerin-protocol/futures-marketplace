@@ -5,7 +5,7 @@ import {
   QueryClientProvider,
 } from "@tanstack/react-query";
 import type { FC, PropsWithChildren } from "react";
-import { WagmiProvider } from "wagmi";
+import { WagmiProvider, type Config } from "wagmi";
 import { config } from "./clients/wagmi";
 
 /** wagmi query-key prefixes that correspond to on-chain reads/simulations. */
@@ -73,7 +73,11 @@ const qc = new QueryClient({
 
 export const Web3Provider: FC<PropsWithChildren> = ({ children }) => {
   return (
-    <WagmiProvider config={config}>
+    // `config` is built by @reown/appkit-adapter-wagmi against @wagmi/core v3
+    // while `WagmiProvider` comes from wagmi v2 (@wagmi/core v2). The two Config
+    // types are structurally incompatible. See "Two copies of @wagmi/core"
+    // in ui/TECH_DEBT.md — remove this cast once the versions are aligned.
+    <WagmiProvider config={config as unknown as Config}>
       <QueryClientProvider client={qc}>{children}</QueryClientProvider>
     </WagmiProvider>
   );

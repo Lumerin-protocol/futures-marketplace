@@ -77,14 +77,14 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
     // #209 mechanism: prices live on an integer-tick grid); fall back to the
     // smallest gap between adjacent live levels when no increment is provided.
     let step = minimumPriceIncrement && minimumPriceIncrement > 0 ? minimumPriceIncrement : Infinity;
-    if (!isFinite(step)) {
+    if (!Number.isFinite(step)) {
       const allPrices = [...askRows, ...bidRows].map((r) => r.price).sort((a, b) => a - b);
       for (let i = 1; i < allPrices.length; i++) {
         const gap = allPrices[i] - allPrices[i - 1];
         if (gap > 1e-9 && gap < step) step = gap;
       }
     }
-    if (!isFinite(step)) step = 0.01;
+    if (!Number.isFinite(step)) step = 0.01;
     // Snap a price onto the integer-tick grid so generated pad prices line up
     // exactly with real levels (mirrors createFinalOrderBookData's tick math).
     const toTickPrice = (tick: number) => Number((tick * step).toFixed(8));

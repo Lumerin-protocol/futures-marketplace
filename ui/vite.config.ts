@@ -75,7 +75,7 @@ export default defineConfig(({ mode }) => {
         },
       }),
       imagetools({
-        defaultDirectives: (url) => {
+        defaultDirectives: (_url) => {
           return new URLSearchParams({
             format: "webp",
             quality: "80",

@@ -1,7 +1,7 @@
+// biome-ignore-all lint/complexity/noForEach: convenience for table testing
+
 import { expect, test, describe } from "vitest";
 import { formatUnits, type RoundingOpts } from "./formatUnits";
-
-// biome-ignore-all lint/complexity/noForEach: convenience for table testing
 
 const token = {
   decimals: 8,
@@ -245,7 +245,7 @@ describe("should use scientific notation when number does not fit in 5 chars", (
 });
 
 describe("should handle corner cases", () => {
-  const dec = BigInt(token.decimals);
+  const _dec = BigInt(token.decimals);
   const opts: RoundingOpts = {
     maxChars: 5,
   };

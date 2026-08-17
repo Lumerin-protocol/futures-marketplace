@@ -1,5 +1,4 @@
 import { backgroundRefetchOpts } from "./config";
-import { gql } from "graphql-request";
 import { graphqlRequest } from "./graphql";
 import { useQuery } from "@tanstack/react-query";
 import type { GetResponse } from "../../gateway/interfaces";

@@ -90,13 +90,16 @@ export const ClosePerpsPositionModal = ({
     enabled: false,
   });
 
+  // Seed the form once per open/session. `marketPrice` is read for the initial
+  // value only — listing it would re-reset the form on every price tick and wipe
+  // whatever the user has typed.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   useEffect(() => {
     if (!open || !session) return;
     const initPrice = marketPrice
       ? (Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)
       : (Number(session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
     form.reset(initPrice, 100);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, session]);
 
   const handleClose = useCallback(() => {
@@ -104,6 +107,11 @@ export const ClosePerpsPositionModal = ({
     onClose();
   }, [onClose]);
 
+  // `form.amount` / `form.amountMode` are listed on purpose: the quantity is read
+  // through `form.getCurrentQuantity()`, so those are what actually has to
+  // invalidate this callback. `snapBigInt` is redefined every render and would
+  // defeat the memo entirely.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   const handleConfirm = useCallback(async () => {
     if (!session || netQty === 0n) return;
     const closeQty = form.getCurrentQuantity();
@@ -172,7 +180,6 @@ export const ClosePerpsPositionModal = ({
     } finally {
       setIsClosing(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, netQty, form.currentPrice, isLong, createOrderAsync, queryClient, publicClient, participantAddress, handleClose, form.amount, form.amountMode, onConfirmed, orderType, marketPrice, refetchSim]);
 
   if (!session) return null;

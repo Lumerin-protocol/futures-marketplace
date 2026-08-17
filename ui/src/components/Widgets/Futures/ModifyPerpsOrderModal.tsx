@@ -37,7 +37,6 @@ export const ModifyPerpsOrderModal = ({
   open,
   onClose,
   order,
-  marketPrice,
   participantAddress,
   priceStep = 0.01,
   onConfirmed,
@@ -59,13 +58,15 @@ export const ModifyPerpsOrderModal = ({
 
   const form = usePerpsOrderForm({ maxQuantity, priceStep });
 
+  // Seed the form once per open/order; `form.reset` is recreated every render, so
+  // listing it would re-reset the form continuously and discard user input.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   useEffect(() => {
     if (!open || !order) return;
     const initPrice = (Number(order.price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
     form.reset(initPrice, 100);
     setSubmitError(null);
     setShowReview(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, order]);
 
   const handleClose = useCallback(() => {
@@ -75,15 +76,20 @@ export const ModifyPerpsOrderModal = ({
     onClose();
   }, [onClose]);
 
+  // The quantity is read through `form.getCurrentQuantity()`, so `form.amount` and
+  // `form.amountMode` are the values that actually have to invalidate this
+  // callback; the getter itself is recreated every render.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   const handleReview = useCallback(() => {
     if (!order) return;
     const newQty = form.getCurrentQuantity();
     if (newQty <= 0 || form.currentPrice <= 0) return;
     setSubmitError(null);
     setShowReview(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order, form.currentPrice, form.amount, form.amountMode]);
 
+  // Same reasoning as `handleReview` above regarding the `form.*` dependencies.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   const handleConfirm = useCallback(async () => {
     if (!order) return;
     const newQty = form.getCurrentQuantity();
@@ -123,7 +129,6 @@ export const ModifyPerpsOrderModal = ({
     } finally {
       setIsSubmitting(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order, form.currentPrice, form.amount, form.amountMode, updateOrdersAsync, queryClient, publicClient, participantAddress, handleClose, onConfirmed]);
 
   if (!order) return null;

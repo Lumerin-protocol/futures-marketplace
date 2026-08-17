@@ -1,5 +1,17 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.3.11/schema.json",
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules/**",
+      "!**/build/**",
+      "!**/dist/**",
+      "!**/coverage/**",
+      "!**/artifacts/**",
+      "!**/cache/**",
+      "!**/typechain-types/**"
+    ]
+  },
   "overrides": [
     {
       "includes": [

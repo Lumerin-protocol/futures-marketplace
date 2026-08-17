@@ -1,3 +1,10 @@
+# ox 0.14.29 (pinned by viem 2.54.0) ships a type error in tempo/KeyAuthorization.ts
+# that breaks `tsc --noEmit`, since it is a .ts source file and therefore not
+# covered by skipLibCheck. 0.14.33 fixes it. Scoped to viem 2.54.0 so that older
+# viem copies in the tree keep their own ox major. See ui/TECH_DEBT.md.
+overrides:
+  viem@2.54.0>ox: 0.14.33
+
 allowBuilds:
   '@reown/appkit': true
   bufferutil: true

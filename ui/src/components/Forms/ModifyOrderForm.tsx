@@ -1,4 +1,4 @@
-import { memo, useCallback, useState, type FC } from "react";
+import { memo, useCallback, useId, type FC } from "react";
 import { useForm, useController, type Control } from "react-hook-form";
 import { waitForOrderBookBlockNumber, getOrderBookQueryKey } from "../../hooks/data/orderBookHelpers";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
@@ -101,7 +101,13 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
       }
 
       const values = form.getValues();
-      if (values.quantity == currentQuantity && values.price == (Number(order.pricePerDay) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)) {
+      // `quantity` is typed as a number but the input can hand back an empty
+      // string, so coerce before comparing to keep the previous loose-equality
+      // behaviour of this guard.
+      if (
+        Number(values.quantity) === currentQuantity &&
+        values.price === (Number(order.pricePerDay) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)
+      ) {
         alert("Please change order terms");
         return false;
       }
@@ -212,7 +218,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
         inputForm={inputForm}
         validateInput={validateInput}
         disableReview={!hasChanges}
-        reviewForm={(props) => {
+        reviewForm={(_props) => {
           const oldPrice = Number(order.pricePerDay) / PAYMENT_TOKEN_SCALE_NUM;
           const newPrice = parseFloat(form.watch("price"));
           const oldQuantity = currentQuantity;
@@ -258,7 +264,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
             </>
           );
         }}
-        resultForm={(props) => (
+        resultForm={(_props) => (
           <>
             <p className="w-6/6 text-left font-normal text-s mt-5">
               Your order has been updated and will appear in the order book shortly.
@@ -368,6 +374,9 @@ const ErrorText = styled("span")`
 const ModifyInputForm = memo<{
   control: Control<ModifyFormValues>;
 }>(({ control }) => {
+  // Several of these forms can be mounted at once (one per order row), so the
+  // label/input ids have to be unique per instance.
+  const fieldId = useId();
   const priceController = useController({
     name: "price",
     control: control,
@@ -375,7 +384,7 @@ const ModifyInputForm = memo<{
       required: "Price is required",
       validate: (value: string) => {
         const numValue = parseFloat(value);
-        if (isNaN(numValue) || numValue <= 0) {
+        if (Number.isNaN(numValue) || numValue <= 0) {
           return "Price must be greater than 0";
         }
         return true;
@@ -402,8 +411,9 @@ const ModifyInputForm = memo<{
   return (
     <InputFormContainer>
       <InputGroup>
-        <label>Price (USDC)</label>
+        <label htmlFor={`${fieldId}-price`}>Price (USDC)</label>
         <input
+          id={`${fieldId}-price`}
           type="text"
           {...priceController.field}
           step="0.01"
@@ -415,8 +425,9 @@ const ModifyInputForm = memo<{
       </InputGroup>
 
       <InputGroup>
-        <label>Quantity</label>
+        <label htmlFor={`${fieldId}-quantity`}>Quantity</label>
         <input
+          id={`${fieldId}-quantity`}
           type="text"
           value={quantityController.field.value}
           onChange={(e) => {
@@ -426,7 +437,7 @@ const ModifyInputForm = memo<{
               quantityController.field.onChange("");
             } else {
               const numValue = parseInt(digits, 10);
-              if (!isNaN(numValue) && numValue >= 0 && numValue <= 127) {
+              if (!Number.isNaN(numValue) && numValue >= 0 && numValue <= 127) {
                 quantityController.field.onChange(numValue);
               }
             }

@@ -35,7 +35,7 @@ export function useSimulatePerpsOrder({ price, quantity, enabled: externalEnable
     address: process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`,
     abi: withErrors(HashPowerPerpsDEXAbi),
     functionName: "simulateOrder",
-    args: argsReady ? [price!, quantityBigInt!] : undefined,
+    args: price !== undefined && quantityBigInt !== undefined ? [price, quantityBigInt] : undefined,
     query: {
       enabled: autoFetchEnabled,
     },

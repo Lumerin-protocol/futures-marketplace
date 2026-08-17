@@ -19,7 +19,10 @@ export const getUserFuturesOrders = (
 ) => {
   const query = useQuery({
     queryKey: [PARTICIPANT_QK],
-    queryFn: () => fetchParticipantAsync(participantAddress!, props),
+    queryFn: () => {
+      if (!participantAddress) throw new Error("getUserFuturesOrders: participantAddress is required");
+      return fetchParticipantAsync(participantAddress, props);
+    },
     enabled: !!participantAddress,
     ...(props?.refetch ? backgroundRefetchOpts : {}),
   });
@@ -114,6 +117,7 @@ export type ParticipantOrder = {
   closedAt: string | null;
   closedBy: string | null;
   expirationAt: bigint;
+  /** On-chain bytes32 orderId — what cancelOrder / updateOrders take. */
   id: string;
   isActive: boolean;
   isBuy: boolean;
