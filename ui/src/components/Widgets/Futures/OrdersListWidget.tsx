@@ -5,7 +5,7 @@ import { SmallWidget } from "../../Cards/Cards.styled";
 import type { Participant, ParticipantOrder } from "../../../hooks/data/getUserFuturesOrders";
 import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
-import { ModifyOrderForm } from "../../Forms/ModifyOrderForm";
+import { ModifyFuturesOrderModal } from "./ModifyFuturesOrderModal";
 import { CloseOrderForm } from "../../Forms/CloseOrderForm";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
@@ -37,8 +37,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   const { data: marketPrice } = useGetMarketPrice();
   const [selectedOrder, setSelectedOrder] = useState<{
     order: ParticipantOrder;
-    orderIds: string[];
-    currentQuantity: number;
+    groupOrders: ParticipantOrder[];
   } | null>(null);
   const [selectedCloseOrder, setSelectedCloseOrder] = useState<{
     isBuy: boolean;
@@ -103,8 +102,8 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
     closeModal.open();
   };
 
-  const handleModifyOrder = (order: ParticipantOrder, orderIds: string[], currentQuantity: number) => {
-    setSelectedOrder({ order, orderIds, currentQuantity });
+  const handleModifyOrder = (order: ParticipantOrder, groupOrders: ParticipantOrder[]) => {
+    setSelectedOrder({ order, groupOrders });
     modifyModal.open();
   };
 
@@ -132,6 +131,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
           closedAt: order.closedAt,
           timestamp: order.timestamp,
           orderIds: [] as string[],
+          orders: [] as ParticipantOrder[],
           firstOrder: order,
         };
       }
@@ -143,8 +143,10 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
       acc[key].originalQuantity += Number(order.originalQuantity);
       acc[key].filledQuantity += Number(order.filledQuantity);
       // One Order per on-chain orderId, so the grouped row cancels/modifies the
-      // ids of every order it collapsed together.
+      // ids of every order it collapsed together. Shrinking the row needs the
+      // orders themselves, to split the new total across them.
       acc[key].orderIds.push(order.id);
+      acc[key].orders.push(order);
 
       return acc;
     },
@@ -161,6 +163,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
         closedAt: string | null;
         timestamp: string;
         orderIds: string[];
+        orders: ParticipantOrder[];
         firstOrder: ParticipantOrder;
       }
     >,
@@ -210,9 +213,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
                       {groupedOrder.isActive && !groupedOrder.closedAt && (
                         <ActionButtons>
                           <ModifyButton
-                            onClick={() =>
-                              handleModifyOrder(groupedOrder.firstOrder, groupedOrder.orderIds, groupedOrder.amount)
-                            }
+                            onClick={() => handleModifyOrder(groupedOrder.firstOrder, groupedOrder.orders)}
                           >
                             Modify
                           </ModifyButton>
@@ -235,25 +236,23 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
       )}
 
       {selectedOrder && (
-        <ModalItem open={modifyModal.isOpen} setOpen={modifyModal.setOpen}>
-          <ModifyOrderForm
-            order={selectedOrder.order}
-            orderIds={selectedOrder.orderIds}
-            currentQuantity={selectedOrder.currentQuantity}
-            participantData={participantData}
-            latestPrice={latestPrice}
-            mmSpotShock={mmSpotShock}
-            minMargin={minMargin}
-            newestItemPrice={newestItemPrice}
-            accountBalance={accountBalance}
-            contractMode={contractMode}
-            balanceQuery={balanceQuery}
-            closeForm={() => {
-              modifyModal.close();
-              setSelectedOrder(null);
-            }}
-          />
-        </ModalItem>
+        <ModifyFuturesOrderModal
+          open={modifyModal.isOpen}
+          order={selectedOrder.order}
+          groupOrders={selectedOrder.groupOrders}
+          participantData={participantData}
+          latestPrice={latestPrice}
+          mmSpotShock={mmSpotShock}
+          minMargin={minMargin}
+          newestItemPrice={newestItemPrice}
+          accountBalance={accountBalance}
+          contractMode={contractMode}
+          balanceQuery={balanceQuery}
+          onClose={() => {
+            modifyModal.close();
+            setSelectedOrder(null);
+          }}
+        />
       )}
 
       {selectedCloseOrder && (
