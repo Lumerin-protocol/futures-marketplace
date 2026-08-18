@@ -462,6 +462,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       highlightTrigger={highlightTrigger}
       contractSpecsQuery={contractSpecsQuery}
       participantData={participantData?.data}
+      perpsOpenOrders={perpsOpenOrdersQuery.data?.data?.orders}
       highlightMode={highlightMode}
       latestPrice={marketPrice ?? null}
       minMargin={minMargin}

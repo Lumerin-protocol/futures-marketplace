@@ -26,14 +26,16 @@ import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { Spinner } from "../../Spinner.styled";
 import { ModalItem } from "../../Modal";
 import { PrimaryButton, SecondaryButton } from "../../Forms/FormButtons/Buttons.styled";
-import { PlaceOrderForm } from "../../Forms/PlaceOrderForm";
+import { PlaceOrderForm, type OrderOffsetPlan } from "../../Forms/PlaceOrderForm";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import { useMarginEngineShocks } from "../../../hooks/data/useMarginEngineShocks";
 import type { Participant } from "../../../hooks/data/getUserFuturesOrders";
+import type { PerpsOrder } from "../../../hooks/data/perps/useUserPerpsOrders";
 import type { ContractMode, AccountBalance } from "../../../types/types";
 import type { PerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
+import { planOffset, type RestingOrder } from "../../../lib/orderUpdatePlan";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
 import {
   handleNumericDecimalInput,
@@ -76,6 +78,8 @@ interface PlaceOrderWidgetProps {
   address?: `0x${string}`;
   contractSpecsQuery: UseQueryResult<GetResponse<FuturesContractSpecs>, Error>;
   participantData?: Participant | null;
+  /** The user's own resting perps orders, used for conflict detection in perps mode. */
+  perpsOpenOrders?: PerpsOrder[];
   latestPrice: bigint | null;
   highlightMode: "inputs" | "buttons" | undefined;
   onOrderPlaced?: () => void | Promise<void>;
@@ -99,6 +103,7 @@ export const PlaceOrderWidget = ({
   highlightTrigger,
   contractSpecsQuery,
   participantData,
+  perpsOpenOrders,
   latestPrice,
   highlightMode,
   onOrderPlaced,
@@ -142,7 +147,10 @@ export const PlaceOrderWidget = ({
   const [showOrderForm, setShowOrderForm] = useState(false);
   const [showLeverageModal, setShowLeverageModal] = useState(false);
   const [bypassConflictCheck, setBypassConflictCheck] = useState(false);
-  const [conflictingOrderQuantity, setConflictingOrderQuantity] = useState<number | null>(null);
+  // Offered while the conflict modal is open, unless the order cannot be offset
+  // (market / IOC / FOK). Cleared when the user declines it, so the order form
+  // submits an offset exactly when this is set.
+  const [offsetPlan, setOffsetPlan] = useState<OrderOffsetPlan | null>(null);
   const [pendingOrder, setPendingOrder] = useState<{
     price: number;
     amount: number;
@@ -545,6 +553,73 @@ export const PlaceOrderWidget = ({
     }
   };
 
+  /**
+   * The user's own resting orders an incoming order would self-cross against:
+   * opposite side, same price (and same delivery date for futures), oldest first.
+   */
+  const findOffsettingOrders = (priceInWei: bigint, isBuy: boolean): RestingOrder[] => {
+    if (contractMode === "perpetual") {
+      return (perpsOpenOrders ?? [])
+        .filter(
+          (order) =>
+            (order.status === "ACTIVE" || order.status === "PARTIALLY_FILLED") &&
+            order.isBuy !== isBuy &&
+            order.price === priceInWei &&
+            order.quantity > 0n,
+        )
+        .sort((a, b) => Number(a.createdAt) - Number(b.createdAt))
+        .map((order) => ({ id: order.id as `0x${string}`, restingQty: order.quantity }));
+    }
+
+    const expirationAtValue = externalExpirationAt ? BigInt(externalExpirationAt) : 0n;
+    return (participantData?.orders ?? [])
+      .filter(
+        (order) =>
+          order.isActive &&
+          order.isBuy !== isBuy &&
+          order.pricePerDay === priceInWei &&
+          order.expirationAt === expirationAtValue &&
+          order.quantity > 0,
+      )
+      .sort((a, b) => Number(a.timestamp) - Number(b.timestamp))
+      .map((order) => ({ id: order.id as `0x${string}`, restingQty: BigInt(order.quantity) }));
+  };
+
+  /**
+   * Net `quantity` against those resting orders instead of placing it.
+   *
+   * Only offered for resting limit orders: a reduce cannot express IOC or FOK,
+   * and a market order is a deliberate instruction to take the book.
+   */
+  const buildOffsetPlan = (
+    offsetting: RestingOrder[],
+    quantity: number,
+    isBuy: boolean,
+  ): OrderOffsetPlan | null => {
+    if (orderType !== "limit" || timeInForce !== TimeInForce.GTC) return null;
+
+    const scale = contractMode === "perpetual" ? QUANTITY_SCALE_NUM : 1;
+    const plan = planOffset(offsetting, BigInt(Math.round(quantity * scale)), !isBuy);
+    const leftoverQty = Number(plan.leftoverQty) / scale;
+
+    return {
+      cancelIds: plan.cancelIds,
+      reduces: plan.reduces,
+      offsetQty: quantity - leftoverQty,
+      leftoverQty,
+    };
+  };
+
+  /** Route an order that collides with the user's own book to the conflict modal. */
+  const promptConflict = (
+    offsetting: RestingOrder[],
+    order: { price: number; amount: number; quantity: number },
+  ) => {
+    setOffsetPlan(buildOffsetPlan(offsetting, Math.abs(order.quantity), order.quantity > 0));
+    setPendingOrder(order);
+    setShowConflictModal(true);
+  };
+
   const handleBuy = async () => {
     if (contractMode === "perpetual") {
       await handleBuyPerps();
@@ -600,24 +675,14 @@ export const PlaceOrderWidget = ({
     const quantity = calculateQuantityFromAmount(numericAmount, currentPrice);
 
     // Check for conflicting orders (opposite action, same price)
-    if (participantData?.orders) {
-      const conflictingOrder = participantData.orders.find(
-        (order) =>
-          order.isActive &&
-          !order.isBuy && // Opposite action (Sell)
-          order.pricePerDay === priceInWei,
-      );
-
-      if (conflictingOrder) {
-        setConflictingOrderQuantity(null);
-        setPendingOrder({
-          price: currentPrice,
-          amount: numericAmount,
-          quantity: quantity, // Positive for Buy
-        });
-        setShowConflictModal(true);
-        return;
-      }
+    const offsetting = findOffsettingOrders(priceInWei, true);
+    if (offsetting.length > 0) {
+      promptConflict(offsetting, {
+        price: currentPrice,
+        amount: numericAmount,
+        quantity: quantity, // Positive for Buy
+      });
+      return;
     }
 
     openOrderForm(currentPrice, numericAmount, quantity); // Positive quantity for Buy
@@ -661,24 +726,14 @@ export const PlaceOrderWidget = ({
     const quantity = calculateQuantityFromAmount(numericAmount, currentPrice);
 
     // Check for conflicting orders (opposite action, same price)
-    if (participantData?.orders) {
-      const conflictingOrder = participantData.orders.find(
-        (order) =>
-          order.isActive &&
-          order.isBuy && // Opposite action (Buy)
-          order.pricePerDay === priceInWei,
-      );
-
-      if (conflictingOrder) {
-        setConflictingOrderQuantity(null);
-        setPendingOrder({
-          price: currentPrice,
-          amount: numericAmount,
-          quantity: -quantity, // Negative for Sell
-        });
-        setShowConflictModal(true);
-        return;
-      }
+    const offsetting = findOffsettingOrders(priceInWei, false);
+    if (offsetting.length > 0) {
+      promptConflict(offsetting, {
+        price: currentPrice,
+        amount: numericAmount,
+        quantity: -quantity, // Negative for Sell
+      });
+      return;
     }
 
     openOrderForm(currentPrice, numericAmount, -quantity); // Negative quantity for Sell
@@ -743,27 +798,14 @@ export const PlaceOrderWidget = ({
     }
 
     // Check for conflicting orders (opposite action, same price, same expiration date)
-    if (participantData?.orders && externalExpirationAt !== undefined) {
-      const expirationAtValue = externalExpirationAt ? BigInt(externalExpirationAt) : 0n;
-      const conflictingOrder = participantData.orders.find(
-        (order) =>
-          order.isActive &&
-          !order.isBuy && // Opposite action (Sell)
-          order.pricePerDay === priceInWei &&
-          order.expirationAt === expirationAtValue,
-      );
-
-      if (conflictingOrder) {
-        // Note: ParticipantOrder doesn't expose quantity, so we can't show it
-        setConflictingOrderQuantity(null);
-        setPendingOrder({
-          price: currentPrice,
-          amount: numericAmount,
-          quantity: quantity, // Positive for Buy
-        });
-        setShowConflictModal(true);
-        return;
-      }
+    const offsetting = findOffsettingOrders(priceInWei, true);
+    if (offsetting.length > 0) {
+      promptConflict(offsetting, {
+        price: currentPrice,
+        amount: numericAmount,
+        quantity: quantity, // Positive for Buy
+      });
+      return;
     }
 
     // Check if price exceeds configured percentage of market price (limit orders only)
@@ -842,27 +884,14 @@ export const PlaceOrderWidget = ({
     }
 
     // Check for conflicting orders (opposite action, same price, same expiration date)
-    if (participantData?.orders && externalExpirationAt !== undefined) {
-      const expirationAtValue = externalExpirationAt ? BigInt(externalExpirationAt) : 0n;
-      const conflictingOrder = participantData.orders.find(
-        (order) =>
-          order.isActive &&
-          order.isBuy && // Opposite action (Buy)
-          order.pricePerDay === priceInWei &&
-          order.expirationAt === expirationAtValue,
-      );
-
-      if (conflictingOrder) {
-        // Note: ParticipantOrder doesn't expose quantity, so we can't show it
-        setConflictingOrderQuantity(null);
-        setPendingOrder({
-          price: currentPrice,
-          amount: numericAmount,
-          quantity: -quantity, // Negative for Sell
-        });
-        setShowConflictModal(true);
-        return;
-      }
+    const offsetting = findOffsettingOrders(priceInWei, false);
+    if (offsetting.length > 0) {
+      promptConflict(offsetting, {
+        price: currentPrice,
+        amount: numericAmount,
+        quantity: -quantity, // Negative for Sell
+      });
+      return;
     }
 
     // Check if price exceeds configured percentage of market price (limit orders only)
@@ -908,7 +937,15 @@ export const PlaceOrderWidget = ({
   const handleConfirmConflict = () => {
     if (pendingOrder) {
       setShowConflictModal(false);
+      setOffsetPlan(null);
       setBypassConflictCheck(true);
+      setShowOrderForm(true);
+    }
+  };
+
+  const handleOffsetConflict = () => {
+    if (pendingOrder && offsetPlan) {
+      setShowConflictModal(false);
       setShowOrderForm(true);
     }
   };
@@ -916,7 +953,7 @@ export const PlaceOrderWidget = ({
   const handleCancelConflict = () => {
     setShowConflictModal(false);
     setPendingOrder(null);
-    setConflictingOrderQuantity(null);
+    setOffsetPlan(null);
     setBypassConflictCheck(false);
   };
 
@@ -1197,9 +1234,10 @@ export const PlaceOrderWidget = ({
       <ModalItem open={showConflictModal} setOpen={setShowConflictModal}>
         <ConflictingOrderModal
           pendingOrder={pendingOrder}
-          conflictingOrderQuantity={conflictingOrderQuantity}
+          offsetPlan={offsetPlan}
           externalExpirationAt={externalExpirationAt}
           onConfirm={handleConfirmConflict}
+          onOffset={handleOffsetConflict}
           onCancel={handleCancelConflict}
           contractMode={contractMode}
         />
@@ -1212,6 +1250,7 @@ export const PlaceOrderWidget = ({
             setShowOrderForm(open);
             if (!open) {
               setPendingOrder(null);
+              setOffsetPlan(null);
             }
           }}
         >
@@ -1225,6 +1264,7 @@ export const PlaceOrderWidget = ({
               await onOrderPlaced?.();
             }}
             bypassConflictCheck={bypassConflictCheck}
+            offsetPlan={offsetPlan}
             contractMode={contractMode}
             perpsCollection={perpsCollection}
             leverage={leverage}
@@ -1233,7 +1273,7 @@ export const PlaceOrderWidget = ({
             closeForm={() => {
               setShowOrderForm(false);
               setPendingOrder(null);
-              setConflictingOrderQuantity(null);
+              setOffsetPlan(null);
               setBypassConflictCheck(false);
             }}
           />
@@ -1326,15 +1366,18 @@ const LeverageModal = ({
 
 const ConflictingOrderModal = ({
   pendingOrder,
+  offsetPlan,
   externalExpirationAt,
   onConfirm,
+  onOffset,
   onCancel,
   contractMode = "futures",
 }: {
   pendingOrder: { price: number; amount: number; quantity: number } | null;
-  conflictingOrderQuantity: number | null;
+  offsetPlan: OrderOffsetPlan | null;
   externalExpirationAt?: number;
   onConfirm: () => void;
+  onOffset: () => void;
   onCancel: () => void;
   contractMode?: ContractMode;
 }) => {
@@ -1343,6 +1386,7 @@ const ConflictingOrderModal = ({
   const isBuy = pendingOrder.quantity > 0;
   const oppositeAction = isBuy ? "Ask" : "Bid";
   const expirationAtFormatted = externalExpirationAt ? new Date(externalExpirationAt * 1000).toLocaleString() : "N/A";
+  const formatQty = (value: number) => value.toFixed(contractMode === "perpetual" ? 6 : 0);
 
   return (
     <div className="space-y-6">
@@ -1371,20 +1415,28 @@ const ConflictingOrderModal = ({
       <div className="bg-white-900/20 border border-white-500/30 rounded-lg p-4">
         <p className="text-white-300 text-sm leading-relaxed">
           <strong>Important:</strong> Your order of{" "}
-          <strong>
-            {contractMode === "perpetual"
-              ? Math.abs(pendingOrder.quantity).toFixed(6)
-              : Math.abs(pendingOrder.quantity)}{" "}
-            units
-          </strong>{" "}
-          will be placed as specified. However, it will be matched against your existing {oppositeAction} order and
-          offset orders will be closed.
+          <strong>{formatQty(Math.abs(pendingOrder.quantity))} units</strong> will be placed as specified. However, it
+          will be matched against your existing {oppositeAction} order and offset orders will be closed.
         </p>
       </div>
 
+      {offsetPlan && (
+        <div className="bg-white-900/20 border border-white-500/30 rounded-lg p-4">
+          <p className="text-white-300 text-sm leading-relaxed">
+            Offsetting instead takes <strong>{formatQty(offsetPlan.offsetQty)} units</strong> off your resting{" "}
+            {oppositeAction} in a single transaction
+            {offsetPlan.leftoverQty > 0
+              ? ` and places the remaining ${formatQty(offsetPlan.leftoverQty)} units.`
+              : ", and places nothing new."}{" "}
+            Nothing is sent to the market, so no other order can fill first.
+          </p>
+        </div>
+      )}
+
       <div className="flex gap-3 justify-end">
         <SecondaryButton onClick={onCancel}>Cancel</SecondaryButton>
-        <PrimaryButton onClick={onConfirm}>Proceed with Order</PrimaryButton>
+        <SecondaryButton onClick={onConfirm}>Place Order Anyway</SecondaryButton>
+        {offsetPlan && <PrimaryButton onClick={onOffset}>Offset Existing Order</PrimaryButton>}
       </div>
     </div>
   );

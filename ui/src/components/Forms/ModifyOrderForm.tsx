@@ -1,9 +1,10 @@
-import { memo, useCallback, useId, type FC } from "react";
+import { memo, useCallback, useId, useMemo, type FC } from "react";
 import { useForm, useController, type Control } from "react-hook-form";
 import { waitForOrderBookBlockNumber, getOrderBookQueryKey } from "../../hooks/data/orderBookHelpers";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import type { TransactionReceipt } from "viem";
-import { useModifyOrder } from "../../hooks/data/useModifyOrder";
+import { useModifyOrder, useUpdateFuturesOrders } from "../../hooks/data/useModifyOrder";
+import { planShrink } from "../../lib/orderUpdatePlan";
 import { PARTICIPANT_QK } from "../../hooks/data/getUserFuturesOrders";
 import { POSITION_BOOK_QK } from "../../hooks/data/getUserFuturesPositions";
 import { HISTORICAL_ORDERS_QK } from "../../hooks/data/useHistoricalOrders";
@@ -29,7 +30,8 @@ interface BalanceQueryResult {
 
 interface ModifyOrderFormProps {
   order: ParticipantOrder;
-  orderIds: string[]; // IDs of orders to close (grouped orders)
+  /** Every order collapsed into the row being modified, oldest first. */
+  groupOrders: ParticipantOrder[];
   currentQuantity: number; // Current quantity of grouped orders
   closeForm: () => void;
   participantData?: Participant | null;
@@ -51,7 +53,7 @@ interface ModifyFormValues {
 export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
   ({
     order,
-    orderIds,
+    groupOrders,
     currentQuantity,
     closeForm,
     participantData,
@@ -64,6 +66,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
     balanceQuery,
   }) => {
     const { modifyOrderAsync } = useModifyOrder();
+    const { updateOrdersAsync } = useUpdateFuturesOrders();
     const qc = useQueryClient();
     const { address } = useAccount();
     const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
@@ -85,6 +88,41 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
         quantity: Number(currentQuantity),
       },
     });
+
+    const orderIds = useMemo(
+      () => groupOrders.map((groupOrder) => groupOrder.id as `0x${string}`),
+      [groupOrders],
+    );
+
+    // Oldest first: a reduce holds the order's slot in the price queue while a
+    // cancel gives it up, so the plan trims the newest and leaves the oldest be.
+    const restingOrders = useMemo(
+      () =>
+        [...groupOrders]
+          .sort((a, b) => Number(a.timestamp) - Number(b.timestamp))
+          .map((groupOrder) => ({
+            id: groupOrder.id as `0x${string}`,
+            restingQty: BigInt(groupOrder.quantity),
+          })),
+      [groupOrders],
+    );
+
+    /**
+     * Same price, strictly less quantity — the contract can shrink the orders in
+     * place instead of cancelling and re-placing them. That keeps queue position
+     * and, because a batch without creates skips the portfolio IM check, it also
+     * works while the account is margin-constrained.
+     */
+    const isReduceOnly = (price: string, quantity: number): boolean => {
+      const priceValue = parseFloat(price);
+      // Called during render, where the price field can still be mid-edit.
+      if (!Number.isFinite(priceValue) || !Number.isFinite(quantity)) return false;
+      return (
+        BigInt(Math.round(priceValue * PAYMENT_TOKEN_SCALE_NUM)) === order.pricePerDay &&
+        quantity > 0 &&
+        quantity < currentQuantity
+      );
+    };
 
     const validateInput = async (): Promise<boolean> => {
       const result = await form.trigger();
@@ -110,6 +148,12 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
       ) {
         alert("Please change order terms");
         return false;
+      }
+
+      // A shrink at an unchanged price can only free margin and cannot collide
+      // with an opposite resting order, so none of the checks below apply.
+      if (isReduceOnly(values.price, Number(values.quantity))) {
+        return true;
       }
 
       // Validate balance for modified order
@@ -209,12 +253,18 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
     const hasChanges =
       Number(watchedQuantity) !== currentQuantity ||
       parseFloat(watchedPrice || "0").toFixed(2) !== originalPriceStr;
+    const isReducing = isReduceOnly(watchedPrice || "0", Number(watchedQuantity));
+    const title = isReducing ? "Reduce Order" : "Modify Order";
 
     return (
       <TransactionForm
         onClose={closeForm}
-        title="Modify Order"
-        description="Update the price and quantity for your order"
+        title={title}
+        description={
+          isReducing
+            ? "Shrink your order without giving up its place in the queue"
+            : "Update the price and quantity for your order"
+        }
         inputForm={inputForm}
         validateInput={validateInput}
         disableReview={!hasChanges}
@@ -260,7 +310,11 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
                   {renderChange("Size", `${oldSize.toFixed(2)} USDC`, `${newSize.toFixed(2)} USDC`)}
                 </div>
               </div>
-              <p className="text-gray-400 text-sm">You are about to modify your order.</p>
+              <p className="text-gray-400 text-sm">
+                {isReducing
+                  ? "You are about to reduce your order. It keeps its price and its place in the queue."
+                  : "You are about to modify your order."}
+              </p>
             </>
           );
         }}
@@ -273,18 +327,27 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
         )}
         transactionSteps={[
           {
-            label: "Modify Order",
+            label: title,
             action: async () => {
               const formValues = form.getValues();
               const newPriceBigInt = BigInt(Math.round(parseFloat(formValues.price) * PAYMENT_TOKEN_SCALE_NUM));
-              const newSignedQuantity = getSignedQuantity();
+              const newQuantity = Number(formValues.quantity);
 
-              const txhash = await modifyOrderAsync({
-                orderIds: orderIds.map((id) => id as `0x${string}`),
-                newPrice: newPriceBigInt,
-                newQuantity: newSignedQuantity,
-                expirationAt: order.expirationAt,
-              });
+              let txhash: `0x${string}` | undefined;
+              if (isReduceOnly(formValues.price, newQuantity)) {
+                const plan = planShrink(restingOrders, BigInt(newQuantity), isBuy);
+                txhash = await updateOrdersAsync({
+                  cancelIds: plan.cancelIds,
+                  reduces: plan.reduces,
+                });
+              } else {
+                txhash = await modifyOrderAsync({
+                  orderIds,
+                  newPrice: newPriceBigInt,
+                  newQuantity: getSignedQuantity(),
+                  expirationAt: order.expirationAt,
+                });
+              }
 
               return {
                 isSkipped: false,
@@ -314,7 +377,7 @@ export const ModifyOrderForm: FC<ModifyOrderFormProps> = memo(
   (prevProps, nextProps) => {
     return (
       prevProps.order.id === nextProps.order.id &&
-      prevProps.orderIds.length === nextProps.orderIds.length &&
+      prevProps.groupOrders.length === nextProps.groupOrders.length &&
       prevProps.currentQuantity === nextProps.currentQuantity &&
       prevProps.latestPrice === nextProps.latestPrice &&
       prevProps.mmSpotShock === nextProps.mmSpotShock &&

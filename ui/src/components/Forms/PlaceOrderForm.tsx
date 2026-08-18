@@ -7,6 +7,8 @@ import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import type { TransactionReceipt } from "viem";
 import { useCreateOrder } from "../../hooks/data/useCreateOrder";
 import { useCreatePerpsOrder } from "../../hooks/data/perps/useCreatePerpsOrder";
+import { useUpdateFuturesOrders } from "../../hooks/data/useModifyOrder";
+import { useUpdatePerpsOrders } from "../../hooks/data/perps/useUpdatePerpsOrders";
 import { PARTICIPANT_QK } from "../../hooks/data/getUserFuturesOrders";
 import { POSITION_BOOK_QK } from "../../hooks/data/getUserFuturesPositions";
 import { USER_PERPS_ORDERS_QK } from "../../hooks/data/perps/useUserPerpsOrders";
@@ -37,6 +39,20 @@ import {
 } from "../../lib/units";
 import { TimeInForce, type TimeInForceValue } from "../../types/timeInForce";
 
+/**
+ * How an incoming order nets against the user's own resting orders on the other
+ * side of the book. Quantities are in display units — whole contracts for
+ * futures, decimal for perps — the same units as the `quantity` prop.
+ */
+export interface OrderOffsetPlan {
+  cancelIds: `0x${string}`[];
+  reduces: { orderId: `0x${string}`; newQuantity: bigint }[];
+  /** Absorbed by the cancels and reduces. */
+  offsetQty: number;
+  /** Exceeds the resting size and still has to be placed. */
+  leftoverQty: number;
+}
+
 interface Props {
   price: bigint;
   expirationAt: bigint;
@@ -46,6 +62,8 @@ interface Props {
   onOrderPlaced?: () => void | Promise<void>;
   closeForm: () => void;
   bypassConflictCheck?: boolean; // Allow proceeding despite conflicting orders
+  /** Set when the user chose to net against their resting orders instead of placing. */
+  offsetPlan?: OrderOffsetPlan | null;
   contractMode?: ContractMode;
   perpsCollection?: PerpsCollection;
   leverage?: number; // Leverage value for perps mode (e.g., 10 for 10x)
@@ -62,6 +80,7 @@ export const PlaceOrderForm: FC<Props> = ({
   onOrderPlaced,
   closeForm,
   bypassConflictCheck = false,
+  offsetPlan = null,
   contractMode = "futures",
   perpsCollection,
   leverage = 10,
@@ -71,6 +90,8 @@ export const PlaceOrderForm: FC<Props> = ({
   // Conditionally use futures or perps create order hook
   const futuresCreateOrder = useCreateOrder();
   const perpsCreateOrder = useCreatePerpsOrder();
+  const { updateOrdersAsync: futuresUpdateOrders } = useUpdateFuturesOrders();
+  const { updateOrdersAsync: perpsUpdateOrders } = useUpdatePerpsOrders();
   const qc = useQueryClient();
   const { address } = useAccount();
   const _publicClient = usePublicClient();
@@ -81,6 +102,10 @@ export const PlaceOrderForm: FC<Props> = ({
   // Determine order type from quantity sign
   const isBuy = quantity > 0;
   const absoluteQuantity = Math.abs(quantity);
+
+  // Only the part that outlives the offset reaches the book, so it is the only
+  // part that needs margin or shows up as a new resting order.
+  const restingQuantity = offsetPlan ? offsetPlan.leftoverQty : absoluteQuantity;
 
   // Notional size (USDC) of this order — matches the "Size" row below.
   const sizeUSDC = (Number(price) / PAYMENT_TOKEN_SCALE_NUM) * absoluteQuantity;
@@ -120,14 +145,14 @@ export const PlaceOrderForm: FC<Props> = ({
       // Formula: (price * quantity) * (1 / leverage)
       // Example: 10x leverage = 10% margin, 5x leverage = 20% margin
       const positionValue =
-        (price * BigInt(Math.round(absoluteQuantity * QUANTITY_SCALE_NUM))) / QUANTITY_SCALE;
+        (price * BigInt(Math.round(restingQuantity * QUANTITY_SCALE_NUM))) / QUANTITY_SCALE;
       const marginPercent = BigInt(Math.round((1 / leverage) * 100)); // Convert leverage to margin %
       margin = (positionValue * marginPercent) / 100n;
     } else {
       // For futures: use the existing calculation with PnL
       margin = getMinMarginForPositionManual(
         price,
-        quantity,
+        isBuy ? restingQuantity : -restingQuantity,
         latestPrice,
         mmSpotShock,
       );
@@ -138,9 +163,9 @@ export const PlaceOrderForm: FC<Props> = ({
   }, [
     latestPrice,
     price,
-    quantity,
+    isBuy,
     contractMode,
-    absoluteQuantity,
+    restingQuantity,
     mmSpotShock,
     leverage,
   ]);
@@ -162,10 +187,13 @@ export const PlaceOrderForm: FC<Props> = ({
     );
   };
 
+  const formatQty = (value: number) => value.toFixed(contractMode === "perpetual" ? 6 : 0);
+  const oppositeAction = isBuy ? "Ask" : "Bid";
+
   return (
     <TransactionForm
       onClose={closeForm}
-      title={isBuy ? "Place Bid Order" : "Place Ask Order"}
+      title={offsetPlan ? "Offset Order" : isBuy ? "Place Bid Order" : "Place Ask Order"}
       description={""}
       reviewForm={(_props) => (
         <>
@@ -183,6 +211,22 @@ export const PlaceOrderForm: FC<Props> = ({
                 <span className="text-gray-300">Quantity:</span>
                 <span className="text-white">{absoluteQuantity.toFixed(6)}</span>
               </div>
+              {offsetPlan && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Offsets your {oppositeAction}:</span>
+                    <span className="text-white">{formatQty(offsetPlan.offsetQty)} units</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">New resting order:</span>
+                    <span className="text-white">
+                      {offsetPlan.leftoverQty > 0
+                        ? `${formatQty(offsetPlan.leftoverQty)} units`
+                        : "None"}
+                    </span>
+                  </div>
+                </>
+              )}
               <div className="flex justify-between">
                 <span className="text-gray-300">Time in Force:</span>
                 <span className="text-white">
@@ -271,24 +315,28 @@ export const PlaceOrderForm: FC<Props> = ({
             </div>
           </div>
           <p className="text-gray-400 text-sm">
-            You are about to place a {isBuy ? "bid" : "ask"} order. Please review the details above.
+            {offsetPlan
+              ? `You are about to offset your resting ${oppositeAction} order. Please review the details above.`
+              : `You are about to place a ${isBuy ? "bid" : "ask"} order. Please review the details above.`}
           </p>
         </>
       )}
       resultForm={(_props) => (
         <>
           <p className="w-6/6 text-left font-normal text-s mt-5">
-            Your order has been placed and will appear in the order book shortly.
+            {offsetPlan && offsetPlan.leftoverQty === 0
+              ? "Your resting order has been offset and will leave the order book shortly."
+              : "Your order has been placed and will appear in the order book shortly."}
           </p>
         </>
       )}
       transactionSteps={[
         {
-          label: `Place ${isBuy ? "Bid" : "Ask"} Order`,
+          label: offsetPlan ? "Offset Order" : `Place ${isBuy ? "Bid" : "Ask"} Order`,
           action: async () => {
-            // Check for conflicting order before proceeding (unless bypassed)
-            if (!bypassConflictCheck && hasConflictingOrder()) {
-              const oppositeAction = isBuy ? "Ask" : "Bid";
+            // Check for conflicting order before proceeding. The offset path is
+            // the deliberate resolution of that conflict, so it never applies.
+            if (!offsetPlan && !bypassConflictCheck && hasConflictingOrder()) {
               const priceInUSDC = Number(price) / PAYMENT_TOKEN_SCALE_NUM;
               throw new Error(
                 `Cannot create ${
@@ -298,7 +346,36 @@ export const PlaceOrderForm: FC<Props> = ({
             }
 
             let txhash: `0x${string}` | undefined;
-            if (contractMode === "perpetual") {
+            if (offsetPlan) {
+              // One transaction: the cancels and reduces retire the overlapping
+              // size, and only what exceeds it is placed as a new order.
+              const leftover = offsetPlan.leftoverQty;
+              if (contractMode === "perpetual") {
+                txhash = await perpsUpdateOrders({
+                  cancelIds: offsetPlan.cancelIds,
+                  reduces: offsetPlan.reduces,
+                  creates:
+                    leftover > 0 ? [{ price, quantity: isBuy ? leftover : -leftover }] : [],
+                });
+              } else {
+                const leftoverUnits = BigInt(Math.round(leftover));
+                txhash = await futuresUpdateOrders({
+                  cancelIds: offsetPlan.cancelIds,
+                  reduces: offsetPlan.reduces,
+                  creates:
+                    leftoverUnits > 0n
+                      ? [
+                          {
+                            price,
+                            expirationAt,
+                            quantity: isBuy ? leftoverUnits : -leftoverUnits,
+                            timeInForce,
+                          },
+                        ]
+                      : [],
+                });
+              }
+            } else if (contractMode === "perpetual") {
               // Perps only needs price and quantity
               txhash = await perpsCreateOrder.createOrderAsync({
                 price,

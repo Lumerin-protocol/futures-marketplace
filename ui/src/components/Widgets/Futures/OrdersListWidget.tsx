@@ -37,7 +37,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   const { data: marketPrice } = useGetMarketPrice();
   const [selectedOrder, setSelectedOrder] = useState<{
     order: ParticipantOrder;
-    orderIds: string[];
+    groupOrders: ParticipantOrder[];
     currentQuantity: number;
   } | null>(null);
   const [selectedCloseOrder, setSelectedCloseOrder] = useState<{
@@ -103,8 +103,12 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
     closeModal.open();
   };
 
-  const handleModifyOrder = (order: ParticipantOrder, orderIds: string[], currentQuantity: number) => {
-    setSelectedOrder({ order, orderIds, currentQuantity });
+  const handleModifyOrder = (
+    order: ParticipantOrder,
+    groupOrders: ParticipantOrder[],
+    currentQuantity: number,
+  ) => {
+    setSelectedOrder({ order, groupOrders, currentQuantity });
     modifyModal.open();
   };
 
@@ -132,6 +136,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
           closedAt: order.closedAt,
           timestamp: order.timestamp,
           orderIds: [] as string[],
+          orders: [] as ParticipantOrder[],
           firstOrder: order,
         };
       }
@@ -143,8 +148,10 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
       acc[key].originalQuantity += Number(order.originalQuantity);
       acc[key].filledQuantity += Number(order.filledQuantity);
       // One Order per on-chain orderId, so the grouped row cancels/modifies the
-      // ids of every order it collapsed together.
+      // ids of every order it collapsed together. Shrinking the row needs the
+      // orders themselves, to split the new total across them.
       acc[key].orderIds.push(order.id);
+      acc[key].orders.push(order);
 
       return acc;
     },
@@ -161,6 +168,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
         closedAt: string | null;
         timestamp: string;
         orderIds: string[];
+        orders: ParticipantOrder[];
         firstOrder: ParticipantOrder;
       }
     >,
@@ -211,7 +219,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
                         <ActionButtons>
                           <ModifyButton
                             onClick={() =>
-                              handleModifyOrder(groupedOrder.firstOrder, groupedOrder.orderIds, groupedOrder.amount)
+                              handleModifyOrder(groupedOrder.firstOrder, groupedOrder.orders, groupedOrder.amount)
                             }
                           >
                             Modify
@@ -238,7 +246,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
         <ModalItem open={modifyModal.isOpen} setOpen={modifyModal.setOpen}>
           <ModifyOrderForm
             order={selectedOrder.order}
-            orderIds={selectedOrder.orderIds}
+            groupOrders={selectedOrder.groupOrders}
             currentQuantity={selectedOrder.currentQuantity}
             participantData={participantData}
             latestPrice={latestPrice}

@@ -18,7 +18,7 @@ import {
   PerpsOrderFormFields,
   PerpsModalCard,
 } from "./PerpsOrderFormFields";
-import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE_NUM } from "../../../lib/units";
 
 interface ModifyPerpsOrderModalProps {
   open: boolean;
@@ -41,12 +41,12 @@ export const ModifyPerpsOrderModal = ({
   const { updateOrdersAsync } = useUpdatePerpsOrders();
   const queryClient = useQueryClient();
 
-  // Remaining (unfilled) quantity: works for both ACTIVE (filled=0) and
-  // PARTIALLY_FILLED.
-  const remainingQtyBig = order
-    ? order.originalQuantity - order.filledQuantity
-    : 0n;
-  const maxQuantity = Number(remainingQtyBig) / PAYMENT_TOKEN_SCALE_NUM;
+  // Still-resting quantity, straight off the indexer. Deriving it as
+  // `originalQuantity - filledQuantity` would be wrong once the order has been
+  // reduced, and the reduce path below needs the exact figure the contract
+  // compares against.
+  const remainingQtyBig = order?.quantity ?? 0n;
+  const maxQuantity = Number(remainingQtyBig) / QUANTITY_SCALE_NUM;
 
   const form = usePerpsOrderForm({ maxQuantity, priceStep });
 
@@ -72,6 +72,26 @@ export const ModifyPerpsOrderModal = ({
     !!order &&
     (form.currentPrice.toFixed(2) !== oldPrice.toFixed(2) ||
       newQtyDisplay.toFixed(6) !== oldQty.toFixed(6));
+
+  /**
+   * Same price, strictly less quantity — the contract can shrink the order in
+   * place, keeping its id and its place in the price queue. The scaled
+   * comparison is what the contract itself checks, so a quantity that rounds
+   * back onto the resting size falls through to the cancel-and-replace path
+   * rather than reverting.
+   */
+  const isReduceOnly = (priceUsd: number, quantity: number): boolean => {
+    if (!order) return false;
+    const scaledQty = BigInt(Math.round(quantity * QUANTITY_SCALE_NUM));
+    return (
+      BigInt(Math.round(priceUsd * PAYMENT_TOKEN_SCALE_NUM)) === order.price &&
+      scaledQty > 0n &&
+      scaledQty < remainingQtyBig
+    );
+  };
+
+  const isReducing = isReduceOnly(form.currentPrice, newQtyDisplay);
+  const title = isReducing ? "Reduce Order" : "Modify Order";
 
   const validateInput = async (): Promise<boolean> => {
     if (!order) return false;
@@ -139,8 +159,12 @@ export const ModifyPerpsOrderModal = ({
 
         <TransactionForm
           onClose={handleClose}
-          title="Modify Order"
-          description="Update the price and quantity for your order"
+          title={title}
+          description={
+            isReducing
+              ? "Shrink your order without giving up its place in the queue"
+              : "Update the price and quantity for your order"
+          }
           inputForm={inputForm}
           validateInput={validateInput}
           disableReview={!hasChanges}
@@ -157,7 +181,11 @@ export const ModifyPerpsOrderModal = ({
                   {renderChange("Size", `${oldSize.toFixed(2)} USDC`, `${newSizeDisplay.toFixed(2)} USDC`)}
                 </div>
               </div>
-              <p className="text-gray-400 text-sm">You are about to modify your order.</p>
+              <p className="text-gray-400 text-sm">
+                {isReducing
+                  ? "You are about to reduce your order. It keeps its price and its place in the queue."
+                  : "You are about to modify your order."}
+              </p>
             </>
           )}
           resultForm={() => (
@@ -167,15 +195,24 @@ export const ModifyPerpsOrderModal = ({
           )}
           transactionSteps={[
             {
-              label: "Modify Order",
+              label: title,
               action: async () => {
                 const newQty = form.getCurrentQuantity();
                 const newPriceBig = BigInt(Math.round(form.currentPrice * PAYMENT_TOKEN_SCALE_NUM));
-                const signedQty = order.isBuy ? newQty : -newQty;
-                const txhash = await updateOrdersAsync({
-                  cancelIds: [order.id as `0x${string}`],
-                  creates: [{ price: newPriceBig, quantity: signedQty }],
-                });
+                const orderId = order.id as `0x${string}`;
+
+                let txhash: `0x${string}` | undefined;
+                if (isReduceOnly(form.currentPrice, newQty)) {
+                  const scaledQty = BigInt(Math.round(newQty * QUANTITY_SCALE_NUM));
+                  txhash = await updateOrdersAsync({
+                    reduces: [{ orderId, newQuantity: order.isBuy ? scaledQty : -scaledQty }],
+                  });
+                } else {
+                  txhash = await updateOrdersAsync({
+                    cancelIds: [orderId],
+                    creates: [{ price: newPriceBig, quantity: order.isBuy ? newQty : -newQty }],
+                  });
+                }
                 if (!txhash) throw new Error("Wallet not ready. Please try again.");
                 return { txhash, isSkipped: false };
               },
