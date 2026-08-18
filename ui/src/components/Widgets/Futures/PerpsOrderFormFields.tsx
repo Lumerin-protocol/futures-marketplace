@@ -2,7 +2,10 @@ import { useState } from "react";
 import Slider from "@mui/material/Slider";
 import styled from "@mui/material/styles/styled";
 import { tokens } from "../../../styles/tokens";
-import { handleNumericDecimalInput6Decimals } from "../../Forms/Shared/AmountInputForm";
+import {
+  handleNumericDecimalInput6Decimals,
+  handleNumericIntegerInput,
+} from "../../Forms/Shared/AmountInputForm";
 import { ModalCard } from "../../Modal.styled";
 
 export type AmountMode = "size" | "quantity";
@@ -12,24 +15,32 @@ export type AmountMode = "size" | "quantity";
 export function usePerpsOrderForm({
   maxQuantity,
   priceStep = 0.01,
+  quantityDecimals = 6,
+  initialAmountMode = "size",
 }: {
   maxQuantity: number;
   priceStep?: number;
+  /** Zero for futures, whose contracts are whole units. */
+  quantityDecimals?: number;
+  initialAmountMode?: AmountMode;
 }) {
   const [price, setPrice] = useState("0.00");
-  const [amountMode, setAmountMode] = useState<AmountMode>("size");
+  const [amountMode, setAmountMode] = useState<AmountMode>(initialAmountMode);
   const [amount, setAmount] = useState("0");
   const [sliderValue, setSliderValue] = useState(100);
 
   const currentPrice = parseFloat(price) || 0;
   const maxSize = maxQuantity * currentPrice;
 
+  const roundQuantity = (value: number) =>
+    quantityDecimals === 0 ? Math.round(value) : value;
+
   const getCurrentQuantity = (): number => {
     if (sliderValue === 100) return maxQuantity;
     const parsed = parseFloat(amount);
     if (Number.isNaN(parsed) || parsed <= 0) return 0;
-    if (amountMode === "size") return currentPrice > 0 ? parsed / currentPrice : 0;
-    return parsed;
+    if (amountMode === "size") return currentPrice > 0 ? roundQuantity(parsed / currentPrice) : 0;
+    return roundQuantity(parsed);
   };
 
   const getCurrentSize = (): number => {
@@ -73,10 +84,10 @@ export function usePerpsOrderForm({
       }
     } else {
       if (pct === 100) {
-        setAmount(maxQuantity > 0 ? maxQuantity.toFixed(6) : "0");
+        setAmount(maxQuantity > 0 ? maxQuantity.toFixed(quantityDecimals) : "0");
       } else {
         const newQty = (maxQuantity * pct) / 100;
-        setAmount(newQty > 0 ? newQty.toFixed(6) : "0");
+        setAmount(newQty > 0 ? newQty.toFixed(quantityDecimals) : "0");
       }
     }
   };
@@ -89,7 +100,7 @@ export function usePerpsOrderForm({
     if (mode === "size") {
       setAmount(currentSz.toFixed(2));
     } else {
-      setAmount(currentQty.toFixed(6));
+      setAmount(currentQty.toFixed(quantityDecimals));
     }
   };
 
@@ -115,10 +126,10 @@ export function usePerpsOrderForm({
       }
     } else {
       if (initialSlider === 100) {
-        setAmount(maxQuantity > 0 ? maxQuantity.toFixed(6) : "0");
+        setAmount(maxQuantity > 0 ? maxQuantity.toFixed(quantityDecimals) : "0");
       } else {
         const initQty = (maxQuantity * initialSlider) / 100;
-        setAmount(initQty > 0 ? initQty.toFixed(6) : "0");
+        setAmount(initQty > 0 ? initQty.toFixed(quantityDecimals) : "0");
       }
     }
   };
@@ -154,6 +165,8 @@ interface PerpsOrderFormFieldsProps {
   priceLabel?: string;
   quantityLabel?: string;
   sizeLabel?: string;
+  /** Zero for futures, whose contracts are whole units. */
+  quantityDecimals?: number;
   currentQuantity: number;
   currentSize: number;
   realizedPnl?: number | null;
@@ -175,6 +188,7 @@ export const PerpsOrderFormFields = ({
   priceLabel = "Price (USDC)",
   quantityLabel = "Quantity",
   sizeLabel = "Size (USDC)",
+  quantityDecimals = 6,
   currentQuantity,
   currentSize,
   realizedPnl,
@@ -230,7 +244,11 @@ export const PerpsOrderFormFields = ({
           type="text"
           value={amount}
           onChange={(e) => onAmountChange(e.target.value.replace("-", ""))}
-          onBeforeInput={handleNumericDecimalInput6Decimals}
+          onBeforeInput={
+            quantityDecimals === 0 && amountMode === "quantity"
+              ? handleNumericIntegerInput
+              : handleNumericDecimalInput6Decimals
+          }
           inputMode="decimal"
           placeholder="0.00"
           disabled={disabled}
@@ -259,7 +277,7 @@ export const PerpsOrderFormFields = ({
     <OrderSummary>
       <SummaryRow>
         <SummaryLabel>{quantityLabel}</SummaryLabel>
-        <SummaryValue>{currentQuantity.toFixed(6)}</SummaryValue>
+        <SummaryValue>{currentQuantity.toFixed(quantityDecimals)}</SummaryValue>
       </SummaryRow>
       <SummaryRow>
         <SummaryLabel>{sizeLabel}</SummaryLabel>

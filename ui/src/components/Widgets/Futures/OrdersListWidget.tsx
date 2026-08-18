@@ -5,7 +5,7 @@ import { SmallWidget } from "../../Cards/Cards.styled";
 import type { Participant, ParticipantOrder } from "../../../hooks/data/getUserFuturesOrders";
 import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
-import { ModifyOrderForm } from "../../Forms/ModifyOrderForm";
+import { ModifyFuturesOrderModal } from "./ModifyFuturesOrderModal";
 import { CloseOrderForm } from "../../Forms/CloseOrderForm";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
@@ -38,7 +38,6 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   const [selectedOrder, setSelectedOrder] = useState<{
     order: ParticipantOrder;
     groupOrders: ParticipantOrder[];
-    currentQuantity: number;
   } | null>(null);
   const [selectedCloseOrder, setSelectedCloseOrder] = useState<{
     isBuy: boolean;
@@ -103,12 +102,8 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
     closeModal.open();
   };
 
-  const handleModifyOrder = (
-    order: ParticipantOrder,
-    groupOrders: ParticipantOrder[],
-    currentQuantity: number,
-  ) => {
-    setSelectedOrder({ order, groupOrders, currentQuantity });
+  const handleModifyOrder = (order: ParticipantOrder, groupOrders: ParticipantOrder[]) => {
+    setSelectedOrder({ order, groupOrders });
     modifyModal.open();
   };
 
@@ -218,9 +213,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
                       {groupedOrder.isActive && !groupedOrder.closedAt && (
                         <ActionButtons>
                           <ModifyButton
-                            onClick={() =>
-                              handleModifyOrder(groupedOrder.firstOrder, groupedOrder.orders, groupedOrder.amount)
-                            }
+                            onClick={() => handleModifyOrder(groupedOrder.firstOrder, groupedOrder.orders)}
                           >
                             Modify
                           </ModifyButton>
@@ -243,25 +236,23 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
       )}
 
       {selectedOrder && (
-        <ModalItem open={modifyModal.isOpen} setOpen={modifyModal.setOpen}>
-          <ModifyOrderForm
-            order={selectedOrder.order}
-            groupOrders={selectedOrder.groupOrders}
-            currentQuantity={selectedOrder.currentQuantity}
-            participantData={participantData}
-            latestPrice={latestPrice}
-            mmSpotShock={mmSpotShock}
-            minMargin={minMargin}
-            newestItemPrice={newestItemPrice}
-            accountBalance={accountBalance}
-            contractMode={contractMode}
-            balanceQuery={balanceQuery}
-            closeForm={() => {
-              modifyModal.close();
-              setSelectedOrder(null);
-            }}
-          />
-        </ModalItem>
+        <ModifyFuturesOrderModal
+          open={modifyModal.isOpen}
+          order={selectedOrder.order}
+          groupOrders={selectedOrder.groupOrders}
+          participantData={participantData}
+          latestPrice={latestPrice}
+          mmSpotShock={mmSpotShock}
+          minMargin={minMargin}
+          newestItemPrice={newestItemPrice}
+          accountBalance={accountBalance}
+          contractMode={contractMode}
+          balanceQuery={balanceQuery}
+          onClose={() => {
+            modifyModal.close();
+            setSelectedOrder(null);
+          }}
+        />
       )}
 
       {selectedCloseOrder && (
