@@ -1,7 +1,6 @@
 import { tokens } from "../../../styles/tokens";
 import { useState } from "react";
 import styled from "@mui/material/styles/styled";
-import { SmallWidget } from "../../Cards/Cards.styled";
 import type { Participant, ParticipantOrder } from "../../../hooks/data/getUserFuturesOrders";
 import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
@@ -275,9 +274,10 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   );
 };
 
-const OrdersContainer = styled(SmallWidget)`
+// Flat section rather than a card: the tab widget already draws the border and
+// pads its content, so a SmallWidget here would nest a second card inside it.
+const OrdersContainer = styled("div")`
   width: 100%;
-  padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;

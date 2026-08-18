@@ -1,7 +1,6 @@
 import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import Tooltip from "@mui/material/Tooltip";
-import { SmallWidget } from "../../Cards/Cards.styled";
 import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPositions";
 import { useCreateOrder } from "../../../hooks/data/useCreateOrder";
 import { useCreatePerpsOrder } from "../../../hooks/data/perps/useCreatePerpsOrder";
@@ -419,9 +418,10 @@ export const PositionsListWidget = ({
   );
 };
 
-const PositionsContainer = styled(SmallWidget)`
+// Flat section rather than a card: the tab widget already draws the border and
+// pads its content, so a SmallWidget here would nest a second card inside it.
+const PositionsContainer = styled("div")`
   width: 100%;
-  padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;

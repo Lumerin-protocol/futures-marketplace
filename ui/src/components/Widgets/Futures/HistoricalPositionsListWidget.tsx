@@ -1,7 +1,6 @@
 import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import { useMemo, useState } from "react";
-import { SmallWidget } from "../../Cards/Cards.styled";
 import type { HistoricalPosition } from "../../../hooks/data/useHistoricalPositions";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
@@ -169,9 +168,10 @@ export const HistoricalPositionsListWidget = ({
   );
 };
 
-const PositionsContainer = styled(SmallWidget)`
+// Flat section rather than a card: the tab widget already draws the border and
+// pads its content, so a SmallWidget here would nest a second card inside it.
+const PositionsContainer = styled("div")`
   width: 100%;
-  padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
