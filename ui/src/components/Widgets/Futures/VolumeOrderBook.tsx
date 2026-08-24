@@ -22,16 +22,12 @@ const ROW_HEIGHT = 22;
 const centerOffset = (scroller: HTMLDivElement, index: number): number =>
   Math.max(0, index * ROW_HEIGHT - scroller.clientHeight / 2 + ROW_HEIGHT / 2);
 
-type Depth = { size: number; total: number };
+type Depth = { quantity: number; total: number };
 
-// Size/Total are notional values (quantity * price), which are large, so use
-// compact notation (e.g. 15.04K, 17.5M) to match the Binance-style layout.
-const formatVolume = (value: number): string =>
-  value.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 2 });
-
-// Full-precision notional for the tooltip (e.g. 105,877.29).
-const formatFull = (value: number): string =>
-  value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+// Quantity/Total are contract counts, and futures contracts are whole units, so
+// they print as plain grouped integers rather than a compact notional.
+const formatQuantity = (value: number): string =>
+  value.toLocaleString("en-US", { maximumFractionDigits: 0 });
 
 // Sub-dollar markets (e.g. perps ~0.99) need more decimals than the 2 used for
 // dollar-plus futures prices.
@@ -88,9 +84,8 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
       if (r.isLastHashprice) continue;
       const units = r.askUnits ?? 0;
       if (units > 0 && (marketPrice == null || r.price >= marketPrice)) {
-        const size = units * r.price;
-        askRunning += size;
-        askDepth.set(r.price, { size, total: askRunning });
+        askRunning += units;
+        askDepth.set(r.price, { quantity: units, total: askRunning });
         if (bestAsk == null) bestAsk = r.price;
       }
     }
@@ -105,9 +100,8 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
       if (r.isLastHashprice) continue;
       const units = r.bidUnits ?? 0;
       if (units > 0 && (marketPrice == null || r.price <= marketPrice)) {
-        const size = units * r.price;
-        bidRunning += size;
-        bidDepth.set(r.price, { size, total: bidRunning });
+        bidRunning += units;
+        bidDepth.set(r.price, { quantity: units, total: bidRunning });
         if (bestBid == null) bestBid = r.price;
       }
     }
@@ -237,7 +231,7 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
       return (
         <Row $side={side} $empty $compact={isMobile} onClick={() => onRowClick?.(formatPrice(row.price), null)}>
           <PriceCol $side={side}>{formatPrice(row.price)}</PriceCol>
-          <SizeCol />
+          <QuantityCol />
           {!isMobile && <TotalCol />}
         </Row>
       );
@@ -247,10 +241,10 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
     const units = side === "ask" ? row.askUnits : row.bidUnits;
 
     // One scale for both sides (max cumulative across the book) so a thin ask
-    // book does not stretch to full width next to a deep bid book. Bright size
-    // bar stays nested inside the darker cumulative-total bar.
+    // book does not stretch to full width next to a deep bid book. Bright
+    // quantity bar stays nested inside the darker cumulative-total bar.
     const maxTotal = Math.max(maxAskTotal, maxBidTotal);
-    const sizeWidth = maxTotal > 0 ? Math.min(100, (depth.size / maxTotal) * 100) : 0;
+    const quantityWidth = maxTotal > 0 ? Math.min(100, (depth.quantity / maxTotal) * 100) : 0;
     const totalWidth = maxTotal > 0 ? Math.min(100, (depth.total / maxTotal) * 100) : 0;
 
     const showTooltip = (e: React.MouseEvent) => {
@@ -273,10 +267,10 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
         onMouseLeave={() => setTooltip(null)}
       >
         <DimLayer $side={side} $width={totalWidth} />
-        <BrightLayer $side={side} $width={sizeWidth} />
+        <BrightLayer $side={side} $width={quantityWidth} />
         <PriceCol $side={side}>{formatPrice(row.price)}</PriceCol>
-        <SizeCol>{formatVolume(depth.size)}</SizeCol>
-        {!isMobile && <TotalCol>{formatVolume(depth.total)}</TotalCol>}
+        <QuantityCol>{formatQuantity(depth.quantity)}</QuantityCol>
+        {!isMobile && <TotalCol>{formatQuantity(depth.total)}</TotalCol>}
       </Row>
     );
   };
@@ -285,7 +279,7 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
     <Container>
       <ColumnHeader $compact={isMobile}>
         <span>Price</span>
-        <span>Size</span>
+        <span>Quantity</span>
         {!isMobile && <span>Total</span>}
       </ColumnHeader>
 
@@ -322,7 +316,7 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
           </div>
           <div className="row">
             <span className="label">Total</span>
-            <span className="value">{formatFull(tooltip.total)}</span>
+            <span className="value">{formatQuantity(tooltip.total)}</span>
           </div>
           <div className="row">
             <span className="label">Distance from Market</span>
@@ -384,7 +378,7 @@ const ScrollToMarketButton = styled("button")`
   }
 `;
 
-// `$compact` is the mobile-only two-column variant (Price / Size, no Total).
+// `$compact` is the mobile-only two-column variant (Price / Quantity, no Total).
 const ColumnHeader = styled("div")<{ $compact?: boolean }>`
   display: grid;
   grid-template-columns: ${(props) => (props.$compact ? "1.2fr 1fr" : "1fr 1fr 1fr")};
@@ -491,7 +485,7 @@ const DimLayer = styled("div")<{ $side: "ask" | "bid"; $width: number }>`
     props.$side === "ask" ? tokens.trading.shortRowBg : tokens.trading.longRowBg};
 `;
 
-// Bright background layer represents the current Size at this price level.
+// Bright background layer represents the resting quantity at this price level.
 const BrightLayer = styled("div")<{ $side: "ask" | "bid"; $width: number }>`
   position: absolute;
   top: 0;
@@ -510,7 +504,7 @@ const PriceCol = styled("span")<{ $side: "ask" | "bid" }>`
   color: ${(props) => (props.$side === "ask" ? tokens.trading.short : tokens.trading.long)};
 `;
 
-const SizeCol = styled("span")`
+const QuantityCol = styled("span")`
   position: relative;
   z-index: 2;
   text-align: right;
