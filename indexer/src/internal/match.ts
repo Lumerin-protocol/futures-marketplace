@@ -245,9 +245,6 @@ function processUserMatch(
   pointer.save();
 
   user.lastActivityAt = ctx.timestamp;
-  if (!realizedPnl.isZero()) {
-    user.realizedPnl = user.realizedPnl.plus(realizedPnl);
-  }
   user.save();
 
   return id;
@@ -504,6 +501,22 @@ function openSession(
 // Fill + Trade aggregation
 // ============================================================================
 
+/// Accrue this leg's realized PnL onto the user and snapshot the lifetime
+/// total onto the trade. A flip writes two trades in one call stack (close
+/// then open); the open leg's pnl is zero so both rows share the post-close
+/// total. Multiple fills that fold into one Trade update the snapshot on each
+/// fold so the saved row always matches `user.realizedPnl`.
+function accrueAndSnapshotRealizedPnl(
+  trade: Trade,
+  user: User,
+  realizedPnl: BigInt,
+): void {
+  if (!realizedPnl.isZero()) {
+    user.realizedPnl = user.realizedPnl.plus(realizedPnl);
+  }
+  trade.cumulativeRealizedPnl = user.realizedPnl;
+}
+
 /// Write the immutable per-leg Fill (skipped when `leg` is null, i.e. an exit
 /// with no matched counterparty order) and fold the leg into the
 /// per-(tx, user, session) Trade aggregate. Returns the Trade id.
@@ -534,6 +547,7 @@ function recordLeg(
     trade.tradeQuantity = BigInt.zero();
     trade.tradingFee = BigInt.zero();
     trade.realizedPnl = BigInt.zero();
+    trade.cumulativeRealizedPnl = BigInt.zero();
     trade.netQuantityAfter = BigInt.zero();
     trade.aggregatedEntryPriceAfter = BigInt.zero();
     trade.fillCount = 0;
@@ -582,6 +596,7 @@ function recordLeg(
   trade.tradeQuantity = trade.tradeQuantity.plus(fillQty);
   trade.tradingFee = trade.tradingFee.plus(tradingFee);
   trade.realizedPnl = trade.realizedPnl.plus(realizedPnl);
+  accrueAndSnapshotRealizedPnl(trade, user, realizedPnl);
   trade.netQuantityAfter = netQuantityAfter;
   trade.aggregatedEntryPriceAfter = entryPriceAfter;
   trade.save();

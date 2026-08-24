@@ -131,6 +131,11 @@ describe("liquidatePosition: PositionLiquidated, seller netQty=0", () => {
       "a closing Trade must exist for the liquidated seller in the liquidation tx",
     );
     assert.equal(
+      String(sellerTrade.cumulativeRealizedPnl),
+      String(sellerUser.realizedPnl),
+      "liquidation Trade.cumulativeRealizedPnl matches User.realizedPnl",
+    );
+    assert.equal(
       sellerTrade.isLiquidation,
       true,
       "closing Trade.isLiquidation must be true on a LIQUIDATION close",
