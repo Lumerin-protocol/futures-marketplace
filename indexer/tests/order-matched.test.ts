@@ -32,13 +32,14 @@ function createOrderCreatedEvent(
   orderId: Bytes,
   participant: Address,
   quantity: BigInt,
+  expirationAt: BigInt = DELIVERY,
 ): OrderCreated {
   return newTypedMockEventWithParams<OrderCreated>([
     paramBytes("orderId", orderId),
     paramAddr("participant", participant),
     paramUint("price", PRICE),
     paramInt("quantity", quantity),
-    paramUint("expirationAt", DELIVERY),
+    paramUint("expirationAt", expirationAt),
   ]);
 }
 
@@ -54,12 +55,13 @@ function createOrderMatchedEvent(
   takerNetQtyAfter: BigInt,
   makerEntryPriceAfter: BigInt,
   takerEntryPriceAfter: BigInt,
+  expirationAt: BigInt = DELIVERY,
 ): OrderMatched {
   return newTypedMockEventWithParams<OrderMatched>([
     paramBytes("makerOrderId", makerOrderId),
     paramAddr("maker", maker),
     paramAddr("taker", taker),
-    paramUint("expirationAt", DELIVERY),
+    paramUint("expirationAt", expirationAt),
     paramUint("tradePrice", tradePrice),
     paramInt("takerQuantity", takerQuantity),
     paramInt("makerFee", makerFee),
@@ -134,6 +136,19 @@ describe("handleOrderMatched", () => {
     assert.fieldEquals("PositionSession", takerSession, "netQuantity", "1");
     assert.fieldEquals("PositionSession", takerSession, "entryPrice", PRICE.toString());
     assert.fieldEquals("PositionSession", makerSession, "netQuantity", "-1");
+
+    assert.fieldEquals(
+      "Trade",
+      tradeAggKey(match.transaction.hash, taker, takerSession),
+      "cumulativeRealizedPnl",
+      "0",
+    );
+    assert.fieldEquals(
+      "Trade",
+      tradeAggKey(match.transaction.hash, maker, makerSession),
+      "cumulativeRealizedPnl",
+      "0",
+    );
 
     assert.fieldEquals(
       "UserDeliverySessionPointer",
@@ -239,9 +254,11 @@ describe("handleOrderMatched", () => {
     assert.fieldEquals("Trade", closeTrade, "realizedPnl", "100000");
     assert.fieldEquals("Trade", closeTrade, "tradeQuantity", "-1");
     assert.fieldEquals("Trade", closeTrade, "fillCount", "1");
+    assert.fieldEquals("Trade", closeTrade, "cumulativeRealizedPnl", "100000");
     assert.fieldEquals("Trade", openTrade, "realizedPnl", "0");
     assert.fieldEquals("Trade", openTrade, "tradeQuantity", "-1");
     assert.fieldEquals("Trade", openTrade, "fillCount", "1");
+    assert.fieldEquals("Trade", openTrade, "cumulativeRealizedPnl", "100000");
 
     // The flipping side writes two legs; the other side writes one.
     assert.fieldEquals("Fill", fillKey(flip.transaction.hash, flip.logIndex, 0), "realizedPnl", "100000");
@@ -283,6 +300,10 @@ describe("handleOrderMatched", () => {
     assert.fieldEquals("PositionSession", session, "closedQuantity", "1");
     assert.fieldEquals("PositionSession", session, "realizedPnl", "-50000");
     assert.fieldEquals("User", trader.toHexString(), "realizedPnl", "-50000");
+
+    const closeTrade = tradeAggKey(close.transaction.hash, trader, session);
+    assert.fieldEquals("Trade", closeTrade, "cumulativeRealizedPnl", "-50000");
+    assert.fieldEquals("Trade", closeTrade, "realizedPnl", "-50000");
 
     const pointer = pointerKey(trader, DELIVERY);
     assert.fieldEquals("UserDeliverySessionPointer", pointer, "netQuantity", "0");
@@ -398,3 +419,94 @@ describe("handleOrderMatched", () => {
     assert.fieldEquals("User", user.toHexString(), "tradeCount", "2");
   });
 });
+
+describe("Trade.cumulativeRealizedPnl", () => {
+  beforeEach(() => {
+    clearStore();
+    setupDataSourceMock();
+    setupFutures();
+  });
+
+  test("accumulates across expirations on one User running total", () => {
+    const maker1 = userAddress(1);
+    const maker2 = userAddress(2);
+    const maker3 = userAddress(3);
+    const maker4 = userAddress(4);
+    const trader = userAddress(5);
+    const expiryB = BigInt.fromI64(1_800_000_000);
+    const winPrice = PRICE.plus(BigInt.fromI64(100_000));
+    const lossPrice = PRICE.minus(BigInt.fromI64(50_000));
+
+    handleOrderCreated(createOrderCreatedEvent(bytes32Id(1), maker1, ONE.neg(), DELIVERY));
+    handleOrderCreated(createOrderCreatedEvent(bytes32Id(10), trader, ONE, DELIVERY));
+    const openA = createOrderMatchedEvent(
+      bytes32Id(1), maker1, trader, PRICE, ONE,
+      BigInt.zero(), BigInt.zero(),
+      ONE.neg(), ONE, PRICE, PRICE,
+      DELIVERY,
+    );
+    handleOrderMatched(openA);
+    const sessionA = sessionKey(openA.block.number, openA.logIndex, 0);
+    assert.fieldEquals(
+      "Trade",
+      tradeAggKey(openA.transaction.hash, trader, sessionA),
+      "cumulativeRealizedPnl",
+      "0",
+    );
+
+    handleOrderCreated(createOrderCreatedEvent(bytes32Id(2), maker2, ONE, DELIVERY));
+    handleOrderCreated(createOrderCreatedEvent(bytes32Id(20), trader, ONE.neg(), DELIVERY));
+    const closeA = createOrderMatchedEvent(
+      bytes32Id(2), maker2, trader, winPrice, ONE.neg(),
+      BigInt.zero(), BigInt.zero(),
+      ONE, BigInt.zero(), winPrice, BigInt.zero(),
+      DELIVERY,
+    );
+    nudgeTx(closeA, 0x100);
+    handleOrderMatched(closeA);
+    assert.fieldEquals(
+      "Trade",
+      tradeAggKey(closeA.transaction.hash, trader, sessionA),
+      "cumulativeRealizedPnl",
+      "100000",
+    );
+    assert.fieldEquals("User", trader.toHexString(), "realizedPnl", "100000");
+
+    handleOrderCreated(createOrderCreatedEvent(bytes32Id(3), maker3, ONE.neg(), expiryB));
+    handleOrderCreated(createOrderCreatedEvent(bytes32Id(30), trader, ONE, expiryB));
+    const openB = createOrderMatchedEvent(
+      bytes32Id(3), maker3, trader, PRICE, ONE,
+      BigInt.zero(), BigInt.zero(),
+      ONE.neg(), ONE, PRICE, PRICE,
+      expiryB,
+    );
+    nudgeTx(openB, 0x200);
+    handleOrderMatched(openB);
+    const sessionB = sessionKey(openB.block.number, openB.logIndex, 0);
+    assert.fieldEquals(
+      "Trade",
+      tradeAggKey(openB.transaction.hash, trader, sessionB),
+      "cumulativeRealizedPnl",
+      "100000",
+    );
+
+    handleOrderCreated(createOrderCreatedEvent(bytes32Id(4), maker4, ONE, expiryB));
+    handleOrderCreated(createOrderCreatedEvent(bytes32Id(40), trader, ONE.neg(), expiryB));
+    const closeB = createOrderMatchedEvent(
+      bytes32Id(4), maker4, trader, lossPrice, ONE.neg(),
+      BigInt.zero(), BigInt.zero(),
+      ONE, BigInt.zero(), lossPrice, BigInt.zero(),
+      expiryB,
+    );
+    nudgeTx(closeB, 0x300);
+    handleOrderMatched(closeB);
+    assert.fieldEquals(
+      "Trade",
+      tradeAggKey(closeB.transaction.hash, trader, sessionB),
+      "cumulativeRealizedPnl",
+      "50000",
+    );
+    assert.fieldEquals("User", trader.toHexString(), "realizedPnl", "50000");
+  });
+});
+
