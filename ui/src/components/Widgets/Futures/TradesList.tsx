@@ -12,9 +12,14 @@ interface TradesListProps {
 }
 
 // Compact notation for the notional Size column (e.g. 15.04K, 1.5M) to match
-// the volume order book layout.
+// the perps volume order book layout.
 const formatSize = (value: number): string =>
   value.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 2 });
+
+// Futures contracts are whole units, so their Quantity column prints as a plain
+// grouped integer — same as the futures volume order book.
+const formatQuantity = (value: number): string =>
+  value.toLocaleString("en-US", { maximumFractionDigits: 0 });
 
 // Local wall-clock time (HH:MM:SS) for the Time column.
 const formatTime = (timestampSeconds: number): string =>
@@ -28,11 +33,14 @@ export const TradesList = ({ contractMode = "futures" }: TradesListProps) => {
   const tokenSymbol =
     (contractMode === "perpetual" ? perpsTokenInfo.symbol : futuresTokenInfo.symbol) || "USDC";
 
+  // Futures fills are quoted in whole contracts; perps keeps the notional.
+  const isFutures = contractMode !== "perpetual";
+
   return (
     <Container>
       <ColumnHeader>
         <span>Price</span>
-        <span>Size ({tokenSymbol})</span>
+        <span>{isFutures ? "Quantity" : `Size (${tokenSymbol})`}</span>
         <span>Time</span>
       </ColumnHeader>
 
@@ -44,7 +52,7 @@ export const TradesList = ({ contractMode = "futures" }: TradesListProps) => {
         trades.map((trade) => (
           <Row key={trade.id}>
             <PriceCol $side={trade.side}>{trade.price.toFixed(trade.price < 1 ? 5 : 2)}</PriceCol>
-            <SizeCol>{formatSize(trade.size)}</SizeCol>
+            <AmountCol>{isFutures ? formatQuantity(trade.quantity) : formatSize(trade.size)}</AmountCol>
             <TimeCol>
               <span>{formatTime(trade.timestamp)}</span>
               <TxLink
@@ -134,7 +142,7 @@ const PriceCol = styled("span")<{ $side: "buy" | "sell" }>`
   color: ${(props) => (props.$side === "buy" ? tokens.trading.long : tokens.trading.short)};
 `;
 
-const SizeCol = styled("span")`
+const AmountCol = styled("span")`
   text-align: right;
   color: ${tokens.text.onDark};
 `;
