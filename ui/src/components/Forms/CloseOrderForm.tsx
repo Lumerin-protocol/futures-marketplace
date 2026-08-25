@@ -10,6 +10,7 @@ import { POSITION_BOOK_QK } from "../../hooks/data/getUserFuturesPositions";
 import { HISTORICAL_ORDERS_QK } from "../../hooks/data/useHistoricalOrders";
 import { FUTURES_POSITION_HISTORY_QK } from "../../hooks/data/useFuturesPositionHistory";
 import { USER_FUTURES_TRADES_QK } from "../../hooks/data/useUserFuturesTrades";
+import { invalidatePortfolioPnl } from "../../hooks/data/pnl/invalidate";
 import { PERPS_ORDER_HISTORY_QK } from "../../hooks/data/perps/usePerpsOrderHistory";
 import { PERPS_POSITION_HISTORY_QK } from "../../hooks/data/perps/usePerpsPositionHistory";
 import { USER_TRADES_QK } from "../../hooks/data/perps/useUserTrades";
@@ -133,6 +134,7 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({
                     address && qc.resetQueries({ queryKey: [FUTURES_POSITION_HISTORY_QK, address] }),
                     address && qc.resetQueries({ queryKey: [USER_FUTURES_TRADES_QK, address] }),
                   ]),
+              invalidatePortfolioPnl(qc),
             ]);
           },
         },

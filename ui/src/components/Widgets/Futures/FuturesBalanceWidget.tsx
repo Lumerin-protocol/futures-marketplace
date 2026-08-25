@@ -4,7 +4,8 @@ import { useAccount } from "wagmi";
 import { useMemo } from "react";
 import { useModal } from "../../../hooks/useModal";
 import { RefreshableValue } from "../../RefreshableValue";
-import { formatValue, PAYMENT_TOKEN_SCALE_NUM, paymentToken } from "../../../lib/units";
+import { formatValue, paymentToken } from "../../../lib/units";
+import { REALIZED_PNL_WINDOW_DAYS } from "../../../lib/portfolioPnl";
 import { UsdcIcon } from "../../../images";
 import { PrimaryButton } from "../../Forms/FormButtons/Buttons.styled";
 import { ModalItem } from "../../Modal";
@@ -24,20 +25,35 @@ interface FuturesBalanceWidgetProps {
   minMargin: bigint | null;
   isLoadingMinMargin: boolean;
   isRefreshingMinMargin?: boolean;
+  /** Mark-to-market across every venue, not just the one being traded. */
   unrealizedPnL: bigint | null;
-  realizedPnL30D: number | null;
+  isLoadingUnrealizedPnL?: boolean;
+  isRefreshingUnrealizedPnL?: boolean;
+  /** Realized over the trailing window, across every venue. */
+  realizedPnLInWindow: bigint | null;
   isLoadingRealizedPnL?: boolean;
   isRefreshingRealizedPnL?: boolean;
   balanceQuery: BalanceQueryResult;
   accountBalance?: AccountBalance;
 }
 
+// Both PnL figures cover the whole account, so they do not change when the user
+// switches trading tabs. Spelling that out avoids reading them as futures-only.
+const ALL_VENUES_HINT = "Across all venues (Futures and Perpetuals)";
+
+const pnlColor = (pnl: bigint | null) => {
+  if (pnl === null || pnl === 0n) return tokens.text.onDark;
+  return pnl > 0n ? tokens.trading.long : tokens.trading.short;
+};
+
 export const FuturesBalanceWidget = ({
   minMargin,
   isLoadingMinMargin,
   isRefreshingMinMargin = false,
   unrealizedPnL,
-  realizedPnL30D,
+  isLoadingUnrealizedPnL = false,
+  isRefreshingUnrealizedPnL = false,
+  realizedPnLInWindow,
   isLoadingRealizedPnL,
   isRefreshingRealizedPnL = false,
   balanceQuery,
@@ -63,19 +79,9 @@ export const FuturesBalanceWidget = ({
   const balanceValue = formatValue(balanceQuery.data ?? 0n, paymentToken);
   const lockedBalanceValue = formatValue(minMargin ?? 0n, paymentToken);
   const unrealizedPnLValue = formatValue(unrealizedPnL ?? 0n, paymentToken);
-  const unrealizedPnlColor =
-    unrealizedPnL && unrealizedPnL > 0
-      ? tokens.trading.long
-      : unrealizedPnL && unrealizedPnL < 0
-      ? tokens.trading.short
-      : tokens.text.onDark;
-  const realizedPnlColor =
-    realizedPnL30D && realizedPnL30D > 0
-      ? tokens.trading.long
-      : realizedPnL30D && realizedPnL30D < 0
-      ? tokens.trading.short
-      : tokens.text.onDark;
-  const realizedPnL30DFormatted = realizedPnL30D !== null ? (realizedPnL30D / PAYMENT_TOKEN_SCALE_NUM).toFixed(2) : "-";
+  const realizedPnLValue = formatValue(realizedPnLInWindow ?? 0n, paymentToken);
+  const unrealizedPnlColor = pnlColor(unrealizedPnL);
+  const realizedPnlColor = pnlColor(realizedPnLInWindow);
 
   const lockedBalanceThreshold = Number(
     process.env.REACT_APP_MARGIN_UTILIZATION_WARNING_PERCENT || "80",
@@ -119,10 +125,11 @@ export const FuturesBalanceWidget = ({
                 </MetricValue>
               </MetricCell>
               <MetricCell>
-                <MetricLabel>Unrealized PnL</MetricLabel>
+                <MetricLabel title={ALL_VENUES_HINT}>Unrealized PnL</MetricLabel>
                 <MetricValue>
                   <RefreshableValue
-                    isInitialLoading={isBalanceInitialLoading}
+                    isInitialLoading={isBalanceInitialLoading || isLoadingUnrealizedPnL}
+                    isRefreshing={isRefreshingUnrealizedPnL}
                     fallback="-"
                     useFallbackWhileLoading
                     style={{ color: unrealizedPnlColor }}
@@ -151,7 +158,9 @@ export const FuturesBalanceWidget = ({
                 </MetricValue>
               </MetricCell>
               <MetricCell>
-                <MetricLabel>Realized PnL (30D)</MetricLabel>
+                <MetricLabel title={ALL_VENUES_HINT}>
+                  Realized PnL ({REALIZED_PNL_WINDOW_DAYS}D)
+                </MetricLabel>
                 <MetricValue>
                   <RefreshableValue
                     isInitialLoading={!!isLoadingRealizedPnL}
@@ -160,7 +169,9 @@ export const FuturesBalanceWidget = ({
                     useFallbackWhileLoading
                     style={{ color: realizedPnlColor }}
                   >
-                    {realizedPnL30D !== null ? realizedPnL30DFormatted : null}
+                    {realizedPnLInWindow !== null
+                      ? Number(realizedPnLValue.valueRounded).toFixed(2)
+                      : null}
                   </RefreshableValue>
                 </MetricValue>
               </MetricCell>

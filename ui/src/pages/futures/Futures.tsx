@@ -21,7 +21,7 @@ import { getUserFuturesPositions } from "../../hooks/data/getUserFuturesPosition
 import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpecs";
 import { useGetPortfolioIM } from "../../hooks/data/useGetPortfolioIM";
 import { useGetMarketPrice } from "../../hooks/data/useGetMarketPrice";
-import { useHistoricalPositions } from "../../hooks/data/useHistoricalPositions";
+import { usePortfolioPnl } from "../../hooks/data/pnl/usePortfolioPnl";
 import { useGetFutureBalance } from "../../hooks/data/useGetFutureBalance";
 import { useFuturesPaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
 import { useFundingRate } from "../../hooks/data/perps/useFundingRate";
@@ -31,10 +31,9 @@ import { useUserPerpsOrders } from "../../hooks/data/perps/useUserPerpsOrders";
 import { useLiquidationThresholds } from "../../hooks/data/useLiquidationThresholds";
 import { usePointsHookWeights } from "../../hooks/data/usePointsHookWeights";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
-import type { PositionBookPosition } from "../../hooks/data/getUserFuturesPositions";
 import type { ContractMode } from "../../types/types";
 import styled from "@mui/material/styles/styled";
-import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE } from "../../lib/units";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 
 interface TradingPageProps {
   defaultMode?: ContractMode;
@@ -115,14 +114,11 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     ).length;
     setHasOpenPerpsOrders(openCount > 0);
   }, [perpsOpenOrdersQuery.data?.data?.orders]);
-  const {
-    data: historicalPositionsData,
-    isLoading: isHistoricalPositionsLoading,
-    isFetching: isHistoricalPositionsFetching,
-  } = useHistoricalPositions(
-    address,
-    true,
-  );
+  // Account-wide PnL, summed over every venue the account trades. Both figures
+  // are deliberately independent of `contractMode` — the venues settle against
+  // one CollateralVault, so the portfolio header states the whole account
+  // regardless of which trading tab is open.
+  const { unrealized, realizedInWindow } = usePortfolioPnl(address);
 
   // Single source of truth for the user's locked collateral: portfolio IM read
   // from the IPortfolioMarginEngine resolved via the Futures contract. This
@@ -226,78 +222,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     () => (liqPrice !== undefined ? Number(liqPrice) / PAYMENT_TOKEN_SCALE_NUM : null),
     [liqPrice],
   );
-
-  // Calculate total unrealized PnL based on contract mode
-  const totalUnrealizedPnL = useMemo(() => {
-    if (!marketPrice || !address) return null;
-
-    if (contractMode === "perpetual") {
-      const sessions = positionSessionsQuery.data?.positionSessions || [];
-      const openSessions = sessions.filter((session) => session.status === "OPEN");
-
-      let totalPnL = 0n;
-      openSessions.forEach((session) => {
-        const netQuantity = session.netQuantity;
-        if (netQuantity === 0n) return;
-        const priceDiff = marketPrice - session.entryPrice;
-        const unrealizedPnL = (priceDiff * netQuantity) / QUANTITY_SCALE;
-        totalPnL += unrealizedPnL;
-      });
-
-      return totalPnL;
-    } else {
-      if (!positionBookData?.data?.positions || !contractSpecsQuery?.data) return null;
-
-      const activePositions = positionBookData.data.positions.filter((p) => p.isActive && !p.closedAt);
-      let totalPnL = 0n;
-
-      // PnL = (mark - entry) * signedQty, summed across active positions.
-      // `netQuantity` is the session's signed contract count (positive long /
-      // negative short), so the sign of each position's PnL falls out naturally
-      // — matches `getMinMarginForPositionManual` and the perps branch above.
-      // `isLong` is only used to pick the correct entry price column from the
-      // buy/sell split kept by the legacy row shape.
-      activePositions.forEach((position: PositionBookPosition) => {
-        if (position.netQuantity === 0) return;
-        const isLong = position.buyer.address.toLowerCase() === address.toLowerCase();
-        const entryPrice = isLong ? position.buyPricePerDay : position.sellPricePerDay;
-        const priceDiff = marketPrice - entryPrice;
-        totalPnL += priceDiff * BigInt(position.netQuantity);
-      });
-
-      return totalPnL;
-    }
-  }, [
-    marketPrice,
-    positionBookData?.data?.positions,
-    address,
-    contractMode,
-    positionSessionsQuery.data?.positionSessions,
-    contractSpecsQuery?.data,
-  ]);
-
-  // Calculate total realized PnL (30D) based on contract mode
-  const totalRealizedPnL30D = useMemo(() => {
-    if (!address) return null;
-
-    if (contractMode === "perpetual") {
-      const sessions = positionSessionsQuery.data?.positionSessions || [];
-      let totalPnL = 0n;
-      sessions.forEach((session) => {
-        totalPnL += session.realizedPnl;
-      });
-      return Number(totalPnL);
-    } else {
-      if (!historicalPositionsData?.data) return null;
-
-      let totalPnL = 0;
-      historicalPositionsData.data.forEach((position) => {
-        totalPnL += position.pnl;
-      });
-
-      return totalPnL;
-    }
-  }, [historicalPositionsData?.data, address, contractMode, positionSessionsQuery.data?.positionSessions]);
 
   // State for order book selection
   const [selectedPrice, setSelectedPrice] = useState<string | undefined>();
@@ -442,12 +366,12 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       minMargin={minMargin}
       isLoadingMinMargin={isLoadingMinMargin}
       isRefreshingMinMargin={isRefreshingMinMargin}
-      unrealizedPnL={totalUnrealizedPnL}
-      realizedPnL30D={totalRealizedPnL30D}
-      isLoadingRealizedPnL={isHistoricalPositionsLoading}
-      isRefreshingRealizedPnL={
-        !isHistoricalPositionsLoading && isHistoricalPositionsFetching
-      }
+      unrealizedPnL={unrealized.total}
+      isLoadingUnrealizedPnL={unrealized.isLoading}
+      isRefreshingUnrealizedPnL={unrealized.isRefreshing}
+      realizedPnLInWindow={realizedInWindow.total}
+      isLoadingRealizedPnL={realizedInWindow.isLoading}
+      isRefreshingRealizedPnL={realizedInWindow.isRefreshing}
       balanceQuery={balanceQuery}
       accountBalance={accountBalanceQuery}
     />
