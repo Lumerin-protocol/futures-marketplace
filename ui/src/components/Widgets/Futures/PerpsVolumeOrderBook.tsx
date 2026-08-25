@@ -405,6 +405,10 @@ const BidSection = styled("div")`
 
 const Row = styled("div")<{ $side: "ask" | "bid"; $highlight?: boolean; $empty?: boolean; $compact?: boolean }>`
   position: relative;
+  /* Keeps the depth-bar/cell z-indexes below scoped to the row. Without a local
+     stacking context the cells would tie with the sticky ColumnHeader's z-index
+     and, being later in the DOM, paint their digits over it while scrolling. */
+  isolation: isolate;
   display: grid;
   grid-template-columns: ${(props) => (props.$compact ? "1.2fr 1fr" : "1fr 1fr 1fr")};
   align-items: center;
