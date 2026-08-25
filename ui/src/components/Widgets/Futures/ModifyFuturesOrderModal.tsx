@@ -11,6 +11,7 @@ import { POSITION_BOOK_QK } from "../../../hooks/data/getUserFuturesPositions";
 import { HISTORICAL_ORDERS_QK } from "../../../hooks/data/useHistoricalOrders";
 import { FUTURES_POSITION_HISTORY_QK } from "../../../hooks/data/useFuturesPositionHistory";
 import { USER_FUTURES_TRADES_QK } from "../../../hooks/data/useUserFuturesTrades";
+import { invalidatePortfolioPnl } from "../../../hooks/data/pnl/invalidate";
 import { getOrderBookQueryKey, waitForOrderBookBlockNumber } from "../../../hooks/data/orderBookHelpers";
 import { useModifyOrder, useUpdateFuturesOrders } from "../../../hooks/data/useModifyOrder";
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
@@ -372,6 +373,7 @@ export const ModifyFuturesOrderModal = ({
                   address && queryClient.resetQueries({ queryKey: [HISTORICAL_ORDERS_QK, address] }),
                   address && queryClient.resetQueries({ queryKey: [FUTURES_POSITION_HISTORY_QK, address] }),
                   address && queryClient.resetQueries({ queryKey: [USER_FUTURES_TRADES_QK, address] }),
+                  invalidatePortfolioPnl(queryClient),
                 ]);
               },
             },

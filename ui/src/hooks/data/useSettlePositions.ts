@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { HashPowerFuturesAbi } from "futures-marketplace-abi/HashPowerFutures.ts";
 import { waitForBlockNumberPositionBook } from "./getUserFuturesPositions";
 import { FUTURES_POSITION_HISTORY_QK } from "./useFuturesPositionHistory";
+import { invalidatePortfolioPnl } from "./pnl/invalidate";
 import { withErrors } from "../../lib/withErrors";
 
 interface SettlePositionsProps {
@@ -51,6 +52,9 @@ export function useSettlePositions() {
     await waitForBlockNumberPositionBook(receipt.blockNumber, queryClient);
 
     queryClient.resetQueries({ queryKey: [FUTURES_POSITION_HISTORY_QK, account] });
+    // Settlement retires the position and books its PnL as realized, so both
+    // header figures move.
+    await invalidatePortfolioPnl(queryClient);
 
     return receipt;
   };

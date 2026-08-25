@@ -244,6 +244,30 @@ describe("should use scientific notation when number does not fit in 5 chars", (
   });
 });
 
+// PnL and signed fees reach this formatter negative, and a loss has to read at
+// the same precision as the equivalent gain — the sign is not a digit. Cases are
+// at the payment token's 6 decimals, which is what PnL is denominated in.
+describe("should format negative numbers like their positive twins", () => {
+  const usdcDecimals = 6;
+  const opts: RoundingOpts = {
+    maxChars: 5,
+  };
+  (
+    [
+      [185_990_000n, "185.99"],
+      [48_670_341n, "48.67"],
+      [1_689_157n, "1.6891"],
+      [230_000n, "0.23"],
+      [111_299_000_000n, "111.29K"],
+    ] as [bigint, string][]
+  ).forEach(([input, expected]) => {
+    test(`-${input} -> -${expected}`, () => {
+      expect(formatUnits(input, usdcDecimals, opts).full).toBe(expected);
+      expect(formatUnits(-input, usdcDecimals, opts).full).toBe(`-${expected}`);
+    });
+  });
+});
+
 describe("should handle corner cases", () => {
   const _dec = BigInt(token.decimals);
   const opts: RoundingOpts = {

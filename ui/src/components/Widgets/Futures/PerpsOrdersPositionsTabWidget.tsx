@@ -14,6 +14,7 @@ import { USER_POSITION_SESSIONS_QK } from "../../../hooks/data/perps/useUserPosi
 import { PERPS_ORDER_HISTORY_QK } from "../../../hooks/data/perps/usePerpsOrderHistory";
 import { PERPS_POSITION_HISTORY_QK } from "../../../hooks/data/perps/usePerpsPositionHistory";
 import { USER_TRADES_QK } from "../../../hooks/data/perps/useUserTrades";
+import { invalidatePortfolioPnl } from "../../../hooks/data/pnl/invalidate";
 import { getOrderBookQueryKey, waitForOrderBookBlockNumber } from "../../../hooks/data/orderBookHelpers";
 import type { TransactionReceipt } from "viem";
 import { TransactionFormV2 as TransactionForm } from "../../Forms/Shared/MultistepForm";
@@ -473,6 +474,7 @@ const CancelOrderConfirmModal = ({ open, order, participantAddress, onClose, onC
                   queryClient.resetQueries({ queryKey: [PERPS_ORDER_HISTORY_QK, participantAddress] }),
                   queryClient.resetQueries({ queryKey: [PERPS_POSITION_HISTORY_QK, participantAddress] }),
                   queryClient.resetQueries({ queryKey: [USER_TRADES_QK, participantAddress] }),
+                  invalidatePortfolioPnl(queryClient),
                 ]);
                 if (onConfirmed) await onConfirmed();
               },
