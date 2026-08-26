@@ -11,13 +11,16 @@ const EXAHASH = 10 ** 18;
 
 type NetworkHashrateIndexItem = {
   blockNumber?: string;
-  hashrate: string;
+  hashrateHpS: string;
   timestamp: string;
   id: string | number;
 };
 
+// graph-node derives the collection name from the entity, capitalising the `d`
+// of `7d` as a word of its own: `NetworkHashrate7d` is queried as
+// `networkHashrate7Ds`, not `networkHashrate7ds`.
 type NetworkHashrateIndexRes = {
-  networkHashrates: NetworkHashrateIndexItem[];
+  networkHashrate7Ds: NetworkHashrateIndexItem[];
 };
 
 type AggregatedNetworkHashrateIndexItem = {
@@ -28,7 +31,7 @@ type AggregatedNetworkHashrateIndexItem = {
 };
 
 type AggregatedNetworkHashrateIndexRes = {
-  networkHashrateCandles: AggregatedNetworkHashrateIndexItem[];
+  networkHashrate7DCandles: AggregatedNetworkHashrateIndexItem[];
 };
 
 export const NETWORK_HASHRATE_INDEX_QK = "networkHashrateIndex";
@@ -57,7 +60,8 @@ async function fetchNetworkHashrateIndexData(timePeriod: TimePeriod) {
 
 // Unlike the price feeds there is no bundled seed for this series: it was
 // indexed from the oracle's start block, so the subgraph already reaches back
-// past the widest chart range on its own.
+// past the widest chart range on its own. The one gap is the oracle's first
+// ~1008 Bitcoin blocks, which predate a full 7-day window and so carry no rows.
 async function fetchDayNetworkHashrateIndex() {
   const now = Math.floor(Date.now() / 1000);
   const startDate = now - 24 * 60 * 60; // 1 day
@@ -79,9 +83,9 @@ async function fetchDayNetworkHashrateIndex() {
       process.env.REACT_APP_SUBGRAPH_ORACLES_URL,
     );
 
-    allIndexes = [...allIndexes, ...req.networkHashrates];
+    allIndexes = [...allIndexes, ...req.networkHashrate7Ds];
 
-    if (req.networkHashrates.length < PAGE_SIZE) {
+    if (req.networkHashrate7Ds.length < PAGE_SIZE) {
       hasMore = false;
     } else {
       skip += PAGE_SIZE;
@@ -94,7 +98,7 @@ async function fetchDayNetworkHashrateIndex() {
     updatedAt: +item.timestamp / 1000,
     updatedAtDate: new Date(+item.timestamp / 1000),
     id: item.id,
-    hashrate: Number(item.hashrate) / EXAHASH,
+    hashrateEhS: Number(item.hashrateHpS) / EXAHASH,
   }));
 }
 
@@ -117,9 +121,9 @@ async function fetchAggregatedNetworkHashrateIndex(timePeriod: "week" | "month")
       process.env.REACT_APP_SUBGRAPH_ORACLES_URL,
     );
 
-    allCandles = [...allCandles, ...req.networkHashrateCandles];
+    allCandles = [...allCandles, ...req.networkHashrate7DCandles];
 
-    if (req.networkHashrateCandles.length < PAGE_SIZE) {
+    if (req.networkHashrate7DCandles.length < PAGE_SIZE) {
       hasMore = false;
     } else {
       skip += PAGE_SIZE;
@@ -137,15 +141,17 @@ async function fetchAggregatedNetworkHashrateIndex(timePeriod: "week" | "month")
         updatedAt: +item.timestamp / 1000,
         updatedAtDate: new Date(+item.timestamp / 1000),
         id: item.id,
-        hashrate: 0,
+        hashrateEhS: 0,
       };
     }
 
+    // Every row in the bucket is already a 7-day average, so this only decimates
+    // the series down to one point per interval rather than smoothing it further.
     return {
       updatedAt: +item.timestamp / 1000,
       updatedAtDate: new Date(+item.timestamp / 1000),
       id: item.id,
-      hashrate: sum / count / EXAHASH,
+      hashrateEhS: sum / count / EXAHASH,
     };
   });
 }

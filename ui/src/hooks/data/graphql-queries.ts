@@ -312,9 +312,13 @@ export const AggregatedBtcPriceIndexQuery = gql`
 // same oracle subgraph as the price feeds and with the same timeseries/candle
 // shape. Difficulty only retargets every ~2016 blocks, so the series is a step
 // function that stays flat within an epoch.
+// The oracle subgraph publishes the network hashrate over two trailing windows,
+// 144 blocks (~1 day) and 1008 blocks (~7 days). We read the 7-day series: block
+// discovery is Poisson, so a 1-day estimate carries roughly 8% standard error
+// against 3% for the 7-day one, and the shorter series mostly plots mining luck.
 export const NetworkHashrateIndexQuery = gql`
   query NetworkHashrateIndex($startDate: BigInt!, $first: Int!, $skip: Int!) {
-    networkHashrates(
+    networkHashrate7Ds(
       where: { timestamp_gte: $startDate }
       orderBy: timestamp
       orderDirection: desc
@@ -323,7 +327,7 @@ export const NetworkHashrateIndexQuery = gql`
     ) {
       blockNumber
       id
-      hashrate
+      hashrateHpS
       timestamp
     }
   }
@@ -331,7 +335,7 @@ export const NetworkHashrateIndexQuery = gql`
 
 export const AggregatedNetworkHashrateIndexQuery = gql`
   query AggregatedNetworkHashrateIndexQuery($interval: String!, $first: Int!, $skip: Int!, $startTimestamp: BigInt!) {
-    networkHashrateCandles(
+    networkHashrate7DCandles(
       interval: $interval
       first: $first
       skip: $skip

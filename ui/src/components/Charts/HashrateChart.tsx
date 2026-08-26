@@ -24,7 +24,7 @@ const CHART_HEIGHT = 400;
 
 const HASHPRICE_LABEL = "Hashprice";
 const BTC_LABEL = "BTC Price";
-const NETWORK_HASHRATE_LABEL = "Network Hashrate";
+const NETWORK_HASHRATE_LABEL = "Network Hashrate (7d avg)";
 
 /**
  * Only `right` and `left` can be rendered as axes, and hashprice and BTC already
@@ -34,11 +34,11 @@ const NETWORK_HASHRATE_LABEL = "Network Hashrate";
 const HASHRATE_SCALE_ID = "network-hashrate";
 
 /**
- * Difficulty retargets roughly every 2016 blocks, so between retargets the
- * hashrate is constant down to the last couple of digits the integer division
- * leaves behind. Autoscaling a range that narrow blows that remainder up into a
- * jagged line, so the range is widened to at least this fraction of its own
- * midpoint and a flat epoch draws flat.
+ * A 7-day trailing average barely moves inside the 1D range — often well under a
+ * percent — and autoscaling a span that narrow magnifies it into a dramatic-looking
+ * swing. The range is widened to at least this fraction of its own midpoint so a
+ * quiet week draws quiet. Over the 30D range real movement exceeds the floor and
+ * autoscaling takes over on its own.
  */
 const MIN_HASHRATE_RANGE_RATIO = 0.02;
 
@@ -256,11 +256,14 @@ interface HashrateChartProps {
     updatedAt?: string | number;
     price: number;
   }>;
-  /** Difficulty-implied Bitcoin network hashrate, in EH/s. */
+  /**
+   * Bitcoin network hashrate in EH/s, measured over a trailing 1008-block (~7 day)
+   * window as work done divided by the median-time-past elapsed over it.
+   */
   networkHashrateData?: Array<{
     updatedAtDate?: Date;
     updatedAt?: string | number;
-    hashrate: number;
+    hashrateEhS: number;
   }>;
   isLoading?: boolean;
   isBtcPriceLoading?: boolean;
@@ -378,10 +381,10 @@ export const HashrateChart: FC<HashrateChartProps> = ({
 
     const points: Array<{ date: Date; value: number }> = [];
     for (const item of networkHashrateData) {
-      if ((!item.updatedAtDate && !item.updatedAt) || item.hashrate <= 0) continue;
+      if ((!item.updatedAtDate && !item.updatedAt) || item.hashrateEhS <= 0) continue;
       points.push({
         date: item.updatedAtDate || new Date(Number(item.updatedAt) * 1000),
-        value: item.hashrate,
+        value: item.hashrateEhS,
       });
     }
     return toLineData(points);
