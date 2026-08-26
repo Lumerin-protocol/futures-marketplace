@@ -6,6 +6,7 @@ import {
   LineSeries,
   LineStyle,
   createChart,
+  type AutoscaleInfo,
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
@@ -23,6 +24,37 @@ const CHART_HEIGHT = 400;
 
 const HASHPRICE_LABEL = "Hashprice";
 const BTC_LABEL = "BTC Price";
+const NETWORK_HASHRATE_LABEL = "Network Hashrate";
+
+/**
+ * Only `right` and `left` can be rendered as axes, and hashprice and BTC already
+ * hold them. Any other id makes an overlay scale: autoscaled but without a
+ * visible axis, so the hashrate is read off the crosshair tooltip.
+ */
+const HASHRATE_SCALE_ID = "network-hashrate";
+
+/**
+ * Difficulty retargets roughly every 2016 blocks, so between retargets the
+ * hashrate is constant down to the last couple of digits the integer division
+ * leaves behind. Autoscaling a range that narrow blows that remainder up into a
+ * jagged line, so the range is widened to at least this fraction of its own
+ * midpoint and a flat epoch draws flat.
+ */
+const MIN_HASHRATE_RANGE_RATIO = 0.02;
+
+const withMinimumRange = (original: () => AutoscaleInfo | null): AutoscaleInfo | null => {
+  const info = original();
+  if (!info?.priceRange) return info;
+
+  const { minValue, maxValue } = info.priceRange;
+  const midpoint = (minValue + maxValue) / 2;
+  const halfSpan = Math.max((maxValue - minValue) / 2, Math.abs(midpoint) * (MIN_HASHRATE_RANGE_RATIO / 2));
+
+  return { ...info, priceRange: { minValue: midpoint - halfSpan, maxValue: midpoint + halfSpan } };
+};
+
+/** Values arrive already divided down to exahashes per second. */
+const formatHashrate = (value: number): string => `${value.toFixed(2)} EH/s`;
 
 const PeriodSwitch = styled("div")`
   display: flex;
@@ -205,6 +237,7 @@ interface TooltipState {
   time: UTCTimestamp;
   hashprice?: number;
   btc?: number;
+  networkHashrate?: number;
   top: number;
   offsetX: number;
   anchorRight: boolean;
@@ -223,10 +256,18 @@ interface HashrateChartProps {
     updatedAt?: string | number;
     price: number;
   }>;
+  /** Difficulty-implied Bitcoin network hashrate, in EH/s. */
+  networkHashrateData?: Array<{
+    updatedAtDate?: Date;
+    updatedAt?: string | number;
+    hashrate: number;
+  }>;
   isLoading?: boolean;
   isBtcPriceLoading?: boolean;
+  isNetworkHashrateLoading?: boolean;
   isFetching?: boolean;
   isBtcPriceFetching?: boolean;
+  isNetworkHashrateFetching?: boolean;
   marketPrice?: bigint | null;
   marketPriceFetchedAt?: Date;
   entryPrice?: number | null;
@@ -241,10 +282,13 @@ interface HashrateChartProps {
 export const HashrateChart: FC<HashrateChartProps> = ({
   data,
   btcPriceData,
+  networkHashrateData,
   isLoading = false,
   isBtcPriceLoading = false,
+  isNetworkHashrateLoading = false,
   isFetching = false,
   isBtcPriceFetching = false,
+  isNetworkHashrateFetching = false,
   marketPrice,
   marketPriceFetchedAt,
   entryPrice,
@@ -254,17 +298,23 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   onTimePeriodChange,
 }) => {
   const [isBtcPriceVisible, setIsBtcPriceVisible] = useState(false);
+  const [isNetworkHashrateVisible, setIsNetworkHashrateVisible] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const hashSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const btcSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const networkHashrateSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
   const fittedPeriodRef = useRef<TimePeriod | null>(null);
 
   const handleBtcPriceLegendClick = useCallback(() => {
     setIsBtcPriceVisible((prev) => !prev);
+  }, []);
+
+  const handleNetworkHashrateLegendClick = useCallback(() => {
+    setIsNetworkHashrateVisible((prev) => !prev);
   }, []);
 
   // Merge market price with historical data if it differs from the first item
@@ -322,6 +372,20 @@ export const HashrateChart: FC<HashrateChartProps> = ({
     }
     return toLineData(points);
   }, [btcPriceData]);
+
+  const networkHashrateSeriesData = useMemo(() => {
+    if (!networkHashrateData || networkHashrateData.length === 0) return [];
+
+    const points: Array<{ date: Date; value: number }> = [];
+    for (const item of networkHashrateData) {
+      if ((!item.updatedAtDate && !item.updatedAt) || item.hashrate <= 0) continue;
+      points.push({
+        date: item.updatedAtDate || new Date(Number(item.updatedAt) * 1000),
+        value: item.hashrate,
+      });
+    }
+    return toLineData(points);
+  }, [networkHashrateData]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -386,6 +450,27 @@ export const HashrateChart: FC<HashrateChartProps> = ({
       },
     });
 
+    const networkHashrateSeries = chart.addSeries(LineSeries, {
+      title: NETWORK_HASHRATE_LABEL,
+      color: tokens.chart.seriesHashrate,
+      lineWidth: 2,
+      priceScaleId: HASHRATE_SCALE_ID,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      pointMarkersVisible: false,
+      visible: false,
+      autoscaleInfoProvider: withMinimumRange,
+      priceFormat: {
+        type: "custom",
+        minMove: 0.01,
+        formatter: formatHashrate,
+      },
+    });
+
+    chart.priceScale(HASHRATE_SCALE_ID).applyOptions({
+      scaleMargins: { top: 0.1, bottom: 0.1 },
+    });
+
     const handleCrosshairMove = (param: MouseEventParams<Time>) => {
       if (!param.point || param.time === undefined || typeof param.time !== "number") {
         setTooltip(null);
@@ -394,8 +479,11 @@ export const HashrateChart: FC<HashrateChartProps> = ({
 
       const hashprice = readSeriesValue(param, hashSeries);
       const btc = btcSeries.options().visible ? readSeriesValue(param, btcSeries) : undefined;
+      const networkHashrate = networkHashrateSeries.options().visible
+        ? readSeriesValue(param, networkHashrateSeries)
+        : undefined;
 
-      if (hashprice === undefined && btc === undefined) {
+      if (hashprice === undefined && btc === undefined && networkHashrate === undefined) {
         setTooltip(null);
         return;
       }
@@ -409,6 +497,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
         time: param.time as UTCTimestamp,
         hashprice,
         btc,
+        networkHashrate,
         top: Math.max(8, param.point.y - 12),
         offsetX: (anchorRight ? width - param.point.x : param.point.x) + 12,
         anchorRight,
@@ -420,6 +509,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
     chartRef.current = chart;
     hashSeriesRef.current = hashSeries;
     btcSeriesRef.current = btcSeries;
+    networkHashrateSeriesRef.current = networkHashrateSeries;
 
     return () => {
       chart.unsubscribeCrosshairMove(handleCrosshairMove);
@@ -427,6 +517,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
       chartRef.current = null;
       hashSeriesRef.current = null;
       btcSeriesRef.current = null;
+      networkHashrateSeriesRef.current = null;
       priceLinesRef.current = [];
       fittedPeriodRef.current = null;
     };
@@ -440,6 +531,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
     // data has, leaving the chart squeezed against the right edge.
     hashSeriesRef.current?.setData(hashrateSeriesData);
     btcSeriesRef.current?.setData(btcSeriesData);
+    networkHashrateSeriesRef.current?.setData(networkHashrateSeriesData);
 
     // Reframing only on a range switch is what stops background refetches from
     // throwing away a pan or zoom the user just made.
@@ -447,18 +539,30 @@ export const HashrateChart: FC<HashrateChartProps> = ({
 
     chartRef.current?.timeScale().fitContent();
 
-    // Both hooks keep serving the previous range while the new one loads, so this
+    // Every hook keeps serving the previous range while the new one loads, so this
     // frame is provisional. Leaving the period unrecorded until every query has
     // settled means whichever one lands last reframes against the real data.
-    if (!isFetching && !isBtcPriceFetching) {
+    if (!isFetching && !isBtcPriceFetching && !isNetworkHashrateFetching) {
       fittedPeriodRef.current = timePeriod;
     }
-  }, [hashrateSeriesData, btcSeriesData, timePeriod, isFetching, isBtcPriceFetching]);
+  }, [
+    hashrateSeriesData,
+    btcSeriesData,
+    networkHashrateSeriesData,
+    timePeriod,
+    isFetching,
+    isBtcPriceFetching,
+    isNetworkHashrateFetching,
+  ]);
 
   useEffect(() => {
     btcSeriesRef.current?.applyOptions({ visible: isBtcPriceVisible });
     chartRef.current?.applyOptions({ leftPriceScale: { visible: isBtcPriceVisible } });
   }, [isBtcPriceVisible]);
+
+  useEffect(() => {
+    networkHashrateSeriesRef.current?.applyOptions({ visible: isNetworkHashrateVisible });
+  }, [isNetworkHashrateVisible]);
 
   useEffect(() => {
     const series = hashSeriesRef.current;
@@ -507,7 +611,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   }, [entryPrice, liquidationPrice, liquidationDirection, hashrateSeriesData]);
 
   const hasData = hashrateSeriesData.length > 0;
-  const isInitialLoad = (isLoading || isBtcPriceLoading) && !hasData;
+  const isInitialLoad = (isLoading || isBtcPriceLoading || isNetworkHashrateLoading) && !hasData;
 
   return (
     <>
@@ -523,6 +627,16 @@ export const HashrateChart: FC<HashrateChartProps> = ({
               {isBtcPriceVisible ? "✓" : null}
             </LegendCheckbox>
             <span>{BTC_LABEL}</span>
+          </LegendButton>
+          <LegendButton
+            type="button"
+            onClick={handleNetworkHashrateLegendClick}
+            aria-pressed={isNetworkHashrateVisible}
+          >
+            <LegendCheckbox $color={tokens.chart.seriesHashrate} $checked={isNetworkHashrateVisible}>
+              {isNetworkHashrateVisible ? "✓" : null}
+            </LegendCheckbox>
+            <span>{NETWORK_HASHRATE_LABEL}</span>
           </LegendButton>
         </Legend>
         <PeriodSwitch>
@@ -561,6 +675,12 @@ export const HashrateChart: FC<HashrateChartProps> = ({
                 {Math.round(tooltip.btc).toLocaleString()}
               </div>
             )}
+            {tooltip.networkHashrate !== undefined && (
+              <div>
+                <span style={{ color: tokens.chart.seriesHashrate }}>{"\u25CF"}</span>{" "}
+                <b>{NETWORK_HASHRATE_LABEL}:</b> {formatHashrate(tooltip.networkHashrate)}
+              </div>
+            )}
           </TooltipBox>
         )}
 
@@ -575,7 +695,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
           <StateOverlay style={{ background: tokens.app.bg, fontSize: "18px" }}>No data available</StateOverlay>
         )}
 
-        {hasData && (isFetching || isBtcPriceFetching) && (
+        {hasData && (isFetching || isBtcPriceFetching || isNetworkHashrateFetching) && (
           <StateOverlay
             style={{
               background: "rgba(15, 17, 23, 0.55)",
