@@ -14,29 +14,18 @@ that needs a decision before any work starts.**
 
 ---
 
-## 1. Two copies of `@wagmi/core` in the tree (v2 and v3)
+## 1. Two copies of `@wagmi/core` in the tree (resolved)
 
-**Where:** `src/Web3Provider.tsx`
+The second copy came in with `@reown/appkit-adapter-wagmi`, which built its
+config against `@wagmi/core@3` while the direct `wagmi@2` dependency brought v2.
+The two `Config` types are structurally incompatible, so `src/Web3Provider.tsx`
+had to cast. Replacing appkit with Konekt leaves only `@wagmi/core@2`, and the
+cast is gone.
 
-`@reown/appkit-adapter-wagmi@1.8.21` builds its config against `@wagmi/core@3.5.5`,
-while the direct `wagmi@2.19.5` dependency brings `@wagmi/core@2.22.1`. The two
-`Config` types are structurally incompatible, so the config object produced by
-appkit cannot be handed to wagmi's `WagmiProvider` without a cast:
+**Still worth retesting by hand after any change to the connect flow**, since
+none of it is covered by types:
 
-```tsx
-<WagmiProvider config={config as unknown as Config}>
-```
-
-Runtime behaviour is unchanged — it is one object, and both packages read the same
-fields. But the cast hides any real drift between the two majors.
-
-**To resolve:** align the versions, most likely by upgrading the app to `wagmi@3`
-so that only `@wagmi/core@3` remains, then delete the cast.
-
-**Must be retested manually after any change here**, because none of it is covered
-by types once the cast is in place:
-
-- connecting and disconnecting a wallet through the appkit modal
+- connecting and disconnecting a wallet through the Konekt modal
 - switching chains
 - reconnect after a page reload
 - a full order flow (approve + create order) to confirm signing still works
@@ -112,12 +101,9 @@ but a caller passing them still reasonably expects them to do something.
 the call site. Worth checking whether `DetailedSpecsModal`'s dismiss actually works
 in the UI, since that one looks like a missing behaviour rather than a dead prop.
 
-## 5. `useAppkit` is unreachable
+## 5. `useAppkit` is unreachable (resolved)
 
-**Where:** `src/hooks/useAppkit.ts`
-
-Nothing in `src` imports it. Wallet connection goes through appkit directly. Either
-it was superseded and should be deleted, or a migration to it was never finished.
+Nothing in `src` ever imported it. Deleted along with appkit itself.
 
 ## 6. `@types/node` (resolved)
 

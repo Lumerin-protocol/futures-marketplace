@@ -5,6 +5,9 @@
 overrides:
   viem@2.54.0>ox: 0.14.33
 
+# `@reown/appkit` is unused in src; wagmi 2 still pulls it via
+# `@walletconnect/ethereum-provider`. Keep the build script allowed so
+# `pnpm install` does not fail with ERR_PNPM_IGNORED_BUILDS.
 allowBuilds:
   '@reown/appkit': true
   '@swc/core': true
@@ -14,3 +17,7 @@ allowBuilds:
   secp256k1: true
   sharp: true
   utf-8-validate: true
+
+minimumReleaseAgeExclude:
+  - konekt-ui@0.3.0
+  - konekt@0.2.0

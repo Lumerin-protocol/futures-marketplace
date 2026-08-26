@@ -8,6 +8,7 @@ import { SmallWidget } from "../../components/Cards/Cards.styled";
 import { truncateAddress } from "../../utils/formatters";
 import { getTxUrl } from "../../lib/indexer";
 import { AddressLength } from "../../types/types";
+import { WalletAvatar } from "../../components/WalletAvatar";
 import { usePointsHookWeights } from "../../hooks/data/usePointsHookWeights";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 import {
@@ -24,13 +25,6 @@ const formatPoints = (points: bigint) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-
-// The same address-derived gradient avatar AppKit/WalletConnect renders. The
-// `wui-avatar` custom element is registered globally by AppKit.
-const WalletAvatar = ({ address }: { address: string }) => (
-  // @ts-ignore - `wui-avatar` is an AppKit web component, not in JSX types.
-  <wui-avatar alt={address} address={address} size="sm" />
-);
 
 // Points per 1 USDC of trade size, i.e. weight / WEIGHT_SCALE. This collapses
 // the raw fixed-point weights (which carry a lot of trailing zeros) into a
@@ -139,7 +133,7 @@ export const Leaderboard: FC = () => {
                         <td>
                           <Tooltip title={entry.address}>
                             <WalletCell>
-                              {!isMobile && <WalletAvatar address={entry.address} />}
+                              {!isMobile && <WalletAvatar address={entry.address} size={22} />}
                               {truncateAddress(
                                 entry.address,
                                 isMobile ? AddressLength.SHORT : AddressLength.LONG,
@@ -464,18 +458,6 @@ const WalletCell = styled.span`
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   white-space: nowrap;
   cursor: default;
-
-  wui-avatar {
-    width: 22px !important;
-    height: 22px !important;
-    margin-right: 0.25rem;
-    border-radius: 50%;
-    overflow: hidden;
-    flex-shrink: 0;
-    box-shadow: none !important;
-    filter: none !important;
-    --wui-box-shadow: none;
-  }
 
   @media (max-width: 600px) {
     gap: 0.3rem;

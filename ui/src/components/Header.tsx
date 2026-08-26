@@ -1,17 +1,10 @@
-import { Suspense } from "react";
 import { styled } from "next-yak";
 import { Link, useLocation, useNavigate } from "react-router";
 import { tokens } from "../styles/tokens";
-import { Skeleton } from "./Skeleton";
 import { ArrowBackIcon, EmojiEventsOutlinedIcon } from "./icons";
-import { safeLazy } from "../utils/safeLazy";
 import { PathName } from "../types/types";
 import HpdxLogomark from "../images/icons/hpdx-logomark.svg?react";
-import { Web3ProviderLazy } from "../Web3ProviderLazy";
-
-const HeaderConnectLazy = safeLazy(() =>
-  import("./HeaderConnect").then((module) => ({ default: module.HeaderConnect })),
-);
+import { HeaderConnect } from "./HeaderConnect";
 
 export const Header = () => {
   const location = useLocation();
@@ -59,30 +52,10 @@ export const Header = () => {
           </NavLink>
         )}
       </Nav>
-      {/* Local boundary so loading this chunk *and* the wagmi/appkit provider
-          it needs only shows a small inline spinner here, instead of
-          bubbling up and blanking the whole page like it did when nothing
-          caught it locally. Web3ProviderLazy is mounted fresh at this one
-          spot — see its comment for why that's safe/cheap. */}
-      <Suspense fallback={<ConnectSlotSkeleton />}>
-        <Web3ProviderLazy>
-          <HeaderConnectLazy />
-        </Web3ProviderLazy>
-      </Suspense>
+      <HeaderConnect />
     </StyledToolbar>
   );
 };
-
-const ConnectSlotSkeleton = () => (
-  <ConnectSlotSkeletonWrapper>
-    <Skeleton width={140} height={48} />
-  </ConnectSlotSkeletonWrapper>
-);
-
-const ConnectSlotSkeletonWrapper = styled.div`
-  display: flex;
-  align-items: center;
-`;
 
 const StyledToolbar = styled.div`
   display: flex;

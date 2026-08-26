@@ -1,4 +1,4 @@
-import { usdcMockAbi } from "contracts-js/dist/abi/abi";
+import { ERC20Abi } from "futures-marketplace-abi/ERC20.ts";
 import { useReadContract } from "wagmi";
 import { backgroundRefetchOpts } from "./config";
 import { useFuturePaymentToken } from "./useFuturePaymentToken";
@@ -14,7 +14,7 @@ export function useFuturesPaymentTokenBalance(address: `0x${string}` | undefined
 
   return useReadContract({
     address: paymentTokenAddress,
-    abi: withErrors(usdcMockAbi),
+    abi: withErrors(ERC20Abi),
     functionName: "balanceOf",
     args: address ? [address] : undefined,
     query: {
