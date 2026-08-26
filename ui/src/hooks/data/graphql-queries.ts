@@ -308,6 +308,43 @@ export const AggregatedBtcPriceIndexQuery = gql`
   }
 `;
 
+// Difficulty-implied Bitcoin network hashrate in hashes/second, served by the
+// same oracle subgraph as the price feeds and with the same timeseries/candle
+// shape. Difficulty only retargets every ~2016 blocks, so the series is a step
+// function that stays flat within an epoch.
+export const NetworkHashrateIndexQuery = gql`
+  query NetworkHashrateIndex($startDate: BigInt!, $first: Int!, $skip: Int!) {
+    networkHashrates(
+      where: { timestamp_gte: $startDate }
+      orderBy: timestamp
+      orderDirection: desc
+      first: $first
+      skip: $skip
+    ) {
+      blockNumber
+      id
+      hashrate
+      timestamp
+    }
+  }
+`;
+
+export const AggregatedNetworkHashrateIndexQuery = gql`
+  query AggregatedNetworkHashrateIndexQuery($interval: String!, $first: Int!, $skip: Int!, $startTimestamp: BigInt!) {
+    networkHashrateCandles(
+      interval: $interval
+      first: $first
+      skip: $skip
+      where: { timestamp_gte: $startTimestamp }
+    ) {
+      count
+      id
+      sum
+      timestamp
+    }
+  }
+`;
+
 // Per-user futures Trades, mirroring the perps `UserTradesQuery` shape.
 // The futures Trade entity additionally carries `expirationAt`, which the perps
 // one has no equivalent for.

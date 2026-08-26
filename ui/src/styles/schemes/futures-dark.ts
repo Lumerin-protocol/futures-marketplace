@@ -58,6 +58,7 @@ export const futuresDark = {
     tooltipBg: "#1A1A2E",
     tooltipBorder: "#2E3348",
     seriesBtc: "#F7931A",
+    seriesHashrate: "#8B5CF6",
     series1: "#00B894",
     series2: "#2563EB",
     series3: "#F7931A",

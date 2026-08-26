@@ -16,6 +16,7 @@ import { useLiquidationNotifications } from "../../hooks/data/useLiquidationNoti
 import { ClosePositionModal, useClosePositionModal } from "../../components/Widgets/Futures/ClosePositionModal";
 import { useHashrateIndexData, type TimePeriod } from "../../hooks/data/useHashRateIndexData";
 import { useBtcPriceIndexData } from "../../hooks/data/useBtcPriceIndexData";
+import { useNetworkHashrateIndexData } from "../../hooks/data/useNetworkHashrateIndexData";
 import { getUserFuturesOrders } from "../../hooks/data/getUserFuturesOrders";
 import { getUserFuturesPositions } from "../../hooks/data/getUserFuturesPositions";
 import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpecs";
@@ -86,6 +87,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const [chartTimePeriod, setChartTimePeriod] = useState<TimePeriod>("week");
   const hashrateQuery = useHashrateIndexData({ timePeriod: chartTimePeriod });
   const btcPriceQuery = useBtcPriceIndexData({ timePeriod: chartTimePeriod });
+  const networkHashrateQuery = useNetworkHashrateIndexData({ timePeriod: chartTimePeriod });
   const contractSpecsQuery = useFuturesContractSpecs();
   const [hasOpenOrders, setHasOpenOrders] = useState(false);
   const [hasOpenPerpsOrders, setHasOpenPerpsOrders] = useState(false);
@@ -335,10 +337,13 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       <HashrateChart
         data={hashrateQuery.data || []}
         btcPriceData={btcPriceQuery.data || []}
+        networkHashrateData={networkHashrateQuery.data || []}
         isLoading={hashrateQuery.isLoading}
         isBtcPriceLoading={btcPriceQuery.isLoading}
+        isNetworkHashrateLoading={networkHashrateQuery.isLoading}
         isFetching={hashrateQuery.isFetching}
         isBtcPriceFetching={btcPriceQuery.isFetching}
+        isNetworkHashrateFetching={networkHashrateQuery.isFetching}
         marketPrice={marketPrice}
         marketPriceFetchedAt={marketPriceFetchedAt}
         entryPrice={openPositionEntryPrice}
