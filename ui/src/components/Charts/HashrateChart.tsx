@@ -24,7 +24,7 @@ const CHART_HEIGHT = 400;
 
 const HASHPRICE_LABEL = "Hashprice";
 const BTC_LABEL = "BTC Price";
-const NETWORK_HASHRATE_LABEL = "Network Hashrate (7d avg)";
+const NETWORK_HASHRATE_LABEL = "Network Hashrate";
 
 /**
  * Only `right` and `left` can be rendered as axes, and hashprice and BTC already
