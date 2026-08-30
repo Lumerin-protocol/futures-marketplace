@@ -67,17 +67,10 @@ export const OrdersPositionsTabWidget = ({
   const historicalPositionsQuery = useFuturesPositionHistory(participantAddress, true);
   const tradesQuery = useUserFuturesTrades(participantAddress, { refetch: activeTab === "TRADES" });
 
-  // Counts for the tab badges. For Open Orders / Positions / Order History /
-  // Position History we use the same `(pricePerDay, expirationAt[, side])`
-  // grouping the underlying widgets render with, so the badge matches the row
-  // count in the table. Trades is a flat list — same as perps.
-  const ordersCount = useMemo(() => {
-    const unique = new Set<string>();
-    orders.forEach((order) => {
-      unique.add(`${order.expirationAt.toString()}_${order.pricePerDay.toString()}`);
-    });
-    return unique.size;
-  }, [orders]);
+  // Counts for the tab badges, matching the row count each widget renders.
+  // Open Orders is one row per on-chain order; Positions still collapses by
+  // `(pricePerDay, expirationAt)` the way PositionsListWidget does.
+  const ordersCount = orders.length;
 
   const positionsCount = useMemo(() => {
     const unique = new Set<string>();

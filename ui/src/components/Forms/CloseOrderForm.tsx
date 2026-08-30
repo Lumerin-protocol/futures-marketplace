@@ -14,7 +14,7 @@ import { invalidatePortfolioPnl } from "../../hooks/data/pnl/invalidate";
 import { PERPS_ORDER_HISTORY_QK } from "../../hooks/data/perps/usePerpsOrderHistory";
 import { PERPS_POSITION_HISTORY_QK } from "../../hooks/data/perps/usePerpsPositionHistory";
 import { USER_TRADES_QK } from "../../hooks/data/perps/useUserTrades";
-import type { FC } from "react";
+import { type FC, useState } from "react";
 import type { ContractMode } from "../../types/types";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 
@@ -42,6 +42,9 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({
   const { address } = useAccount();
   const { closeOrdersAsync } = useCloseOrder();
   const { cancelOrderAsync } = useCancelPerpsOrder();
+  /// How the cancel actually resolved, so the result screen can distinguish a
+  /// real cancel from a row that the indexer had simply not caught up on.
+  const [outcome, setOutcome] = useState<{ cancelled: number; stale: number } | null>(null);
 
   const formatPrice = (price: bigint) => {
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
@@ -50,6 +53,36 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({
   const formatExpirationAt = (expirationAt: bigint) => {
     const date = new Date(Number(expirationAt) * 1000);
     return date.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
+  };
+
+  const refreshOrderViews = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
+      address && qc.invalidateQueries({ queryKey: [POSITION_BOOK_QK] }),
+      address && qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
+      ...(contractMode === "perpetual"
+        ? [
+            address && qc.resetQueries({ queryKey: [PERPS_ORDER_HISTORY_QK, address] }),
+            address && qc.resetQueries({ queryKey: [PERPS_POSITION_HISTORY_QK, address] }),
+            address && qc.resetQueries({ queryKey: [USER_TRADES_QK, address] }),
+          ]
+        : [
+            address && qc.resetQueries({ queryKey: [HISTORICAL_ORDERS_QK, address] }),
+            address && qc.resetQueries({ queryKey: [FUTURES_POSITION_HISTORY_QK, address] }),
+            address && qc.resetQueries({ queryKey: [USER_FUTURES_TRADES_QK, address] }),
+          ]),
+      invalidatePortfolioPnl(qc),
+    ]);
+  };
+
+  const resultMessage = () => {
+    if (outcome && outcome.cancelled === 0) {
+      return "This order had already left the order book — it was filled or cancelled before your request, so there was nothing to sign. The list has been refreshed.";
+    }
+    if (outcome && outcome.stale > 0) {
+      return `Cancelled ${outcome.cancelled} of ${outcome.cancelled + outcome.stale} orders in this row — the rest had already been filled or cancelled.`;
+    }
+    return "Your order has been cancelled and will be removed from the order book shortly.";
   };
 
   return (
@@ -87,9 +120,7 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({
       )}
       resultForm={(_props) => (
         <>
-          <p className="w-6/6 text-left font-normal text-s mt-5">
-            Your order has been cancelled and will be removed from the order book shortly.
-          </p>
+          <p className="w-6/6 text-left font-normal text-s mt-5">{resultMessage()}</p>
         </>
       )}
       transactionSteps={[
@@ -101,41 +132,35 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({
             }
             const ids = orderIds.map((id) => id as `0x${string}`);
 
-            let txhash: `0x${string}` | undefined;
             if (contractMode === "perpetual") {
               // Perps cancel is one id per call; cancel the grouped row sequentially.
+              let txhash: `0x${string}` | undefined;
               for (const orderId of ids) {
                 const hash = await cancelOrderAsync({ orderId });
                 if (!hash) throw new Error("Wallet not ready. Please try again.");
                 txhash = hash;
               }
-            } else {
-              const txs = await closeOrdersAsync({ orderIds: ids });
-              txhash = txs?.[0];
-              if (!txhash) throw new Error("Wallet not ready. Please try again.");
+              setOutcome({ cancelled: ids.length, stale: 0 });
+              return { txhash, isSkipped: false };
             }
-            return { txhash, isSkipped: false };
+
+            const result = await closeOrdersAsync({ orderIds: ids });
+            if (result.status === "not-ready") {
+              throw new Error("Wallet not ready. Please try again.");
+            }
+            if (result.status === "already-closed") {
+              // Nothing left on the book to cancel, so there is no transaction
+              // to sign — the row was indexer lag. Refresh so it disappears.
+              setOutcome({ cancelled: 0, stale: result.staleIds.length });
+              await refreshOrderViews();
+              return { isSkipped: true };
+            }
+            setOutcome({ cancelled: result.cancelledIds.length, stale: result.staleIds.length });
+            return { txhash: result.txhash, isSkipped: false };
           },
           postConfirmation: async (receipt: TransactionReceipt) => {
             await waitForOrderBookBlockNumber(receipt.blockNumber, qc, contractMode, Number(expirationAt));
-
-            await Promise.all([
-              qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
-              address && qc.invalidateQueries({ queryKey: [POSITION_BOOK_QK] }),
-              address && qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
-              ...(contractMode === "perpetual"
-                ? [
-                    address && qc.resetQueries({ queryKey: [PERPS_ORDER_HISTORY_QK, address] }),
-                    address && qc.resetQueries({ queryKey: [PERPS_POSITION_HISTORY_QK, address] }),
-                    address && qc.resetQueries({ queryKey: [USER_TRADES_QK, address] }),
-                  ]
-                : [
-                    address && qc.resetQueries({ queryKey: [HISTORICAL_ORDERS_QK, address] }),
-                    address && qc.resetQueries({ queryKey: [FUTURES_POSITION_HISTORY_QK, address] }),
-                    address && qc.resetQueries({ queryKey: [USER_FUTURES_TRADES_QK, address] }),
-                  ]),
-              invalidatePortfolioPnl(qc),
-            ]);
+            await refreshOrderViews();
           },
         },
       ]}

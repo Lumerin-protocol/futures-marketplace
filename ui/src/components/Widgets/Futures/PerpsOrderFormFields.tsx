@@ -17,17 +17,30 @@ export function usePerpsOrderForm({
   priceStep = 0.01,
   quantityDecimals = 6,
   initialAmountMode = "size",
+  allowAboveMax = false,
 }: {
   maxQuantity: number;
   priceStep?: number;
   /** Zero for futures, whose contracts are whole units. */
   quantityDecimals?: number;
   initialAmountMode?: AmountMode;
+  /**
+   * Let a typed amount exceed `maxQuantity`. Modify raises an order by
+   * cancel-and-replace and checks margin for the new size itself, so it opts in.
+   * Close must stay capped at the position size, and that cap lives here.
+   */
+  allowAboveMax?: boolean;
 }) {
   const [price, setPrice] = useState("0.00");
   const [amountMode, setAmountMode] = useState<AmountMode>(initialAmountMode);
   const [amount, setAmount] = useState("0");
   const [sliderValue, setSliderValue] = useState(100);
+  /**
+   * Whether `amount` was last written by the slider. Only then may 100% stand in
+   * for the exact `maxQuantity`; otherwise a typed value would be silently
+   * replaced by the max, which is what used to make a raised amount look ignored.
+   */
+  const [amountFromSlider, setAmountFromSlider] = useState(true);
 
   const currentPrice = parseFloat(price) || 0;
   const maxSize = maxQuantity * currentPrice;
@@ -36,19 +49,24 @@ export function usePerpsOrderForm({
     quantityDecimals === 0 ? Math.round(value) : value;
 
   const getCurrentQuantity = (): number => {
-    if (sliderValue === 100) return maxQuantity;
+    if (amountFromSlider && sliderValue === 100) return maxQuantity;
     const parsed = parseFloat(amount);
     if (Number.isNaN(parsed) || parsed <= 0) return 0;
-    if (amountMode === "size") return currentPrice > 0 ? roundQuantity(parsed / currentPrice) : 0;
-    return roundQuantity(parsed);
+    const quantity =
+      amountMode === "size"
+        ? currentPrice > 0
+          ? roundQuantity(parsed / currentPrice)
+          : 0
+        : roundQuantity(parsed);
+    return allowAboveMax ? quantity : Math.min(quantity, maxQuantity);
   };
 
   const getCurrentSize = (): number => {
-    if (sliderValue === 100) return maxQuantity * currentPrice;
+    if (amountFromSlider && sliderValue === 100) return maxQuantity * currentPrice;
     const parsed = parseFloat(amount);
     if (Number.isNaN(parsed) || parsed <= 0) return 0;
-    if (amountMode === "quantity") return parsed * currentPrice;
-    return parsed;
+    const size = amountMode === "quantity" ? parsed * currentPrice : parsed;
+    return allowAboveMax ? size : Math.min(size, maxSize);
   };
 
   const handlePriceChange = (newPrice: string) => {
@@ -62,10 +80,13 @@ export function usePerpsOrderForm({
 
   const handleAmountChange = (newAmount: string) => {
     setAmount(newAmount);
+    setAmountFromSlider(false);
     const parsed = parseFloat(newAmount);
     if (!Number.isNaN(parsed) && parsed >= 0) {
       const maxVal = amountMode === "size" ? maxSize : maxQuantity;
       if (maxVal > 0) {
+        // The slider only tracks the field for display, so it stays clamped to
+        // its own 0–100 range even when the typed amount runs past the max.
         const pct = Math.min(100, Math.max(0, (parsed / maxVal) * 100));
         setSliderValue(Math.round(pct));
       }
@@ -75,6 +96,7 @@ export function usePerpsOrderForm({
   const handleSliderChange = (_: Event, value: number | number[]) => {
     const pct = Array.isArray(value) ? value[0] : value;
     setSliderValue(pct);
+    setAmountFromSlider(true);
     if (amountMode === "size") {
       if (pct === 100) {
         setAmount(maxSize > 0 ? maxSize.toFixed(2) : "0");
@@ -115,6 +137,7 @@ export function usePerpsOrderForm({
   const reset = (initialPriceStr: string, initialSlider = 100) => {
     setPrice(initialPriceStr);
     setSliderValue(initialSlider);
+    setAmountFromSlider(true);
     const initPriceNum = parseFloat(initialPriceStr) || 0;
     if (amountMode === "size") {
       if (initialSlider === 100) {

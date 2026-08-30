@@ -11,7 +11,9 @@ const ZERO_HASH = "0x00000000000000000000000000000000000000000000000000000000000
 
 export const getUserFuturesPositions = (address: `0x${string}` | undefined, props?: { refetch?: boolean }) => {
   const query = useQuery({
-    queryKey: [POSITION_BOOK_QK],
+    // Keyed by address so switching wallets cannot serve the previous
+    // account's positions out of the cache.
+    queryKey: [POSITION_BOOK_QK, address],
     queryFn: () => {
       if (!address) throw new Error("getUserFuturesPositions: address is required");
       return fetchPositionBookAsync(address);
@@ -130,7 +132,11 @@ export const toFuturesSessionTrade = (
   transactionHash: trade.transactionHash,
 });
 
-export const waitForBlockNumberPositionBook = async (blockNumber: bigint, qc: QueryClient) => {
+export const waitForBlockNumberPositionBook = async (
+  blockNumber: bigint,
+  qc: QueryClient,
+  address: `0x${string}`,
+) => {
   const delay = 1000;
   const maxAttempts = 30; // 30 attempts with 1s delay = max 30 seconds wait
 
@@ -138,9 +144,9 @@ export const waitForBlockNumberPositionBook = async (blockNumber: bigint, qc: Qu
   while (attempts < maxAttempts) {
     await new Promise((resolve) => setTimeout(resolve, delay));
     // Force a fresh fetch of the data
-    await qc.refetchQueries({ queryKey: [POSITION_BOOK_QK] });
+    await qc.refetchQueries({ queryKey: [POSITION_BOOK_QK, address] });
 
-    const data = qc.getQueryData<GetResponse<PositionBook>>([POSITION_BOOK_QK]);
+    const data = qc.getQueryData<GetResponse<PositionBook>>([POSITION_BOOK_QK, address]);
     const currentBlock = data?.blockNumber;
 
     if (currentBlock !== undefined && currentBlock >= Number(blockNumber)) {

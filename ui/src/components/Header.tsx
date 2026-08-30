@@ -198,8 +198,13 @@ const BrandName = styled(Typography)`
   }
 `;
 
+// The full brand name is the only elastic item in the header row, so it is
+// swapped for the abbreviation well before the mobile breakpoint — otherwise it
+// squeezes the nav and connect controls on narrow desktop windows.
+const BRAND_ABBREVIATION_QUERY = "(max-width: 1140px)";
+
 const FullBrand = styled("span")`
-  @media (max-width: 768px) {
+  @media ${BRAND_ABBREVIATION_QUERY} {
     display: none;
   }
 `;
@@ -207,7 +212,7 @@ const FullBrand = styled("span")`
 const ShortBrand = styled("span")`
   display: none;
 
-  @media (max-width: 768px) {
+  @media ${BRAND_ABBREVIATION_QUERY} {
     display: inline;
   }
 `;
