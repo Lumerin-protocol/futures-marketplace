@@ -49,7 +49,11 @@ export const ModifyPerpsOrderModal = ({
   const remainingQtyBig = order?.quantity ?? 0n;
   const maxQuantity = Number(remainingQtyBig) / QUANTITY_SCALE_NUM;
 
-  const form = usePerpsOrderForm({ maxQuantity, priceStep });
+  // `allowAboveMax`: raising the size is a cancel-and-replace, so the resting
+  // quantity is a default rather than a ceiling. There is no local margin
+  // preview here the way futures has one — an unaffordable size surfaces as a
+  // decoded revert from the `updateOrders` simulation.
+  const form = usePerpsOrderForm({ maxQuantity, priceStep, allowAboveMax: true });
 
   // Seed the form once per open/order; `form.reset` is recreated every render, so
   // listing it would re-reset the form continuously and discard user input.

@@ -49,7 +49,7 @@ export function useSettlePositions() {
     const hash = await writeContractAsync(req.request);
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
-    await waitForBlockNumberPositionBook(receipt.blockNumber, queryClient);
+    await waitForBlockNumberPositionBook(receipt.blockNumber, queryClient, account);
 
     queryClient.resetQueries({ queryKey: [FUTURES_POSITION_HISTORY_QK, account] });
     // Settlement retires the position and books its PnL as realized, so both

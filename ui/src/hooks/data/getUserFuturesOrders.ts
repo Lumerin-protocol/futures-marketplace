@@ -18,7 +18,10 @@ export const getUserFuturesOrders = (
   },
 ) => {
   const query = useQuery({
-    queryKey: [PARTICIPANT_QK],
+    // The address belongs in the key: without it every account shares one cache
+    // entry, so switching wallets serves the previous account's order ids to
+    // Close/Modify and the contract rejects them as not the sender's.
+    queryKey: [PARTICIPANT_QK, participantAddress],
     queryFn: () => {
       if (!participantAddress) throw new Error("getUserFuturesOrders: participantAddress is required");
       return fetchParticipantAsync(participantAddress, props);

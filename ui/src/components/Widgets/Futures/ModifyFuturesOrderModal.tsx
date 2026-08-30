@@ -17,7 +17,7 @@ import { useModifyOrder, useUpdateFuturesOrders } from "../../../hooks/data/useM
 import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
 import { useMakerTakerFees } from "../../../hooks/data/useMakerTakerFees";
 import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
-import { planShrink } from "../../../lib/orderUpdatePlan";
+import { planShrink, type RestingOrder } from "../../../lib/orderUpdatePlan";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import type { AccountBalance, ContractMode } from "../../../types/types";
 import { TransactionFormV2 as TransactionForm } from "../../Forms/Shared/MultistepForm";
@@ -34,8 +34,6 @@ interface ModifyFuturesOrderModalProps {
   open: boolean;
   onClose: () => void;
   order: ParticipantOrder | null;
-  /** Every order collapsed into the row being modified. */
-  groupOrders: ParticipantOrder[];
   participantData?: Participant | null;
   latestPrice: bigint | null;
   /// Maintenance spot shock from the PortfolioMarginEngine, WAD-scaled.
@@ -51,7 +49,6 @@ export const ModifyFuturesOrderModal = ({
   open,
   onClose,
   order,
-  groupOrders,
   participantData,
   latestPrice,
   mmSpotShock,
@@ -80,20 +77,13 @@ export const ModifyFuturesOrderModal = ({
 
   const isBuy = order?.isBuy ?? false;
 
-  // Still-resting contracts across every order the row collapsed together.
-  const currentQuantity = groupOrders.reduce(
-    (total, groupOrder) => total + Number(groupOrder.quantity),
-    0,
-  );
+  const currentQuantity = Number(order?.quantity ?? 0);
 
-  // Oldest first: a reduce holds the order's slot in the price queue while a
-  // cancel gives it up, so the plan trims the newest and leaves the oldest be.
-  const restingOrders = [...groupOrders]
-    .sort((a, b) => Number(a.timestamp) - Number(b.timestamp))
-    .map((groupOrder) => ({
-      id: groupOrder.id as `0x${string}`,
-      restingQty: BigInt(groupOrder.quantity),
-    }));
+  // `planShrink` works over a list because the contract's cancel/reduce batch
+  // does; one table row is one on-chain order, so the list has a single entry.
+  const restingOrders: RestingOrder[] = order
+    ? [{ id: order.id as `0x${string}`, restingQty: BigInt(order.quantity) }]
+    : [];
 
   const form = usePerpsOrderForm({
     maxQuantity: currentQuantity,
@@ -101,6 +91,9 @@ export const ModifyFuturesOrderModal = ({
     // Futures contracts are whole units, so quantity is the natural way in.
     quantityDecimals: 0,
     initialAmountMode: "quantity",
+    // Raising the size is a cancel-and-replace, which `validateInput` prices
+    // against available margin — so the resting size is a default, not a cap.
+    allowAboveMax: true,
   });
 
   // Seed the form once per open/order; `form.reset` is recreated every render, so

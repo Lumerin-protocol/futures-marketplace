@@ -34,17 +34,8 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   const modifyModal = useModal();
   const closeModal = useModal();
   const { data: marketPrice } = useGetMarketPrice();
-  const [selectedOrder, setSelectedOrder] = useState<{
-    order: ParticipantOrder;
-    groupOrders: ParticipantOrder[];
-  } | null>(null);
-  const [selectedCloseOrder, setSelectedCloseOrder] = useState<{
-    isBuy: boolean;
-    pricePerDay: bigint;
-    expirationAt: bigint;
-    amount: number;
-    orderIds: string[];
-  } | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<ParticipantOrder | null>(null);
+  const [selectedCloseOrder, setSelectedCloseOrder] = useState<ParticipantOrder | null>(null);
   const _getStatusColor = (isActive: boolean, closedAt: string | null) => {
     if (closedAt) {
       return tokens.trading.info; // Filled/Closed
@@ -90,85 +81,20 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
     return `${(Number(margin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} USDC`;
   };
 
-  const handleCloseOrder = (groupedOrder: {
-    isBuy: boolean;
-    pricePerDay: bigint;
-    expirationAt: bigint;
-    amount: number;
-    orderIds: string[];
-  }) => {
-    setSelectedCloseOrder(groupedOrder);
+  // What the order covers today. `originalQuantity` is frozen at creation, so
+  // after a reduce it still reports the pre-reduce size — the difference sits in
+  // `cancelledQuantity`, which would make the row disagree with Modify/Close.
+  const liveQuantity = (order: ParticipantOrder) => order.filledQuantity + order.quantity;
+
+  const handleCloseOrder = (order: ParticipantOrder) => {
+    setSelectedCloseOrder(order);
     closeModal.open();
   };
 
-  const handleModifyOrder = (order: ParticipantOrder, groupOrders: ParticipantOrder[]) => {
-    setSelectedOrder({ order, groupOrders });
+  const handleModifyOrder = (order: ParticipantOrder) => {
+    setSelectedOrder(order);
     modifyModal.open();
   };
-
-  // Group orders by type, pricePerDay, and expirationAt.
-  //
-  // The indexer aggregates qty=N OrderCreated events from a single
-  // `createOrder` call into one Order entity carrying `quantity` /
-  // `originalQuantity` / `filledQuantity` counters. We still group across
-  // multiple Order rows here because the same (isBuy, price, expirationAt)
-  // tuple can be hit by separate transactions, each producing its own
-  // Order — and the modify/close UX collapses those into one row.
-  const groupedOrders = orders.reduce(
-    (acc, order) => {
-      const key = `${order.isBuy}-${order.pricePerDay}-${order.expirationAt}`;
-
-      if (!acc[key]) {
-        acc[key] = {
-          isBuy: order.isBuy,
-          pricePerDay: order.pricePerDay,
-          expirationAt: order.expirationAt,
-          amount: 0,
-          originalQuantity: 0,
-          filledQuantity: 0,
-          isActive: order.isActive,
-          closedAt: order.closedAt,
-          timestamp: order.timestamp,
-          orderIds: [] as string[],
-          orders: [] as ParticipantOrder[],
-          firstOrder: order,
-        };
-      }
-
-      // `amount` represents still-open units — what margin / modify / close
-      // calculations need. Filled and original are summed separately for
-      // the "filled / total" cell.
-      acc[key].amount += Number(order.quantity);
-      acc[key].originalQuantity += Number(order.originalQuantity);
-      acc[key].filledQuantity += Number(order.filledQuantity);
-      // One Order per on-chain orderId, so the grouped row cancels/modifies the
-      // ids of every order it collapsed together. Shrinking the row needs the
-      // orders themselves, to split the new total across them.
-      acc[key].orderIds.push(order.id);
-      acc[key].orders.push(order);
-
-      return acc;
-    },
-    {} as Record<
-      string,
-      {
-        isBuy: boolean;
-        pricePerDay: bigint;
-        expirationAt: bigint;
-        amount: number;
-        originalQuantity: number;
-        filledQuantity: number;
-        isActive: boolean;
-        closedAt: string | null;
-        timestamp: string;
-        orderIds: string[];
-        orders: ParticipantOrder[];
-        firstOrder: ParticipantOrder;
-      }
-    >,
-  );
-
-  const groupedOrdersArray = Object.values(groupedOrders);
 
   return (
     <OrdersContainer>
@@ -194,29 +120,25 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
                 </tr>
               </thead>
               <tbody>
-                {groupedOrdersArray.map((groupedOrder, index) => (
-                  <TableRow key={`${groupedOrder.isBuy}-${groupedOrder.pricePerDay}-${groupedOrder.expirationAt}-${index}`}>
-                    <td><DateTimeCell timestamp={groupedOrder.expirationAt} /></td>
+                {orders.map((order) => (
+                  <TableRow key={order.id}>
+                    <td><DateTimeCell timestamp={order.expirationAt} /></td>
                     <td>
-                      <TypeBadge $type={groupedOrder.isBuy ? "Long" : "Short"}>
-                        {groupedOrder.isBuy ? "Long" : "Short"}
+                      <TypeBadge $type={order.isBuy ? "Long" : "Short"}>
+                        {order.isBuy ? "Long" : "Short"}
                       </TypeBadge>
                     </td>
-                    <td>{formatPrice(groupedOrder.pricePerDay)}</td>
-                    <td>{groupedOrder.filledQuantity} / {groupedOrder.originalQuantity}</td>
+                    <td>{formatPrice(order.pricePerDay)}</td>
+                    <td>{order.filledQuantity} / {liveQuantity(order)}</td>
                     <td>
-                      {formatMargin(calculateMargin(groupedOrder.pricePerDay, groupedOrder.amount, groupedOrder.isBuy))}
+                      {formatMargin(calculateMargin(order.pricePerDay, order.quantity, order.isBuy))}
                     </td>
-                    <td><DateTimeCell timestamp={groupedOrder.timestamp} /></td>
+                    <td><DateTimeCell timestamp={order.timestamp} /></td>
                     <td>
-                      {groupedOrder.isActive && !groupedOrder.closedAt && (
+                      {order.isActive && !order.closedAt && (
                         <ActionButtons>
-                          <ModifyButton
-                            onClick={() => handleModifyOrder(groupedOrder.firstOrder, groupedOrder.orders)}
-                          >
-                            Modify
-                          </ModifyButton>
-                          <CloseButton onClick={() => handleCloseOrder(groupedOrder)}>Close</CloseButton>
+                          <ModifyButton onClick={() => handleModifyOrder(order)}>Modify</ModifyButton>
+                          <CloseButton onClick={() => handleCloseOrder(order)}>Close</CloseButton>
                         </ActionButtons>
                       )}
                     </td>
@@ -226,7 +148,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
             </Table>
           </TableContainer>
 
-          {groupedOrdersArray.length === 0 && (
+          {orders.length === 0 && (
             <EmptyState>
               <p>No orders found</p>
             </EmptyState>
@@ -237,8 +159,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
       {selectedOrder && (
         <ModifyFuturesOrderModal
           open={modifyModal.isOpen}
-          order={selectedOrder.order}
-          groupOrders={selectedOrder.groupOrders}
+          order={selectedOrder}
           participantData={participantData}
           latestPrice={latestPrice}
           mmSpotShock={mmSpotShock}
@@ -260,8 +181,8 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
             isBuy={selectedCloseOrder.isBuy}
             pricePerDay={selectedCloseOrder.pricePerDay}
             expirationAt={selectedCloseOrder.expirationAt}
-            amount={selectedCloseOrder.amount}
-            orderIds={selectedCloseOrder.orderIds}
+            amount={selectedCloseOrder.quantity}
+            orderIds={[selectedCloseOrder.id]}
             contractMode={contractMode}
             closeForm={() => {
               closeModal.close();
