@@ -22,6 +22,8 @@ const getPulseAnimation = (isHighlighted?: boolean) => {
   }
   return "none";
 };
+import { useAccount } from "wagmi";
+import { useAppKit } from "@reown/appkit/react";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { Spinner } from "../../Spinner.styled";
 import { ModalItem } from "../../Modal";
@@ -117,6 +119,8 @@ export const PlaceOrderWidget = ({
   const { data: marketPrice, isLoading: isMarketPriceLoading } = useGetMarketPrice();
   const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
   const { feeFor } = useMakerTakerFees();
+  const { isConnected, isConnecting, isReconnecting } = useAccount();
+  const { open: openWalletModal } = useAppKit();
 
   // Calculate price step from contract specs
   const priceStep = contractSpecsQuery.data?.data?.minimumPriceIncrement
@@ -620,7 +624,24 @@ export const PlaceOrderWidget = ({
     setShowConflictModal(true);
   };
 
+  /**
+   * Open the wallet modal rather than validating an order the user cannot sign:
+   * without an account every balance reads as zero, so the checks below would
+   * otherwise reject the order as underfunded.
+   */
+  const hasWallet = (): boolean => {
+    if (isConnected) return true;
+    // wagmi reports disconnected while it restores a session, and opening the
+    // modal then would compete with the reconnect already in flight.
+    if (!isConnecting && !isReconnecting) {
+      openWalletModal({ view: "Connect" });
+    }
+    return false;
+  };
+
   const handleBuy = async () => {
+    if (!hasWallet()) return;
+
     if (contractMode === "perpetual") {
       await handleBuyPerps();
     } else {
@@ -629,6 +650,8 @@ export const PlaceOrderWidget = ({
   };
 
   const handleSell = async () => {
+    if (!hasWallet()) return;
+
     if (contractMode === "perpetual") {
       await handleSellPerps();
     } else {

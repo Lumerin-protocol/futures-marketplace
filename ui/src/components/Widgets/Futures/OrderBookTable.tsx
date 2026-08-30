@@ -513,6 +513,12 @@ const OrderBookWidget = styled(SmallWidget)`
 const TopBar = styled("div")`
   display: flex;
   width: 100%;
+  /* ViewToggle needs overflow: hidden to clip its buttons into its rounded
+     border, which also drops its automatic minimum size to zero — so at any
+     width too narrow for both controls it gets crushed to a sliver instead of
+     pushing the date switcher onto its own line. Wrapping is inert whenever
+     the two do fit, so it stays on for every breakpoint. */
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 0.5rem;
@@ -520,10 +526,20 @@ const TopBar = styled("div")`
 
   /* MOBILE-ONLY (see MOBILE_TRADING_QUERY): the book shares its row with the
      place-order form, so the view tabs and the date switcher stack instead of
-     squeezing each other out. */
+     squeezing each other out. Once stacked, space-between would pin each row to
+     the left edge, so they are centred over the ladder below instead. */
   @media (max-width: 768px) {
-    flex-wrap: wrap;
+    justify-content: center;
     gap: 0.25rem;
+  }
+
+  /* Same treatment for the narrow book column of the desktop grid: between the
+     1024px single-column collapse and the 1400px right-panel step (both from
+     FuturesContainer) the 7fr column leaves this bar only ~210-330px, under the
+     ~325px the two controls need side by side. Wider than that they fit on one
+     line and stay pinned to the edges. */
+  @media (min-width: 1025px) and (max-width: 1400px) {
+    justify-content: center;
   }
 `;
 

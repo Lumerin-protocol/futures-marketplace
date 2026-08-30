@@ -44,6 +44,8 @@ type TooltipState = {
 
 export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBookProps) => {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  // Separate hover tooltip for the center (market-price) row.
+  const [centerTooltip, setCenterTooltip] = useState<{ x: number; y: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // On mobile the hover tooltip (price/total/distance-from-market) is more of a
@@ -173,9 +175,11 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
   const handleScroll = () => {
     const scroller = scrollRef.current;
     if (!scroller) return;
-    // Hide the hover tooltip on scroll: Safari doesn't fire a row's onMouseLeave
-    // when rows move out from under a stationary cursor, so it would get stuck.
+    // Hide the hover tooltips on scroll: Safari doesn't fire a row's onMouseLeave
+    // when rows move out from under a stationary cursor, so they would get stuck.
+    // The center row is virtualized too, so it can be unmounted mid-hover.
     setTooltip(null);
+    setCenterTooltip(null);
     if (lastTargetRef.current == null || Math.abs(scroller.scrollTop - lastTargetRef.current) > 2) {
       userScrolledRef.current = true;
     }
@@ -210,7 +214,11 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
     // regular ladder level.
     if (row.isLastHashprice) {
       return (
-        <CenterRow>
+        <CenterRow
+          onMouseEnter={(e) => !isMobile && setCenterTooltip({ x: e.clientX, y: e.clientY })}
+          onMouseMove={(e) => !isMobile && setCenterTooltip({ x: e.clientX, y: e.clientY })}
+          onMouseLeave={() => setCenterTooltip(null)}
+        >
           <span className={`best ${isUp ? "up" : "down"}`}>
             {bestPrice != null ? formatPrice(bestPrice) : "—"}
             <span className="arrow">{isUp ? "↑" : "↓"}</span>
@@ -325,6 +333,20 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
                 ? `${tooltip.distancePct >= 0 ? "+" : ""}${tooltip.distancePct.toFixed(2)}%`
                 : "—"}
             </span>
+          </div>
+        </Tooltip>
+      )}
+
+      {centerTooltip && !isMobile && marketPrice != null && (
+        <Tooltip
+          style={{
+            left: Math.max(8, centerTooltip.x - 236),
+            top: centerTooltip.y + 12,
+          }}
+        >
+          <div className="row">
+            <span className="label">Underlying Hash Price (USDC)</span>
+            <span className="value">{formatPrice(marketPrice)}</span>
           </div>
         </Tooltip>
       )}
