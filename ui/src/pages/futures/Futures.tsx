@@ -189,17 +189,27 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // account (not per position) and a hedged book can have thresholds on both sides.
   const { liqPrice, liqDirection, alreadyUnderwater } = useLiquidationThresholds(address);
 
-  const _openPositionNetQuantity = useMemo(() => {
-    if (contractMode !== "perpetual") return null;
-    const sessions = positionSessionsQuery.data?.positionSessions || [];
-    const openSessions = sessions.filter((s) => s.status === "OPEN");
-    if (openSessions.length === 0) return null;
-    let sum = 0n;
-    for (const s of openSessions) {
-      sum += s.netQuantity;
+  // Signed net open position in contract units: whole contracts for futures at
+  // the selected expiry (which the contract margins as its own bucket) and
+  // QUANTITY_SCALE units for perps. A session's `netQuantity` mirrors the net
+  // delta for its whole bucket and only one session is ever OPEN per bucket, so
+  // this reads the open session rather than summing.
+  const openPositionNetQuantity = useMemo(() => {
+    if (contractMode === "perpetual") {
+      const sessions = positionSessionsQuery.data?.positionSessions || [];
+      return sessions.find((s) => s.status === "OPEN")?.netQuantity ?? null;
     }
-    return sum;
-  }, [contractMode, positionSessionsQuery.data?.positionSessions]);
+    if (!positionBookData?.data?.positions || !selectedExpirationAt) return null;
+    const position = positionBookData.data.positions.find(
+      (p) => p.isActive && !p.closedAt && p.expirationAt === String(selectedExpirationAt),
+    );
+    return position ? BigInt(position.netQuantity) : null;
+  }, [
+    contractMode,
+    positionSessionsQuery.data?.positionSessions,
+    positionBookData?.data?.positions,
+    selectedExpirationAt,
+  ]);
 
   const openPositionEntryPrice = useMemo(() => {
     if (contractMode === "perpetual") {
@@ -392,6 +402,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       contractSpecsQuery={contractSpecsQuery}
       participantData={participantData?.data}
       perpsOpenOrders={perpsOpenOrdersQuery.data?.data?.orders}
+      openPositionNetQuantity={openPositionNetQuantity}
       highlightMode={highlightMode}
       latestPrice={marketPrice ?? null}
       minMargin={minMargin}

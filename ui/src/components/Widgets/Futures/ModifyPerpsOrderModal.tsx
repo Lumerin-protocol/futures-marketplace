@@ -14,6 +14,7 @@ import { invalidatePortfolioPnl } from "../../../hooks/data/pnl/invalidate";
 import { getOrderBookQueryKey, waitForOrderBookBlockNumber } from "../../../hooks/data/orderBookHelpers";
 import type { TransactionReceipt } from "viem";
 import { TransactionFormV2 as TransactionForm } from "../../Forms/Shared/MultistepForm";
+import { showAlert } from "../../AlertModal";
 import {
   usePerpsOrderForm,
   PerpsOrderFormFields,
@@ -102,11 +103,11 @@ export const ModifyPerpsOrderModal = ({
     if (!order) return false;
     const newQty = form.getCurrentQuantity();
     if (newQty <= 0 || form.currentPrice <= 0) {
-      alert("Please enter a valid price and quantity");
+      await showAlert("Please enter a valid price and quantity");
       return false;
     }
     if (!hasChanges) {
-      alert("Please change order terms");
+      await showAlert("Please change order terms");
       return false;
     }
     return true;
