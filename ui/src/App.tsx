@@ -4,6 +4,7 @@ import type { FC } from "react";
 import { darkTheme } from "./styles/themeOptions";
 import { tokens } from "./styles/tokens";
 import { Router } from "./Router";
+import { AlertModalHost } from "./components/AlertModal";
 import useAnalytics from "./hooks/useAnalytics";
 
 // No Web3Provider here on purpose: wagmi/@reown/appkit stays a lazy chunk
@@ -18,6 +19,7 @@ export const App: FC = () => {
       <Box sx={{ minHeight: "100vh", bgcolor: tokens.app.bg }}>
         <Router />
       </Box>
+      <AlertModalHost />
     </ThemeProvider>
   );
 };

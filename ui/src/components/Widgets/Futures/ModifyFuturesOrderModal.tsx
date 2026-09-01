@@ -21,6 +21,7 @@ import { planShrink, type RestingOrder } from "../../../lib/orderUpdatePlan";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import type { AccountBalance, ContractMode } from "../../../types/types";
 import { TransactionFormV2 as TransactionForm } from "../../Forms/Shared/MultistepForm";
+import { showAlert, showConfirm } from "../../AlertModal";
 import { usePerpsOrderForm, PerpsOrderFormFields, PerpsModalCard } from "./PerpsOrderFormFields";
 
 interface BalanceQueryResult {
@@ -141,11 +142,11 @@ export const ModifyFuturesOrderModal = ({
     const newQuantity = form.getCurrentQuantity();
     const newPrice = form.currentPrice;
     if (newQuantity <= 0 || newPrice <= 0) {
-      alert("Please enter a valid price and quantity");
+      await showAlert("Please enter a valid price and quantity");
       return false;
     }
     if (!hasChanges) {
-      alert("Please change order terms");
+      await showAlert("Please change order terms");
       return false;
     }
 
@@ -161,7 +162,7 @@ export const ModifyFuturesOrderModal = ({
     const availableBalance = totalBalance - lockedBalance;
 
     if (!latestPrice || mmSpotShock === undefined) {
-      alert("Unable to fetch market data. Please try again.");
+      await showAlert({ message: "Unable to fetch market data. Please try again.", variant: "error" });
       return false;
     }
 
@@ -187,7 +188,7 @@ export const ModifyFuturesOrderModal = ({
       const availableBalanceFormatted = (Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const accountBalanceValue = accountBalanceQuery.data ?? 0n;
       const accountBalanceFormatted = (Number(accountBalanceValue) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      alert(
+      await showAlert(
         `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${requiredMarginFormatted} USDC\nReserved trading fee (max of maker/taker): ${reservedFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
       );
       return false;
@@ -206,7 +207,7 @@ export const ModifyFuturesOrderModal = ({
 
       if (conflictingOrder) {
         const oppositeAction = isBuy ? "Sell" : "Buy";
-        alert(
+        await showAlert(
           `Cannot modify order to price ${newPrice.toFixed(2)} USDC. You already have an active ${oppositeAction} order at the same price and expiration date. Please close or modify the existing order first.`,
         );
         return false;
@@ -218,9 +219,11 @@ export const ModifyFuturesOrderModal = ({
       const maxAllowedPrice = newestItemPrice * maxPriceMultiplier;
       if (newPrice > maxAllowedPrice) {
         const percentageOver = ((newPrice / newestItemPrice) * 100).toFixed(1);
-        const confirmed = window.confirm(
-          `⚠️ High Price Warning\n\nYour price (${newPrice.toFixed(2)} USDC) is ${percentageOver}% of the market price (${newestItemPrice.toFixed(2)} USDC).\n\nThis price is significantly above the current market rate. You may experience difficulty finding a counterparty or may face higher slippage.\n\nDo you want to proceed?`,
-        );
+        const confirmed = await showConfirm({
+          title: "High Price Warning",
+          message: `Your price (${newPrice.toFixed(2)} USDC) is ${percentageOver}% of the market price (${newestItemPrice.toFixed(2)} USDC).\n\nThis price is significantly above the current market rate. You may experience difficulty finding a counterparty or may face higher slippage.\n\nDo you want to proceed?`,
+          confirmText: "Proceed",
+        });
         if (!confirmed) {
           return false;
         }

@@ -27,6 +27,7 @@ import { useAppKit } from "@reown/appkit/react";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { Spinner } from "../../Spinner.styled";
 import { ModalItem } from "../../Modal";
+import { showAlert } from "../../AlertModal";
 import { PrimaryButton, SecondaryButton } from "../../Forms/FormButtons/Buttons.styled";
 import { PlaceOrderForm, type OrderOffsetPlan } from "../../Forms/PlaceOrderForm";
 import type { UseQueryResult } from "@tanstack/react-query";
@@ -82,6 +83,12 @@ interface PlaceOrderWidgetProps {
   participantData?: Participant | null;
   /** The user's own resting perps orders, used for conflict detection in perps mode. */
   perpsOpenOrders?: PerpsOrder[];
+  /**
+   * Signed net open position in contract units — whole contracts for futures at
+   * `externalExpirationAt`, QUANTITY_SCALE units for perps. Lets the widget spot
+   * orders that only unwind the position, which the venues accept below margin.
+   */
+  openPositionNetQuantity?: bigint | null;
   latestPrice: bigint | null;
   highlightMode: "inputs" | "buttons" | undefined;
   onOrderPlaced?: () => void | Promise<void>;
@@ -106,6 +113,7 @@ export const PlaceOrderWidget = ({
   contractSpecsQuery,
   participantData,
   perpsOpenOrders,
+  openPositionNetQuantity,
   latestPrice,
   highlightMode,
   onOrderPlaced,
@@ -223,6 +231,7 @@ export const PlaceOrderWidget = ({
     amount,
     amountMode,
     contractMode,
+    openPositionNetQuantity,
   ]);
 
   // Helper to get numeric amount value for calculations
@@ -287,6 +296,55 @@ export const PlaceOrderWidget = ({
     return calculateQuantityFromAmount(numericAmount, currentPrice);
   };
 
+  /** Contract units the user already has resting on `isBuy`'s side of this book. */
+  const restingQuantityOnSide = (isBuy: boolean): bigint => {
+    if (contractMode === "perpetual") {
+      return (perpsOpenOrders ?? [])
+        .filter(
+          (order) =>
+            (order.status === "ACTIVE" || order.status === "PARTIALLY_FILLED") && order.isBuy === isBuy,
+        )
+        .reduce((total, order) => total + order.quantity, 0n);
+    }
+
+    const expirationAtValue = externalExpirationAt ? BigInt(externalExpirationAt) : 0n;
+    return (participantData?.orders ?? [])
+      .filter(
+        (order) =>
+          order.isActive && order.isBuy === isBuy && order.expirationAt === expirationAtValue,
+      )
+      .reduce((total, order) => total + BigInt(order.quantity), 0n);
+  };
+
+  /**
+   * Largest order, in contract units, that can still only unwind the open
+   * position: the position itself less whatever already rests on the reducing
+   * side. Mirrors `_isLocallyReducing` / `_restingReduceAbs` on the venue
+   * contracts. Zero while the user is flat.
+   */
+  const reduceOnlyCapacity = (): bigint => {
+    const position = openPositionNetQuantity ?? 0n;
+    if (position === 0n) return 0n;
+    const absPosition = position > 0n ? position : -position;
+    const resting = restingQuantityOnSide(position < 0n);
+    return resting >= absPosition ? 0n : absPosition - resting;
+  };
+
+  /**
+   * Orders that only unwind the position cannot raise the account's margin, so
+   * both venues accept them below initial margin and the balance checks below
+   * must let them through — otherwise a fully margined account could never close
+   * out. The contract still decides: cross-venue exposure can make a locally
+   * reducing order raise portfolio margin, and the simulate preceding every
+   * write reverts on that.
+   */
+  const isReduceOnlyOrder = (quantity: number, isBuy: boolean): boolean => {
+    const position = openPositionNetQuantity ?? 0n;
+    if (position === 0n || (position > 0n) === isBuy) return false;
+    const scale = contractMode === "perpetual" ? QUANTITY_SCALE_NUM : 1;
+    return BigInt(Math.round(quantity * scale)) <= reduceOnlyCapacity();
+  };
+
   // Calculate maximum available quantity based on current price
   const calculateMaxQuantity = (): number => {
     const currentPrice = parseFloat(price) || 0;
@@ -298,16 +356,21 @@ export const PlaceOrderWidget = ({
     const lockedBalance = minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
+    // An open position can always be unwound, so the slider has to reach that far
+    // even when margin leaves no free balance. Only one side reduces, and the
+    // buy/sell handlers still reject the other one.
+    const reduceOnlyMax =
+      Number(reduceOnlyCapacity()) / (contractMode === "perpetual" ? QUANTITY_SCALE_NUM : 1);
+
     // For perpetual mode, return max size (notional) or max quantity depending on amountMode
     if (contractMode === "perpetual") {
       const buffer = PAYMENT_TOKEN_SCALE / 10n; // 0.1 USDC in base units
       const effectiveBalance = availableBalance > buffer ? availableBalance - buffer : 0n;
       const maxSize = (Number(effectiveBalance) / PAYMENT_TOKEN_SCALE_NUM) * leverage;
       if (amountMode === "quantity") {
-        const priceNum = parseFloat(price) || 0;
-        return priceNum > 0 ? maxSize / priceNum : 0;
+        return Math.max(maxSize / currentPrice, reduceOnlyMax);
       }
-      return maxSize;
+      return Math.max(maxSize, reduceOnlyMax * currentPrice);
     }
 
     // Binary search to find maximum quantity for futures mode
@@ -337,7 +400,8 @@ export const PlaceOrderWidget = ({
       }
     }
 
-    return amountMode === "size" ? maxQty * currentPrice : maxQty;
+    const bestQty = Math.max(maxQty, reduceOnlyMax);
+    return amountMode === "size" ? bestQty * currentPrice : bestQty;
   };
 
   // Highlight button when position is closed and values are substituted
@@ -499,7 +563,7 @@ export const PlaceOrderWidget = ({
       const remainingQty = simResult.data?.[2];
 
       if (filledQty === undefined || remainingQty === undefined) {
-        alert("Failed to check order book liquidity");
+        await showAlert({ message: "Failed to check order book liquidity", variant: "error" });
         return false;
       }
 
@@ -507,7 +571,7 @@ export const PlaceOrderWidget = ({
       const filledAbs = filledQty < 0n ? -filledQty : filledQty;
 
       if (filledAbs === 0n) {
-        alert("There is no liquidity in order book");
+        await showAlert("There is no liquidity in order book");
         return false;
       }
 
@@ -519,7 +583,7 @@ export const PlaceOrderWidget = ({
         const total = ((Number(filledAbs) + Number(remainingAbs)) / scale).toFixed(
           contractMode === "perpetual" ? 6 : 0,
         );
-        alert(
+        await showAlert(
           `Order would only be partially filled.\n\nRequested: ${total}\nWill be filled: ${filled}\nUnfilled: ${remaining}\n\nNot enough liquidity to fill the full order (FOK).`,
         );
         return false;
@@ -527,7 +591,7 @@ export const PlaceOrderWidget = ({
 
       return true;
     } catch {
-      alert("Failed to check order book liquidity");
+      await showAlert({ message: "Failed to check order book liquidity", variant: "error" });
       return false;
     }
   };
@@ -663,7 +727,7 @@ export const PlaceOrderWidget = ({
   const handleBuyPerps = async () => {
     const numericAmount = getNumericAmount();
     if (numericAmount <= 0) {
-      alert("Amount must be greater than 0");
+      await showAlert("Amount must be greater than 0");
       return;
     }
 
@@ -672,6 +736,7 @@ export const PlaceOrderWidget = ({
     // Validate minimum margin
     const currentPrice = getEffectivePrice("buy");
     const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
+    const quantity = calculateQuantityFromAmount(numericAmount, currentPrice);
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance = minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
@@ -681,21 +746,18 @@ export const PlaceOrderWidget = ({
     const requiredMargin = effectiveSizeBuy / leverage;
     const marginInWei = BigInt(Math.round(requiredMargin * PAYMENT_TOKEN_SCALE_NUM));
 
-    if (marginInWei > availableBalance) {
+    if (!isReduceOnlyOrder(quantity, true) && marginInWei > availableBalance) {
       const marginFormatted = requiredMargin.toFixed(2);
       const totalBalanceFormatted = (Number(totalBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const lockedBalanceFormatted = (Number(lockedBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const availableBalanceFormatted = (Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const accountBalance = accountBalanceQuery.data ?? 0n;
       const accountBalanceFormatted = (Number(accountBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      alert(
+      await showAlert(
         `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${marginFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
       );
       return;
     }
-
-    // Calculate quantity from amount (respects amountMode)
-    const quantity = calculateQuantityFromAmount(numericAmount, currentPrice);
 
     // Check for conflicting orders (opposite action, same price)
     const offsetting = findOffsettingOrders(priceInWei, true);
@@ -715,7 +777,7 @@ export const PlaceOrderWidget = ({
   const handleSellPerps = async () => {
     const numericAmount = getNumericAmount();
     if (numericAmount <= 0) {
-      alert("Amount must be greater than 0");
+      await showAlert("Amount must be greater than 0");
       return;
     }
 
@@ -723,6 +785,7 @@ export const PlaceOrderWidget = ({
 
     const currentPrice = getEffectivePrice("sell");
     const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
+    const quantity = calculateQuantityFromAmount(numericAmount, currentPrice);
     const totalBalance = balanceQuery.data ?? 0n;
     const lockedBalance = minMargin ?? 0n;
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
@@ -732,21 +795,18 @@ export const PlaceOrderWidget = ({
     const requiredMargin = effectiveSizeSell / leverage;
     const marginInWei = BigInt(Math.round(requiredMargin * PAYMENT_TOKEN_SCALE_NUM));
 
-    if (marginInWei > availableBalance) {
+    if (!isReduceOnlyOrder(quantity, false) && marginInWei > availableBalance) {
       const marginFormatted = requiredMargin.toFixed(2);
       const totalBalanceFormatted = (Number(totalBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const lockedBalanceFormatted = (Number(lockedBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const availableBalanceFormatted = (Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const accountBalance = accountBalanceQuery.data ?? 0n;
       const accountBalanceFormatted = (Number(accountBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      alert(
+      await showAlert(
         `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${marginFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
       );
       return;
     }
-
-    // Calculate quantity from amount (respects amountMode)
-    const quantity = calculateQuantityFromAmount(numericAmount, currentPrice);
 
     // Check for conflicting orders (opposite action, same price)
     const offsetting = findOffsettingOrders(priceInWei, false);
@@ -765,13 +825,13 @@ export const PlaceOrderWidget = ({
   // Futures mode buy handler - uses quantity directly
   const handleBuyFutures = async () => {
     if (!externalExpirationAt && contractMode === "futures") {
-      alert("Please select a price from the order book to set expiration date");
+      await showAlert("Please select a price from the order book to set expiration date");
       return;
     }
 
     const numericAmount = getNumericAmount();
     if (numericAmount <= 0) {
-      alert(amountMode === "size" ? "Size must be greater than 0" : "Quantity must be greater than 0");
+      await showAlert(amountMode === "size" ? "Size must be greater than 0" : "Quantity must be greater than 0");
       return;
     }
 
@@ -781,7 +841,7 @@ export const PlaceOrderWidget = ({
     const currentPrice = getEffectivePrice("buy");
     const quantity = calculateQuantityFromAmount(numericAmount, currentPrice);
     if (quantity <= 0) {
-      alert("Quantity must be at least 1 contract");
+      await showAlert("Quantity must be at least 1 contract");
       return;
     }
     const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
@@ -790,7 +850,7 @@ export const PlaceOrderWidget = ({
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
     if (!latestPrice || mmSpotShock === undefined) {
-      alert("Unable to fetch market data. Please try again.");
+      await showAlert({ message: "Unable to fetch market data. Please try again.", variant: "error" });
       return;
     }
 
@@ -805,7 +865,7 @@ export const PlaceOrderWidget = ({
     const reservedFee = feeFor(priceInWei * BigInt(quantity));
     const totalRequired = requiredMargin + reservedFee;
 
-    if (totalRequired > availableBalance) {
+    if (!isReduceOnlyOrder(quantity, true) && totalRequired > availableBalance) {
       const requiredMarginFormatted = (Number(requiredMargin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const reservedFeeFormatted = (Number(reservedFee) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const totalRequiredFormatted = (Number(totalRequired) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
@@ -814,7 +874,7 @@ export const PlaceOrderWidget = ({
       const availableBalanceFormatted = (Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const accountBalance = accountBalanceQuery.data ?? 0n;
       const accountBalanceFormatted = (Number(accountBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      alert(
+      await showAlert(
         `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${requiredMarginFormatted} USDC\nReserved trading fee (max of maker/taker): ${reservedFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
       );
       return;
@@ -851,13 +911,13 @@ export const PlaceOrderWidget = ({
   // Futures mode sell handler - uses quantity directly
   const handleSellFutures = async () => {
     if (!externalExpirationAt && contractMode === "futures") {
-      alert("Please select a price from the order book to set expiration date");
+      await showAlert("Please select a price from the order book to set expiration date");
       return;
     }
 
     const numericAmount = getNumericAmount();
     if (numericAmount <= 0) {
-      alert(amountMode === "size" ? "Size must be greater than 0" : "Quantity must be greater than 0");
+      await showAlert(amountMode === "size" ? "Size must be greater than 0" : "Quantity must be greater than 0");
       return;
     }
 
@@ -867,7 +927,7 @@ export const PlaceOrderWidget = ({
     const currentPrice = getEffectivePrice("sell");
     const quantity = calculateQuantityFromAmount(numericAmount, currentPrice);
     if (quantity <= 0) {
-      alert("Quantity must be at least 1 contract");
+      await showAlert("Quantity must be at least 1 contract");
       return;
     }
     const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
@@ -876,7 +936,7 @@ export const PlaceOrderWidget = ({
     const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
 
     if (!latestPrice || mmSpotShock === undefined) {
-      alert("Unable to fetch market data. Please try again.");
+      await showAlert({ message: "Unable to fetch market data. Please try again.", variant: "error" });
       return;
     }
 
@@ -891,7 +951,7 @@ export const PlaceOrderWidget = ({
     const reservedFee = feeFor(priceInWei * BigInt(quantity));
     const totalRequired = requiredMargin + reservedFee;
 
-    if (totalRequired > availableBalance) {
+    if (!isReduceOnlyOrder(quantity, false) && totalRequired > availableBalance) {
       const requiredMarginFormatted = (Number(requiredMargin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const reservedFeeFormatted = (Number(reservedFee) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const totalRequiredFormatted = (Number(totalRequired) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
@@ -900,7 +960,7 @@ export const PlaceOrderWidget = ({
       const availableBalanceFormatted = (Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       const accountBalance = accountBalanceQuery.data ?? 0n;
       const accountBalanceFormatted = (Number(accountBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      alert(
+      await showAlert(
         `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${requiredMarginFormatted} USDC\nReserved trading fee (max of maker/taker): ${reservedFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
       );
       return;

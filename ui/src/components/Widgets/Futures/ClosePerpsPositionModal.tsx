@@ -15,6 +15,7 @@ import { invalidatePortfolioPnl } from "../../../hooks/data/pnl/invalidate";
 import { getOrderBookQueryKey, waitForOrderBookBlockNumber } from "../../../hooks/data/orderBookHelpers";
 import type { TransactionReceipt } from "viem";
 import { TransactionFormV2 as TransactionForm } from "../../Forms/Shared/MultistepForm";
+import { showAlert } from "../../AlertModal";
 import {
   usePerpsOrderForm,
   PerpsOrderFormFields,
@@ -117,12 +118,12 @@ export const ClosePerpsPositionModal = ({
       const remainingQty = simResult.data?.[2];
       if (remainingQty !== undefined && remainingQty > 0n) {
         if (!filledQty || filledQty === 0n) {
-          alert("There is no liquidity in order book");
+          await showAlert("There is no liquidity in order book");
         } else {
           const filled = (Number(filledQty) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
           const remaining = (Number(remainingQty) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
           const total = ((Number(filledQty) + Number(remainingQty)) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
-          alert(
+          await showAlert(
             `Order would only be partially filled. Requested: ${total} | Will fill: ${filled} | Unfilled: ${remaining}`,
           );
         }
@@ -130,7 +131,7 @@ export const ClosePerpsPositionModal = ({
       }
       return true;
     } catch {
-      alert("Failed to check order book liquidity");
+      await showAlert({ message: "Failed to check order book liquidity", variant: "error" });
       return false;
     }
   };
@@ -139,7 +140,7 @@ export const ClosePerpsPositionModal = ({
     if (!session || netQty === 0n) return false;
     const closeQty = form.getCurrentQuantity();
     if (closeQty <= 0 || effectiveClosePrice <= 0) {
-      alert("Please enter a valid close quantity and price");
+      await showAlert("Please enter a valid close quantity and price");
       return false;
     }
     return checkLiquidity();
