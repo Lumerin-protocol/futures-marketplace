@@ -162,7 +162,16 @@ export const AmountInputForm: FC<Props> = ({
             min: 0.01,
             step: "0.01",
           }}
-          sx={{ flex: 1 }}
+          sx={{
+            flex: 1,
+            // Safari can render the outlined fieldset over the shrunk label.
+            // A matching background keeps the notch visually clear.
+            "& .MuiInputLabel-shrink": {
+              backgroundColor: tokens.surface.inputIsland,
+              paddingInline: "4px",
+              zIndex: 1,
+            },
+          }}
         />
         {showMaxButton && onMaxClick && (
           <MaxButton onClick={onMaxClick} type="button">

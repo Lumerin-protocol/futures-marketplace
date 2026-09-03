@@ -16,7 +16,7 @@ import { withErrors } from "../../../lib/withErrors";
  * netting.
  *
  * The engine address is resolved from the Futures contract's `portfolioMargin`, the
- * same source `useGetPortfolioIM` uses.
+ * same source `useGetPortfolioMargins` uses.
  */
 export function useGetPerpsOrderMargin(address: `0x${string}` | undefined) {
   const { data: engine } = useFuturesMarginEngine();

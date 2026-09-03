@@ -203,6 +203,8 @@ export const futuresDark = {
     highlightBorderSoft: "rgba(245, 158, 11, 0.3)",
     yellowRadial:
       "radial-gradient(circle, rgba(0, 0, 0, 0) 36%, rgba(245, 158, 11, 0.05) 100%)",
+    redRadial:
+      "radial-gradient(circle, rgba(0, 0, 0, 0) 36%, rgba(239, 68, 68, 0.07) 100%)",
   },
   formButtons: {
     secondaryBg: "#2E3348",

@@ -9,7 +9,7 @@ import { HashrateChart } from "../../components/Charts/HashrateChart";
 import { PlaceOrderWidget } from "../../components/Widgets/Futures/PlaceOrderWidget";
 import { OrdersPositionsTabWidget } from "../../components/Widgets/Futures/OrdersPositionsTabWidget";
 import { PerpsOrdersPositionsTabWidget } from "../../components/Widgets/Futures/PerpsOrdersPositionsTabWidget";
-import { LiquidationToast } from "../../components/Widgets/Futures/LiquidationToast";
+import { RiskToast, type RiskToastItem } from "../../components/Widgets/Futures/RiskToast";
 import { FuturesMobileLayout } from "../../components/Widgets/Futures/mobile/FuturesMobileLayout";
 import { useIsMobileTradingLayout } from "../../components/Widgets/Futures/mobile/mobileTradingLayout";
 import { useLiquidationNotifications } from "../../hooks/data/useLiquidationNotifications";
@@ -20,7 +20,7 @@ import { useNetworkHashrateIndexData } from "../../hooks/data/useNetworkHashrate
 import { getUserFuturesOrders } from "../../hooks/data/getUserFuturesOrders";
 import { getUserFuturesPositions } from "../../hooks/data/getUserFuturesPositions";
 import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpecs";
-import { useGetPortfolioIM } from "../../hooks/data/useGetPortfolioIM";
+import { useMarginRisk } from "../../hooks/data/useMarginRisk";
 import { useGetMarketPrice } from "../../hooks/data/useGetMarketPrice";
 import { usePortfolioPnl } from "../../hooks/data/pnl/usePortfolioPnl";
 import { useGetFutureBalance } from "../../hooks/data/useGetFutureBalance";
@@ -122,22 +122,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // regardless of which trading tab is open.
   const { unrealized, realizedInWindow } = usePortfolioPnl(address);
 
-  // Single source of truth for the user's locked collateral: portfolio IM read
-  // from the IPortfolioMarginEngine resolved via the Futures contract. This
-  // replaces the previous mode-toggle aggregation between futures `getMinMargin`
-  // and perps `getMaintenanceMargin`/`getInitialMargin`.
-  const minMarginQuery = useGetPortfolioIM(address);
-
-  const minMargin = useMemo(() => {
-    if (minMarginQuery.data === undefined) return null;
-    return minMarginQuery.data as bigint;
-  }, [minMarginQuery.data]);
-
-  // Spinner only before the first IM value; background polls should not replace
-  // Locked with a spinner (see RefreshableValue in the balance widget).
-  const isLoadingMinMargin = minMargin === null && minMarginQuery.isFetching;
-  const isRefreshingMinMargin = minMargin !== null && minMarginQuery.isFetching;
-
   // Single shared balance — both Futures and Perps engines settle against the same CollateralVault,
   // so we always read `vault.balanceOf(account)` regardless of contract mode.
   const vaultBalanceQuery = useGetFutureBalance(address);
@@ -188,6 +172,40 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // the Futures contract liquidates on. Cross-product, so there is one pair per
   // account (not per position) and a hedged book can have thresholds on both sides.
   const { liqPrice, liqDirection, alreadyUnderwater } = useLiquidationThresholds(address);
+
+  // Everything the account portfolio panel reads, off the IPortfolioMarginEngine
+  // resolved via the Futures contract. `im` is also the single source of truth
+  // for locked collateral, so it feeds every order-entry affordability check
+  // regardless of contract mode. Declared after the threshold solver because the
+  // Danger status line quotes the liquidation price.
+  const marginRisk = useMarginRisk(address, liqPrice);
+  const minMargin = marginRisk.im;
+
+  // Liquidations that already happened and margin tiers the account has just
+  // crossed into share one stack. Ids are namespaced by producer so a single
+  // dismiss handler can route back to whichever hook owns the item.
+  const riskToasts = useMemo<RiskToastItem[]>(
+    () => [
+      ...marginRisk.toasts,
+      ...liquidationNotifications.map((notification) => ({
+        id: `liq:${notification.id}`,
+        message: `Your ${notification.product} position was liquidated.`,
+        variant: "warning" as const,
+      })),
+    ],
+    [marginRisk.toasts, liquidationNotifications],
+  );
+
+  const dismissRiskToast = useCallback(
+    (id: string) => {
+      if (id.startsWith("liq:")) {
+        dismissLiquidation(id.slice("liq:".length));
+        return;
+      }
+      marginRisk.dismissToast(id);
+    },
+    [dismissLiquidation, marginRisk.dismissToast],
+  );
 
   // Signed net open position in contract units: whole contracts for futures at
   // the selected expiry (which the contract margins as its own bucket) and
@@ -378,9 +396,8 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
   const balanceNode = (
     <FuturesBalanceWidget
-      minMargin={minMargin}
-      isLoadingMinMargin={isLoadingMinMargin}
-      isRefreshingMinMargin={isRefreshingMinMargin}
+      marginRisk={marginRisk}
+      liqPrice={liqPrice}
       unrealizedPnL={unrealized.total}
       isLoadingUnrealizedPnL={unrealized.isLoading}
       isRefreshingUnrealizedPnL={unrealized.isRefreshing}
@@ -411,7 +428,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       balanceQuery={balanceQuery}
       perpsCollection={perpsCollectionQuery.data?.data}
       onOrderPlaced={async () => {
-        await minMarginQuery.refetch();
+        await marginRisk.refetch();
       }}
     />
   );
@@ -429,7 +446,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
         perpsOpenOrders={perpsOpenOrdersQuery.data?.data?.orders || []}
         perpsOpenOrdersLoading={perpsOpenOrdersQuery.isLoading}
         onPositionClosed={async () => {
-          await minMarginQuery.refetch();
+          await marginRisk.refetch();
         }}
       />
     ) : (
@@ -451,7 +468,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
   return (
     <>
-      <LiquidationToast notifications={liquidationNotifications} onDismiss={dismissLiquidation} />
+      <RiskToast items={riskToasts} onDismiss={dismissRiskToast} />
 
       {isMobileTradingLayout ? (
         <FuturesMobileLayout
