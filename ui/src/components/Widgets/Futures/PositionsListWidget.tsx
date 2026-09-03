@@ -2,8 +2,6 @@ import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import Tooltip from "@mui/material/Tooltip";
 import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPositions";
-import { useCreateOrder } from "../../../hooks/data/useCreateOrder";
-import { useCreatePerpsOrder } from "../../../hooks/data/perps/useCreatePerpsOrder";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { useSettlePositions } from "../../../hooks/data/useSettlePositions";
 import { useState } from "react";
@@ -13,6 +11,7 @@ import type { ContractMode } from "../../../types/types";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { FuturesTradesModal, type FuturesTradesModalSelection } from "./FuturesTradesModal";
+import type { CloseableFuturesPosition } from "./CloseFuturesPositionModal";
 import { LiquidationChip, formatLiquidatedQty } from "../../../lib/liquidation";
 
 interface BalanceQueryResult {
@@ -26,7 +25,7 @@ interface PositionsListWidgetProps {
   positions: PositionBookPosition[];
   isLoading?: boolean;
   participantAddress?: `0x${string}`;
-  onClosePosition?: (price: string, amount: number, isBuy: boolean, expirationAt?: number) => void;
+  onClosePosition?: (position: CloseableFuturesPosition) => void;
   contractMode?: ContractMode;
   balanceQuery: BalanceQueryResult;
 }
@@ -38,10 +37,6 @@ export const PositionsListWidget = ({
   onClosePosition,
   contractMode = "futures",
 }: PositionsListWidgetProps) => {
-  const futuresCreateOrder = useCreateOrder();
-  const perpsCreateOrder = useCreatePerpsOrder();
-  const isPending =
-    contractMode === "perpetual" ? perpsCreateOrder.isPending : futuresCreateOrder.isPending;
   const { data: marketPrice } = useGetMarketPrice();
   const [tradesSelection, setTradesSelection] = useState<FuturesTradesModalSelection | null>(null);
   const { settlePositionsAsync, isPending: isSettling } = useSettlePositions();
@@ -94,7 +89,6 @@ export const PositionsListWidget = ({
 
 
   // Get latest price from market price hook
-  const latestPrice = marketPrice ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
   const latestPriceBigInt = marketPrice ?? null;
 
   // Maintenance shock from the PortfolioMarginEngine (WAD). Margin is
@@ -147,68 +141,18 @@ export const PositionsListWidget = ({
     return `${pnl.toFixed(2)} (${percentage.toFixed(2)}%)`;
   };
 
-  const handleClosePosition = async (groupedPosition: {
+  const handleClosePosition = (groupedPosition: {
     pricePerDay: bigint;
     expirationAt: string;
     positionType: string;
-    amount: number;
     netQuantity: number;
-    positions: PositionBookPosition[];
   }) => {
-    // Determine order type to close the position
-    // If it's a Long position, create a Sell order (negative quantity)
-    // If it's a Short position, create a Buy order (positive quantity)
-    // Quantity sign: positive = Buy, negative = Sell.
-    // Size is taken from the session-level `netQuantity` (the actual signed
-    // position size), not `groupedPosition.amount` (a count of how many
-    // PositionBookPosition rows fell into this group — usually 1, since
-    // sessions are per-(user, expirationAt) and one session collapses to one
-    // PositionBookPosition).
-    const positionSize = Math.abs(groupedPosition.netQuantity);
-    const quantity =
-      groupedPosition.positionType === "Short"
-        ? positionSize // Buy order (positive)
-        : -positionSize; // Sell order (negative)
-
-    // Use market price instead of position price for closing
-    const priceString = latestPrice ? latestPrice.toFixed(2) : formatPrice(groupedPosition.pricePerDay);
-
-    // Determine isBuy for callback compatibility
-    const isBuy = quantity > 0;
-
-    // If callback provided, use it to populate place order widget
-    if (onClosePosition) {
-      onClosePosition(priceString, Math.abs(quantity), isBuy, Number(groupedPosition.expirationAt));
-      return;
-    }
-
-    // Otherwise, create order directly (fallback behavior)
-    try {
-      // Use expirationAt directly (it's already a timestamp)
-      const expirationAt = BigInt(groupedPosition.expirationAt);
-
-      // Use market price for the order
-      const closePrice = latestPriceBigInt ?? groupedPosition.pricePerDay;
-
-      if (contractMode === "perpetual") {
-        await perpsCreateOrder.createOrderAsync({
-          price: closePrice,
-          quantity: quantity,
-        });
-      } else {
-        await futuresCreateOrder.createOrderAsync({
-          price: closePrice,
-          expirationAt: expirationAt,
-          quantity: quantity,
-        });
-      }
-
-      console.log(
-        `Created ${isBuy ? "buy" : "sell"} order to close ${Math.abs(quantity)} ${groupedPosition.positionType} positions at market price`,
-      );
-    } catch (err) {
-      console.error("Failed to close position:", err);
-    }
+    onClosePosition?.({
+      pricePerDay: groupedPosition.pricePerDay,
+      expirationAt: groupedPosition.expirationAt,
+      positionType: groupedPosition.positionType,
+      netQuantity: groupedPosition.netQuantity,
+    });
   };
 
   // Group positions by price (based on position type), expirationAt, and position type
@@ -367,7 +311,6 @@ export const PositionsListWidget = ({
                           {groupedPosition.isActive && !groupedPosition.closedAt && !matured && (
                             <CloseButton
                               onClick={() => handleClosePosition(groupedPosition)}
-                              disabled={isPending}
                               title="By creating opposite order"
                             >
                               Close

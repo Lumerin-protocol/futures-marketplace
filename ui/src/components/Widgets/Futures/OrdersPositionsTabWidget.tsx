@@ -17,6 +17,8 @@ import { LoadMoreButton } from "../../LoadMoreButton";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { getTxUrl } from "../../../lib/indexer";
 import { LiquidationChip, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
+import { CloseFuturesPositionModal, type CloseableFuturesPosition } from "./CloseFuturesPositionModal";
+import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 
 import type { AccountBalance, ContractMode } from "../../../types/types";
 
@@ -35,7 +37,7 @@ interface OrdersPositionsTabWidgetProps {
   ordersLoading?: boolean;
   positionsLoading?: boolean;
   participantAddress?: `0x${string}`;
-  onClosePosition?: (price: string, amount: number, isBuy: boolean, expirationAt?: number) => void;
+  onPositionClosed?: () => void | Promise<void>;
   participantData?: Participant | null;
   minMargin?: bigint | null;
   accountBalance?: AccountBalance;
@@ -49,7 +51,7 @@ export const OrdersPositionsTabWidget = ({
   ordersLoading,
   positionsLoading,
   participantAddress,
-  onClosePosition,
+  onPositionClosed,
   participantData,
   minMargin,
   accountBalance,
@@ -57,6 +59,8 @@ export const OrdersPositionsTabWidget = ({
   balanceQuery,
 }: OrdersPositionsTabWidgetProps) => {
   const [activeTab, setActiveTab] = useState<TabType>("OPEN_ORDERS");
+  const [closePosition, setClosePosition] = useState<CloseableFuturesPosition | null>(null);
+  const { data: marketPrice } = useGetMarketPrice();
 
   // Fetch up-front so the tab badge counts (Order History / Position History /
   // Trades) are accurate on initial render. Each query is cached by react-query
@@ -138,7 +142,7 @@ export const OrdersPositionsTabWidget = ({
               positions={positions}
               isLoading={positionsLoading}
               participantAddress={participantAddress}
-              onClosePosition={onClosePosition}
+              onClosePosition={setClosePosition}
               contractMode={contractMode}
               balanceQuery={balanceQuery}
             />
@@ -179,6 +183,17 @@ export const OrdersPositionsTabWidget = ({
           </OrdersWrapper>
         )}
       </Content>
+
+      {closePosition && (
+        <CloseFuturesPositionModal
+          open
+          onClose={() => setClosePosition(null)}
+          position={closePosition}
+          marketPrice={marketPrice}
+          participantAddress={participantAddress}
+          onConfirmed={onPositionClosed}
+        />
+      )}
     </TabContainer>
   );
 };
