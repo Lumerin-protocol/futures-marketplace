@@ -396,6 +396,9 @@ export const HashrateChart: FC<HashrateChartProps> = ({
 
     const chart = createChart(container, {
       autoSize: true,
+      // Prevent accidental zooming (mouse wheel / pinch scale).
+      // We leave panning enabled (default `handleScroll`) so the user can still navigate.
+      handleScale: false,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
         textColor: tokens.text.primary,

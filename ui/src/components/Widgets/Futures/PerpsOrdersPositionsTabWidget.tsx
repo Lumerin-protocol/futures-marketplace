@@ -1032,7 +1032,7 @@ const PerpsTradesTable = ({ trades, isLoading, hasMore = false, isFetchingMore, 
                   <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
                     {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
                   </TypeBadge>
-                  {trade.isLiquidation && <LiquidationChip>Liquidated</LiquidationChip>}
+                  {trade.isLiquidation && <LiquidationChip>Liquidation</LiquidationChip>}
                 </SideCell>
               </td>
               <td>{formatPrice(trade.tradePrice)}</td>

@@ -307,7 +307,16 @@ export const FuturesTradesModal = ({
 };
 
 const TradesModalCard = styled(ModalCard)`
+  width: calc(100% - 2rem);
   max-width: 1000px;
+  max-height: calc(100dvh - 6rem);
+  overflow: hidden;
+  box-sizing: border-box;
+
+  @media (max-width: 600px) {
+    max-height: calc(100dvh - 2rem);
+    margin: 1rem auto;
+  }
 
   h2 {
     font-size: 2rem;
@@ -351,11 +360,14 @@ const _SummaryValue = styled("span")`
 `;
 
 const TradesTableContainer = styled("div")`
+  flex: 1 1 auto;
   width: 100%;
-  overflow-x: auto;
+  min-height: 0;
+  overflow: auto;
   margin-top: 0.5rem;
 
   &::-webkit-scrollbar {
+    width: 8px;
     height: 8px;
   }
 
@@ -376,11 +388,15 @@ const TradesTable = styled("table")`
   min-width: 800px;
 
   th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
     text-align: left;
     padding: 0.75rem 0.5rem;
     font-size: 0.75rem;
     font-weight: 600;
     color: ${tokens.text.secondary};
+    background: ${tokens.modal.bg};
     border-bottom: 1px solid ${tokens.overlay.white20};
     white-space: nowrap;
   }

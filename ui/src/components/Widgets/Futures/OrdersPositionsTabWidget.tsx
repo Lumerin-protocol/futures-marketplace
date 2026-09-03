@@ -259,7 +259,7 @@ const FuturesTradesTable = ({
                 <td>
                   <SideCell>
                     <TypeBadge $type={isLong ? "Long" : "Short"}>{isLong ? "Long" : "Short"}</TypeBadge>
-                    {trade.isLiquidation && <LiquidationChip>Liquidated</LiquidationChip>}
+                    {trade.isLiquidation && <LiquidationChip>Liquidation</LiquidationChip>}
                   </SideCell>
                 </td>
                 <td>{formatPrice(trade.tradePrice)}</td>

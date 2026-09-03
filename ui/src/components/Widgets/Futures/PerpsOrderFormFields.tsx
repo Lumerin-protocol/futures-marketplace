@@ -497,6 +497,8 @@ const sharedInputStyles = `
 
 export const PriceInput = styled("input")`
   ${sharedInputStyles}
+  box-sizing: border-box;
+  height: 48px;
 `;
 
 export const AmountInput = styled("input")`
