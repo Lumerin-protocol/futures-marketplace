@@ -42,10 +42,17 @@ type TooltipState = {
   y: number;
 };
 
-export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBookProps) => {
+export const VolumeOrderBook = ({
+  rows,
+  onRowClick,
+  marketPrice,
+}: VolumeOrderBookProps) => {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   // Separate hover tooltip for the center (market-price) row.
-  const [centerTooltip, setCenterTooltip] = useState<{ x: number; y: number } | null>(null);
+  const [centerTooltip, setCenterTooltip] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // On mobile the hover tooltip (price/total/distance-from-market) is more of a
@@ -57,7 +64,15 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
   // Compute cumulative depth per side once per order-book update. Rows arrive as
   // one contiguous, tick-by-tick ladder sorted high -> low (empty rows included),
   // with exactly one row flagged `isLastHashprice` marking the market price.
-  const { askDepth, bidDepth, maxAskTotal, maxBidTotal, bestAsk, bestBid, centerIndex } = useMemo(() => {
+  const {
+    askDepth,
+    bidDepth,
+    maxAskTotal,
+    maxBidTotal,
+    bestAsk,
+    bestBid,
+    centerIndex,
+  } = useMemo(() => {
     const askDepth = new Map<number, Depth>();
     const bidDepth = new Map<number, Depth>();
 
@@ -85,7 +100,7 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
       const r = rows[i];
       if (r.isLastHashprice) continue;
       const units = r.askUnits ?? 0;
-      if (units > 0 && (marketPrice == null || r.price >= marketPrice)) {
+      if (units > 0) {
         askRunning += units;
         askDepth.set(r.price, { quantity: units, total: askRunning });
         if (bestAsk == null) bestAsk = r.price;
@@ -101,7 +116,7 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
       const r = rows[i];
       if (r.isLastHashprice) continue;
       const units = r.bidUnits ?? 0;
-      if (units > 0 && (marketPrice == null || r.price <= marketPrice)) {
+      if (units > 0) {
         bidRunning += units;
         bidDepth.set(r.price, { quantity: units, total: bidRunning });
         if (bestBid == null) bestBid = r.price;
@@ -109,7 +124,15 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
     }
     const maxBidTotal = bidRunning;
 
-    return { askDepth, bidDepth, maxAskTotal, maxBidTotal, bestAsk, bestBid, centerIndex };
+    return {
+      askDepth,
+      bidDepth,
+      maxAskTotal,
+      maxBidTotal,
+      bestAsk,
+      bestBid,
+      centerIndex,
+    };
   }, [rows, marketPrice]);
 
   const rowVirtualizer = useVirtualizer({
@@ -128,7 +151,10 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
   const lastTargetRef = useRef<number | null>(null);
   // Overlay "Scroll to Market" button, shown when the market row is scrolled
   // out of view. `dir` points the user back towards it.
-  const [marketButton, setMarketButton] = useState<{ show: boolean; dir: "up" | "down" }>({
+  const [marketButton, setMarketButton] = useState<{
+    show: boolean;
+    dir: "up" | "down";
+  }>({
     show: false,
     dir: "down",
   });
@@ -138,7 +164,9 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
   const updateMarketButton = useCallback(
     (scroller: HTMLDivElement) => {
       if (centerIndex < 0) {
-        setMarketButton((prev) => (prev.show ? { show: false, dir: prev.dir } : prev));
+        setMarketButton((prev) =>
+          prev.show ? { show: false, dir: prev.dir } : prev
+        );
         return;
       }
       const centerPx = centerIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
@@ -148,11 +176,13 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
         centerPx < viewTop
           ? { show: true, dir: "up" }
           : centerPx > viewBottom
-            ? { show: true, dir: "down" }
-            : { show: false, dir: "down" };
-      setMarketButton((prev) => (prev.show === next.show && prev.dir === next.dir ? prev : next));
+          ? { show: true, dir: "down" }
+          : { show: false, dir: "down" };
+      setMarketButton((prev) =>
+        prev.show === next.show && prev.dir === next.dir ? prev : next
+      );
     },
-    [centerIndex],
+    [centerIndex]
   );
 
   useEffect(() => {
@@ -167,7 +197,9 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
     const target = centerOffset(scroller, centerIndex);
     lastTargetRef.current = target;
     scroller.scrollTop = target;
-    setMarketButton((prev) => (prev.show ? { show: false, dir: prev.dir } : prev));
+    setMarketButton((prev) =>
+      prev.show ? { show: false, dir: prev.dir } : prev
+    );
   }, [rows.length, centerIndex, updateMarketButton]);
 
   // Distinguish user scrolling from our programmatic centering: our set lands on
@@ -180,7 +212,10 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
     // The center row is virtualized too, so it can be unmounted mid-hover.
     setTooltip(null);
     setCenterTooltip(null);
-    if (lastTargetRef.current == null || Math.abs(scroller.scrollTop - lastTargetRef.current) > 2) {
+    if (
+      lastTargetRef.current == null ||
+      Math.abs(scroller.scrollTop - lastTargetRef.current) > 2
+    ) {
       userScrolledRef.current = true;
     }
     updateMarketButton(scroller);
@@ -193,7 +228,9 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
     lastTargetRef.current = target;
     userScrolledRef.current = false; // resume auto-centering
     scroller.scrollTop = target;
-    setMarketButton((prev) => (prev.show ? { show: false, dir: prev.dir } : prev));
+    setMarketButton((prev) =>
+      prev.show ? { show: false, dir: prev.dir } : prev
+    );
   };
 
   // Best price = the order-book level (best ask or best bid) closest to the
@@ -201,11 +238,15 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
   // market price.
   let bestPrice: number | null;
   if (bestAsk != null && bestBid != null && marketPrice != null) {
-    bestPrice = Math.abs(bestAsk - marketPrice) <= Math.abs(bestBid - marketPrice) ? bestAsk : bestBid;
+    bestPrice =
+      Math.abs(bestAsk - marketPrice) <= Math.abs(bestBid - marketPrice)
+        ? bestAsk
+        : bestBid;
   } else {
     bestPrice = bestAsk ?? bestBid ?? marketPrice;
   }
-  const isUp = bestPrice != null && marketPrice != null ? bestPrice >= marketPrice : true;
+  const isUp =
+    bestPrice != null && marketPrice != null ? bestPrice >= marketPrice : true;
 
   const renderRow = (index: number) => {
     const row = rows[index];
@@ -215,29 +256,53 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
     if (row.isLastHashprice) {
       return (
         <CenterRow
-          onMouseEnter={(e) => !isMobile && setCenterTooltip({ x: e.clientX, y: e.clientY })}
-          onMouseMove={(e) => !isMobile && setCenterTooltip({ x: e.clientX, y: e.clientY })}
+          onMouseEnter={(e) =>
+            !isMobile && setCenterTooltip({ x: e.clientX, y: e.clientY })
+          }
+          onMouseMove={(e) =>
+            !isMobile && setCenterTooltip({ x: e.clientX, y: e.clientY })
+          }
           onMouseLeave={() => setCenterTooltip(null)}
         >
           <span className={`best ${isUp ? "up" : "down"}`}>
             {bestPrice != null ? formatPrice(bestPrice) : "—"}
             <span className="arrow">{isUp ? "↑" : "↓"}</span>
           </span>
-          <span className="market">{marketPrice != null ? formatPrice(marketPrice) : "—"}</span>
+          <span className="market">
+            {marketPrice != null ? formatPrice(marketPrice) : "—"}
+          </span>
         </CenterRow>
       );
     }
 
-    // Side is derived from position relative to the center row so it stays
-    // correct even when the market price is unavailable.
-    const side: "ask" | "bid" = centerIndex >= 0 && index < centerIndex ? "ask" : "bid";
-    const depth = side === "ask" ? askDepth.get(row.price) : bidDepth.get(row.price);
+    // A row belongs to the side that actually has resting quantity at that
+    // price. The oracle/mark price can sit far from the book's own mid (e.g. a
+    // stale or mis-scaled hashrate mark), so deriving the side from the mark
+    // would drop one whole side of the book. Only fall back to position relative
+    // to the mark for empty ladder rows, which carry no quantity of their own.
+    const hasAsk = row.askUnits != null && row.askUnits > 0;
+    const hasBid = row.bidUnits != null && row.bidUnits > 0;
+    const side: "ask" | "bid" =
+      hasAsk && !hasBid
+        ? "ask"
+        : hasBid && !hasAsk
+        ? "bid"
+        : centerIndex >= 0 && index < centerIndex
+        ? "ask"
+        : "bid";
+    const depth =
+      side === "ask" ? askDepth.get(row.price) : bidDepth.get(row.price);
 
     // Empty ladder rows: show only the price so the user can click any tick
     // (e.g. 3.01, 3.02, ...) to place an order there even with no resting order.
     if (!depth) {
       return (
-        <Row $side={side} $empty $compact={isMobile} onClick={() => onRowClick?.(formatPrice(row.price), null)}>
+        <Row
+          $side={side}
+          $empty
+          $compact={isMobile}
+          onClick={() => onRowClick?.(formatPrice(row.price), null)}
+        >
           <PriceCol $side={side}>{formatPrice(row.price)}</PriceCol>
           <QuantityCol />
           {!isMobile && <TotalCol />}
@@ -245,15 +310,18 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
       );
     }
 
-    const highlight = side === "ask" ? Boolean(row.highlightAsk) : Boolean(row.highlightBid);
+    const highlight =
+      side === "ask" ? Boolean(row.highlightAsk) : Boolean(row.highlightBid);
     const units = side === "ask" ? row.askUnits : row.bidUnits;
 
     // One scale for both sides (max cumulative across the book) so a thin ask
     // book does not stretch to full width next to a deep bid book. Bright
     // quantity bar stays nested inside the darker cumulative-total bar.
     const maxTotal = Math.max(maxAskTotal, maxBidTotal);
-    const quantityWidth = maxTotal > 0 ? Math.min(100, (depth.quantity / maxTotal) * 100) : 0;
-    const totalWidth = maxTotal > 0 ? Math.min(100, (depth.total / maxTotal) * 100) : 0;
+    const quantityWidth =
+      maxTotal > 0 ? Math.min(100, (depth.quantity / maxTotal) * 100) : 0;
+    const totalWidth =
+      maxTotal > 0 ? Math.min(100, (depth.total / maxTotal) * 100) : 0;
 
     const showTooltip = (e: React.MouseEvent) => {
       if (isMobile) return;
@@ -261,7 +329,13 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
         marketPrice != null && marketPrice !== 0
           ? ((row.price - marketPrice) / marketPrice) * 100
           : null;
-      setTooltip({ price: row.price, total: depth.total, distancePct, x: e.clientX, y: e.clientY });
+      setTooltip({
+        price: row.price,
+        total: depth.total,
+        distancePct,
+        x: e.clientX,
+        y: e.clientY,
+      });
     };
 
     return (
@@ -296,7 +370,10 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
           {rowVirtualizer.getVirtualItems().map((virtualRow) => (
             <VirtualRow
               key={virtualRow.key}
-              style={{ height: virtualRow.size, transform: `translateY(${virtualRow.start}px)` }}
+              style={{
+                height: virtualRow.size,
+                transform: `translateY(${virtualRow.start}px)`,
+              }}
             >
               {renderRow(virtualRow.index)}
             </VirtualRow>
@@ -330,7 +407,9 @@ export const VolumeOrderBook = ({ rows, onRowClick, marketPrice }: VolumeOrderBo
             <span className="label">Distance from Market</span>
             <span className="value">
               {tooltip.distancePct != null
-                ? `${tooltip.distancePct >= 0 ? "+" : ""}${tooltip.distancePct.toFixed(2)}%`
+                ? `${
+                    tooltip.distancePct >= 0 ? "+" : ""
+                  }${tooltip.distancePct.toFixed(2)}%`
                 : "—"}
             </span>
           </div>
@@ -403,7 +482,8 @@ const ScrollToMarketButton = styled("button")`
 // `$compact` is the mobile-only two-column variant (Price / Quantity, no Total).
 const ColumnHeader = styled("div")<{ $compact?: boolean }>`
   display: grid;
-  grid-template-columns: ${(props) => (props.$compact ? "1.2fr 1fr" : "1fr 1fr 1fr")};
+  grid-template-columns: ${(props) =>
+    props.$compact ? "1.2fr 1fr" : "1fr 1fr 1fr"};
   z-index: 2;
   background-color: ${tokens.surface.panel};
   border-bottom: 1px solid ${tokens.overlay.white10};
@@ -470,10 +550,16 @@ const VirtualRow = styled("div")`
   width: 100%;
 `;
 
-const Row = styled("div")<{ $side: "ask" | "bid"; $highlight?: boolean; $empty?: boolean; $compact?: boolean }>`
+const Row = styled("div")<{
+  $side: "ask" | "bid";
+  $highlight?: boolean;
+  $empty?: boolean;
+  $compact?: boolean;
+}>`
   position: relative;
   display: grid;
-  grid-template-columns: ${(props) => (props.$compact ? "1.2fr 1fr" : "1fr 1fr 1fr")};
+  grid-template-columns: ${(props) =>
+    props.$compact ? "1.2fr 1fr" : "1fr 1fr 1fr"};
   align-items: center;
   height: ${ROW_HEIGHT}px;
   padding: 0 0.5rem;
@@ -486,7 +572,9 @@ const Row = styled("div")<{ $side: "ask" | "bid"; $highlight?: boolean; $empty?:
   ${(props) =>
     props.$highlight &&
     `box-shadow: inset 0 0 8px ${
-      props.$side === "ask" ? tokens.trading.shortHighlightGlow : tokens.trading.longHighlightGlow
+      props.$side === "ask"
+        ? tokens.trading.shortHighlightGlow
+        : tokens.trading.longHighlightGlow
     };`}
 
   &:hover {
@@ -504,7 +592,9 @@ const DimLayer = styled("div")<{ $side: "ask" | "bid"; $width: number }>`
   z-index: 0;
   width: ${(props) => props.$width}%;
   background-color: ${(props) =>
-    props.$side === "ask" ? tokens.trading.shortRowBg : tokens.trading.longRowBg};
+    props.$side === "ask"
+      ? tokens.trading.shortRowBg
+      : tokens.trading.longRowBg};
 `;
 
 // Bright background layer represents the resting quantity at this price level.
@@ -516,14 +606,17 @@ const BrightLayer = styled("div")<{ $side: "ask" | "bid"; $width: number }>`
   z-index: 1;
   width: ${(props) => props.$width}%;
   background-color: ${(props) =>
-    props.$side === "ask" ? tokens.trading.shortHighlightBg : tokens.trading.longHighlightBg};
+    props.$side === "ask"
+      ? tokens.trading.shortHighlightBg
+      : tokens.trading.longHighlightBg};
 `;
 
 const PriceCol = styled("span")<{ $side: "ask" | "bid" }>`
   position: relative;
   z-index: 2;
   text-align: left;
-  color: ${(props) => (props.$side === "ask" ? tokens.trading.short : tokens.trading.long)};
+  color: ${(props) =>
+    props.$side === "ask" ? tokens.trading.short : tokens.trading.long};
 `;
 
 const QuantityCol = styled("span")`

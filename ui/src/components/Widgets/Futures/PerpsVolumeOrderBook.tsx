@@ -33,7 +33,10 @@ type DerivedLevel = {
 // Size/Total are notional values (quantity * price), which are large, so use
 // compact notation (e.g. 15.04K, 17.5M) to match the Binance-style layout.
 const formatVolume = (value: number): string =>
-  value.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 2 });
+  value.toLocaleString("en-US", {
+    notation: "compact",
+    maximumFractionDigits: 2,
+  });
 
 // Full-precision notional for the tooltip (e.g. 105,877.29).
 const formatFull = (value: number): string =>
@@ -52,127 +55,134 @@ type TooltipState = {
   y: number;
 };
 
-export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPriceIncrement }: PerpsVolumeOrderBookProps) => {
+export const PerpsVolumeOrderBook = ({
+  rows,
+  onRowClick,
+  marketPrice,
+  minimumPriceIncrement,
+}: PerpsVolumeOrderBookProps) => {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   // Separate hover tooltip for the center (market-price) row.
-  const [centerTooltip, setCenterTooltip] = useState<{ x: number; y: number } | null>(null);
+  const [centerTooltip, setCenterTooltip] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   // The mobile layout gives the book only half the screen width, so the
   // cumulative Total column is dropped there (its depth bar still shows it).
   const isMobile = useIsMobileTradingLayout();
   // Compute cumulative totals once per order book update (not per row).
-  const { askLevels, bidLevels, maxAskTotal, maxBidTotal, bestAsk, bestBid } = useMemo(() => {
-    // Input rows are sorted high -> low price.
-    let askRows = rows.filter((r) => r.askUnits && r.askUnits > 0);
-    let bidRows = rows.filter((r) => r.bidUnits && r.bidUnits > 0);
+  const { askLevels, bidLevels, maxAskTotal, maxBidTotal, bestAsk, bestBid } =
+    useMemo(() => {
+      // Input rows are sorted high -> low price.
+      const askRows = rows.filter((r) => r.askUnits && r.askUnits > 0);
+      const bidRows = rows.filter((r) => r.bidUnits && r.bidUnits > 0);
 
-    // Hide crossed / overlapping levels: relative to the market price an ask
-    // priced below market (or a bid priced above it) would cross the book, so
-    // drop those levels entirely.
-    if (marketPrice != null) {
-      askRows = askRows.filter((r) => r.price >= marketPrice);
-      bidRows = bidRows.filter((r) => r.price <= marketPrice);
-    }
-
-    // Tick size for the padded rows. Prefer the market's exact increment (the
-    // #209 mechanism: prices live on an integer-tick grid); fall back to the
-    // smallest gap between adjacent live levels when no increment is provided.
-    let step = minimumPriceIncrement && minimumPriceIncrement > 0 ? minimumPriceIncrement : Infinity;
-    if (!Number.isFinite(step)) {
-      const allPrices = [...askRows, ...bidRows].map((r) => r.price).sort((a, b) => a - b);
-      for (let i = 1; i < allPrices.length; i++) {
-        const gap = allPrices[i] - allPrices[i - 1];
-        if (gap > 1e-9 && gap < step) step = gap;
+      // Tick size for the padded rows. Prefer the market's exact increment (the
+      // #209 mechanism: prices live on an integer-tick grid); fall back to the
+      // smallest gap between adjacent live levels when no increment is provided.
+      let step =
+        minimumPriceIncrement && minimumPriceIncrement > 0
+          ? minimumPriceIncrement
+          : Infinity;
+      if (!Number.isFinite(step)) {
+        const allPrices = [...askRows, ...bidRows]
+          .map((r) => r.price)
+          .sort((a, b) => a - b);
+        for (let i = 1; i < allPrices.length; i++) {
+          const gap = allPrices[i] - allPrices[i - 1];
+          if (gap > 1e-9 && gap < step) step = gap;
+        }
       }
-    }
-    if (!Number.isFinite(step)) step = 0.01;
-    // Snap a price onto the integer-tick grid so generated pad prices line up
-    // exactly with real levels (mirrors createFinalOrderBookData's tick math).
-    const toTickPrice = (tick: number) => Number((tick * step).toFixed(8));
+      if (!Number.isFinite(step)) step = 0.01;
+      // Snap a price onto the integer-tick grid so generated pad prices line up
+      // exactly with real levels (mirrors createFinalOrderBookData's tick math).
+      const toTickPrice = (tick: number) => Number((tick * step).toFixed(8));
 
-    // Ask cumulative: iterate from best ask (lowest price = last element)
-    // towards higher prices. Preserve high -> low order for rendering.
-    // Size is notional (units * price); Total is the cumulative sum of Size.
-    const asks: DerivedLevel[] = new Array(askRows.length);
-    let askRunningTotal = 0;
-    for (let i = askRows.length - 1; i >= 0; i--) {
-      const units = askRows[i].askUnits as number;
-      const size = units * askRows[i].price;
-      askRunningTotal += size;
-      asks[i] = {
-        price: askRows[i].price,
-        units,
-        size,
-        total: askRunningTotal,
-        highlight: Boolean(askRows[i].highlightAsk),
-      };
-    }
-    // Top row (highest ask) holds the largest cumulative total.
-    const maxAskTotal = asks.length > 0 ? asks[0].total : 0;
+      // Ask cumulative: iterate from best ask (lowest price = last element)
+      // towards higher prices. Preserve high -> low order for rendering.
+      // Size is notional (units * price); Total is the cumulative sum of Size.
+      const asks: DerivedLevel[] = new Array(askRows.length);
+      let askRunningTotal = 0;
+      for (let i = askRows.length - 1; i >= 0; i--) {
+        const units = askRows[i].askUnits as number;
+        const size = units * askRows[i].price;
+        askRunningTotal += size;
+        asks[i] = {
+          price: askRows[i].price,
+          units,
+          size,
+          total: askRunningTotal,
+          highlight: Boolean(askRows[i].highlightAsk),
+        };
+      }
+      // Top row (highest ask) holds the largest cumulative total.
+      const maxAskTotal = asks.length > 0 ? asks[0].total : 0;
 
-    // Bid cumulative: iterate from best bid (highest price = first element)
-    // towards lower prices.
-    let bidRunningTotal = 0;
-    const bids: DerivedLevel[] = bidRows.map((r) => {
-      const units = r.bidUnits as number;
-      const size = units * r.price;
-      bidRunningTotal += size;
+      // Bid cumulative: iterate from best bid (highest price = first element)
+      // towards lower prices.
+      let bidRunningTotal = 0;
+      const bids: DerivedLevel[] = bidRows.map((r) => {
+        const units = r.bidUnits as number;
+        const size = units * r.price;
+        bidRunningTotal += size;
+        return {
+          price: r.price,
+          units,
+          size,
+          total: bidRunningTotal,
+          highlight: Boolean(r.highlightBid),
+        };
+      });
+      // Bottom row (lowest bid) holds the largest cumulative total.
+      const maxBidTotal = bids.length > 0 ? bids[bids.length - 1].total : 0;
+
+      const bestAsk = asks.length > 0 ? asks[asks.length - 1].price : null;
+      const bestBid = bids.length > 0 ? bids[0].price : null;
+
+      const emptyLevel = (price: number): DerivedLevel => ({
+        price,
+        units: 0,
+        size: 0,
+        total: 0,
+        highlight: false,
+        isEmpty: true,
+      });
+
+      // Pad above the highest ask (higher prices). Anchor to the highest ask, or
+      // to the market price when there are no asks yet. Walk the integer-tick grid
+      // outward so every pad price is a real, selectable tick.
+      const askAnchor = asks.length > 0 ? asks[0].price : marketPrice ?? null;
+      const askPads: DerivedLevel[] = [];
+      if (askAnchor != null) {
+        const anchorTick = Math.round(askAnchor / step);
+        for (let i = PAD_ROWS; i >= 1; i--) {
+          askPads.push(emptyLevel(toTickPrice(anchorTick + i)));
+        }
+      }
+
+      // Pad below the lowest bid (lower prices). Anchor to the lowest bid, or to
+      // the market price when there are no bids yet.
+      const bidAnchor =
+        bids.length > 0 ? bids[bids.length - 1].price : marketPrice ?? null;
+      const bidPads: DerivedLevel[] = [];
+      if (bidAnchor != null) {
+        const anchorTick = Math.round(bidAnchor / step);
+        for (let i = 1; i <= PAD_ROWS; i++) {
+          const tick = anchorTick - i;
+          if (tick <= 0) break;
+          bidPads.push(emptyLevel(toTickPrice(tick)));
+        }
+      }
+
       return {
-        price: r.price,
-        units,
-        size,
-        total: bidRunningTotal,
-        highlight: Boolean(r.highlightBid),
+        askLevels: [...askPads, ...asks],
+        bidLevels: [...bids, ...bidPads],
+        maxAskTotal,
+        maxBidTotal,
+        bestAsk,
+        bestBid,
       };
-    });
-    // Bottom row (lowest bid) holds the largest cumulative total.
-    const maxBidTotal = bids.length > 0 ? bids[bids.length - 1].total : 0;
-
-    const bestAsk = asks.length > 0 ? asks[asks.length - 1].price : null;
-    const bestBid = bids.length > 0 ? bids[0].price : null;
-
-    const emptyLevel = (price: number): DerivedLevel => ({
-      price,
-      units: 0,
-      size: 0,
-      total: 0,
-      highlight: false,
-      isEmpty: true,
-    });
-
-    // Pad above the highest ask (higher prices). Anchor to the highest ask, or
-    // to the market price when there are no asks yet. Walk the integer-tick grid
-    // outward so every pad price is a real, selectable tick.
-    const askAnchor = asks.length > 0 ? asks[0].price : marketPrice ?? null;
-    const askPads: DerivedLevel[] = [];
-    if (askAnchor != null) {
-      const anchorTick = Math.round(askAnchor / step);
-      for (let i = PAD_ROWS; i >= 1; i--) {
-        askPads.push(emptyLevel(toTickPrice(anchorTick + i)));
-      }
-    }
-
-    // Pad below the lowest bid (lower prices). Anchor to the lowest bid, or to
-    // the market price when there are no bids yet.
-    const bidAnchor = bids.length > 0 ? bids[bids.length - 1].price : marketPrice ?? null;
-    const bidPads: DerivedLevel[] = [];
-    if (bidAnchor != null) {
-      const anchorTick = Math.round(bidAnchor / step);
-      for (let i = 1; i <= PAD_ROWS; i++) {
-        const tick = anchorTick - i;
-        if (tick <= 0) break;
-        bidPads.push(emptyLevel(toTickPrice(tick)));
-      }
-    }
-
-    return {
-      askLevels: [...askPads, ...asks],
-      bidLevels: [...bids, ...bidPads],
-      maxAskTotal,
-      maxBidTotal,
-      bestAsk,
-      bestBid,
-    };
-  }, [rows, marketPrice, minimumPriceIncrement]);
+    }, [rows, marketPrice, minimumPriceIncrement]);
 
   const renderRow = (level: DerivedLevel, side: "ask" | "bid") => {
     // Empty padding rows: show the price ladder only, no depth bars/tooltip.
@@ -196,8 +206,10 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
     // book does not stretch to full width next to a deep bid book. Bright size
     // bar stays nested inside the darker cumulative-total bar.
     const maxTotal = Math.max(maxAskTotal, maxBidTotal);
-    const sizeWidth = maxTotal > 0 ? Math.min(100, (level.size / maxTotal) * 100) : 0;
-    const totalWidth = maxTotal > 0 ? Math.min(100, (level.total / maxTotal) * 100) : 0;
+    const sizeWidth =
+      maxTotal > 0 ? Math.min(100, (level.size / maxTotal) * 100) : 0;
+    const totalWidth =
+      maxTotal > 0 ? Math.min(100, (level.total / maxTotal) * 100) : 0;
 
     const showTooltip = (e: React.MouseEvent) => {
       // Touch taps fire mouseenter, which would leave the tooltip stuck over a
@@ -207,7 +219,13 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
         marketPrice != null && marketPrice !== 0
           ? ((level.price - marketPrice) / marketPrice) * 100
           : null;
-      setTooltip({ price: level.price, total: level.total, distancePct, x: e.clientX, y: e.clientY });
+      setTooltip({
+        price: level.price,
+        total: level.total,
+        distancePct,
+        x: e.clientX,
+        y: e.clientY,
+      });
     };
 
     return (
@@ -235,12 +253,16 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
   // market price.
   let bestPrice: number | null;
   if (bestAsk != null && bestBid != null && marketPrice != null) {
-    bestPrice = Math.abs(bestAsk - marketPrice) <= Math.abs(bestBid - marketPrice) ? bestAsk : bestBid;
+    bestPrice =
+      Math.abs(bestAsk - marketPrice) <= Math.abs(bestBid - marketPrice)
+        ? bestAsk
+        : bestBid;
   } else {
     bestPrice = bestAsk ?? bestBid ?? marketPrice;
   }
 
-  const isUp = bestPrice != null && marketPrice != null ? bestPrice >= marketPrice : true;
+  const isUp =
+    bestPrice != null && marketPrice != null ? bestPrice >= marketPrice : true;
 
   // Center the spread on first load so asks scroll to their bottom (best ask)
   // and bids to their top (best bid), keeping the market-price row in view.
@@ -255,7 +277,7 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
     if (!center || !scroller) return;
     scroller.scrollTop = Math.max(
       0,
-      center.offsetTop - scroller.clientHeight / 2 + center.clientHeight / 2,
+      center.offsetTop - scroller.clientHeight / 2 + center.clientHeight / 2
     );
     hasCenteredRef.current = true;
   }, [askLevels.length, bidLevels.length]);
@@ -287,22 +309,32 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
         {!isMobile && <span>Total</span>}
       </ColumnHeader>
 
-      <AskSection>{askLevels.map((level) => renderRow(level, "ask"))}</AskSection>
+      <AskSection>
+        {askLevels.map((level) => renderRow(level, "ask"))}
+      </AskSection>
 
       <CenterRow
         ref={centerRef}
-        onMouseEnter={(e) => !isMobile && setCenterTooltip({ x: e.clientX, y: e.clientY })}
-        onMouseMove={(e) => !isMobile && setCenterTooltip({ x: e.clientX, y: e.clientY })}
+        onMouseEnter={(e) =>
+          !isMobile && setCenterTooltip({ x: e.clientX, y: e.clientY })
+        }
+        onMouseMove={(e) =>
+          !isMobile && setCenterTooltip({ x: e.clientX, y: e.clientY })
+        }
         onMouseLeave={() => setCenterTooltip(null)}
       >
         <span className={`best ${isUp ? "up" : "down"}`}>
           {bestPrice != null ? formatPrice(bestPrice) : "—"}
           <span className="arrow">{isUp ? "↑" : "↓"}</span>
         </span>
-        <span className="market">{marketPrice != null ? formatPrice(marketPrice) : "—"}</span>
+        <span className="market">
+          {marketPrice != null ? formatPrice(marketPrice) : "—"}
+        </span>
       </CenterRow>
 
-      <BidSection>{bidLevels.map((level) => renderRow(level, "bid"))}</BidSection>
+      <BidSection>
+        {bidLevels.map((level) => renderRow(level, "bid"))}
+      </BidSection>
 
       {tooltip && (
         <Tooltip
@@ -323,7 +355,9 @@ export const PerpsVolumeOrderBook = ({ rows, onRowClick, marketPrice, minimumPri
             <span className="label">Distance from Market</span>
             <span className="value">
               {tooltip.distancePct != null
-                ? `${tooltip.distancePct >= 0 ? "+" : ""}${tooltip.distancePct.toFixed(2)}%`
+                ? `${
+                    tooltip.distancePct >= 0 ? "+" : ""
+                  }${tooltip.distancePct.toFixed(2)}%`
                 : "—"}
             </span>
           </div>
@@ -360,7 +394,8 @@ const Container = styled("div")<{ $compact?: boolean }>`
 // `$compact` is the mobile-only two-column variant (Price / Size, no Total).
 const ColumnHeader = styled("div")<{ $compact?: boolean }>`
   display: grid;
-  grid-template-columns: ${(props) => (props.$compact ? "1.2fr 1fr" : "1fr 1fr 1fr")};
+  grid-template-columns: ${(props) =>
+    props.$compact ? "1.2fr 1fr" : "1fr 1fr 1fr"};
   position: sticky;
   top: -1px;
   z-index: 2;
@@ -403,14 +438,20 @@ const BidSection = styled("div")`
   justify-content: flex-start;
 `;
 
-const Row = styled("div")<{ $side: "ask" | "bid"; $highlight?: boolean; $empty?: boolean; $compact?: boolean }>`
+const Row = styled("div")<{
+  $side: "ask" | "bid";
+  $highlight?: boolean;
+  $empty?: boolean;
+  $compact?: boolean;
+}>`
   position: relative;
   /* Keeps the depth-bar/cell z-indexes below scoped to the row. Without a local
      stacking context the cells would tie with the sticky ColumnHeader's z-index
      and, being later in the DOM, paint their digits over it while scrolling. */
   isolation: isolate;
   display: grid;
-  grid-template-columns: ${(props) => (props.$compact ? "1.2fr 1fr" : "1fr 1fr 1fr")};
+  grid-template-columns: ${(props) =>
+    props.$compact ? "1.2fr 1fr" : "1fr 1fr 1fr"};
   align-items: center;
   height: 22px;
   padding: 0 0.5rem;
@@ -423,7 +464,9 @@ const Row = styled("div")<{ $side: "ask" | "bid"; $highlight?: boolean; $empty?:
   ${(props) =>
     props.$highlight &&
     `box-shadow: inset 0 0 8px ${
-      props.$side === "ask" ? tokens.trading.shortHighlightGlow : tokens.trading.longHighlightGlow
+      props.$side === "ask"
+        ? tokens.trading.shortHighlightGlow
+        : tokens.trading.longHighlightGlow
     };`}
 
   &:hover {
@@ -441,7 +484,9 @@ const DimLayer = styled("div")<{ $side: "ask" | "bid"; $width: number }>`
   z-index: 0;
   width: ${(props) => props.$width}%;
   background-color: ${(props) =>
-    props.$side === "ask" ? tokens.trading.shortRowBg : tokens.trading.longRowBg};
+    props.$side === "ask"
+      ? tokens.trading.shortRowBg
+      : tokens.trading.longRowBg};
 `;
 
 // Bright background layer represents the current Size at this price level.
@@ -453,14 +498,17 @@ const BrightLayer = styled("div")<{ $side: "ask" | "bid"; $width: number }>`
   z-index: 1;
   width: ${(props) => props.$width}%;
   background-color: ${(props) =>
-    props.$side === "ask" ? tokens.trading.shortHighlightBg : tokens.trading.longHighlightBg};
+    props.$side === "ask"
+      ? tokens.trading.shortHighlightBg
+      : tokens.trading.longHighlightBg};
 `;
 
 const PriceCol = styled("span")<{ $side: "ask" | "bid" }>`
   position: relative;
   z-index: 2;
   text-align: left;
-  color: ${(props) => (props.$side === "ask" ? tokens.trading.short : tokens.trading.long)};
+  color: ${(props) =>
+    props.$side === "ask" ? tokens.trading.short : tokens.trading.long};
 `;
 
 const SizeCol = styled("span")`
