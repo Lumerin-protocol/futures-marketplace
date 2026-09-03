@@ -13,7 +13,6 @@ import { RiskToast, type RiskToastItem } from "../../components/Widgets/Futures/
 import { FuturesMobileLayout } from "../../components/Widgets/Futures/mobile/FuturesMobileLayout";
 import { useIsMobileTradingLayout } from "../../components/Widgets/Futures/mobile/mobileTradingLayout";
 import { useLiquidationNotifications } from "../../hooks/data/useLiquidationNotifications";
-import { ClosePositionModal, useClosePositionModal } from "../../components/Widgets/Futures/ClosePositionModal";
 import { useHashrateIndexData, type TimePeriod } from "../../hooks/data/useHashRateIndexData";
 import { useBtcPriceIndexData } from "../../hooks/data/useBtcPriceIndexData";
 import { useNetworkHashrateIndexData } from "../../hooks/data/useNetworkHashrateIndexData";
@@ -256,7 +255,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // State for order book selection
   const [selectedPrice, setSelectedPrice] = useState<string | undefined>();
   const [selectedAmount, setSelectedAmount] = useState<number | undefined>();
-  const [selectedIsBuy, setSelectedIsBuy] = useState<boolean | undefined>();
   const [highlightMode, setHighlightMode] = useState<"inputs" | "buttons" | undefined>();
   const [highlightTrigger, setHighlightTrigger] = useState(0);
 
@@ -266,7 +264,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   useEffect(() => {
     setSelectedPrice(undefined);
     setSelectedAmount(undefined);
-    setSelectedIsBuy(undefined);
     setHighlightMode(undefined);
     setHighlightTrigger(0);
   }, [contractMode]);
@@ -274,24 +271,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const previousOrderBookStateRef = useRef<Map<number, { bidUnits: number | null; askUnits: number | null }>>(
     new Map(),
   );
-
-  const proceedWithClosePosition = useCallback(
-    (price: string, amount: number, isBuy: boolean, expirationAt?: number) => {
-      setSelectedPrice(price);
-      setSelectedAmount(amount);
-      setSelectedIsBuy(isBuy);
-      // Snap the order book (and PlaceOrderWidget's externalExpirationAt) to the
-      // closing position's expiry so the prefilled order targets the correct book.
-      if (expirationAt && contractMode === "futures") {
-        setSelectedExpirationAt(expirationAt);
-      }
-      setHighlightMode("buttons");
-      setHighlightTrigger((prev) => prev + 1);
-    },
-    [contractMode],
-  );
-
-  const closePositionModal = useClosePositionModal(proceedWithClosePosition);
 
   const handleOrderBookClick = (price: string, _amount: number | null) => {
     setSelectedPrice(price);
@@ -414,7 +393,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       externalPrice={selectedPrice}
       externalAmount={selectedAmount}
       externalExpirationAt={selectedExpirationAt}
-      externalIsBuy={selectedIsBuy}
       highlightTrigger={highlightTrigger}
       contractSpecsQuery={contractSpecsQuery}
       participantData={participantData?.data}
@@ -456,7 +434,9 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
         ordersLoading={isParticipantLoading}
         positionsLoading={isPositionBookLoading}
         participantAddress={address}
-        onClosePosition={closePositionModal.handleClosePosition}
+        onPositionClosed={async () => {
+          await marginRisk.refetch();
+        }}
         participantData={participantData?.data}
         minMargin={minMargin}
         accountBalance={accountBalanceQuery}
@@ -503,16 +483,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
           {tablesNode && <OrdersPositionsArea>{tablesNode}</OrdersPositionsArea>}
         </FuturesContainer>
       )}
-
-      {/* Close Position Info Modal */}
-      <ClosePositionModal
-        isOpen={closePositionModal.showModal}
-        pendingClosePosition={closePositionModal.pendingClosePosition}
-        onConfirm={closePositionModal.handleConfirm}
-        onCancel={closePositionModal.handleCancel}
-        doNotShowAgain={closePositionModal.doNotShowAgain}
-        onDoNotShowAgainChange={closePositionModal.setDoNotShowAgain}
-      />
     </>
   );
 };

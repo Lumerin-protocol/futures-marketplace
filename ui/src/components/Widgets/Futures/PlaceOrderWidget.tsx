@@ -404,7 +404,10 @@ export const PlaceOrderWidget = ({
     return amountMode === "size" ? bestQty * currentPrice : bestQty;
   };
 
-  // Highlight button when position is closed and values are substituted
+  // Highlight price/amount inputs when the user clicks the order book
+  // (`highlightMode === "inputs"`). `highlightMode === "buttons"` pulses Bid/Ask
+  // and is unused in the live close-position flow (kept so the legacy
+  // ClosePositionModal prefill path can be restored).
   useEffect(() => {
     if (
       externalPrice !== undefined &&
