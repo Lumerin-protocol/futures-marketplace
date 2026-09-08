@@ -9,7 +9,7 @@ import EmojiEventsOutlinedIcon from "@mui/icons-material/EmojiEventsOutlined";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { safeLazy } from "../utils/safeLazy";
 import { PathName } from "../types/types";
-import LogoIcon from "../images/icons/hpdx-logo.png";
+import HpdxLogomark from "../images/icons/hpdx-logomark.svg?react";
 import { Web3ProviderLazy } from "../Web3ProviderLazy";
 
 const HeaderConnectLazy = safeLazy(() =>
@@ -35,7 +35,7 @@ export const Header = () => {
   return (
     <StyledToolbar>
       <TitleWrapper>
-        <Logo src={LogoIcon} alt="HPDX" onClick={handleLogoClick} />
+        <Logo aria-label="HPDX" onClick={handleLogoClick} />
         <BrandName onClick={handleLogoClick}>
           {isLeaderboardActive ? (
             <LeaderboardTitle>Leaderboard</LeaderboardTitle>
@@ -173,7 +173,9 @@ const TitleWrapper = styled("div")`
   min-width: 0;
 `;
 
-const Logo = styled("img")`
+const Logo = styled(HpdxLogomark)`
+  display: block;
+  flex-shrink: 0;
   height: 46px;
   width: 46px;
   cursor: pointer;
