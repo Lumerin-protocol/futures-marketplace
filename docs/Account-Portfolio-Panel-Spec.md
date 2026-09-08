@@ -68,7 +68,7 @@ capability flag, not a risk level.
 | State | Condition | Panel | Status line copy |
 |---|---|---|---|
 | Healthy | ratio < 60% and !belowIM | none | none |
-| Restricted | belowIM (any ratio) | Withdraw max = 0, note under Available | "Below initial margin. Withdrawals and new positions are disabled; reducing orders are allowed." |
+| Restricted | belowIM (any ratio) | Withdraw max = 0, amber boxed note above the tier line | "Below initial margin. Withdrawals and new positions are disabled; reducing orders are allowed." |
 | Caution | 60% ≤ ratio < 80% | amber left border + radial (current `shouldHighlight` styling) | "Margin ratio 72%. Liquidation at 100%." |
 | Danger | 80% ≤ ratio < 100% | red border, one toast on entry, persistent banner | "Liquidation risk. Deposit or reduce your position. Liq. price ≈ {liqPrice}." (`useLiquidationThresholds`) |
 | Liquidatable | ratio ≥ 100% | red pulsing banner | "Account is liquidatable. Positions may be closed at any moment." |

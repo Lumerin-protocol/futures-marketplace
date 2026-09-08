@@ -5,14 +5,18 @@ import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPos
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { useSettlePositions } from "../../../hooks/data/useSettlePositions";
 import { useState } from "react";
-import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
-import { useMarginEngineShocks } from "../../../hooks/data/useMarginEngineShocks";
+import { useOrderMargin } from "../../../hooks/data/useOrderMargin";
 import type { ContractMode } from "../../../types/types";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { FuturesTradesModal, type FuturesTradesModalSelection } from "./FuturesTradesModal";
 import type { CloseableFuturesPosition } from "./CloseFuturesPositionModal";
 import { LiquidationChip, formatLiquidatedQty } from "../../../lib/liquidation";
+
+const MARGIN_HINT =
+  "Initial margin this delivery date accounts for — how much the account's requirement " +
+  "would fall without it. Collateral is pooled across every expiry and the perps venue, " +
+  "so these do not add up to Margin Used, and a hedging leg accounts for none of it.";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -38,6 +42,7 @@ export const PositionsListWidget = ({
   contractMode = "futures",
 }: PositionsListWidgetProps) => {
   const { data: marketPrice } = useGetMarketPrice();
+  const orderMargin = useOrderMargin();
   const [tradesSelection, setTradesSelection] = useState<FuturesTradesModalSelection | null>(null);
   const { settlePositionsAsync, isPending: isSettling } = useSettlePositions();
   // expirationAt currently being claimed, plus any per-expiration claim error message.
@@ -91,15 +96,21 @@ export const PositionsListWidget = ({
   // Get latest price from market price hook
   const latestPriceBigInt = marketPrice ?? null;
 
-  // Maintenance shock from the PortfolioMarginEngine (WAD). Margin is
-  // cross-account, so this per-leg figure is a preview, not the requirement.
-  const { mmSpotShock } = useMarginEngineShocks();
-
-  // Calculate margin for a position
-  const calculateMargin = (pricePerDay: bigint, amount: number, positionType: string): bigint | null => {
-    if (!latestPriceBigInt || mmSpotShock === undefined) return null;
-    const qty = positionType === "Long" ? amount : -amount;
-    return getMinMarginForPositionManual(pricePerDay, qty, latestPriceBigInt, mmSpotShock);
+  /**
+   * Initial margin this expiry accounts for: what the account's portfolio
+   * requirement would fall by without it. Quoted per `expirationAt` because that
+   * is the granularity the venue aggregates, so two rows that differ only by
+   * fill price share one figure — the same way this table's Quantity column
+   * already reports the session-level net quantity.
+   *
+   * Clamped, because the engine nets every expiry into one delta: an expiry
+   * hedging the rest of the book accounts for none of the requirement, and
+   * removing it can even raise it.
+   */
+  const calculateMargin = (expirationAt: string): bigint | null => {
+    const quote = orderMargin.quote({ closeFutures: [BigInt(expirationAt)] });
+    if (!quote) return null;
+    return quote.imIncrease < 0n ? -quote.imIncrease : 0n;
   };
 
   const formatMargin = (margin: bigint | null): string => {
@@ -107,8 +118,8 @@ export const PositionsListWidget = ({
     return `${(Number(margin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} USDC`;
   };
 
-  // PnL = (mark - entry) * signedQty, mirroring the on-chain settlement math in
-  // `getMinMarginForPositionManual`. Signed `netQuantity` encodes side
+  // PnL = (mark - entry) * signedQty, mirroring the venue's own settlement math.
+  // Signed `netQuantity` encodes side
   // (long > 0, short < 0), so the sign of the result falls out naturally. The
   // percentage is taken against entry notional (fixed at fill time) so it
   // doesn't drift with the market price the way a mark-notional denominator does.
@@ -167,7 +178,6 @@ export const PositionsListWidget = ({
           pricePerDay: pricePerDay,
           expirationAt: position.expirationAt,
           positionType: positionType,
-          amount: 0,
           // Sessions are per (user, expirationAt), so every position rolling up
           // into this group shares the same session-level net qty. Take it
           // from the first one we see; subsequent ones would just duplicate it.
@@ -182,7 +192,6 @@ export const PositionsListWidget = ({
         };
       }
 
-      acc[key].amount += 1;
       acc[key].positions.push(position);
 
       return acc;
@@ -193,7 +202,6 @@ export const PositionsListWidget = ({
         pricePerDay: bigint;
         expirationAt: string;
         positionType: string;
-        amount: number;
         netQuantity: number;
         liquidatedQuantity: number;
         isActive: boolean;
@@ -232,7 +240,7 @@ export const PositionsListWidget = ({
               <th>Status</th>
               <th>Price (USDC)</th>
               <th>Quantity</th>
-              <th>Margin</th>
+              <th title={MARGIN_HINT}>Margin</th>
               <th>Unrealized PnL (USDC)</th>
               <th>Time</th>
               <th>Action</th>
@@ -281,14 +289,8 @@ export const PositionsListWidget = ({
                       </td>
                       <td>{formatPrice(groupedPosition.pricePerDay)}</td>
                       <td>{Math.abs(groupedPosition.netQuantity)}</td>
-                      <td>
-                        {formatMargin(
-                          calculateMargin(
-                            groupedPosition.pricePerDay,
-                            groupedPosition.amount,
-                            groupedPosition.positionType,
-                          ),
-                        )}
+                      <td title={MARGIN_HINT}>
+                        {formatMargin(calculateMargin(groupedPosition.expirationAt))}
                       </td>
                       <td>
                         <PnLCell $isPositive={pnl !== null && pnl >= 0}>{formatPnL(pnl, percentage)}</PnLCell>

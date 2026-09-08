@@ -39,7 +39,6 @@ interface OrdersPositionsTabWidgetProps {
   participantAddress?: `0x${string}`;
   onPositionClosed?: () => void | Promise<void>;
   participantData?: Participant | null;
-  minMargin?: bigint | null;
   accountBalance?: AccountBalance;
   contractMode?: ContractMode;
   balanceQuery: BalanceQueryResult;
@@ -53,7 +52,6 @@ export const OrdersPositionsTabWidget = ({
   participantAddress,
   onPositionClosed,
   participantData,
-  minMargin,
   accountBalance,
   contractMode = "futures",
   balanceQuery,
@@ -130,7 +128,6 @@ export const OrdersPositionsTabWidget = ({
             orders={orders}
             isLoading={ordersLoading}
             participantData={participantData}
-            minMargin={minMargin}
             accountBalance={accountBalance}
             contractMode={contractMode}
             balanceQuery={balanceQuery}

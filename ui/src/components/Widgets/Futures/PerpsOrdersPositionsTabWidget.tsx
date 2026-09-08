@@ -27,6 +27,7 @@ import { usePerpsPositionHistory } from "../../../hooks/data/perps/usePerpsPosit
 import { ClosePerpsPositionModal } from "./ClosePerpsPositionModal";
 import { ModifyPerpsOrderModal } from "./ModifyPerpsOrderModal";
 import type { PerpsOrder } from "../../../hooks/data/perps/useUserPerpsOrders";
+import { useOrderMargin } from "../../../hooks/data/useOrderMargin";
 import { DateTimeCell } from "../../DateTimeCell";
 import { LoadMoreButton } from "../../LoadMoreButton";
 import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE } from "../../../lib/units";
@@ -34,10 +35,8 @@ import { getTxUrl } from "../../../lib/indexer";
 import {
   LiquidationChip,
   formatLiquidatedQty,
-  describeLiquidationLevel,
   LIQUIDATION_ROW_BG,
 } from "../../../lib/liquidation";
-import type { LiquidationDirection } from "../../../lib/portfolioMargin";
 
 type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "POSITION_HISTORY" | "ORDER_HISTORY";
 
@@ -46,12 +45,6 @@ interface PerpsOrdersPositionsTabWidgetProps {
   marketPrice?: bigint;
   positionSessions: PositionSession[];
   positionSessionsLoading?: boolean;
-  /** Account-wide, cross-product price at which the portfolio becomes liquidatable. */
-  liqPrice?: bigint;
-  /** Which way spot has to move to reach `liqPrice`. */
-  liqDirection?: LiquidationDirection;
-  /** Balance is already under maintenance margin at the current mark. */
-  isUnderwater?: boolean;
   // Lifted from this widget into Futures.tsx so the parent can derive
   // `hasOpenPerpsOrders` and gate polling cadence for perps orders + positions.
   perpsOpenOrders: PerpsOrder[];
@@ -64,9 +57,6 @@ export const PerpsOrdersPositionsTabWidget = ({
   marketPrice,
   positionSessions,
   positionSessionsLoading,
-  liqPrice,
-  liqDirection,
-  isUnderwater,
   perpsOpenOrders,
   perpsOpenOrdersLoading,
   onPositionClosed,
@@ -164,9 +154,6 @@ export const PerpsOrdersPositionsTabWidget = ({
               positionSessions={positionSessions}
               isLoading={positionSessionsLoading}
               marketPrice={marketPrice}
-              liqPrice={liqPrice}
-              liqDirection={liqDirection}
-              isUnderwater={isUnderwater}
               onClosePosition={setClosePositionSession}
             />
           </PositionsWrapper>
@@ -626,14 +613,12 @@ interface PerpsPositionsTableProps {
   positionSessions: PositionSession[];
   isLoading?: boolean;
   marketPrice?: bigint;
-  liqPrice?: bigint;
-  liqDirection?: LiquidationDirection;
-  isUnderwater?: boolean;
   onClosePosition?: (session: PositionSession) => void;
 }
 
-const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, liqPrice, liqDirection, isUnderwater, onClosePosition }: PerpsPositionsTableProps) => {
+const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClosePosition }: PerpsPositionsTableProps) => {
   const [selectedSession, setSelectedSession] = useState<PositionSession | null>(null);
+  const orderMargin = useOrderMargin();
 
   const formatPrice = (price: bigint) => {
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
@@ -660,18 +645,20 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, liqPric
     return priceDiff * netQuantity / QUANTITY_SCALE; // Adjust for precision
   };
 
-  // Margin is pooled across the whole account, so there is no per-position
-  // liquidation price — every row shows the same account-wide level.
-  const liquidationPriceLabel = isUnderwater
-    ? "Liquidatable"
-    : liqPrice !== undefined
-    ? `${liqDirection === "up" ? "↑" : "↓"} ${formatPrice(liqPrice)}`
-    : "N/A";
-  const liquidationTooltip = describeLiquidationLevel({
-    price: liqPrice,
-    direction: liqDirection,
-    isUnderwater,
-  });
+  // The venue nets every fill into one position, so the account has a single
+  // open session and its margin is the whole perps leg's contribution to
+  // portfolio IM: what the requirement drops by once the leg is flat. Clamped,
+  // because a leg hedging the futures book can make closing out cost margin
+  // rather than free it, and a negative figure in a Margin column reads as a bug.
+  const positionMargin = orderMargin.quote({ closePerps: true })?.imIncrease;
+  const positionMarginLabel =
+    positionMargin === undefined
+      ? "—"
+      : `${(Number(positionMargin < 0n ? -positionMargin : 0n) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} USDC`;
+  const marginTooltip =
+    "Initial margin this position accounts for — how much the account's requirement " +
+    "would fall if it were closed. Collateral is pooled across futures and perps, so a " +
+    "leg that hedges the rest of the book can account for none of it.";
 
   const openPositions = [...positionSessions]
     .filter((session) => session.status === "OPEN")
@@ -704,11 +691,10 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, liqPric
               <th>Status</th>
               <th>Entry Price</th>
               <th>Size / Max Size</th>
-              <th>Net Quantity</th>
+              <th title={marginTooltip}>Margin</th>
               <th>Fees (F/T)</th>
               <th>Unrealized PnL</th>
               <th>Realized PnL</th>
-              <th title={liquidationTooltip}>Liquidation Price</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -753,7 +739,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, liqPric
                     {" / "}
                     {((Number(session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(session.maxQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}
                   </td>
-                  <td>{(Number(displayQuantity < 0n ? -displayQuantity : displayQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)}</td>
+                  <td title={marginTooltip}>{positionMarginLabel}</td>
                   <td>{formatFees(session.fundingFees, session.tradingFees)}</td>
                   <td>
                     <PnLText $isPositive={unrealizedPnlValue >= 0}>
@@ -764,12 +750,6 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, liqPric
                     <PnLText $isPositive={realizedPnlValue >= 0}>
                       {realizedPnlValue >= 0 ? "+" : ""}{realizedPnlValue.toFixed(2)} USDC
                     </PnLText>
-                  </td>
-                  <td
-                    style={isUnderwater ? { color: tokens.trading.short } : undefined}
-                    title={liquidationTooltip}
-                  >
-                    {liquidationPriceLabel}
                   </td>
                   <td>
                     <ActionButtons>

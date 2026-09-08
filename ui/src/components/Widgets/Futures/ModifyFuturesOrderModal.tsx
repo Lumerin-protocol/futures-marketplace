@@ -14,7 +14,7 @@ import { USER_FUTURES_TRADES_QK } from "../../../hooks/data/useUserFuturesTrades
 import { invalidatePortfolioPnl } from "../../../hooks/data/pnl/invalidate";
 import { getOrderBookQueryKey, waitForOrderBookBlockNumber } from "../../../hooks/data/orderBookHelpers";
 import { useModifyOrder, useUpdateFuturesOrders } from "../../../hooks/data/useModifyOrder";
-import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
+import { useOrderMargin } from "../../../hooks/data/useOrderMargin";
 import { useMakerTakerFees } from "../../../hooks/data/useMakerTakerFees";
 import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import { planShrink, type RestingOrder } from "../../../lib/orderUpdatePlan";
@@ -36,10 +36,6 @@ interface ModifyFuturesOrderModalProps {
   onClose: () => void;
   order: ParticipantOrder | null;
   participantData?: Participant | null;
-  latestPrice: bigint | null;
-  /// Maintenance spot shock from the PortfolioMarginEngine, WAD-scaled.
-  mmSpotShock: bigint | undefined;
-  minMargin?: bigint | null;
   newestItemPrice: number | null;
   accountBalance?: AccountBalance;
   contractMode?: ContractMode;
@@ -51,9 +47,6 @@ export const ModifyFuturesOrderModal = ({
   onClose,
   order,
   participantData,
-  latestPrice,
-  mmSpotShock,
-  minMargin,
   newestItemPrice,
   accountBalance,
   contractMode = "futures",
@@ -65,6 +58,7 @@ export const ModifyFuturesOrderModal = ({
   const { address } = useAccount();
   const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
   const { feeFor } = useMakerTakerFees();
+  const orderMargin = useOrderMargin();
   const contractSpecsQuery = useFuturesContractSpecs();
 
   const minimumPriceIncrement = contractSpecsQuery.data?.data?.minimumPriceIncrement;
@@ -157,39 +151,49 @@ export const ModifyFuturesOrderModal = ({
     }
 
     const newPriceInWei = BigInt(Math.round(newPrice * PAYMENT_TOKEN_SCALE_NUM));
-    const totalBalance = balanceQuery.data ?? 0n;
-    const lockedBalance = minMargin ?? 0n;
-    const availableBalance = totalBalance - lockedBalance;
 
-    if (!latestPrice || mmSpotShock === undefined) {
-      await showAlert({ message: "Unable to fetch market data. Please try again.", variant: "error" });
+    // Anything else is a cancel-and-replace, which the contract checks against
+    // portfolio IM once at the end of the batch — with the old order already off
+    // the book and with no reducing exception, so quote both legs together.
+    const absNewQuantity = BigInt(Math.ceil(newQuantity));
+    // Reserve the worse of maker/taker fee — see comment on `useMakerTakerFees`.
+    const reservedFee = feeFor(newPriceInWei * absNewQuantity);
+    const quote = orderMargin.quote(
+      {
+        cancel: [
+          {
+            venue: "futures",
+            price: order.pricePerDay,
+            quantity: isBuy ? BigInt(order.quantity) : -BigInt(order.quantity),
+          },
+        ],
+        place: [
+          {
+            venue: "futures",
+            price: newPriceInWei,
+            quantity: isBuy ? absNewQuantity : -absNewQuantity,
+          },
+        ],
+      },
+      { reservedFee },
+    );
+
+    if (!quote) {
+      await showAlert({ message: "Unable to fetch margin data. Please try again.", variant: "error" });
       return false;
     }
 
-    // Calculate required margin for the new order
-    const newSignedQuantity = isBuy ? newQuantity : -newQuantity;
-    const requiredMargin = getMinMarginForPositionManual(
-      newPriceInWei,
-      newSignedQuantity,
-      latestPrice,
-      mmSpotShock,
-    );
-
-    // Reserve the worse of maker/taker fee — see comment on `useMakerTakerFees`.
-    const reservedFee = feeFor(newPriceInWei * BigInt(Math.ceil(newQuantity)));
-    const totalRequired = requiredMargin + reservedFee;
-
-    if (totalRequired > availableBalance) {
-      const requiredMarginFormatted = (Number(requiredMargin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      const reservedFeeFormatted = (Number(reservedFee) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      const totalRequiredFormatted = (Number(totalRequired) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      const totalBalanceFormatted = (Number(totalBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      const lockedBalanceFormatted = (Number(lockedBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      const availableBalanceFormatted = (Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      const accountBalanceValue = accountBalanceQuery.data ?? 0n;
-      const accountBalanceFormatted = (Number(accountBalanceValue) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+    if (!quote.affordable) {
+      const usdc = (value: bigint) => (Number(value) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
       await showAlert(
-        `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${requiredMarginFormatted} USDC\nReserved trading fee (max of maker/taker): ${reservedFeeFormatted} USDC\nTotal required: ${totalRequiredFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
+        `Insufficient funds. Please deposit futures account.\n\n` +
+          `Added margin for this change: ${usdc(quote.imIncrease)} USDC\n` +
+          `Reserved trading fee (max of maker/taker): ${usdc(quote.reservedFee)} USDC\n` +
+          `Already committed to open orders and positions: ${usdc(quote.imBefore)} USDC\n` +
+          `Total margin required: ${usdc(quote.imAfter + quote.reservedFee)} USDC\n` +
+          `Total futures balance: ${usdc(balanceQuery.data ?? 0n)} USDC\n` +
+          `Short by: ${usdc(-quote.headroom)} USDC\n` +
+          `Available account balance: ${usdc(accountBalanceQuery.data ?? 0n)} USDC`,
       );
       return false;
     }

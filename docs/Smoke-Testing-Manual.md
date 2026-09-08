@@ -211,8 +211,10 @@ You are the **taker**. Buy into the maker’s asks to open a **long**.
 
 With an open position:
 
-1. **Positions** tab: Side, Status Open, Entry, Size, Net Quantity, Fees, Unrealized / Realized PnL, Liquidation Price.
+1. **Positions** tab: Side, Status Open, Entry, Size, Margin, Fees, Unrealized / Realized PnL.
 2. Account Portfolio **Unrealized PNL** should match the position row (same sign/color).
+   The liquidation price is account-wide, so it lives in the header and the Account
+   Portfolio panel rather than on a position row.
 3. Change the price chart to 1D / 7D / 30D — page stays usable; Entry line still sensible if shown.
 4. Open **View Details** / contract specs — modal opens and closes cleanly.
 5. Wait or refresh: Unrealized PnL should move when hash price moves (as a long, it rises when price rises).
