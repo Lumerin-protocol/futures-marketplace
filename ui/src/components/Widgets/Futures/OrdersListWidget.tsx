@@ -6,9 +6,8 @@ import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
 import { ModifyFuturesOrderModal } from "./ModifyFuturesOrderModal";
 import { CloseOrderForm } from "../../Forms/CloseOrderForm";
-import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
-import { useMarginEngineShocks } from "../../../hooks/data/useMarginEngineShocks";
+import { useOrderMargin } from "../../../hooks/data/useOrderMargin";
 import type { AccountBalance, ContractMode } from "../../../types/types";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
@@ -24,16 +23,16 @@ interface OrdersListWidgetProps {
   orders: ParticipantOrder[];
   isLoading?: boolean;
   participantData?: Participant | null;
-  minMargin?: bigint | null;
   accountBalance?: AccountBalance;
   contractMode?: ContractMode;
   balanceQuery: BalanceQueryResult;
 }
 
-export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin, accountBalance, contractMode = "futures", balanceQuery }: OrdersListWidgetProps) => {
+export const OrdersListWidget = ({ orders, isLoading, participantData, accountBalance, contractMode = "futures", balanceQuery }: OrdersListWidgetProps) => {
   const modifyModal = useModal();
   const closeModal = useModal();
   const { data: marketPrice } = useGetMarketPrice();
+  const orderMargin = useOrderMargin();
   const [selectedOrder, setSelectedOrder] = useState<ParticipantOrder | null>(null);
   const [selectedCloseOrder, setSelectedCloseOrder] = useState<ParticipantOrder | null>(null);
   const _getStatusColor = (isActive: boolean, closedAt: string | null) => {
@@ -59,21 +58,23 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   };
 
 
-  // Get latest price from market price hook
-  const latestPrice = marketPrice ?? null;
-
-  // Maintenance shock from the PortfolioMarginEngine (WAD). Margin is
-  // cross-account, so this per-leg figure is a preview, not the requirement.
-  const { mmSpotShock } = useMarginEngineShocks();
-
   // Get newest item price for high price validation
   const newestItemPrice = marketPrice ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
 
-  // Calculate margin for an order
-  const calculateMargin = (pricePerDay: bigint, amount: number, isBuy: boolean): bigint | null => {
-    if (!latestPrice || mmSpotShock === undefined) return null;
-    const qty = isBuy ? amount : -amount;
-    return getMinMarginForPositionManual(pricePerDay, qty, latestPrice, mmSpotShock);
+  // What this order contributes to the account's portfolio IM — the margin that
+  // cancelling it would free. Marginal rather than standalone, because the engine
+  // nets every leg: an order hedging the rest of the book contributes nothing.
+  const calculateMargin = (order: ParticipantOrder): bigint | null => {
+    const quote = orderMargin.quote({
+      cancel: [
+        {
+          venue: "futures",
+          price: order.pricePerDay,
+          quantity: order.isBuy ? BigInt(order.quantity) : -BigInt(order.quantity),
+        },
+      ],
+    });
+    return quote ? -quote.imIncrease : null;
   };
 
   const formatMargin = (margin: bigint | null): string => {
@@ -130,9 +131,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
                     </td>
                     <td>{formatPrice(order.pricePerDay)}</td>
                     <td>{order.filledQuantity} / {liveQuantity(order)}</td>
-                    <td>
-                      {formatMargin(calculateMargin(order.pricePerDay, order.quantity, order.isBuy))}
-                    </td>
+                    <td>{formatMargin(calculateMargin(order))}</td>
                     <td><DateTimeCell timestamp={order.timestamp} /></td>
                     <td>
                       {order.isActive && !order.closedAt && (
@@ -161,9 +160,6 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
           open={modifyModal.isOpen}
           order={selectedOrder}
           participantData={participantData}
-          latestPrice={latestPrice}
-          mmSpotShock={mmSpotShock}
-          minMargin={minMargin}
           newestItemPrice={newestItemPrice}
           accountBalance={accountBalance}
           contractMode={contractMode}

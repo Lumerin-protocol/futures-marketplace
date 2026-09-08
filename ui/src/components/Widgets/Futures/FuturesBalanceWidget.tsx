@@ -253,7 +253,6 @@ export const FuturesBalanceWidget = ({
                       {amount(marginRisk.available)}
                     </RefreshableValue>
                   </MetricValue>
-                  {belowIM && !isError && <CellNote>Below initial margin</CellNote>}
                 </MetricCell>
                 <MetricCell>
                   <HintedLabel hint={ALL_VENUES_HINT}>
@@ -400,12 +399,6 @@ const MetricValue = styled("span")`
   line-height: 1.2;
 `;
 
-const CellNote = styled("span")`
-  font-size: 0.6rem;
-  color: ${tokens.text.muted};
-  line-height: 1.2;
-`;
-
 const ActionButtons = styled("div")`
   display: flex;
   gap: 0.5rem;
@@ -463,10 +456,19 @@ const GaugeValue = styled("span")<{ $color: string }>`
   color: ${({ $color }) => $color};
 `;
 
+// Boxed like DangerBanner rather than set as a line of text: this is the panel's
+// only statement about what the account may no longer do, and it now carries that
+// on its own — the muted note under Available is gone. Amber because it is a
+// restriction to read, not the liquidation risk the red banner is reserved for.
 const RestrictedNote = styled("div")`
+  padding: 0.35rem 0.5rem;
+  background-color: ${tokens.perps.highlightBg};
+  border: 1px solid ${tokens.perps.highlightBorderSoft};
+  border-radius: 6px;
+  color: ${tokens.trading.warning};
   font-size: 0.68rem;
   line-height: 1.35;
-  color: ${tokens.text.secondary};
+  font-weight: 500;
 `;
 
 const CautionNote = styled("div")`

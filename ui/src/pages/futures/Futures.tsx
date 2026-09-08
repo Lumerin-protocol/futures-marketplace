@@ -399,7 +399,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       perpsOpenOrders={perpsOpenOrdersQuery.data?.data?.orders}
       openPositionNetQuantity={openPositionNetQuantity}
       highlightMode={highlightMode}
-      latestPrice={marketPrice ?? null}
       minMargin={minMargin}
       contractMode={contractMode}
       accountBalance={accountBalanceQuery}
@@ -418,9 +417,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
         marketPrice={marketPrice}
         positionSessions={positionSessionsQuery.data?.positionSessions || []}
         positionSessionsLoading={positionSessionsQuery.isLoading}
-        liqPrice={liqPrice}
-        liqDirection={liqDirection}
-        isUnderwater={alreadyUnderwater}
         perpsOpenOrders={perpsOpenOrdersQuery.data?.data?.orders || []}
         perpsOpenOrdersLoading={perpsOpenOrdersQuery.isLoading}
         onPositionClosed={async () => {
@@ -438,7 +434,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
           await marginRisk.refetch();
         }}
         participantData={participantData?.data}
-        minMargin={minMargin}
         accountBalance={accountBalanceQuery}
         contractMode={contractMode}
         balanceQuery={balanceQuery}

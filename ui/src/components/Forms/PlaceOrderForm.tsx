@@ -1,4 +1,4 @@
-import { type FC, useState, useEffect } from "react";
+import { type FC, useMemo } from "react";
 import {
   waitForOrderBookBlockNumber,
   getOrderBookQueryKey,
@@ -25,8 +25,7 @@ import { useAccount, usePublicClient, } from "wagmi";
 import type { Participant } from "../../hooks/data/getUserFuturesOrders";
 import type { ContractMode } from "../../types/types";
 import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpecs";
-import { useMarginEngineShocks } from "../../hooks/data/useMarginEngineShocks";
-import { getMinMarginForPositionManual } from "../../hooks/data/getMinMarginForPositionManual";
+import { useOrderMargin } from "../../hooks/data/useOrderMargin";
 import Tooltip from "@mui/material/Tooltip";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import { useMakerTakerFees } from "../../hooks/data/useMakerTakerFees";
@@ -59,7 +58,6 @@ interface Props {
   expirationAt: bigint;
   quantity: number; // Positive for Buy, Negative for Sell
   participantData?: Participant | null;
-  latestPrice: bigint | null;
   onOrderPlaced?: () => void | Promise<void>;
   closeForm: () => void;
   bypassConflictCheck?: boolean; // Allow proceeding despite conflicting orders
@@ -77,7 +75,6 @@ export const PlaceOrderForm: FC<Props> = ({
   expirationAt,
   quantity,
   participantData,
-  latestPrice,
   onOrderPlaced,
   closeForm,
   bypassConflictCheck = false,
@@ -127,49 +124,33 @@ export const PlaceOrderForm: FC<Props> = ({
     wMaker !== undefined && weightScale ? (Number(wMaker) * sizeUSDC) / Number(weightScale) : null;
   const takerReward =
     wTaker !== undefined && weightScale ? (Number(wTaker) * sizeUSDC) / Number(weightScale) : null;
-  // Maintenance shock from the PortfolioMarginEngine (WAD): margin is a
-  // cross-account figure, so this only previews a single leg.
-  const { mmSpotShock } = useMarginEngineShocks();
+  const orderMargin = useOrderMargin();
 
-  // State for required margin
-  const [requiredMargin, setRequiredMargin] = useState<bigint | null>(null);
-  const [isLoadingMargin, setIsLoadingMargin] = useState(false);
-
-  // Calculate required margin when price or quantity changes
-  useEffect(() => {
-    if (!latestPrice || mmSpotShock === undefined) return;
-    setIsLoadingMargin(true);
-
-    let margin: bigint;
+  /**
+   * Margin this order commits, `null` while the reads it needs are in flight.
+   *
+   * Futures quote the venue's own gate — the rise in portfolio IM once the order
+   * rests — so this modal shows the figure the order widget showed and the one
+   * `createOrder` will check. Perps still size margin off the chosen leverage.
+   */
+  const requiredMargin = useMemo<bigint | null>(() => {
     if (contractMode === "perpetual") {
-      // For perps: calculate margin based on leverage
-      // Formula: (price * quantity) * (1 / leverage)
-      // Example: 10x leverage = 10% margin, 5x leverage = 20% margin
+      // (price * quantity) * (1 / leverage): 10x leverage = 10% margin.
       const positionValue =
         (price * BigInt(Math.round(restingQuantity * QUANTITY_SCALE_NUM))) / QUANTITY_SCALE;
-      const marginPercent = BigInt(Math.round((1 / leverage) * 100)); // Convert leverage to margin %
-      margin = (positionValue * marginPercent) / 100n;
-    } else {
-      // For futures: use the existing calculation with PnL
-      margin = getMinMarginForPositionManual(
-        price,
-        isBuy ? restingQuantity : -restingQuantity,
-        latestPrice,
-        mmSpotShock,
-      );
+      const marginPercent = BigInt(Math.round((1 / leverage) * 100));
+      return (positionValue * marginPercent) / 100n;
     }
 
-    setRequiredMargin(margin);
-    setIsLoadingMargin(false);
-  }, [
-    latestPrice,
-    price,
-    isBuy,
-    contractMode,
-    restingQuantity,
-    mmSpotShock,
-    leverage,
-  ]);
+    const quantity = BigInt(Math.round(restingQuantity));
+    if (quantity === 0n) return 0n;
+    const quote = orderMargin.quote({
+      place: [{ venue: "futures", price, quantity: isBuy ? quantity : -quantity }],
+    });
+    if (!quote) return null;
+    // A leg that hedges the rest of the book can lower IM; it never earns credit.
+    return quote.imIncrease > 0n ? quote.imIncrease : 0n;
+  }, [contractMode, price, restingQuantity, leverage, isBuy, orderMargin.quote]);
 
   // Check for conflicting orders (opposite action, same price, same expiration date)
   const hasConflictingOrder = () => {
@@ -260,12 +241,8 @@ export const PlaceOrderForm: FC<Props> = ({
                 <span className="text-gray-300">Required Margin:</span>
                 <span className="text-white">
                   {requiredMargin !== null
-                    ? `${(Math.abs(Number(requiredMargin)) / PAYMENT_TOKEN_SCALE_NUM).toFixed(
-                        2,
-                      )} USDC`
-                    : isLoadingMargin
-                    ? "Loading..."
-                    : "N/A"}
+                    ? `${(Number(requiredMargin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} USDC`
+                    : "Loading..."}
                 </span>
               </div>
               {contractMode === "perpetual" ? (
