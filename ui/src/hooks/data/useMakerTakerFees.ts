@@ -8,7 +8,34 @@ const futuresAddress = process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${strin
 const BPS = 10_000n;
 
 /**
- * Reads the maker and taker fee rates from the Futures contract.
+ * Reserve for a notional at a venue's rates: the worse of maker/taker, since at
+ * submit time it is not yet known whether the order matches (taker) or rests and
+ * later fills (maker). A maker rebate is a negative rate and is floored at zero —
+ * it is not spendable headroom.
+ *
+ * Split out from the hook because the two venues publish their rates in
+ * different places: futures on the contract, perps on the subgraph collection.
+ * The arithmetic is the same, so only the source should differ.
+ */
+export function feeReserverFor(
+  makerFeeBps: number | undefined,
+  takerFeeBps: number | undefined,
+): (notional: bigint) => bigint {
+  const worstCaseFeeBps =
+    makerFeeBps !== undefined && takerFeeBps !== undefined
+      ? Math.max(makerFeeBps, takerFeeBps)
+      : undefined;
+
+  return (notional: bigint): bigint => {
+    if (worstCaseFeeBps === undefined || worstCaseFeeBps <= 0) return 0n;
+    return (notional * BigInt(worstCaseFeeBps)) / BPS;
+  };
+}
+
+/**
+ * Reads the maker and taker fee rates from the Futures contract. Perps set their
+ * own rates and publish them on the subgraph collection, so an order on that
+ * venue must reserve through `feeReserverFor(collection...)` instead of this.
  *
  * Both are signed basis points of the filled notional — `notional * bps / 10000`,
  * where notional is `price * contracts`. Signed because a maker rebate is
@@ -53,10 +80,7 @@ export function useMakerTakerFees() {
 
   /// Fee to reserve against a notional (token decimals). Zero while the rates
   /// are still loading, and never negative — a rebate is not spendable headroom.
-  const feeFor = (notional: bigint): bigint => {
-    if (worstCaseFeeBps === undefined || worstCaseFeeBps <= 0) return 0n;
-    return (notional * BigInt(worstCaseFeeBps)) / BPS;
-  };
+  const feeFor = feeReserverFor(makerFeeBps, takerFeeBps);
 
   return {
     ...result,

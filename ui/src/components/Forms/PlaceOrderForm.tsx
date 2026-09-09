@@ -26,6 +26,7 @@ import type { Participant } from "../../hooks/data/getUserFuturesOrders";
 import type { ContractMode } from "../../types/types";
 import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpecs";
 import { useOrderMargin } from "../../hooks/data/useOrderMargin";
+import type { OrderVenue } from "../../lib/orderMargin";
 import Tooltip from "@mui/material/Tooltip";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import { useMakerTakerFees } from "../../hooks/data/useMakerTakerFees";
@@ -65,7 +66,6 @@ interface Props {
   offsetPlan?: OrderOffsetPlan | null;
   contractMode?: ContractMode;
   perpsCollection?: PerpsCollection;
-  leverage?: number; // Leverage value for perps mode (e.g., 10 for 10x)
   isMarketOrder?: boolean;
   timeInForce?: TimeInForceValue;
 }
@@ -81,7 +81,6 @@ export const PlaceOrderForm: FC<Props> = ({
   offsetPlan = null,
   contractMode = "futures",
   perpsCollection,
-  leverage = 10,
   isMarketOrder = false,
   timeInForce = TimeInForce.GTC,
 }) => {
@@ -129,28 +128,26 @@ export const PlaceOrderForm: FC<Props> = ({
   /**
    * Margin this order commits, `null` while the reads it needs are in flight.
    *
-   * Futures quote the venue's own gate — the rise in portfolio IM once the order
-   * rests — so this modal shows the figure the order widget showed and the one
-   * `createOrder` will check. Perps still size margin off the chosen leverage.
+   * Quotes the venue's own gate on either book — the rise in portfolio IM once
+   * the order rests — so this modal shows the figure the order widget showed and
+   * the one `createOrder` will check. Leverage does not enter it: neither venue
+   * has such a term, it only caps how much of the gate's capacity the widget
+   * offers.
    */
   const requiredMargin = useMemo<bigint | null>(() => {
-    if (contractMode === "perpetual") {
-      // (price * quantity) * (1 / leverage): 10x leverage = 10% margin.
-      const positionValue =
-        (price * BigInt(Math.round(restingQuantity * QUANTITY_SCALE_NUM))) / QUANTITY_SCALE;
-      const marginPercent = BigInt(Math.round((1 / leverage) * 100));
-      return (positionValue * marginPercent) / 100n;
-    }
-
-    const quantity = BigInt(Math.round(restingQuantity));
+    const venue: OrderVenue = contractMode === "perpetual" ? "perps" : "futures";
+    const quantity =
+      venue === "perps"
+        ? BigInt(Math.round(restingQuantity * QUANTITY_SCALE_NUM))
+        : BigInt(Math.round(restingQuantity));
     if (quantity === 0n) return 0n;
     const quote = orderMargin.quote({
-      place: [{ venue: "futures", price, quantity: isBuy ? quantity : -quantity }],
+      place: [{ venue, price, quantity: isBuy ? quantity : -quantity }],
     });
     if (!quote) return null;
     // A leg that hedges the rest of the book can lower IM; it never earns credit.
     return quote.imIncrease > 0n ? quote.imIncrease : 0n;
-  }, [contractMode, price, restingQuantity, leverage, isBuy, orderMargin.quote]);
+  }, [contractMode, price, restingQuantity, isBuy, orderMargin.quote]);
 
   // Check for conflicting orders (opposite action, same price, same expiration date)
   const hasConflictingOrder = () => {

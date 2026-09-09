@@ -17,6 +17,12 @@ export type HistoricalPosition = {
   /// session is owned by a single user, so a single price is sufficient and
   /// the side is conveyed via `isLong`.
   pricePerDay: bigint;
+  /// Price the session actually exited at: the indexer's quantity-weighted
+  /// average over every exit, whichever way they happened — traded out,
+  /// liquidated, or cash-settled at expiry. Distinct from `settlementPrice`,
+  /// which only exists for the last of those three. A session only reaches
+  /// CLOSE through a path that folds into this, so it is always populated.
+  closePrice: bigint;
   /// Realized PnL for the session as reported by the indexer. Replaces the
   /// legacy `buyerPnl` / `sellerPnl` split.
   pnl: number;
@@ -130,6 +136,7 @@ export const sessionToHistoricalPosition = (
     timestamp: session.openedAt,
     expirationAt: session.expirationAt,
     pricePerDay: BigInt(session.entryPrice),
+    closePrice: BigInt(session.closePrice),
     pnl: Number(session.realizedPnl),
     isLong,
     closedQuantity: session.closedQuantity,
