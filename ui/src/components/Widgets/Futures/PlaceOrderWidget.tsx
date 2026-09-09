@@ -2232,6 +2232,8 @@ const StyledSlider = styled(Slider, {
   }
   `}
   
+  /* Halo sized so thumb + halo at 0% / 100% (9px + 7px) stays within the
+     card's 1rem side padding instead of reaching the page edge. */
   & .MuiSlider-thumb {
     width: 18px;
     height: 18px;
@@ -2240,12 +2242,12 @@ const StyledSlider = styled(Slider, {
 
     &:hover,
     &.Mui-focusVisible {
-      box-shadow: 0 0 0 8px ${tokens.overlay.white16};
+      box-shadow: 0 0 0 5px ${tokens.overlay.white16};
       background-color: ${tokens.neutralButton.hover};
     }
     
     &.Mui-active {
-      box-shadow: 0 0 0 14px ${tokens.overlay.white16};
+      box-shadow: 0 0 0 7px ${tokens.overlay.white16};
     }
   }
   
@@ -2285,6 +2287,12 @@ const StyledSlider = styled(Slider, {
     padding: 4px 8px;
     font-size: 0.75rem;
   }
+
+  /* "auto" also pops the value on hover; only show it while the thumb is
+     actually being dragged, when the amount field is not yet settled. */
+  & .MuiSlider-thumb:not(.Mui-active) .MuiSlider-valueLabel {
+    display: none;
+  }
   
   /* MOBILE-ONLY (see MOBILE_TRADING_QUERY): the form only gets half the screen,
      so the thumb and its tick labels shrink to stay proportionate. */
@@ -2295,11 +2303,11 @@ const StyledSlider = styled(Slider, {
 
       &:hover,
       &.Mui-focusVisible {
-        box-shadow: 0 0 0 5px ${tokens.overlay.white16};
+        box-shadow: 0 0 0 4px ${tokens.overlay.white16};
       }
 
       &.Mui-active {
-        box-shadow: 0 0 0 9px ${tokens.overlay.white16};
+        box-shadow: 0 0 0 6px ${tokens.overlay.white16};
       }
     }
 
