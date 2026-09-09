@@ -80,6 +80,15 @@ export const HistoricalPositionsListWidget = ({
               const positionType: "Long" | "Short" = position.isLong ? "Long" : "Short";
               const maxQuantity = Math.abs(position.maxQuantity);
               const wasLiquidated = position.liquidatedQuantity > 0;
+              // A pinned price belongs to the expiration, not to this session, so
+              // its mere presence would relabel every session at that date the
+              // moment it settled. The settling exit fill lands in the pinning
+              // transaction or later, so anything that closed earlier was a
+              // trade-out by the user.
+              const wasSettled =
+                position.settledAt !== null &&
+                position.closedAt !== null &&
+                Number(position.closedAt) >= Number(position.settledAt);
               return (
                 <TableRow
                   key={position.id}
@@ -102,7 +111,7 @@ export const HistoricalPositionsListWidget = ({
                           maxQuantity - position.liquidatedQuantity,
                         )}
                       </LiquidationChip>
-                    ) : position.settlementPrice !== null ? (
+                    ) : wasSettled ? (
                       <span style={{ color: tokens.text.muted }}>Settled</span>
                     ) : (
                       <span style={{ color: tokens.text.muted }}>Closed</span>
@@ -111,8 +120,8 @@ export const HistoricalPositionsListWidget = ({
                   <td>{formatPrice(position.pricePerDay)}</td>
                   <td>{maxQuantity}</td>
                   <td>
-                    {position.settlementPrice !== null ? (
-                      formatPrice(position.settlementPrice)
+                    {position.closePrice > 0n ? (
+                      formatPrice(position.closePrice)
                     ) : (
                       <span style={{ color: tokens.text.muted }}>—</span>
                     )}

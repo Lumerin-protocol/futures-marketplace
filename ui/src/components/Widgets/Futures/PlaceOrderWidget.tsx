@@ -1,7 +1,7 @@
 import styled from "@mui/material/styles/styled";
 import { keyframes, css } from "@emotion/react";
 import { SmallWidget } from "../../Cards/Cards.styled";
-import { type ComponentProps, type CSSProperties, useState, useEffect, useId, useRef } from "react";
+import { type ComponentProps, type CSSProperties, useState, useEffect, useId, useMemo, useRef } from "react";
 import Slider, { SliderMark } from "@mui/material/Slider";
 import Tooltip from "@mui/material/Tooltip";
 import { tokens } from "../../../styles/tokens";
@@ -44,7 +44,8 @@ import {
   handleNumericDecimalInput6Decimals,
   handleNumericIntegerInput,
 } from "../../Forms/Shared/AmountInputForm";
-import { useMakerTakerFees } from "../../../hooks/data/useMakerTakerFees";
+import { feeReserverFor, useMakerTakerFees } from "../../../hooks/data/useMakerTakerFees";
+import type { OrderVenue } from "../../../lib/orderMargin";
 import { ModeToggle, ModeButton, type AmountMode } from "./PerpsOrderFormFields";
 import { MOBILE_TOGGLE_METRICS } from "./mobile/mobileTradingLayout";
 import { useSimulatePerpsOrder } from "../../../hooks/data/perps/useSimulatePerpsOrder";
@@ -122,23 +123,19 @@ export const PlaceOrderWidget = ({
   const fieldId = useId();
   const { data: marketPrice, isLoading: isMarketPriceLoading } = useGetMarketPrice();
   const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
-  const { feeFor } = useMakerTakerFees();
+  const { feeFor: futuresFeeFor } = useMakerTakerFees();
   const { isConnected, isConnecting, isReconnecting } = useAccount();
   const { open: openWalletModal } = useAppKit();
 
-  // Perps fees live on the perps collection, not the futures contract
-  // `useMakerTakerFees` reads. A rebate is not spendable headroom.
-  const perpsFeeFor = (notional: bigint): bigint => {
-    const maker = perpsCollection?.makerFeeBps;
-    const taker = perpsCollection?.takerFeeBps;
-    if (maker === undefined || taker === undefined) return 0n;
-    const worst = Math.max(maker, taker);
-    if (worst <= 0) return 0n;
-    return (notional * BigInt(worst)) / 10_000n;
-  };
-  const reserveFee = (notional: bigint) =>
-    contractMode === "perpetual" ? perpsFeeFor(notional) : feeFor(notional);
-  const orderVenue = contractMode === "perpetual" ? "perps" : "futures";
+  // Fee rates are per venue — futures publish theirs on the contract, perps on
+  // the collection — so the reserve has to follow the order, not the widget.
+  // A rebate is not spendable headroom; `feeReserverFor` already floors at zero.
+  const perpsFeeFor = useMemo(
+    () => feeReserverFor(perpsCollection?.makerFeeBps, perpsCollection?.takerFeeBps),
+    [perpsCollection?.makerFeeBps, perpsCollection?.takerFeeBps],
+  );
+  const reserveFee = contractMode === "perpetual" ? perpsFeeFor : futuresFeeFor;
+  const orderVenue: OrderVenue = contractMode === "perpetual" ? "perps" : "futures";
 
   // Calculate price step from contract specs
   const priceStep = contractSpecsQuery.data?.data?.minimumPriceIncrement
@@ -1504,7 +1501,10 @@ export const PlaceOrderWidget = ({
         />
       </ModalItem>
 
-      {showOrderForm && pendingOrder && externalExpirationAt && (
+      {/* Perps have no expiration to wait on. This used to require one in both
+          modes and got away with it because the page left the futures expiry set
+          while in perps mode; the market selector now clears it. */}
+      {showOrderForm && pendingOrder && (contractMode === "perpetual" || externalExpirationAt !== undefined) && (
         <ModalItem
           compact
           open={showOrderForm}
@@ -1518,7 +1518,7 @@ export const PlaceOrderWidget = ({
         >
           <PlaceOrderForm
             price={BigInt(Math.round(pendingOrder.price * PAYMENT_TOKEN_SCALE_NUM))}
-            expirationAt={BigInt(externalExpirationAt)}
+            expirationAt={externalExpirationAt !== undefined ? BigInt(externalExpirationAt) : 0n}
             quantity={pendingOrder.quantity}
             participantData={participantData}
             onOrderPlaced={async () => {

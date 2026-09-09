@@ -1,7 +1,7 @@
 import { tokens } from "../../styles/tokens";
 import { type FC, type ReactNode, useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { useAccount } from "wagmi";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import { FuturesBalanceWidget } from "../../components/Widgets/Futures/FuturesBalanceWidget";
 import { TradingHeader } from "../../components/Widgets/Futures/TradingHeader";
 import { OrderBookTable } from "../../components/Widgets/Futures/OrderBookTable";
@@ -30,7 +30,9 @@ import { useUserPositionSessions } from "../../hooks/data/perps/useUserPositionS
 import { useUserPerpsOrders } from "../../hooks/data/perps/useUserPerpsOrders";
 import { useLiquidationThresholds } from "../../hooks/data/useLiquidationThresholds";
 import { usePointsHookWeights } from "../../hooks/data/usePointsHookWeights";
+import { useTradableExpirations } from "../../hooks/data/useGetExpirationDates";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
+import type { Instrument } from "../../lib/instruments";
 import type { ContractMode } from "../../types/types";
 import styled from "@mui/material/styles/styled";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
@@ -42,14 +44,16 @@ interface TradingPageProps {
 export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const { isConnected, address } = useAccount();
   const { mode: modeParam } = useParams<{ mode: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const previousAddressRef = useRef<string | undefined>(undefined);
   // Below 768px the page renders the mobile-only compound layout (order book
   // beside the place-order form, chart collapsed) instead of the desktop grid.
   const isMobileTradingLayout = useIsMobileTradingLayout();
 
-  // Mode is owned by the URL (/trade/:mode). Same route element stays mounted
-  // across futures↔perps, so wagmi Hydrate is not recreated mid-tree.
+  // The traded instrument is owned by the URL: the product by /trade/:mode and,
+  // for futures, the expiration by ?expiry=. Same route element stays mounted
+  // across every switch, so wagmi Hydrate is not recreated mid-tree.
   const contractMode: ContractMode =
     modeParam === "perpetual" || modeParam === "futures" ? modeParam : defaultMode;
 
@@ -59,9 +63,36 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     }
   }, [modeParam, defaultMode, navigate]);
 
-  const handleContractModeChange = useCallback(
-    (mode: ContractMode) => {
-      navigate(mode === "perpetual" ? "/trade/perpetual" : "/trade/futures", { replace: true });
+  const { expirations } = useTradableExpirations();
+  const expiryParam = searchParams.get("expiry");
+
+  // Each futures expiration is its own market on-chain, so this is the second
+  // half of "what am I trading". Falls back to the front of the list while the
+  // dates load, when the URL names none, and when the one it names has rolled
+  // off the contract's forward window.
+  const selectedExpirationAt = useMemo(() => {
+    if (contractMode === "perpetual") return undefined;
+    const requested = expiryParam === null ? Number.NaN : Number(expiryParam);
+    return expirations.includes(requested) ? requested : expirations[0];
+  }, [contractMode, expiryParam, expirations]);
+
+  // Keep the URL from naming an expiration that is not the one being traded.
+  // A bare /trade/futures is left alone — it is the stable "front month" entry
+  // point rather than a stale link.
+  useEffect(() => {
+    if (contractMode !== "futures" || expiryParam === null) return;
+    if (selectedExpirationAt === undefined || expiryParam === String(selectedExpirationAt)) return;
+    setSearchParams({ expiry: String(selectedExpirationAt) }, { replace: true });
+  }, [contractMode, expiryParam, selectedExpirationAt, setSearchParams]);
+
+  const handleInstrumentChange = useCallback(
+    (instrument: Instrument) => {
+      navigate(
+        instrument.mode === "perpetual"
+          ? "/trade/perpetual"
+          : `/trade/futures?expiry=${instrument.expirationAt}`,
+        { replace: true },
+      );
     },
     [navigate],
   );
@@ -158,9 +189,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // Poll both products' trade feeds for new liquidations and surface a toast.
   const { notifications: liquidationNotifications, dismiss: dismissLiquidation } =
     useLiquidationNotifications(address);
-
-  // Active expiration date selected in the order book (used for futures entry price line)
-  const [selectedExpirationAt, setSelectedExpirationAt] = useState<number | undefined>();
 
   // Resolve the points hook address and its weighting params (WEIGHT_SCALE,
   // wTaker, wMaker) on initial load so they're warm in cache for the place-order
@@ -279,10 +307,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     setHighlightTrigger((prev) => prev + 1);
   };
 
-  const handleExpirationAtChange = (expirationAt: number | undefined) => {
-    setSelectedExpirationAt(expirationAt);
-  };
-
   const currentPriceFormatted = marketPrice ? (Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2) : null;
 
   // Change of the current market price vs the previous distinct polled value.
@@ -314,7 +338,8 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const renderHeader = (mobileActions?: ReactNode) => (
     <TradingHeader
       contractMode={contractMode}
-      onContractModeChange={handleContractModeChange}
+      expirations={expirations}
+      onInstrumentChange={handleInstrumentChange}
       contractSpecsQuery={contractSpecsQuery}
       currentPrice={currentPriceFormatted}
       priceChange={visiblePriceChange}
@@ -365,11 +390,10 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const orderBookNode = (
     <OrderBookTable
       onRowClick={handleOrderBookClick}
-      onExpirationAtChange={handleExpirationAtChange}
       contractSpecsQuery={contractSpecsQuery}
       previousOrderBookStateRef={previousOrderBookStateRef}
       contractMode={contractMode}
-      targetExpirationAt={selectedExpirationAt}
+      selectedExpirationAt={selectedExpirationAt}
     />
   );
 

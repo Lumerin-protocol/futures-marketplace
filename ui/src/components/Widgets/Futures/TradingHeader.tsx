@@ -8,6 +8,8 @@ import { DetailedSpecsModal } from "./DetailedSpecsModal";
 import { useSettlementPrice } from "../../../hooks/data/useSettlementPrice";
 import { formatHashratePHPS, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { describeLiquidationLevel } from "../../../lib/liquidation";
+import { MarketSelector } from "./MarketSelector";
+import type { Instrument } from "../../../lib/instruments";
 import type { LiquidationDirection } from "../../../lib/portfolioMargin";
 import type { ReactNode } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
@@ -17,7 +19,10 @@ import type { ContractMode } from "../../../types/types";
 
 interface TradingHeaderProps {
   contractMode: ContractMode;
-  onContractModeChange: (mode: ContractMode) => void;
+  /// Tradable futures expirations, unix seconds ascending — the futures rows of
+  /// the market selector.
+  expirations: readonly number[];
+  onInstrumentChange: (instrument: Instrument) => void;
   contractSpecsQuery: UseQueryResult<GetResponse<FuturesContractSpecs>, Error>;
   currentPrice?: string | null;
   /// Change of the current market price vs the previous polled value. Used to
@@ -49,7 +54,8 @@ const formatVolume = (raw: string): string => {
 
 export const TradingHeader = ({
   contractMode,
-  onContractModeChange,
+  expirations,
+  onInstrumentChange,
   contractSpecsQuery,
   currentPrice,
   priceChange,
@@ -145,35 +151,32 @@ export const TradingHeader = ({
     );
   };
 
-  const modeToggle = (
-    <ModeToggle>
-      <ModeButton
-        $active={contractMode === "futures"}
-        onClick={() => onContractModeChange("futures")}
-      >
-        Futures
-      </ModeButton>
-      <ModeButton
-        $active={contractMode === "perpetual"}
-        onClick={() => onContractModeChange("perpetual")}
-      >
-        Perpetuals
-      </ModeButton>
-    </ModeToggle>
+  const marketSelector = (
+    <MarketSelector
+      contractMode={contractMode}
+      selectedExpirationAt={selectedExpirationAt}
+      expirations={expirations}
+      onChange={onInstrumentChange}
+    />
   );
 
   return (
     <>
       <HeaderBar>
-        {/* Left: contract mode toggle. On mobile it shares a full-width row with
-            the layout's controls, which sit in the right corner. */}
+        {/* Left: market selector, fenced off from the read-only stats by the same
+            divider they use between themselves. On mobile it shares a full-width
+            row with the layout's controls, which sit in the right corner, and the
+            stats wrap below — so there is nothing to divide it from. */}
         {mobileActions ? (
           <ModeRow>
-            {modeToggle}
+            {marketSelector}
             {mobileActions}
           </ModeRow>
         ) : (
-          modeToggle
+          <>
+            {marketSelector}
+            <Divider />
+          </>
         )}
 
         {/* Center: market stats */}
@@ -262,7 +265,7 @@ const HeaderBar = styled("div")`
 `;
 
 // MOBILE-ONLY wrapper (only rendered when `mobileActions` is passed): claims a
-// full flex line so the contract-mode toggle and the layout controls sit on their
+// full flex line so the market selector and the layout controls sit on their
 // own row, with the controls pushed to the right corner and the stats below.
 const ModeRow = styled("div")`
   display: flex;
@@ -270,35 +273,6 @@ const ModeRow = styled("div")`
   justify-content: space-between;
   gap: 0.5rem;
   flex: 1 1 100%;
-`;
-
-const ModeToggle = styled("div")`
-  display: flex;
-  gap: 0;
-  border: 1px solid ${tokens.border.default};
-  border-radius: ${tokens.radius.sm};
-  overflow: hidden;
-  flex-shrink: 0;
-`;
-
-const ModeButton = styled("button")<{ $active: boolean }>`
-  padding: 0.4rem 1rem;
-  background: ${(props) => (props.$active ? tokens.surface.tabActive : "transparent")};
-  color: ${tokens.text.onDark};
-  border: none;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  white-space: nowrap;
-
-  &:hover {
-    background: ${(props) => (props.$active ? tokens.surface.tabHover : tokens.surface.tabInactiveHover)};
-  }
-
-  &:not(:last-child) {
-    border-right: 1px solid ${tokens.border.muted05};
-  }
 `;
 
 const StatsRow = styled("div")`
@@ -314,8 +288,11 @@ const StatItem = styled("div")`
   gap: 0.1rem;
 `;
 
+/* Deliberately a step under the market selector's label: these are facts about
+   the instrument, and half a dozen of them at the selector's weight left the bar
+   with no focal point. */
 const StatValue = styled("span")`
-  font-size: 1rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: ${tokens.text.onDark};
   line-height: 1.2;
@@ -323,7 +300,7 @@ const StatValue = styled("span")`
 
 const PriceChange = styled("span")<{ $up: boolean }>`
   margin-left: 0.4rem;
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   font-weight: 600;
   color: ${(props) => (props.$up ? tokens.trading.long : tokens.trading.short)};
 `;

@@ -2,7 +2,6 @@ import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { useGetExpirationDates } from "../../../hooks/data/useGetExpirationDates";
 import { useAggregateOrderBook } from "../../../hooks/data/useAggregateOrderBook";
 import { usePerpsOrderBook } from "../../../hooks/data/perps/usePerpsOrderBook";
 import { usePerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
@@ -21,14 +20,13 @@ import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE_NUM } from "../../../lib/units"
 
 interface OrderBookTableProps {
   onRowClick?: (price: string, amount: number | null) => void;
-  onExpirationAtChange?: (expirationAt: number | undefined) => void;
   contractSpecsQuery: UseQueryResult<GetResponse<FuturesContractSpecs>, Error>;
   previousOrderBookStateRef: React.MutableRefObject<Map<number, { bidUnits: number | null; askUnits: number | null }>>;
   contractMode?: ContractMode;
-  // When set, the carousel snaps to the matching expiration date (futures only).
-  // Used by the close-position flow to align the order book with the position
-  // being closed.
-  targetExpirationAt?: number;
+  // Futures market to show, unix seconds. Picked in the header's market selector
+  // — each expiration has its own book. Undefined in perps mode, and in futures
+  // mode until the expiration list has loaded.
+  selectedExpirationAt?: number;
 }
 
 const normalizePrice = (price: number, minimumPriceIncrement: number | null): number => {
@@ -40,13 +38,11 @@ const normalizePrice = (price: number, minimumPriceIncrement: number | null): nu
 
 export const OrderBookTable = ({
   onRowClick,
-  onExpirationAtChange,
   contractSpecsQuery,
   previousOrderBookStateRef,
   contractMode = "futures",
-  targetExpirationAt,
+  selectedExpirationAt,
 }: OrderBookTableProps) => {
-  const [selectedDateIndex, setSelectedDateIndex] = useState(0);
   // Order book display mode: Classic / Volume ladders, or the all-users Trades feed.
   const [viewMode, setViewMode] = useState<"classic" | "volume" | "trades">("volume");
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -56,7 +52,6 @@ export const OrderBookTable = ({
     new Map(),
   );
 
-  const { data: expirationDatesRaw, isLoading, isError } = useGetExpirationDates();
   const { data: marketPrice } = useGetMarketPrice();
   const perpsCollectionQuery = usePerpsCollection();
 
@@ -71,55 +66,6 @@ export const OrderBookTable = ({
     if (rawIncrement == null) return null;
     return Number(rawIncrement) / PAYMENT_TOKEN_SCALE_NUM;
   }, [contractMode, perpsCollectionQuery.data?.data?.minimumPriceIncrement, contractSpecsQuery.data?.data?.minimumPriceIncrement]);
-
-  // Transform expiration dates from bigint[] to [{ expirationAt: number }]
-  // Filter out dates that are earlier than now
-  const expirationDates = useMemo(() => {
-    if (!expirationDatesRaw) return [];
-    const now = Math.floor(Date.now() / 1000); // Current time in Unix timestamp (seconds)
-    return expirationDatesRaw
-      .map((date) => ({
-        expirationAt: Number(date),
-      }))
-      .filter(({ expirationAt }) => expirationAt >= now)
-      .sort((a, b) => a.expirationAt - b.expirationAt); // Sort by date ascending
-  }, [expirationDatesRaw]);
-
-  // Reset selected date index if it's out of bounds after filtering
-  useEffect(() => {
-    if (expirationDates.length > 0 && selectedDateIndex >= expirationDates.length) {
-      setSelectedDateIndex(0);
-    }
-  }, [expirationDates.length, selectedDateIndex]);
-
-  // Snap the carousel to a target expiration date when the parent requests it
-  // (e.g. closing a position on a different expiry than the one currently shown).
-  // `selectedDateIndex` is deliberately omitted: with it listed, manually paging
-  // the carousel would immediately snap back to the target while it is still set.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
-  useEffect(() => {
-    if (!targetExpirationAt || expirationDates.length === 0) return;
-    const idx = expirationDates.findIndex((d) => d.expirationAt === targetExpirationAt);
-    if (idx >= 0 && idx !== selectedDateIndex) {
-      setSelectedDateIndex(idx);
-    }
-  }, [targetExpirationAt, expirationDates]);
-
-  // Get selected expiration date
-  const selectedExpirationAt = expirationDates[selectedDateIndex]?.expirationAt;
-
-  // Notify parent component when expiration date changes.
-  // `onExpirationAtChange` is an optional prop that callers pass inline, so it is
-  // a new function on every parent render; listing it would fire this
-  // notification on every render instead of only when the expiry changes.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
-  useEffect(() => {
-    if (selectedExpirationAt) {
-      onExpirationAtChange?.(selectedExpirationAt);
-    } else {
-      onExpirationAtChange?.(undefined);
-    }
-  }, [selectedExpirationAt]);
 
   // Fetch order book based on contract mode
   const futuresOrderBookQuery = useAggregateOrderBook(
@@ -178,15 +124,15 @@ export const OrderBookTable = ({
     futuresOrderBookQuery.data?.data?.priceLevels,
   ]);
 
-  // Drop the highlight baseline and refetch when the user pages to another
-  // expiry. `selectedDateIndex` is the trigger rather than a value read here, and
-  // `orderBookQuery` swaps between the futures and perps query objects, so
-  // listing its `refetch` would fire an extra request whenever the mode flips.
+  // Drop the highlight baseline and refetch when the selector moves to another
+  // market. `selectedExpirationAt` is the trigger rather than a value read here,
+  // and `orderBookQuery` swaps between the futures and perps query objects, so
+  // listing its `refetch` would fire an extra request on every mode flip.
   // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   useEffect(() => {
     previousOrderBookStateRef.current = new Map();
     orderBookQuery.refetch();
-  }, [selectedDateIndex]);
+  }, [selectedExpirationAt]);
 
   // Get current order book state from pre-aggregated data
   const currentOrderBookState = useMemo(() => {
@@ -350,74 +296,48 @@ export const OrderBookTable = ({
     previousOrderBookStateRef.current = new Map(currentOrderBookState);
   }, [orderBookData, currentOrderBookState]);
 
-  // Navigation functions
-  const goToPreviousDate = () => {
-    if (selectedDateIndex > 0) {
-      setSelectedDateIndex(selectedDateIndex - 1);
+  // The ladder tracks this book's own query, and futures additionally wait on the
+  // page resolving which expiration is being traded because that query stays
+  // disabled until then. Perps wait on nothing expiry-related any more: these
+  // states used to read the futures expiration list, which perps have no use for.
+  //
+  // Only the ladder is gated. The trades feed has its own source and is not
+  // scoped to an expiration, and keeping the view tabs mounted means switching
+  // markets no longer blanks the whole widget while the new book loads.
+  const renderLadder = () => {
+    if (orderBookQuery.isError) {
+      return <StatusMessage $error>Failed to load order book data</StatusMessage>;
     }
-  };
-
-  const goToNextDate = () => {
-    if (selectedDateIndex < expirationDates.length - 1) {
-      setSelectedDateIndex(selectedDateIndex + 1);
+    if (orderBookQuery.isLoading || (contractMode === "futures" && selectedExpirationAt === undefined)) {
+      return <StatusMessage>Loading order book data...</StatusMessage>;
     }
-  };
-
-  // Format expiration date for display
-  const formatExpirationAt = (timestamp: number) => {
-    const date = new Date(timestamp * 1000);
-    return date.toLocaleDateString("en-US", {
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    });
-  };
-
-  const selectedDateDisplay = selectedExpirationAt
-    ? formatExpirationAt(selectedExpirationAt)
-    : isLoading
-      ? "Loading..."
-      : "No dates available";
-
-  // Show error state
-  if (isError) {
-    return (
-      <OrderBookWidget>
-        <Header>
-          <button type="button" className="nav-arrow" disabled>
-            ←
-          </button>
-          <h3>Error</h3>
-          <button type="button" className="nav-arrow" disabled>
-            →
-          </button>
-        </Header>
-        <TableContainer>
-          <div style={{ textAlign: "center", padding: "2rem", color: tokens.trading.short }}>Failed to load order book data</div>
-        </TableContainer>
-      </OrderBookWidget>
+    return viewMode === "volume" ? (
+      contractMode === "perpetual" ? (
+        <PerpsVolumeOrderBook
+          rows={finalOrderBookDataWithHighlights}
+          contractMode={contractMode}
+          onRowClick={onRowClick}
+          marketPrice={marketPriceNumber}
+          minimumPriceIncrement={minimumPriceIncrement}
+        />
+      ) : (
+        <VolumeOrderBook
+          rows={finalOrderBookDataWithHighlights}
+          contractMode={contractMode}
+          onRowClick={onRowClick}
+          marketPrice={marketPriceNumber}
+        />
+      )
+    ) : (
+      <ClassicOrderBook
+        rows={finalOrderBookDataWithHighlights}
+        maxBidAmount={maxBidAmount}
+        maxAskAmount={maxAskAmount}
+        contractMode={contractMode}
+        onRowClick={onRowClick}
+      />
     );
-  }
-
-  // Show loading state
-  if (isLoading) {
-    return (
-      <OrderBookWidget>
-        <Header>
-          <button type="button" className="nav-arrow" disabled>
-            ←
-          </button>
-          <h3>Loading...</h3>
-          <button type="button" className="nav-arrow" disabled>
-            →
-          </button>
-        </Header>
-        <TableContainer>
-          <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.secondary }}>Loading order book data...</div>
-        </TableContainer>
-      </OrderBookWidget>
-    );
-  }
+  };
 
   return (
     <OrderBookWidget>
@@ -445,58 +365,10 @@ export const OrderBookTable = ({
             Trades
           </ToggleButton>
         </ViewToggle>
-        {contractMode === "futures" && viewMode !== "trades" && (
-          <DateSwitcher>
-            <button
-              type="button"
-              onClick={goToPreviousDate}
-              className="nav-arrow"
-              disabled={selectedDateIndex === 0 || isLoading}
-            >
-              ←
-            </button>
-            <span className="date-label">{selectedDateDisplay}</span>
-            <button
-              type="button"
-              onClick={goToNextDate}
-              className="nav-arrow"
-              disabled={selectedDateIndex === expirationDates.length - 1 || isLoading}
-            >
-              →
-            </button>
-          </DateSwitcher>
-        )}
       </TopBar>
 
       <TableContainer ref={tableContainerRef}>
-        {viewMode === "trades" ? (
-          <TradesList contractMode={contractMode} />
-        ) : viewMode === "volume" ? (
-          contractMode === "perpetual" ? (
-            <PerpsVolumeOrderBook
-              rows={finalOrderBookDataWithHighlights}
-              contractMode={contractMode}
-              onRowClick={onRowClick}
-              marketPrice={marketPriceNumber}
-              minimumPriceIncrement={minimumPriceIncrement}
-            />
-          ) : (
-            <VolumeOrderBook
-              rows={finalOrderBookDataWithHighlights}
-              contractMode={contractMode}
-              onRowClick={onRowClick}
-              marketPrice={marketPriceNumber}
-            />
-          )
-        ) : (
-          <ClassicOrderBook
-            rows={finalOrderBookDataWithHighlights}
-            maxBidAmount={maxBidAmount}
-            maxAskAmount={maxAskAmount}
-            contractMode={contractMode}
-            onRowClick={onRowClick}
-          />
-        )}
+        {viewMode === "trades" ? <TradesList contractMode={contractMode} /> : renderLadder()}
       </TableContainer>
     </OrderBookWidget>
   );
@@ -510,112 +382,20 @@ const OrderBookWidget = styled(SmallWidget)`
   border: 1px solid ${tokens.border.muted04};
 `;
 
+/* Holds the Order Book / Trades tabs. The expiration switcher that used to share
+   this row — and the wrapping rules the pair needed at narrow widths — moved to
+   the header's market selector. */
 const TopBar = styled("div")`
   display: flex;
   width: 100%;
-  /* ViewToggle needs overflow: hidden to clip its buttons into its rounded
-     border, which also drops its automatic minimum size to zero — so at any
-     width too narrow for both controls it gets crushed to a sliver instead of
-     pushing the date switcher onto its own line. Wrapping is inert whenever
-     the two do fit, so it stays on for every breakpoint. */
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.4rem;
-
-  /* MOBILE-ONLY (see MOBILE_TRADING_QUERY): the book shares its row with the
-     place-order form, so the view tabs and the date switcher stack instead of
-     squeezing each other out. Once stacked, space-between would pin each row to
-     the left edge, so they are centred over the ladder below instead. */
-  @media (max-width: 768px) {
-    justify-content: center;
-    gap: 0.25rem;
-  }
-
-  /* Same treatment for the narrow book column of the desktop grid: between the
-     1024px single-column collapse and the 1400px right-panel step (both from
-     FuturesContainer) the 7fr column leaves this bar only ~210-330px, under the
-     ~325px the two controls need side by side. Wider than that they fit on one
-     line and stay pinned to the edges. */
-  @media (min-width: 1025px) and (max-width: 1400px) {
-    justify-content: center;
-  }
-`;
-
-const Header = styled("div")`
-  display: flex;
-  justify-content: space-between;
   align-items: center;
   margin-bottom: 0.4rem;
-
-  h3 {
-    margin: 0;
-    font-size: 0.85rem;
-    font-weight: 600;
-  }
-
-  .nav-arrow {
-    background: none;
-    border: none;
-    color: ${tokens.text.onDark};
-    font-size: 0.9rem;
-    cursor: pointer;
-    padding: 0.2rem 0.4rem;
-    border-radius: 4px;
-    transition: all 0.2s ease;
-
-    &:hover:not(:disabled) {
-      background-color: ${tokens.overlay.white10};
-    }
-
-    &:disabled {
-      color: ${tokens.text.orderBookMuted};
-      cursor: not-allowed;
-      opacity: 0.5;
-    }
-  }
 `;
 
-const DateSwitcher = styled("div")`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.15rem;
-
-  .date-label {
-    font-size: 0.8rem;
-    font-weight: 600;
-    white-space: nowrap;
-    color: ${tokens.text.onDark};
-  }
-
-  /* MOBILE-ONLY: half-width column, so the expiry label steps down a size. */
-  @media (max-width: 768px) {
-    .date-label {
-      font-size: 0.7rem;
-    }
-  }
-
-  .nav-arrow {
-    background: none;
-    border: none;
-    color: ${tokens.text.onDark};
-    font-size: 0.9rem;
-    cursor: pointer;
-    padding: 0.2rem 0.4rem;
-    border-radius: 4px;
-    transition: all 0.2s ease;
-
-    &:hover:not(:disabled) {
-      background-color: ${tokens.overlay.white10};
-    }
-
-    &:disabled {
-      color: ${tokens.text.orderBookMuted};
-      cursor: not-allowed;
-      opacity: 0.5;
-    }
-  }
+const StatusMessage = styled("div")<{ $error?: boolean }>`
+  text-align: center;
+  padding: 2rem;
+  color: ${(props) => (props.$error ? tokens.trading.short : tokens.text.secondary)};
 `;
 
 const TableContainer = styled("div")`
