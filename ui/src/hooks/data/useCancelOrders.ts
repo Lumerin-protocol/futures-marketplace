@@ -23,6 +23,39 @@ export type CancelOrdersResult =
     };
 
 /**
+ * Split order ids into those still resting for `account` and those that have
+ * already left the book.
+ *
+ * The open-orders list comes from the indexer, which trails the chain by a
+ * poll interval plus indexing lag, and one row collapses several ids. Any of
+ * them may already be filled, self-crossed, liquidated or swept by the time
+ * the user clicks. `updateOrders` is atomic, so a single such id reverts the
+ * whole batch and cancels nothing — and it reverts as `OrderNotBelongToSender`,
+ * because cancelling a deleted order compares the sender against the zeroed-out
+ * participant. Drop ids we can see are gone and cancel the rest. A read failure
+ * throws rather than dropping the id: only positively-missing orders are skipped.
+ */
+export async function partitionRestingOrderIds(
+  orderIds: `0x${string}`[],
+  account: `0x${string}`,
+  getOrder: (id: `0x${string}`) => Promise<{ participant: `0x${string}`; quantity: bigint }>,
+): Promise<{ cancellableIds: `0x${string}`[]; staleIds: `0x${string}`[] }> {
+  const onChain = await Promise.all(orderIds.map((id) => getOrder(id)));
+  const cancellableIds: `0x${string}`[] = [];
+  const staleIds: `0x${string}`[] = [];
+  orderIds.forEach((id, index) => {
+    const order = onChain[index];
+    const isRestingForSender = order.quantity !== 0n && order.participant.toLowerCase() === account.toLowerCase();
+    if (isRestingForSender) {
+      cancellableIds.push(id);
+    } else {
+      staleIds.push(id);
+    }
+  });
+  return { cancellableIds, staleIds };
+}
+
+/**
  * Cancel resting orders in one transaction via `updateOrders(ids, [], [])`.
  * Both venues expose the same `getOrder` / `updateOrders` shape, so the hook
  * only differs in which contract it talks to.
@@ -52,31 +85,9 @@ export function useCancelOrders(contractMode: ContractMode = "futures") {
     });
     const isPerps = contractMode === "perpetual";
 
-    // The open-orders list comes from the indexer, which trails the chain by a
-    // poll interval plus indexing lag, and one row collapses several ids. Any
-    // of them may already be filled, self-crossed, liquidated or swept by the
-    // time the user clicks. `updateOrders` is atomic, so a single such id
-    // reverts the whole batch and cancels nothing — and it reverts as
-    // `OrderNotBelongToSender`, because cancelling a deleted order compares the
-    // sender against the zeroed-out participant. Drop ids we can see are gone
-    // and cancel the rest. A read failure throws rather than dropping the id:
-    // only positively-missing orders are skipped.
-    const onChain = await Promise.all(
-      props.orderIds.map((id) => (isPerps ? perps.read.getOrder([id]) : futures.read.getOrder([id]))),
+    const { cancellableIds, staleIds } = await partitionRestingOrderIds(props.orderIds, account, (id) =>
+      isPerps ? perps.read.getOrder([id]) : futures.read.getOrder([id]),
     );
-
-    const cancellableIds: `0x${string}`[] = [];
-    const staleIds: `0x${string}`[] = [];
-    props.orderIds.forEach((id, index) => {
-      const order = onChain[index];
-      const isRestingForSender =
-        order.quantity !== 0n && order.participant.toLowerCase() === account.toLowerCase();
-      if (isRestingForSender) {
-        cancellableIds.push(id);
-      } else {
-        staleIds.push(id);
-      }
-    });
 
     if (cancellableIds.length === 0) return { status: "already-closed", staleIds };
 

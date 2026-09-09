@@ -1,20 +1,10 @@
-import { waitForOrderBookBlockNumber, getOrderBookQueryKey } from "../../hooks/data/orderBookHelpers";
+import { waitForOrderBookBlockNumber } from "../../hooks/data/orderBookHelpers";
 import { useQueryClient } from "@tanstack/react-query";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import type { TransactionReceipt } from "viem";
 import { useCancelOrders } from "../../hooks/data/useCancelOrders";
+import { refreshVenueViews } from "../../hooks/data/refreshVenueViews";
 import { useAccount } from "wagmi";
-import { PARTICIPANT_QK } from "../../hooks/data/getUserFuturesOrders";
-import { POSITION_BOOK_QK } from "../../hooks/data/getUserFuturesPositions";
-import { HISTORICAL_ORDERS_QK } from "../../hooks/data/useHistoricalOrders";
-import { FUTURES_POSITION_HISTORY_QK } from "../../hooks/data/useFuturesPositionHistory";
-import { USER_FUTURES_TRADES_QK } from "../../hooks/data/useUserFuturesTrades";
-import { invalidatePortfolioPnl } from "../../hooks/data/pnl/invalidate";
-import { USER_PERPS_ORDERS_QK } from "../../hooks/data/perps/useUserPerpsOrders";
-import { USER_POSITION_SESSIONS_QK } from "../../hooks/data/perps/useUserPositionSessions";
-import { PERPS_ORDER_HISTORY_QK } from "../../hooks/data/perps/usePerpsOrderHistory";
-import { PERPS_POSITION_HISTORY_QK } from "../../hooks/data/perps/usePerpsPositionHistory";
-import { USER_TRADES_QK } from "../../hooks/data/perps/useUserTrades";
 import { type FC, useState } from "react";
 import type { ContractMode } from "../../types/types";
 
@@ -59,29 +49,7 @@ export const CancelAllOrdersForm: FC<CancelAllOrdersFormProps> = ({
     .filter(Boolean)
     .join(" and ");
 
-  const refreshOrderViews = async () => {
-    await Promise.all([
-      qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
-      invalidatePortfolioPnl(qc),
-      ...(address
-        ? contractMode === "perpetual"
-          ? [
-              qc.invalidateQueries({ queryKey: [USER_PERPS_ORDERS_QK, address] }),
-              qc.invalidateQueries({ queryKey: [USER_POSITION_SESSIONS_QK, address] }),
-              qc.resetQueries({ queryKey: [PERPS_ORDER_HISTORY_QK, address] }),
-              qc.resetQueries({ queryKey: [PERPS_POSITION_HISTORY_QK, address] }),
-              qc.resetQueries({ queryKey: [USER_TRADES_QK, address] }),
-            ]
-          : [
-              qc.invalidateQueries({ queryKey: [POSITION_BOOK_QK] }),
-              qc.invalidateQueries({ queryKey: [PARTICIPANT_QK] }),
-              qc.resetQueries({ queryKey: [HISTORICAL_ORDERS_QK, address] }),
-              qc.resetQueries({ queryKey: [FUTURES_POSITION_HISTORY_QK, address] }),
-              qc.resetQueries({ queryKey: [USER_FUTURES_TRADES_QK, address] }),
-            ]
-        : []),
-    ]);
-  };
+  const refreshOrderViews = () => refreshVenueViews(qc, contractMode, address);
 
   const resultMessage = () => {
     if (outcome && outcome.cancelled === 0) {
