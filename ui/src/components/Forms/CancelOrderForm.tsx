@@ -2,7 +2,7 @@ import { waitForOrderBookBlockNumber, getOrderBookQueryKey } from "../../hooks/d
 import { useQueryClient } from "@tanstack/react-query";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import type { TransactionReceipt } from "viem";
-import { useCloseOrder } from "../../hooks/data/useCloseOrder";
+import { useCancelOrders } from "../../hooks/data/useCancelOrders";
 import { useCancelPerpsOrder } from "../../hooks/data/perps/useCancelPerpsOrder";
 import { useAccount } from "wagmi";
 import { PARTICIPANT_QK } from "../../hooks/data/getUserFuturesOrders";
@@ -18,7 +18,7 @@ import { type FC, useState } from "react";
 import type { ContractMode } from "../../types/types";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 
-export interface CloseOrderFormProps {
+export interface CancelOrderFormProps {
   isBuy: boolean;
   pricePerDay: bigint;
   expirationAt: bigint;
@@ -29,7 +29,7 @@ export interface CloseOrderFormProps {
   contractMode?: ContractMode;
 }
 
-export const CloseOrderForm: FC<CloseOrderFormProps> = ({
+export const CancelOrderForm: FC<CancelOrderFormProps> = ({
   isBuy,
   pricePerDay,
   expirationAt,
@@ -40,7 +40,7 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({
 }) => {
   const qc = useQueryClient();
   const { address } = useAccount();
-  const { closeOrdersAsync } = useCloseOrder();
+  const { cancelOrdersAsync } = useCancelOrders();
   const { cancelOrderAsync } = useCancelPerpsOrder();
   /// How the cancel actually resolved, so the result screen can distinguish a
   /// real cancel from a row that the indexer had simply not caught up on.
@@ -88,8 +88,9 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({
   return (
     <TransactionForm
       onClose={closeForm}
-      title="Close Order"
+      title="Cancel Order"
       description=""
+      executeLabel="Cancel Order"
       reviewForm={(_props) => (
         <>
           <div className="mb-4">
@@ -144,7 +145,7 @@ export const CloseOrderForm: FC<CloseOrderFormProps> = ({
               return { txhash, isSkipped: false };
             }
 
-            const result = await closeOrdersAsync({ orderIds: ids });
+            const result = await cancelOrdersAsync({ orderIds: ids });
             if (result.status === "not-ready") {
               throw new Error("Wallet not ready. Please try again.");
             }

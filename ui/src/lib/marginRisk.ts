@@ -100,7 +100,7 @@ const TIER_ORDER = ["healthy", "caution", "danger", "liquidatable"] as const;
 const rank = (tier: MarginTier): number => TIER_ORDER.indexOf(tier);
 
 /** The tier the ratio reaches on its own, ignoring where the account came from. */
-function tierAtEntry(ratioPercent: number, thresholds: MarginRatioThresholds): MarginTier {
+export function tierAtEntry(ratioPercent: number, thresholds: MarginRatioThresholds): MarginTier {
   if (ratioPercent >= LIQUIDATABLE_PERCENT) return "liquidatable";
   if (ratioPercent >= thresholds.danger) return "danger";
   if (ratioPercent >= thresholds.caution) return "caution";

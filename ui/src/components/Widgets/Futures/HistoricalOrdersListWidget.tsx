@@ -88,7 +88,7 @@ export const HistoricalOrdersListWidget = ({
               <th>Quantity</th>
               <th>Status</th>
               <th>Created</th>
-              <th>Closed</th>
+              <th>Updated</th>
             </tr>
           </thead>
           <tbody>

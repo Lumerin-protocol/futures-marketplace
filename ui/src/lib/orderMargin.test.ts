@@ -457,4 +457,28 @@ describe("maxAffordableQuantity lands on the gate's edge", () => {
     expect(gateAccepts(flat, perpsLeg(max))).toBe(true);
     expect(gateAccepts(flat, perpsLeg(max + 1n))).toBe(false);
   });
+
+  test("an in-the-money perps bid is sized off fill loss, not notional over leverage", () => {
+    // Same $15 / $1.50-per-contract case as the futures in-the-money bid: 10
+    // contracts. Sizing as available × 10x / limit would clear ~25 contracts
+    // and revert; the gate stops at 10.
+    const flat = snapshot({ balance: 15n * USDC });
+    const max = maxAffordableQuantity({
+      snapshot: flat,
+      params,
+      venue: "perps",
+      price: usdc(6),
+      markPrice: MARK,
+      isBuy: true,
+    });
+    const perpsLeg = (quantity: bigint): OrderLeg => ({
+      venue: "perps",
+      price: usdc(6),
+      quantity,
+    });
+
+    expect(max / USDC).toBe(10n);
+    expect(gateAccepts(flat, perpsLeg(max))).toBe(true);
+    expect(gateAccepts(flat, perpsLeg(max + 1n))).toBe(false);
+  });
 });

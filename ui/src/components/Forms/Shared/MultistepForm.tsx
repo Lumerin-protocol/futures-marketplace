@@ -24,6 +24,8 @@ interface TransactionFormProps {
   resultForm?: FC<StepComponentProps>;
   transactionSteps: TransactionStep[];
   onClose: () => void;
+  /** Label of the review step's primary button; defaults to "Execute". */
+  executeLabel?: string;
 }
 
 export const TransactionForm = (props: TransactionFormProps) => {
@@ -185,7 +187,7 @@ export const TransactionFormV2 = (props: TransactionFormProps) => {
               {props.reviewForm(p)}
               <MultistepFormActions
                 primary={{
-                  label: "Execute",
+                  label: props.executeLabel ?? "Execute",
                   onClick: async () => {
                     if (props.validateInput && !(await props.validateInput())) {
                       return;

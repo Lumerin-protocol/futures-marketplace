@@ -212,7 +212,7 @@ export const ModifyFuturesOrderModal = ({
       if (conflictingOrder) {
         const oppositeAction = isBuy ? "Sell" : "Buy";
         await showAlert(
-          `Cannot modify order to price ${newPrice.toFixed(2)} USDC. You already have an active ${oppositeAction} order at the same price and expiration date. Please close or modify the existing order first.`,
+          `Cannot modify order to price ${newPrice.toFixed(2)} USDC. You already have an active ${oppositeAction} order at the same price and expiration date. Please cancel or modify the existing order first.`,
         );
         return false;
       }

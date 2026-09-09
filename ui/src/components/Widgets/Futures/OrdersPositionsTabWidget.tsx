@@ -19,6 +19,11 @@ import { getTxUrl } from "../../../lib/indexer";
 import { LiquidationChip, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
 import { CloseFuturesPositionModal, type CloseableFuturesPosition } from "./CloseFuturesPositionModal";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
+import { ModalItem } from "../../Modal";
+import { CancelAllOrdersForm, type CancellableOrder } from "../../Forms/CancelAllOrdersForm";
+import { ExitAllForm, type ExitAllPosition } from "../../Forms/ExitAllForm";
+import { CancelAllButton } from "./CancelAllButton";
+import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 
 import type { AccountBalance, ContractMode } from "../../../types/types";
 
@@ -58,7 +63,25 @@ export const OrdersPositionsTabWidget = ({
 }: OrdersPositionsTabWidgetProps) => {
   const [activeTab, setActiveTab] = useState<TabType>("OPEN_ORDERS");
   const [closePosition, setClosePosition] = useState<CloseableFuturesPosition | null>(null);
+  // Snapshot of the orders at the moment "Cancel all" was clicked. Held in
+  // state rather than derived, so the result screen still knows what it
+  // cancelled after the list has emptied underneath it.
+  const [cancelAllOrders, setCancelAllOrders] = useState<CancellableOrder[] | null>(null);
+  // Same idea for "Close all": what was open when the user clicked.
+  const [exitAll, setExitAll] = useState<{ orders: CancellableOrder[]; positions: ExitAllPosition[] } | null>(null);
   const { data: marketPrice } = useGetMarketPrice();
+  const contractSpecs = useFuturesContractSpecs();
+  const priceStep = contractSpecs.data?.data?.minimumPriceIncrement ?? 10_000n;
+
+  // Only rows the table offers a Close button for; the list may still carry
+  // just-filled or just-cancelled rows while the indexer catches up.
+  const cancellableOrders = useMemo<CancellableOrder[]>(
+    () =>
+      orders
+        .filter((o) => o.isActive && !o.closedAt)
+        .map((o) => ({ id: o.id, isBuy: o.isBuy, expirationAt: o.expirationAt })),
+    [orders],
+  );
 
   // Fetch up-front so the tab badge counts (Order History / Position History /
   // Trades) are accurate on initial render. Each query is cached by react-query
@@ -68,6 +91,27 @@ export const OrdersPositionsTabWidget = ({
   const historicalOrdersQuery = useHistoricalOrders(participantAddress, true);
   const historicalPositionsQuery = useFuturesPositionHistory(participantAddress, true);
   const tradesQuery = useUserFuturesTrades(participantAddress, { refetch: activeTab === "TRADES" });
+
+  // Open, unmatured positions, one per delivery. Sessions are per (user,
+  // expirationAt), so every row of a delivery carries the same signed net
+  // quantity; the first one seen speaks for all. Matured deliveries are
+  // settled by the keeper (or the Claim button), not traded out of.
+  const closablePositions = useMemo<ExitAllPosition[]>(() => {
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const byExpiration = new Map<string, ExitAllPosition>();
+    for (const p of positions) {
+      if (!p.isActive || p.closedAt || p.netQuantity === 0) continue;
+      if (contractMode === "futures" && Number(p.expirationAt) > 0 && Number(p.expirationAt) < nowSeconds) continue;
+      if (byExpiration.has(p.expirationAt)) continue;
+      const isLong = participantAddress && p.buyer.address.toLowerCase() === participantAddress.toLowerCase();
+      byExpiration.set(p.expirationAt, {
+        netQuantity: BigInt(p.netQuantity),
+        entryPrice: isLong ? p.buyPricePerDay : p.sellPricePerDay,
+        expirationAt: BigInt(p.expirationAt),
+      });
+    }
+    return [...byExpiration.values()];
+  }, [positions, participantAddress, contractMode]);
 
   // Counts for the tab badges, matching the row count each widget renders.
   // Open Orders is one row per on-chain order; Positions still collapses by
@@ -119,6 +163,22 @@ export const OrdersPositionsTabWidget = ({
             setValue={setActiveTab}
           />
         </TabSwitchWrapper>
+        {activeTab === "OPEN_ORDERS" && cancellableOrders.length > 0 && (
+          <CancelAllButton onClick={() => setCancelAllOrders(cancellableOrders)}>Cancel all</CancelAllButton>
+        )}
+        {activeTab === "POSITIONS" && closablePositions.length > 0 && (
+          <CancelAllButton
+            onClick={() => setExitAll({ orders: cancellableOrders, positions: closablePositions })}
+            disabled={marketPrice === undefined}
+            title={
+              cancellableOrders.length > 0
+                ? "Close every position at market and cancel all open orders"
+                : "Close every position at market"
+            }
+          >
+            Close all
+          </CancelAllButton>
+        )}
       </Header>
 
       <Content>
@@ -180,6 +240,30 @@ export const OrdersPositionsTabWidget = ({
           </OrdersWrapper>
         )}
       </Content>
+
+      {cancelAllOrders && (
+        <ModalItem open setOpen={(isOpen) => !isOpen && setCancelAllOrders(null)}>
+          <CancelAllOrdersForm
+            orders={cancelAllOrders}
+            contractMode={contractMode}
+            closeForm={() => setCancelAllOrders(null)}
+          />
+        </ModalItem>
+      )}
+
+      {exitAll && (
+        <ModalItem open setOpen={(isOpen) => !isOpen && setExitAll(null)}>
+          <ExitAllForm
+            contractMode={contractMode}
+            orders={exitAll.orders}
+            positions={exitAll.positions}
+            marketPrice={marketPrice}
+            priceStep={priceStep}
+            closeForm={() => setExitAll(null)}
+            onConfirmed={onPositionClosed}
+          />
+        </ModalItem>
+      )}
 
       {closePosition && (
         <CloseFuturesPositionModal
@@ -325,6 +409,7 @@ const Header = styled("div")`
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
   width: 100%;
 `;
 
