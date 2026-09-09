@@ -26,6 +26,9 @@ import { usePerpsOrderHistory } from "../../../hooks/data/perps/usePerpsOrderHis
 import { usePerpsPositionHistory } from "../../../hooks/data/perps/usePerpsPositionHistory";
 import { ClosePerpsPositionModal } from "./ClosePerpsPositionModal";
 import { ModifyPerpsOrderModal } from "./ModifyPerpsOrderModal";
+import { ModalItem } from "../../Modal";
+import { CancelAllOrdersForm, type CancellableOrder } from "../../Forms/CancelAllOrdersForm";
+import { CancelAllButton } from "./CancelAllButton";
 import type { PerpsOrder } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { useOrderMargin } from "../../../hooks/data/useOrderMargin";
 import { DateTimeCell } from "../../DateTimeCell";
@@ -66,6 +69,9 @@ export const PerpsOrdersPositionsTabWidget = ({
   const [closePositionSession, setClosePositionSession] = useState<PositionSession | null>(null);
   const [modifyOrder, setModifyOrder] = useState<PerpsOrder | null>(null);
   const [cancelOrder, setCancelOrder] = useState<PerpsOrder | null>(null);
+  // Snapshot of the orders at the moment "Cancel all" was clicked, so the
+  // result screen still knows what it cancelled after the list empties.
+  const [cancelAllOrders, setCancelAllOrders] = useState<CancellableOrder[] | null>(null);
 
   // Paginated ("Load More") Order History — all non-ACTIVE perps orders.
   const orderHistoryQuery = usePerpsOrderHistory(participantAddress);
@@ -85,14 +91,20 @@ export const PerpsOrdersPositionsTabWidget = ({
     tradesQuery.refresh();
   };
 
-  // Count perps orders still resting on the book, excluding fully filled
-  const ordersCount = useMemo(() => {
-    return perpsOpenOrders.filter(
-      (order) =>
-        (order.status === "ACTIVE" || order.status === "PARTIALLY_FILLED") &&
-        order.filledQuantity !== order.originalQuantity
-    ).length;
-  }, [perpsOpenOrders]);
+  // Perps orders still resting on the book, excluding fully filled — the same
+  // filter the open-orders table applies, so "Cancel all" matches what is shown.
+  const restingOrders = useMemo<CancellableOrder[]>(
+    () =>
+      perpsOpenOrders
+        .filter(
+          (order) =>
+            (order.status === "ACTIVE" || order.status === "PARTIALLY_FILLED") &&
+            order.filledQuantity !== order.originalQuantity,
+        )
+        .map((order) => ({ id: order.id, isBuy: order.isBuy })),
+    [perpsOpenOrders],
+  );
+  const ordersCount = restingOrders.length;
 
   // Count unique positions
   const positionsCount = useMemo(() => {
@@ -133,6 +145,9 @@ export const PerpsOrdersPositionsTabWidget = ({
             setValue={setActiveTab}
           />
         </TabSwitchWrapper>
+        {activeTab === "OPEN_ORDERS" && restingOrders.length > 0 && (
+          <CancelAllButton onClick={() => setCancelAllOrders(restingOrders)}>Cancel all</CancelAllButton>
+        )}
       </Header>
 
       <Content>
@@ -223,6 +238,17 @@ export const PerpsOrdersPositionsTabWidget = ({
           participantAddress={participantAddress}
           onConfirmed={refreshPerpsHistory}
         />
+      )}
+
+      {cancelAllOrders && (
+        <ModalItem open setOpen={(isOpen) => !isOpen && setCancelAllOrders(null)}>
+          <CancelAllOrdersForm
+            orders={cancelAllOrders}
+            contractMode="perpetual"
+            closeForm={() => setCancelAllOrders(null)}
+            onConfirmed={refreshPerpsHistory}
+          />
+        </ModalItem>
       )}
 
       {cancelOrder && (
@@ -1176,6 +1202,7 @@ const Header = styled("div")`
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
   width: 100%;
 `;
 

@@ -26,7 +26,7 @@ const EMPTY_RESULT = { data: { priceLevels: [] } as AggregateOrderBook, blockNum
 
 const fetchAggregateOrderBookAsync = async (expirationAt: number | undefined) => {
   // Defensive guard: TanStack Query's `invalidateQueries({ queryKey: [AGGREGATE_ORDER_BOOK_QK] })`
-  // (used in PlaceOrderForm / CloseOrderForm / ModifyOrderForm post-confirmation hooks)
+  // (used in PlaceOrderForm / CancelOrderForm / ModifyOrderForm post-confirmation hooks)
   // refetches active observers even when `enabled: false`, so we may be entered with no
   // expiration date selected (e.g. before `useGetExpirationDates()` resolves). The indexer's
   // `priceLevels` collection is keyed by `(expirationAt, price, side)` and `$expirationAt`

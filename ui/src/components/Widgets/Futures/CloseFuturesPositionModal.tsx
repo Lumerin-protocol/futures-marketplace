@@ -177,7 +177,7 @@ export const CloseFuturesPositionModal = ({
       {position && (
         <PositionInfoSection>
           <InfoRow>
-            <InfoLabel>Close Order Side</InfoLabel>
+            <InfoLabel>Closing Side</InfoLabel>
             <InfoValue>
               <TypeBadge $type={closeSide}>{closeSide}</TypeBadge>
             </InfoValue>
@@ -302,7 +302,7 @@ export const CloseFuturesPositionModal = ({
           )}
           resultForm={() => (
             <p className="w-6/6 text-left font-normal text-s mt-5">
-              Your close order has been submitted and will appear in the order book shortly.
+              Your closing order has been submitted and will appear in the order book shortly.
             </p>
           )}
           transactionSteps={[

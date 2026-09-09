@@ -19,6 +19,9 @@ import { getTxUrl } from "../../../lib/indexer";
 import { LiquidationChip, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
 import { CloseFuturesPositionModal, type CloseableFuturesPosition } from "./CloseFuturesPositionModal";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
+import { ModalItem } from "../../Modal";
+import { CancelAllOrdersForm, type CancellableOrder } from "../../Forms/CancelAllOrdersForm";
+import { CancelAllButton } from "./CancelAllButton";
 
 import type { AccountBalance, ContractMode } from "../../../types/types";
 
@@ -58,7 +61,21 @@ export const OrdersPositionsTabWidget = ({
 }: OrdersPositionsTabWidgetProps) => {
   const [activeTab, setActiveTab] = useState<TabType>("OPEN_ORDERS");
   const [closePosition, setClosePosition] = useState<CloseableFuturesPosition | null>(null);
+  // Snapshot of the orders at the moment "Cancel all" was clicked. Held in
+  // state rather than derived, so the result screen still knows what it
+  // cancelled after the list has emptied underneath it.
+  const [cancelAllOrders, setCancelAllOrders] = useState<CancellableOrder[] | null>(null);
   const { data: marketPrice } = useGetMarketPrice();
+
+  // Only rows the table offers a Close button for; the list may still carry
+  // just-filled or just-cancelled rows while the indexer catches up.
+  const cancellableOrders = useMemo<CancellableOrder[]>(
+    () =>
+      orders
+        .filter((o) => o.isActive && !o.closedAt)
+        .map((o) => ({ id: o.id, isBuy: o.isBuy, expirationAt: o.expirationAt })),
+    [orders],
+  );
 
   // Fetch up-front so the tab badge counts (Order History / Position History /
   // Trades) are accurate on initial render. Each query is cached by react-query
@@ -119,6 +136,9 @@ export const OrdersPositionsTabWidget = ({
             setValue={setActiveTab}
           />
         </TabSwitchWrapper>
+        {activeTab === "OPEN_ORDERS" && cancellableOrders.length > 0 && (
+          <CancelAllButton onClick={() => setCancelAllOrders(cancellableOrders)}>Cancel all</CancelAllButton>
+        )}
       </Header>
 
       <Content>
@@ -180,6 +200,16 @@ export const OrdersPositionsTabWidget = ({
           </OrdersWrapper>
         )}
       </Content>
+
+      {cancelAllOrders && (
+        <ModalItem open setOpen={(isOpen) => !isOpen && setCancelAllOrders(null)}>
+          <CancelAllOrdersForm
+            orders={cancelAllOrders}
+            contractMode={contractMode}
+            closeForm={() => setCancelAllOrders(null)}
+          />
+        </ModalItem>
+      )}
 
       {closePosition && (
         <CloseFuturesPositionModal
@@ -325,6 +355,7 @@ const Header = styled("div")`
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
   width: 100%;
 `;
 

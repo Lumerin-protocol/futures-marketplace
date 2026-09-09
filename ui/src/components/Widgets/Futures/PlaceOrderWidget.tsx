@@ -1,8 +1,8 @@
 import styled from "@mui/material/styles/styled";
 import { keyframes, css } from "@emotion/react";
 import { SmallWidget } from "../../Cards/Cards.styled";
-import { useState, useEffect, useId } from "react";
-import Slider from "@mui/material/Slider";
+import { type ComponentProps, type CSSProperties, useState, useEffect, useId, useRef } from "react";
+import Slider, { SliderMark } from "@mui/material/Slider";
 import Tooltip from "@mui/material/Tooltip";
 import { tokens } from "../../../styles/tokens";
 
@@ -162,6 +162,8 @@ export const PlaceOrderWidget = ({
     contractMode === "perpetual" ? "size" : "quantity",
   ); // "size" = USDC notional, "quantity" = raw contracts
   const [sliderValue, setSliderValue] = useState(0); // Slider value 0-100
+  // Set when the slider writes `amount`, so the amount→slider effect skips one run.
+  const sliderWroteAmountRef = useRef(false);
   const [leverage, setLeverage] = useState(10); // Leverage multiplier (1x to 10x), default 10x
   const [highlightedButton, setHighlightedButton] = useState<"buy" | "sell" | "inputs" | null>(null);
   const [showHighPriceModal, setShowHighPriceModal] = useState(false);
@@ -173,6 +175,27 @@ export const PlaceOrderWidget = ({
   // (market / IOC / FOK). Cleared when the user declines it, so the order form
   // submits an offset exactly when this is set.
   const [offsetPlan, setOffsetPlan] = useState<OrderOffsetPlan | null>(null);
+
+  // Price helpers live above the loading return below: the slider-sync effect
+  // runs after that early render too, and everything it reaches must already
+  // be initialised.
+  const snapToStep = (value: number): number =>
+    priceStep ? Math.round(value / priceStep) * priceStep : value;
+
+  // Returns the effective order price: market price (snapped) for market orders, input price for limit orders.
+  // For market orders, a 5% slippage buffer is applied so the order is
+  // guaranteed to cross the spread: buys are priced 5% above market, sells 5% below.
+  const getEffectivePrice = (side?: "buy" | "sell"): number => {
+    if (orderType === "market" && newestItemPrice) {
+      const base = newestItemPrice;
+      if (side) {
+        const slipped = side === "buy" ? base * (1 + MARKET_SLIPPAGE) : base * (1 - MARKET_SLIPPAGE);
+        return snapToStep(slipped);
+      }
+      return snapToStep(base);
+    }
+    return parseFloat(price) || 0;
+  };
   const [pendingOrder, setPendingOrder] = useState<{
     price: number;
     amount: number;
@@ -225,14 +248,14 @@ export const PlaceOrderWidget = ({
   // so listing them would rerun this effect on every render.
   // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   useEffect(() => {
-    const maxQty = calculateMaxQuantity();
-    if (maxQty > 0) {
-      const numericAmount = getNumericAmount();
-      const percentage = Math.min(100, Math.max(0, (numericAmount / maxQty) * 100));
-      setSliderValue(Math.round(percentage));
-    } else {
-      setSliderValue(0);
+    // An amount the slider itself just wrote must not be fed back into it: the
+    // thumb is at the pointer, and re-deriving it from the snapped quantity
+    // would yank it to the integer's position mid-drag. Release parks it there.
+    if (sliderWroteAmountRef.current) {
+      sliderWroteAmountRef.current = false;
+      return;
     }
+    setSliderValue(sliderPercentFor(qtyFromAmount(getNumericAmount()), calculateMaxQuantity()));
   }, [
     price,
     balanceQuery.data,
@@ -368,11 +391,8 @@ export const PlaceOrderWidget = ({
    * the shortfall, when the gate would revert. Same predicate for both venues:
    * they share one portfolio IM.
    */
-  const checkOrderMargin = async (
-    priceInWei: bigint,
-    quantity: number,
-    isBuy: boolean,
-  ): Promise<boolean> => {
+  /** The gate's verdict on one order, `undefined` while its inputs are loading. */
+  const quoteOrder = (priceInWei: bigint, quantity: number, isBuy: boolean) => {
     const scale = contractMode === "perpetual" ? QUANTITY_SCALE_NUM : 1;
     const absQuantity = BigInt(Math.round(Math.abs(quantity) * scale));
     const reservedFee = reserveFee(
@@ -380,7 +400,7 @@ export const PlaceOrderWidget = ({
         ? (priceInWei * absQuantity) / QUANTITY_SCALE
         : priceInWei * absQuantity,
     );
-    const quote = orderMargin.quote(
+    return orderMargin.quote(
       {
         place: [
           {
@@ -392,6 +412,14 @@ export const PlaceOrderWidget = ({
       },
       { reservedFee, locallyReducing: isReduceOnlyOrder(quantity, isBuy) },
     );
+  };
+
+  const checkOrderMargin = async (
+    priceInWei: bigint,
+    quantity: number,
+    isBuy: boolean,
+  ): Promise<boolean> => {
+    const quote = quoteOrder(priceInWei, quantity, isBuy);
 
     if (!quote) {
       await showAlert({
@@ -402,98 +430,189 @@ export const PlaceOrderWidget = ({
     }
     if (quote.affordable) return true;
 
-    const accountBalance = accountBalanceQuery.data ?? 0n;
+    // The other side may take this size for free when it unwinds the position;
+    // say so rather than sending the user to deposit.
+    const otherSideCapacity = sideCapacity(!isBuy);
+    const otherSideFits = otherSideCapacity !== undefined && otherSideCapacity >= Math.abs(quantity);
+    const walletBalance = accountBalanceQuery.data ?? 0n;
     await showAlert(
-      `Insufficient funds. Please deposit futures account.\n\n` +
+      `Insufficient funds for this ${isBuy ? "bid" : "ask"}.\n\n` +
         `Margin for this order: ${usdc(quote.imIncrease)} USDC\n` +
         `Reserved trading fee (max of maker/taker): ${usdc(quote.reservedFee)} USDC\n` +
         `Already committed to open orders and positions: ${usdc(quote.imBefore)} USDC\n` +
         `Total margin required: ${usdc(quote.imAfter + quote.reservedFee)} USDC\n` +
-        `Total futures balance: ${usdc(balanceQuery.data ?? 0n)} USDC\n` +
-        `Short by: ${usdc(-quote.headroom)} USDC\n` +
-        `Available account balance: ${usdc(accountBalance)} USDC`,
+        `Futures account balance: ${usdc(balanceQuery.data ?? 0n)} USDC\n` +
+        `Short by: ${usdc(-quote.headroom)} USDC\n\n` +
+        (otherSideFits
+          ? `An ${isBuy ? "ask" : "bid"} of this size would go through: it reduces your position, so it needs no extra margin. `
+          : "") +
+        `To place this ${isBuy ? "bid" : "ask"}, deposit at least ${usdc(-quote.headroom)} USDC ` +
+        `(wallet USDC, not yet deposited: ${usdc(walletBalance)}).`,
     );
     return false;
   };
 
-  // Calculate maximum available quantity based on current price
-  const calculateMaxQuantity = (): number => {
-    const limitPrice = parseFloat(price) || 0;
-    // Market orders are submitted at a slipped mark, which is what fill loss
-    // is charged on. Size the slider at those prices so 100% still passes.
-    const buyPrice =
-      orderType === "market" && newestItemPrice
-        ? newestItemPrice * (1 + MARKET_SLIPPAGE)
-        : limitPrice;
-    const sellPrice =
-      orderType === "market" && newestItemPrice
-        ? newestItemPrice * (1 - MARKET_SLIPPAGE)
-        : limitPrice;
-    if (buyPrice <= 0 || sellPrice <= 0) return 0;
+  /**
+   * Largest quantity (contract units) `isBuy` can place at its own submit price:
+   * the funded max for that side, plus the reduce-only capacity when that side
+   * unwinds the position. `undefined` while the reads are in flight.
+   *
+   * The slider cannot know the side — it is set before Bid or Ask is pressed —
+   * so its range is a union of both. The buttons and the hint under the slider
+   * use this per-side figure, so the user sees which side the range belongs to
+   * before the gate has to tell them.
+   */
+  const sideCapacity = (isBuy: boolean): number | undefined => {
+    const px = getEffectivePrice(isBuy ? "buy" : "sell");
+    if (px <= 0) return undefined;
+    const funded = orderMargin.maxQuantity({
+      venue: orderVenue,
+      price: BigInt(Math.round(px * PAYMENT_TOKEN_SCALE_NUM)),
+      isBuy,
+      reserveFee,
+    });
+    if (funded === undefined) return undefined;
 
     const qtyScale = contractMode === "perpetual" ? QUANTITY_SCALE_NUM : 1;
+    const position = openPositionNetQuantity ?? 0n;
+    const reduces = position !== 0n && (position > 0n) !== isBuy;
+    const reduceQty = reduces ? Number(reduceOnlyCapacity()) / qtyScale : 0;
+    let qty = Math.max(Number(funded) / qtyScale, reduceQty);
 
-    // An open position can always be unwound, so the slider has to reach that far
-    // even when margin leaves no free balance. Only one side reduces, and the
-    // buy/sell handlers still reject the other one.
-    const reduceOnlyMax = Number(reduceOnlyCapacity()) / qtyScale;
-
-    // The slider is set before the user picks a side, and the two sides do not
-    // cost the same — a leg that hedges existing exposure is cheaper than one
-    // that extends it. Take the side the account can least afford so 100% is
-    // placeable whichever button follows, and let the reduce-only union carry
-    // the cheap side past it.
-    const fundedMax = (isBuy: boolean, px: number) =>
-      orderMargin.maxQuantity({
-        venue: orderVenue,
-        price: BigInt(Math.round(px * PAYMENT_TOKEN_SCALE_NUM)),
-        isBuy,
-        // The fee scales with notional, so it is charged per candidate size
-        // rather than subtracted from the balance once up front.
-        reserveFee,
-      });
-
-    const maxBuy = fundedMax(true, buyPrice);
-    const maxSell = fundedMax(false, sellPrice);
-    // Not loaded yet: report no capacity rather than a guess the gate would reject.
-    if (maxBuy === undefined || maxSell === undefined) return 0;
-
-    const maxBuyQty = Number(maxBuy) / qtyScale;
-    const maxSellQty = Number(maxSell) / qtyScale;
-    let bestQty = Math.max(Math.min(maxBuyQty, maxSellQty), reduceOnlyMax);
-
-    // Leverage is a user cap on top of the gate, not a substitute for it. At
-    // 10x (the IM shock) the search is the binding constraint; below 10x this
-    // keeps 100% from using more notional than the chosen leverage implies.
+    // Same user-chosen leverage cap the slider applies.
     if (contractMode === "perpetual" && leverage > 0) {
       const totalBalance = balanceQuery.data ?? 0n;
       const lockedBalance = minMargin ?? 0n;
       const available = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
-      const capPrice = Math.max(buyPrice, sellPrice);
-      const leverageQty =
-        capPrice > 0
-          ? ((Number(available) / PAYMENT_TOKEN_SCALE_NUM) * leverage) / capPrice
-          : 0;
-      bestQty = Math.max(Math.min(bestQty, leverageQty), reduceOnlyMax);
+      const leverageQty = ((Number(available) / PAYMENT_TOKEN_SCALE_NUM) * leverage) / px;
+      qty = Math.max(Math.min(qty, leverageQty), reduceQty);
     }
-
-    if (amountMode === "size") {
-      // Convert each side at the price that side will actually submit, then
-      // keep the smaller notional so Bid and Ask both still fit.
-      const bestSize = Math.min(maxBuyQty * buyPrice, maxSellQty * sellPrice);
-      const reduceSize = reduceOnlyMax * (limitPrice || buyPrice);
-      let size = Math.max(bestSize, reduceSize);
-      if (contractMode === "perpetual" && leverage > 0) {
-        const totalBalance = balanceQuery.data ?? 0n;
-        const lockedBalance = minMargin ?? 0n;
-        const available = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
-        const leverageSize = (Number(available) / PAYMENT_TOKEN_SCALE_NUM) * leverage;
-        size = Math.max(Math.min(size, leverageSize), reduceSize);
-      }
-      return size;
-    }
-    return bestQty;
+    return qty;
   };
+
+  /**
+   * Slider marks: the usual quarters, plus an unlabelled dot at the smaller
+   * side's ceiling when the two sides differ — green for Bid, red for Ask — so
+   * the user can see where that side stops being placeable while the track runs
+   * on to the other side's max. Hovering the dot says which side and how much.
+   */
+  const sliderMarks = (): { marks: { value: number; label?: string }[]; cap: CapMarkInfo | undefined } => {
+    // Only the middle label carries the unit; the rest read as plain numbers.
+    const quarters = [0, 25, 50, 75, 100].map((value) => ({
+      value,
+      label: value === 50 ? `${value}%` : `${value}`,
+    }));
+    const max = calculateMaxQuantity();
+    const buyCap = sideCapacity(true);
+    const sellCap = sideCapacity(false);
+    if (max <= 0 || buyCap === undefined || sellCap === undefined || buyCap === sellCap) {
+      return { marks: quarters, cap: undefined };
+    }
+    const smallerIsBuy = buyCap < sellCap;
+    const pct = sliderPercentFor(snapQty(smallerIsBuy ? buyCap : sellCap), max);
+    if (pct <= 0 || pct >= 100) return { marks: quarters, cap: undefined };
+
+    const marks: { value: number; label?: string }[] = [...quarters, { value: pct }].sort(
+      (a, b) => a.value - b.value,
+    );
+    return {
+      marks,
+      cap: {
+        index: marks.findIndex((mark) => mark.value === pct && mark.label === undefined),
+        value: pct,
+        isBuy: smallerIsBuy,
+        color: smallerIsBuy ? tokens.trading.long : tokens.trading.short,
+        title: `Max ${smallerIsBuy ? "bid" : "ask"} at this price: ${sideCapacityLabel(smallerIsBuy)}${
+          amountMode === "size" ? "" : " contracts"
+        }. Beyond this point the slider is ${smallerIsBuy ? "ask" : "bid"} only.`,
+      },
+    };
+  };
+
+  /** `sideCapacity` in the units the amount field is in, formatted for the hint. */
+  const sideCapacityLabel = (isBuy: boolean): string => {
+    const qty = sideCapacity(isBuy);
+    if (qty === undefined) return "…";
+    if (amountMode === "size") return `${(qty * getEffectivePrice(isBuy ? "buy" : "sell")).toFixed(2)} USDC`;
+    return contractMode === "perpetual" ? String(Number(qty.toFixed(6))) : Math.floor(qty).toFixed(0);
+  };
+
+  /**
+   * Why `isBuy` cannot take the current amount, or `undefined` when it can (or
+   * when the answer is not known yet — a loading read must not grey the button).
+   */
+  const sideBlocker = (isBuy: boolean): string | undefined => {
+    const numericAmount = getNumericAmount();
+    if (numericAmount <= 0) return undefined;
+    const px = getEffectivePrice(isBuy ? "buy" : "sell");
+    if (px <= 0) return undefined;
+    const quantity = calculateQuantityFromAmount(numericAmount, px);
+    if (quantity <= 0) return undefined;
+    const quote = quoteOrder(BigInt(Math.round(px * PAYMENT_TOKEN_SCALE_NUM)), quantity, isBuy);
+    if (!quote || quote.affordable) return undefined;
+    const side = isBuy ? "bid" : "ask";
+    const other = isBuy ? "ask" : "bid";
+    const cap = sideCapacity(isBuy);
+    const capQty = cap === undefined ? 0 : contractMode === "perpetual" ? cap : Math.floor(cap);
+    const otherCapacity = sideCapacity(!isBuy);
+    const otherFits = otherCapacity !== undefined && otherCapacity >= quantity;
+    return (
+      `This ${side} needs ${usdc(-quote.headroom)} USDC more than your available balance. ` +
+      (capQty > 0
+        ? `Click ${isBuy ? "Bid" : "Ask"} to set the size to the max ${side} at this price (${sideCapacityLabel(isBuy)}), then click again to place.`
+        : "Nothing can be placed on this side at this price.") +
+      (otherFits ? ` An ${other} of this size reduces your position and would go through.` : "")
+    );
+  };
+
+  /**
+   * The slider's 100%, in the amount field's units.
+   *
+   * The slider is set before the user picks a side, and the two sides rarely
+   * share a ceiling — one may be unwinding a position while the other extends
+   * it. It reaches the *larger* side so that side is fully usable; the smaller
+   * side's button says what it can take and clamps to it on click
+   * (`clampToSide`). Zero until the reads the gate needs have landed.
+   */
+  const calculateMaxQuantity = (): number => {
+    const buyCap = sideCapacity(true);
+    const sellCap = sideCapacity(false);
+    if (buyCap === undefined || sellCap === undefined) return 0;
+    return Math.max(buyCap, sellCap);
+  };
+
+  // ---- The slider works in contracts; the amount field is a view of that ----
+  // Futures trade whole contracts, so a size in USDC is only ever a whole
+  // number of contracts times the price. Everything the slider does is done in
+  // quantity and converted for display at the very end, so "Size" mode cannot
+  // produce a size no order can have.
+
+  /**
+   * Round a quantity *down* to what the venue can place: whole contracts for
+   * futures, six decimals for perps. Down, never nearest — a ceiling rounded up
+   * by a millionth is a ceiling the gate rejects.
+   */
+  const snapQty = (qty: number): number =>
+    contractMode === "perpetual" ? Math.floor(qty * 1e6 + 1e-6) / 1e6 : Math.floor(qty);
+
+  /** The amount field's value for `qty`, in the field's current unit. */
+  const amountFromQty = (qty: number): number | string => {
+    // Size is floored to the cent for the same reason: the quantity it implies
+    // must not exceed the one it was made from.
+    if (amountMode === "size") return (Math.floor(qty * getEffectivePrice() * 100 + 1e-6) / 100).toFixed(2);
+    return contractMode === "perpetual" ? qty.toFixed(6) : qty;
+  };
+
+  /** The quantity the amount field currently describes. */
+  const qtyFromAmount = (value: number): number => {
+    if (amountMode !== "size") return value;
+    const px = getEffectivePrice();
+    return px > 0 ? value / px : 0;
+  };
+
+  /** Where `qty` sits on the 0–100 track, for a given ceiling. */
+  const sliderPercentFor = (qty: number, maxQty: number): number =>
+    maxQty > 0 ? Math.round(Math.min(100, Math.max(0, (qty / maxQty) * 100))) : 0;
 
   // Highlight price/amount inputs when the user clicks the order book
   // (`highlightMode === "inputs"`). `highlightMode === "buttons"` pulses Bid/Ask
@@ -617,26 +736,6 @@ export const PlaceOrderWidget = ({
     );
   }
 
-  // Helper functions for price adjustment
-  const snapToStep = (value: number): number => {
-    return Math.round(value / priceStep) * priceStep;
-  };
-
-  // Returns the effective order price: market price (snapped) for market orders, input price for limit orders.
-  // For market orders, a 5% slippage buffer is applied so the order is
-  // guaranteed to cross the spread: buys are priced 5% above market, sells 5% below.
-  const getEffectivePrice = (side?: "buy" | "sell"): number => {
-    if (orderType === "market" && newestItemPrice) {
-      const base = newestItemPrice;
-      if (side) {
-        const slipped = side === "buy" ? base * (1 + MARKET_SLIPPAGE) : base * (1 - MARKET_SLIPPAGE);
-        return snapToStep(slipped);
-      }
-      return snapToStep(base);
-    }
-    return parseFloat(price) || 0;
-  };
-
   /** Pre-flight liquidity check for market / FOK. Returns false if the user should abort. */
   const checkLiquidity = async (side: "buy" | "sell"): Promise<boolean> => {
     const needsCheck = orderType === "market" || timeInForce === TimeInForce.FOK || timeInForce === TimeInForce.IOC;
@@ -705,13 +804,11 @@ export const PlaceOrderWidget = ({
   const handleAmountChange = (newAmount: number | string) => {
     setAmount(newAmount);
 
-    
     // Update slider to reflect the amount as a percentage of max
     const maxQty = calculateMaxQuantity();
     if (maxQty > 0) {
       const numericAmount = typeof newAmount === "string" ? parseFloat(newAmount) : newAmount;
-      const percentage = Math.min(100, Math.max(0, (numericAmount / maxQty) * 100));
-      setSliderValue(Math.round(percentage));
+      setSliderValue(sliderPercentFor(qtyFromAmount(Number.isNaN(numericAmount) ? 0 : numericAmount), maxQty));
     }
   };
 
@@ -797,8 +894,90 @@ export const PlaceOrderWidget = ({
     return false;
   };
 
+  /**
+   * The slider reaches the larger side's ceiling, so the smaller side can be
+   * asked for more than it can take. Its button is greyed while that is so; the
+   * first click brings the amount and slider down to that side's max instead of
+   * trading, the button lights up, and the next click places. Returns true when
+   * it clamped (so the caller stops there); false when the amount already fits
+   * or nothing at all can be placed on that side (the gate's alert then explains).
+   */
+  const clampToSide = (isBuy: boolean): boolean => {
+    const cap = sideCapacity(isBuy);
+    if (cap === undefined) return false;
+    const px = getEffectivePrice(isBuy ? "buy" : "sell");
+    const numericAmount = getNumericAmount();
+    if (numericAmount <= 0 || px <= 0) return false;
+    const quantity = calculateQuantityFromAmount(numericAmount, px);
+    // Tolerance for the float round-trip through the amount field.
+    if (quantity <= cap + 1e-9) return false;
+
+    return setAmountToSideMax(isBuy);
+  };
+
+  /** Write `isBuy`'s ceiling into the amount field (and slider). False when that ceiling is zero. */
+  const setAmountToSideMax = (isBuy: boolean): boolean => {
+    const cap = sideCapacity(isBuy);
+    if (cap === undefined) return false;
+    const capQty = snapQty(cap);
+    if (capQty <= 0) return false;
+    handleAmountChange(amountFromQty(capQty));
+    return true;
+  };
+
+  /** How close (in slider points) the thumb has to come to the dot to be pulled onto it. */
+  const DOT_SNAP_POINTS = 3;
+
+  /** The quantity a slider position stands for, snapped to what the venue can place. */
+  const qtyAtSliderValue = (value: number, maxQty: number): number => {
+    // Interior positions round to the nearest placeable quantity so the thumb
+    // feels balanced; only the ceiling is floored, since that is a real limit.
+    const raw = (maxQty * value) / 100;
+    const nearest =
+      contractMode === "perpetual" ? Math.round(raw * 1e6) / 1e6 : Math.round(raw);
+    return Math.min(nearest, snapQty(maxQty));
+  };
+
+  /**
+   * Thumb moving: pull it onto the dot when near, otherwise convert the position
+   * to a placeable quantity and show that (as contracts or as USDC).
+   */
+  const handleSliderChange = (value: number) => {
+    const { cap } = sliderMarks();
+    if (cap && Math.abs(value - cap.value) <= DOT_SNAP_POINTS) {
+      if (setAmountToSideMax(cap.isBuy)) return;
+    }
+    setSliderValue(value);
+    const maxQty = calculateMaxQuantity();
+    if (maxQty <= 0) return;
+    const next = amountFromQty(qtyAtSliderValue(value, maxQty));
+    // Only flag when the amount really changes; an unchanged amount does not
+    // re-run the effect, and a stale flag would swallow a later legitimate sync.
+    if (next !== amount) {
+      sliderWroteAmountRef.current = true;
+      setAmount(next);
+    }
+  };
+
+  /**
+   * On release, for whole-contract futures: park the thumb exactly where the
+   * quantity in the amount field sits, so the handle and the number agree.
+   *
+   * Deliberately reads the amount rather than the pointer position MUI hands
+   * over: while the dot held the thumb, the pointer may have drifted a little
+   * past it, and re-deriving from the pointer would drop a contract the user
+   * never saw.
+   */
+  const handleSliderCommitted = () => {
+    if (contractMode === "perpetual") return;
+    const maxQty = calculateMaxQuantity();
+    if (maxQty <= 0) return;
+    setSliderValue(sliderPercentFor(qtyFromAmount(getNumericAmount()), maxQty));
+  };
+
   const handleBuy = async () => {
     if (!hasWallet()) return;
+    if (clampToSide(true)) return;
 
     if (contractMode === "perpetual") {
       await handleBuyPerps();
@@ -809,6 +988,7 @@ export const PlaceOrderWidget = ({
 
   const handleSell = async () => {
     if (!hasWallet()) return;
+    if (clampToSide(false)) return;
 
     if (contractMode === "perpetual") {
       await handleSellPerps();
@@ -1229,68 +1409,60 @@ export const PlaceOrderWidget = ({
               <SliderContainer>
                 <StyledSlider
                   value={sliderValue}
-                  onChange={(_, value) => {
-                    const numValue = Array.isArray(value) ? value[0] : value;
-                    setSliderValue(numValue);
-                    
-                    const maxQty = calculateMaxQuantity();
-                    const newAmount = (maxQty * numValue) / 100;
-
-                    if (isFuturesIntegerQty) {
-                      setAmount(Math.floor(newAmount));
-                    } else {
-                      const decimals = amountMode === "quantity" ? 6 : 2;
-                      if (newAmount <= 0) {
-                        setAmount("0");
-                      } else {
-                        const factor = 10 ** decimals;
-                        // Floor at 100% so toFixed rounding cannot walk past the
-                        // last quantity the margin gate accepts.
-                        const scaled =
-                          numValue === 100
-                            ? Math.floor(newAmount * factor)
-                            : Math.round(newAmount * factor);
-                        setAmount((scaled / factor).toFixed(decimals));
-                      }
-                    }
-                  }}
+                  onChange={(_, value) => handleSliderChange(Array.isArray(value) ? value[0] : value)}
+                  onChangeCommitted={() => handleSliderCommitted()}
                   disabled={showOrderForm}
                   min={0}
                   max={100}
-                  marks={[
-                    { value: 0, label: '0%' },
-                    { value: 25, label: '25%' },
-                    { value: 50, label: '50%' },
-                    { value: 75, label: '75%' },
-                    { value: 100, label: '100%' },
-                  ]}
+                  {...(() => {
+                    const { marks, cap } = sliderMarks();
+                    return {
+                      marks,
+                      $lastMarkIndex: marks.length - 1,
+                      slots: { mark: CapAwareMark },
+                      slotProps: { mark: { cap, lastIndex: marks.length - 1 } as Record<string, unknown> },
+                    };
+                  })()}
                   valueLabelDisplay="auto"
                   valueLabelFormat={(value) => `${value}%`}
                 />
-                {/* <SliderInfoContainer>
-                  <SliderInfo>
-                    Max: {calculateMaxQuantity().toFixed(contractMode === "perpetual" ? 6 : 0)}
-                  </SliderInfo>
-                </SliderInfoContainer> */}
               </SliderContainer>
             </InputGroup>
           </InputSection>
 
           <ButtonSection>
-            <BuyButton
-              onClick={handleBuy}
-              disabled={showOrderForm}
-              $isHighlighted={highlightedButton === "buy"}
-            >
-              Bid
-            </BuyButton>
-            <SellButton
-              onClick={handleSell}
-              disabled={showOrderForm}
-              $isHighlighted={highlightedButton === "sell"}
-            >
-              Ask
-            </SellButton>
+            {(() => {
+              const buyBlocker = sideBlocker(true);
+              const sellBlocker = sideBlocker(false);
+              return (
+                <>
+                  <Tooltip title={buyBlocker ?? ""} arrow disableHoverListener={!buyBlocker}>
+                    <ButtonSlot>
+                      <BuyButton
+                        onClick={handleBuy}
+                        disabled={showOrderForm}
+                        $isHighlighted={highlightedButton === "buy"}
+                        $isCapped={buyBlocker !== undefined}
+                      >
+                        Bid
+                      </BuyButton>
+                    </ButtonSlot>
+                  </Tooltip>
+                  <Tooltip title={sellBlocker ?? ""} arrow disableHoverListener={!sellBlocker}>
+                    <ButtonSlot>
+                      <SellButton
+                        onClick={handleSell}
+                        disabled={showOrderForm}
+                        $isHighlighted={highlightedButton === "sell"}
+                        $isCapped={sellBlocker !== undefined}
+                      >
+                        Ask
+                      </SellButton>
+                    </ButtonSlot>
+                  </Tooltip>
+                </>
+              );
+            })()}
           </ButtonSection>
 
           {getNumericAmount() > 0 && (
@@ -1357,6 +1529,7 @@ export const PlaceOrderWidget = ({
             contractMode={contractMode}
             perpsCollection={perpsCollection}
             isMarketOrder={orderType === "market"}
+            marketSlippage={MARKET_SLIPPAGE}
             timeInForce={timeInForce}
             closeForm={() => {
               setShowOrderForm(false);
@@ -1433,6 +1606,7 @@ const LeverageModal = ({
           }}
           min={1}
           max={10}
+          $lastMarkIndex={3}
           marks={[
             { value: 1, label: '1x' },
             { value: 3, label: '3x' },
@@ -1820,6 +1994,13 @@ const PriceButton = styled("button")<{ $isHighlighted?: boolean }>`
   }
 `;
 
+/** Tooltip anchor: a disabled button fires no pointer events, so the wrapper takes them. */
+const ButtonSlot = styled("span")`
+  display: flex;
+  flex: 1;
+  min-width: 0;
+`;
+
 const ButtonSection = styled("div")`
   gap: 0.75rem;
   flex-shrink: 0;
@@ -1850,7 +2031,7 @@ const ButtonSection = styled("div")`
   }
 `;
 
-const BuyButton = styled("button")<{ $isHighlighted?: boolean }>`
+const BuyButton = styled("button")<{ $isHighlighted?: boolean; $isCapped?: boolean }>`
   width: 100%;
   padding: 0.875rem 1rem;
   background: ${tokens.trading.long};
@@ -1863,7 +2044,6 @@ const BuyButton = styled("button")<{ $isHighlighted?: boolean }>`
   transition: transform 0.1s ease;
   min-width: 120px;
   animation: ${(props) => (props.$isHighlighted ? css`${pulseYellow} 1.5s ease-in-out infinite` : "none")};
-  
   &:hover:not(:disabled) {
     background: ${tokens.trading.longHover};
     transform: translateY(-1px);
@@ -1879,9 +2059,21 @@ const BuyButton = styled("button")<{ $isHighlighted?: boolean }>`
     opacity: 0.6;
     animation: none;
   }
+
+  /* Looks disabled but stays clickable: the click sets the size to this side's max. */
+  ${(props) =>
+    props.$isCapped &&
+    css`
+      background: ${tokens.surface.tabMuted};
+      opacity: 0.6;
+      &:hover:not(:disabled) {
+        background: ${tokens.surface.tabMuted};
+        transform: none;
+      }
+    `}
 `;
 
-const SellButton = styled("button")<{ $isHighlighted?: boolean }>`
+const SellButton = styled("button")<{ $isHighlighted?: boolean; $isCapped?: boolean }>`
   width: 100%;
   padding: 0.875rem 1rem;
   background: ${tokens.trading.short};
@@ -1894,7 +2086,6 @@ const SellButton = styled("button")<{ $isHighlighted?: boolean }>`
   transition: transform 0.1s ease;
   min-width: 120px;
   animation: ${(props) => (props.$isHighlighted ? css`${pulseYellow} 1.5s ease-in-out infinite` : "none")};
-  
   &:hover:not(:disabled) {
     background: ${tokens.trading.shortHover};
     transform: translateY(-1px);
@@ -1910,6 +2101,18 @@ const SellButton = styled("button")<{ $isHighlighted?: boolean }>`
     opacity: 0.6;
     animation: none;
   }
+
+  /* Looks disabled but stays clickable: the click sets the size to this side's max. */
+  ${(props) =>
+    props.$isCapped &&
+    css`
+      background: ${tokens.surface.tabMuted};
+      opacity: 0.6;
+      &:hover:not(:disabled) {
+        background: ${tokens.surface.tabMuted};
+        transform: none;
+      }
+    `}
 `;
 
 const OrderSummary = styled("div")`
@@ -1944,13 +2147,90 @@ const SliderContainer = styled("div")`
   flex-direction: column;
   gap: 0.5rem;
   margin-top: 0.5rem;
-  padding: 0 1rem;
 `;
 
-const StyledSlider = styled(Slider)`
+/** Where the smaller side's capacity ends on the slider, and what to say about it. */
+interface CapMarkInfo {
+  /** Position in the `marks` array, which is what MUI stamps on `data-index`. */
+  index: number;
+  /** Slider value (0–100) the dot sits at. */
+  value: number;
+  /** Which side's ceiling it is. */
+  isBuy: boolean;
+  color: string;
+  title: string;
+}
+
+/**
+ * Slider mark slot: the default tick everywhere except at `cap.index`, which
+ * becomes a coloured tick with a tooltip, and at `lastIndex`, which draws
+ * nothing since the bar's end already marks 100. Both arrive via
+ * `slotProps.mark` and must not reach the DOM.
+ */
+const CapAwareMark = (props: Record<string, unknown>) => {
+  const { cap, lastIndex, ...rest } = props as { cap?: CapMarkInfo; lastIndex?: number } & Record<
+    string,
+    unknown
+  >;
+  const index = rest["data-index"];
+  if (index === lastIndex) return null;
+  if (cap && index === cap.index) {
+    return (
+      <Tooltip title={cap.title} arrow placement="top">
+        <CapMark style={rest.style as CSSProperties} $color={cap.color} />
+      </Tooltip>
+    );
+  }
+  return <SliderMark {...(rest as ComponentProps<typeof SliderMark>)} />;
+};
+
+/** Same tick as the quarter marks, just coloured for the side it caps. */
+const CapMark = styled("span")<{ $color: string }>`
+  position: absolute;
+  top: 50%;
+  /* Wider than the visible tick so it can actually be hovered for the tooltip. */
+  width: 12px;
+  height: 12px;
+  transform: translate(-50%, -50%);
+  cursor: help;
+  /* Marks render after the rail and track but before the thumb, so with no
+     z-index of its own the tick sits above the bar and under the handle. */
+
+  &::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 2px;
+    height: 6px;
+    transform: translate(-50%, -50%);
+    background-color: ${(p) => p.$color};
+  }
+`;
+
+/**
+ * `$lastMarkIndex` is the index of the final mark: its label is pinned to the
+ * right edge (and the first mark's to the left) so the labels stay inside the
+ * bar's width instead of hanging off either end.
+ */
+const StyledSlider = styled(Slider, {
+  shouldForwardProp: (prop) => prop !== "$lastMarkIndex",
+})<{ $lastMarkIndex?: number }>`
   color: ${tokens.text.primary};
   height: 6px;
   padding: 13px 0;
+
+  & .MuiSlider-markLabel[data-index="0"] {
+    transform: translateX(0);
+  }
+
+  ${(p) =>
+    p.$lastMarkIndex !== undefined &&
+    `
+  & .MuiSlider-markLabel[data-index="${p.$lastMarkIndex}"] {
+    transform: translateX(-100%);
+  }
+  `}
   
   & .MuiSlider-thumb {
     width: 18px;

@@ -5,7 +5,7 @@ import type { Participant, ParticipantOrder } from "../../../hooks/data/getUserF
 import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
 import { ModifyFuturesOrderModal } from "./ModifyFuturesOrderModal";
-import { CloseOrderForm } from "../../Forms/CloseOrderForm";
+import { CancelOrderForm } from "../../Forms/CancelOrderForm";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { useOrderMargin } from "../../../hooks/data/useOrderMargin";
 import type { AccountBalance, ContractMode } from "../../../types/types";
@@ -34,7 +34,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, accountBa
   const { data: marketPrice } = useGetMarketPrice();
   const orderMargin = useOrderMargin();
   const [selectedOrder, setSelectedOrder] = useState<ParticipantOrder | null>(null);
-  const [selectedCloseOrder, setSelectedCloseOrder] = useState<ParticipantOrder | null>(null);
+  const [selectedCancelOrder, setSelectedCancelOrder] = useState<ParticipantOrder | null>(null);
   const _getStatusColor = (isActive: boolean, closedAt: string | null) => {
     if (closedAt) {
       return tokens.trading.info; // Filled/Closed
@@ -87,8 +87,8 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, accountBa
   // `cancelledQuantity`, which would make the row disagree with Modify/Close.
   const liveQuantity = (order: ParticipantOrder) => order.filledQuantity + order.quantity;
 
-  const handleCloseOrder = (order: ParticipantOrder) => {
-    setSelectedCloseOrder(order);
+  const handleCancelOrder = (order: ParticipantOrder) => {
+    setSelectedCancelOrder(order);
     closeModal.open();
   };
 
@@ -137,7 +137,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, accountBa
                       {order.isActive && !order.closedAt && (
                         <ActionButtons>
                           <ModifyButton onClick={() => handleModifyOrder(order)}>Modify</ModifyButton>
-                          <CloseButton onClick={() => handleCloseOrder(order)}>Close</CloseButton>
+                          <CancelButton onClick={() => handleCancelOrder(order)}>Cancel</CancelButton>
                         </ActionButtons>
                       )}
                     </td>
@@ -171,18 +171,18 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, accountBa
         />
       )}
 
-      {selectedCloseOrder && (
+      {selectedCancelOrder && (
         <ModalItem open={closeModal.isOpen} setOpen={closeModal.setOpen}>
-          <CloseOrderForm
-            isBuy={selectedCloseOrder.isBuy}
-            pricePerDay={selectedCloseOrder.pricePerDay}
-            expirationAt={selectedCloseOrder.expirationAt}
-            amount={selectedCloseOrder.quantity}
-            orderIds={[selectedCloseOrder.id]}
+          <CancelOrderForm
+            isBuy={selectedCancelOrder.isBuy}
+            pricePerDay={selectedCancelOrder.pricePerDay}
+            expirationAt={selectedCancelOrder.expirationAt}
+            amount={selectedCancelOrder.quantity}
+            orderIds={[selectedCancelOrder.id]}
             contractMode={contractMode}
             closeForm={() => {
               closeModal.close();
-              setSelectedCloseOrder(null);
+              setSelectedCancelOrder(null);
             }}
           />
         </ModalItem>
@@ -333,7 +333,7 @@ const ModifyButton = styled("button")`
   }
 `;
 
-const CloseButton = styled("button")`
+const CancelButton = styled("button")`
   padding: 0.5rem 0.875rem;
   background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};
