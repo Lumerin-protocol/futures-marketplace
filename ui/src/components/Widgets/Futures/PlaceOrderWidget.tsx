@@ -1334,6 +1334,7 @@ export const PlaceOrderWidget = ({
 
       {showOrderForm && pendingOrder && externalExpirationAt && (
         <ModalItem
+          compact
           open={showOrderForm}
           setOpen={(open) => {
             setShowOrderForm(open);
