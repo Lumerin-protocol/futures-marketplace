@@ -65,7 +65,6 @@ interface Props {
   offsetPlan?: OrderOffsetPlan | null;
   contractMode?: ContractMode;
   perpsCollection?: PerpsCollection;
-  leverage?: number; // Leverage value for perps mode (e.g., 10 for 10x)
   isMarketOrder?: boolean;
   timeInForce?: TimeInForceValue;
 }
@@ -81,7 +80,6 @@ export const PlaceOrderForm: FC<Props> = ({
   offsetPlan = null,
   contractMode = "futures",
   perpsCollection,
-  leverage = 10,
   isMarketOrder = false,
   timeInForce = TimeInForce.GTC,
 }) => {
@@ -94,7 +92,12 @@ export const PlaceOrderForm: FC<Props> = ({
   const { address } = useAccount();
   const _publicClient = usePublicClient();
   const contractSpecsQuery = useFuturesContractSpecs();
-  const { makerFeePercent, takerFeePercent, isLoading: isFeesLoading } = useMakerTakerFees();
+  const {
+    feeFor,
+    makerFeePercent,
+    takerFeePercent,
+    isLoading: isFeesLoading,
+  } = useMakerTakerFees();
   const { wMaker, wTaker, weightScale, isLoading: isWeightsLoading } = usePointsHookWeights();
 
   // Determine order type from quantity sign
@@ -129,28 +132,48 @@ export const PlaceOrderForm: FC<Props> = ({
   /**
    * Margin this order commits, `null` while the reads it needs are in flight.
    *
-   * Futures quote the venue's own gate — the rise in portfolio IM once the order
+   * Both venues quote the same gate — the rise in portfolio IM once the order
    * rests — so this modal shows the figure the order widget showed and the one
-   * `createOrder` will check. Perps still size margin off the chosen leverage.
+   * `createOrder` will check. The reserved fee is the worse of maker/taker on
+   * the resting notional: at submit we do not know which the fill will charge.
    */
   const requiredMargin = useMemo<bigint | null>(() => {
-    if (contractMode === "perpetual") {
-      // (price * quantity) * (1 / leverage): 10x leverage = 10% margin.
-      const positionValue =
-        (price * BigInt(Math.round(restingQuantity * QUANTITY_SCALE_NUM))) / QUANTITY_SCALE;
-      const marginPercent = BigInt(Math.round((1 / leverage) * 100));
-      return (positionValue * marginPercent) / 100n;
+    const venue = contractMode === "perpetual" ? "perps" : "futures";
+    const scale = venue === "perps" ? QUANTITY_SCALE_NUM : 1;
+    const nativeQty = BigInt(Math.round(restingQuantity * scale));
+    if (nativeQty === 0n) return 0n;
+
+    const notional =
+      venue === "perps" ? (price * nativeQty) / QUANTITY_SCALE : price * nativeQty;
+    let reservedFee = 0n;
+    if (venue === "perps") {
+      const maker = perpsCollection?.makerFeeBps;
+      const taker = perpsCollection?.takerFeeBps;
+      if (maker !== undefined && taker !== undefined) {
+        const worst = Math.max(maker, taker);
+        if (worst > 0) reservedFee = (notional * BigInt(worst)) / 10_000n;
+      }
+    } else {
+      reservedFee = feeFor(notional);
     }
 
-    const quantity = BigInt(Math.round(restingQuantity));
-    if (quantity === 0n) return 0n;
-    const quote = orderMargin.quote({
-      place: [{ venue: "futures", price, quantity: isBuy ? quantity : -quantity }],
-    });
+    const quote = orderMargin.quote(
+      { place: [{ venue, price, quantity: isBuy ? nativeQty : -nativeQty }] },
+      { reservedFee },
+    );
     if (!quote) return null;
     // A leg that hedges the rest of the book can lower IM; it never earns credit.
     return quote.imIncrease > 0n ? quote.imIncrease : 0n;
-  }, [contractMode, price, restingQuantity, leverage, isBuy, orderMargin.quote]);
+  }, [
+    contractMode,
+    price,
+    restingQuantity,
+    isBuy,
+    orderMargin.quote,
+    perpsCollection?.makerFeeBps,
+    perpsCollection?.takerFeeBps,
+    feeFor,
+  ]);
 
   // Check for conflicting orders (opposite action, same price, same expiration date)
   const hasConflictingOrder = () => {

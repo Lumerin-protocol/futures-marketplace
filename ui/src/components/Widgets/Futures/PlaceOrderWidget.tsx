@@ -51,7 +51,6 @@ import { useSimulatePerpsOrder } from "../../../hooks/data/perps/useSimulatePerp
 import { useSimulateFuturesOrder } from "../../../hooks/data/useSimulateFuturesOrder";
 import {
   formatHashratePHPS,
-  PAYMENT_TOKEN_SCALE,
   PAYMENT_TOKEN_SCALE_NUM,
   QUANTITY_SCALE,
   QUANTITY_SCALE_NUM,
@@ -126,6 +125,20 @@ export const PlaceOrderWidget = ({
   const { feeFor } = useMakerTakerFees();
   const { isConnected, isConnecting, isReconnecting } = useAccount();
   const { open: openWalletModal } = useAppKit();
+
+  // Perps fees live on the perps collection, not the futures contract
+  // `useMakerTakerFees` reads. A rebate is not spendable headroom.
+  const perpsFeeFor = (notional: bigint): bigint => {
+    const maker = perpsCollection?.makerFeeBps;
+    const taker = perpsCollection?.takerFeeBps;
+    if (maker === undefined || taker === undefined) return 0n;
+    const worst = Math.max(maker, taker);
+    if (worst <= 0) return 0n;
+    return (notional * BigInt(worst)) / 10_000n;
+  };
+  const reserveFee = (notional: bigint) =>
+    contractMode === "perpetual" ? perpsFeeFor(notional) : feeFor(notional);
+  const orderVenue = contractMode === "perpetual" ? "perps" : "futures";
 
   // Calculate price step from contract specs
   const priceStep = contractSpecsQuery.data?.data?.minimumPriceIncrement
@@ -231,6 +244,7 @@ export const PlaceOrderWidget = ({
     amountMode,
     contractMode,
     leverage,
+    orderType,
     openPositionNetQuantity,
   ]);
 
@@ -351,21 +365,26 @@ export const PlaceOrderWidget = ({
    * Pre-flight the venue's margin gate. `createOrder` admits an order only when
    * the balance covers portfolio IM *with that order on the book*, or when the
    * order reduces locally and IM does not rise. Returns false, having explained
-   * the shortfall, when the gate would revert.
+   * the shortfall, when the gate would revert. Same predicate for both venues:
+   * they share one portfolio IM.
    */
-  const checkFuturesMargin = async (
+  const checkOrderMargin = async (
     priceInWei: bigint,
     quantity: number,
     isBuy: boolean,
   ): Promise<boolean> => {
-    const absQuantity = BigInt(quantity);
-    // Reserve the worse of maker/taker fee — see comment on `useMakerTakerFees`.
-    const reservedFee = feeFor(priceInWei * absQuantity);
+    const scale = contractMode === "perpetual" ? QUANTITY_SCALE_NUM : 1;
+    const absQuantity = BigInt(Math.round(Math.abs(quantity) * scale));
+    const reservedFee = reserveFee(
+      contractMode === "perpetual"
+        ? (priceInWei * absQuantity) / QUANTITY_SCALE
+        : priceInWei * absQuantity,
+    );
     const quote = orderMargin.quote(
       {
         place: [
           {
-            venue: "futures",
+            venue: orderVenue,
             price: priceInWei,
             quantity: isBuy ? absQuantity : -absQuantity,
           },
@@ -399,54 +418,81 @@ export const PlaceOrderWidget = ({
 
   // Calculate maximum available quantity based on current price
   const calculateMaxQuantity = (): number => {
-    const currentPrice = parseFloat(price) || 0;
-    if (currentPrice <= 0) return 0;
+    const limitPrice = parseFloat(price) || 0;
+    // Market orders are submitted at a slipped mark, which is what fill loss
+    // is charged on. Size the slider at those prices so 100% still passes.
+    const buyPrice =
+      orderType === "market" && newestItemPrice
+        ? newestItemPrice * (1 + MARKET_SLIPPAGE)
+        : limitPrice;
+    const sellPrice =
+      orderType === "market" && newestItemPrice
+        ? newestItemPrice * (1 - MARKET_SLIPPAGE)
+        : limitPrice;
+    if (buyPrice <= 0 || sellPrice <= 0) return 0;
 
-    const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
-    const totalBalance = balanceQuery.data ?? 0n;
-    // Portfolio IM already nets futures and perps legs, so it is the locked amount in both modes.
-    const lockedBalance = minMargin ?? 0n;
-    const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
+    const qtyScale = contractMode === "perpetual" ? QUANTITY_SCALE_NUM : 1;
 
     // An open position can always be unwound, so the slider has to reach that far
     // even when margin leaves no free balance. Only one side reduces, and the
     // buy/sell handlers still reject the other one.
-    const reduceOnlyMax =
-      Number(reduceOnlyCapacity()) / (contractMode === "perpetual" ? QUANTITY_SCALE_NUM : 1);
-
-    // For perpetual mode, return max size (notional) or max quantity depending on amountMode
-    if (contractMode === "perpetual") {
-      const buffer = PAYMENT_TOKEN_SCALE / 10n; // 0.1 USDC in base units
-      const effectiveBalance = availableBalance > buffer ? availableBalance - buffer : 0n;
-      const maxSize = (Number(effectiveBalance) / PAYMENT_TOKEN_SCALE_NUM) * leverage;
-      if (amountMode === "quantity") {
-        return Math.max(maxSize / currentPrice, reduceOnlyMax);
-      }
-      return Math.max(maxSize, reduceOnlyMax * currentPrice);
-    }
+    const reduceOnlyMax = Number(reduceOnlyCapacity()) / qtyScale;
 
     // The slider is set before the user picks a side, and the two sides do not
     // cost the same — a leg that hedges existing exposure is cheaper than one
     // that extends it. Take the side the account can least afford so 100% is
     // placeable whichever button follows, and let the reduce-only union carry
     // the cheap side past it.
-    const fundedMax = (isBuy: boolean) =>
+    const fundedMax = (isBuy: boolean, px: number) =>
       orderMargin.maxQuantity({
-        venue: "futures",
-        price: priceInWei,
+        venue: orderVenue,
+        price: BigInt(Math.round(px * PAYMENT_TOKEN_SCALE_NUM)),
         isBuy,
         // The fee scales with notional, so it is charged per candidate size
         // rather than subtracted from the balance once up front.
-        reserveFee: feeFor,
+        reserveFee,
       });
 
-    const maxBuy = fundedMax(true);
-    const maxSell = fundedMax(false);
+    const maxBuy = fundedMax(true, buyPrice);
+    const maxSell = fundedMax(false, sellPrice);
     // Not loaded yet: report no capacity rather than a guess the gate would reject.
     if (maxBuy === undefined || maxSell === undefined) return 0;
 
-    const bestQty = Math.max(Number(maxBuy < maxSell ? maxBuy : maxSell), reduceOnlyMax);
-    return amountMode === "size" ? bestQty * currentPrice : bestQty;
+    const maxBuyQty = Number(maxBuy) / qtyScale;
+    const maxSellQty = Number(maxSell) / qtyScale;
+    let bestQty = Math.max(Math.min(maxBuyQty, maxSellQty), reduceOnlyMax);
+
+    // Leverage is a user cap on top of the gate, not a substitute for it. At
+    // 10x (the IM shock) the search is the binding constraint; below 10x this
+    // keeps 100% from using more notional than the chosen leverage implies.
+    if (contractMode === "perpetual" && leverage > 0) {
+      const totalBalance = balanceQuery.data ?? 0n;
+      const lockedBalance = minMargin ?? 0n;
+      const available = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
+      const capPrice = Math.max(buyPrice, sellPrice);
+      const leverageQty =
+        capPrice > 0
+          ? ((Number(available) / PAYMENT_TOKEN_SCALE_NUM) * leverage) / capPrice
+          : 0;
+      bestQty = Math.max(Math.min(bestQty, leverageQty), reduceOnlyMax);
+    }
+
+    if (amountMode === "size") {
+      // Convert each side at the price that side will actually submit, then
+      // keep the smaller notional so Bid and Ask both still fit.
+      const bestSize = Math.min(maxBuyQty * buyPrice, maxSellQty * sellPrice);
+      const reduceSize = reduceOnlyMax * (limitPrice || buyPrice);
+      let size = Math.max(bestSize, reduceSize);
+      if (contractMode === "perpetual" && leverage > 0) {
+        const totalBalance = balanceQuery.data ?? 0n;
+        const lockedBalance = minMargin ?? 0n;
+        const available = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
+        const leverageSize = (Number(available) / PAYMENT_TOKEN_SCALE_NUM) * leverage;
+        size = Math.max(Math.min(size, leverageSize), reduceSize);
+      }
+      return size;
+    }
+    return bestQty;
   };
 
   // Highlight price/amount inputs when the user clicks the order book
@@ -771,7 +817,7 @@ export const PlaceOrderWidget = ({
     }
   };
 
-  // Perps mode buy handler - uses amount as margin
+  // Perps mode buy handler
   const handleBuyPerps = async () => {
     const numericAmount = getNumericAmount();
     if (numericAmount <= 0) {
@@ -781,31 +827,14 @@ export const PlaceOrderWidget = ({
 
     if (!(await checkLiquidity("buy"))) return;
 
-    // Validate minimum margin
     const currentPrice = getEffectivePrice("buy");
     const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
     const quantity = calculateQuantityFromAmount(numericAmount, currentPrice);
-    const totalBalance = balanceQuery.data ?? 0n;
-    const lockedBalance = minMargin ?? 0n;
-    const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
-
-    // Required margin = effectiveSize / leverage (effectiveSize accounts for amountMode)
-    const effectiveSizeBuy = getEffectiveSize();
-    const requiredMargin = effectiveSizeBuy / leverage;
-    const marginInWei = BigInt(Math.round(requiredMargin * PAYMENT_TOKEN_SCALE_NUM));
-
-    if (!isReduceOnlyOrder(quantity, true) && marginInWei > availableBalance) {
-      const marginFormatted = requiredMargin.toFixed(2);
-      const totalBalanceFormatted = (Number(totalBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      const lockedBalanceFormatted = (Number(lockedBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      const availableBalanceFormatted = (Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      const accountBalance = accountBalanceQuery.data ?? 0n;
-      const accountBalanceFormatted = (Number(accountBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      await showAlert(
-        `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${marginFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
-      );
+    if (quantity <= 0) {
+      await showAlert("Quantity must be greater than 0");
       return;
     }
+    if (!(await checkOrderMargin(priceInWei, quantity, true))) return;
 
     // Check for conflicting orders (opposite action, same price)
     const offsetting = findOffsettingOrders(priceInWei, true);
@@ -821,7 +850,7 @@ export const PlaceOrderWidget = ({
     openOrderForm(currentPrice, numericAmount, quantity); // Positive quantity for Buy
   };
 
-  // Perps mode sell handler - uses amount as margin
+  // Perps mode sell handler
   const handleSellPerps = async () => {
     const numericAmount = getNumericAmount();
     if (numericAmount <= 0) {
@@ -834,27 +863,11 @@ export const PlaceOrderWidget = ({
     const currentPrice = getEffectivePrice("sell");
     const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
     const quantity = calculateQuantityFromAmount(numericAmount, currentPrice);
-    const totalBalance = balanceQuery.data ?? 0n;
-    const lockedBalance = minMargin ?? 0n;
-    const availableBalance = totalBalance > lockedBalance ? totalBalance - lockedBalance : 0n;
-
-    // Required margin = effectiveSize / leverage (effectiveSize accounts for amountMode)
-    const effectiveSizeSell = getEffectiveSize();
-    const requiredMargin = effectiveSizeSell / leverage;
-    const marginInWei = BigInt(Math.round(requiredMargin * PAYMENT_TOKEN_SCALE_NUM));
-
-    if (!isReduceOnlyOrder(quantity, false) && marginInWei > availableBalance) {
-      const marginFormatted = requiredMargin.toFixed(2);
-      const totalBalanceFormatted = (Number(totalBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      const lockedBalanceFormatted = (Number(lockedBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      const availableBalanceFormatted = (Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      const accountBalance = accountBalanceQuery.data ?? 0n;
-      const accountBalanceFormatted = (Number(accountBalance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-      await showAlert(
-        `Insufficient funds. Please deposit futures account.\n\nRequired margin: ${marginFormatted} USDC\nTotal futures balance: ${totalBalanceFormatted} USDC\nLocked balance: ${lockedBalanceFormatted} USDC\nAvailable balance: ${availableBalanceFormatted} USDC\nAvailable account balance: ${accountBalanceFormatted} USDC`,
-      );
+    if (quantity <= 0) {
+      await showAlert("Quantity must be greater than 0");
       return;
     }
+    if (!(await checkOrderMargin(priceInWei, quantity, false))) return;
 
     // Check for conflicting orders (opposite action, same price)
     const offsetting = findOffsettingOrders(priceInWei, false);
@@ -894,7 +907,7 @@ export const PlaceOrderWidget = ({
     }
     const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
 
-    if (!(await checkFuturesMargin(priceInWei, quantity, true))) return;
+    if (!(await checkOrderMargin(priceInWei, quantity, true))) return;
 
     // Check for conflicting orders (opposite action, same price, same expiration date)
     const offsetting = findOffsettingOrders(priceInWei, true);
@@ -948,7 +961,7 @@ export const PlaceOrderWidget = ({
     }
     const priceInWei = BigInt(Math.round(currentPrice * PAYMENT_TOKEN_SCALE_NUM));
 
-    if (!(await checkFuturesMargin(priceInWei, quantity, false))) return;
+    if (!(await checkOrderMargin(priceInWei, quantity, false))) return;
 
     // Check for conflicting orders (opposite action, same price, same expiration date)
     const offsetting = findOffsettingOrders(priceInWei, false);
@@ -1030,12 +1043,14 @@ export const PlaceOrderWidget = ({
   // quote the dearer of the two, which is the side the slider ceiling is set
   // from. IM itself covers everything the account already holds, so the increase
   // is the part this decision commits.
-  const futuresRequiredMargin = (() => {
-    if (contractMode === "perpetual" || previewQuantity <= 0 || previewPrice <= 0) return undefined;
-    const price = BigInt(Math.round(previewPrice * PAYMENT_TOKEN_SCALE_NUM));
-    const quantity = BigInt(previewQuantity);
+  const previewRequiredMargin = (() => {
+    if (previewQuantity <= 0 || previewPrice <= 0) return undefined;
+    const priceWei = BigInt(Math.round(previewPrice * PAYMENT_TOKEN_SCALE_NUM));
+    const scale = contractMode === "perpetual" ? QUANTITY_SCALE_NUM : 1;
+    const quantity = BigInt(Math.round(previewQuantity * scale));
+    if (quantity === 0n) return 0n;
     const forSide = (signedQuantity: bigint) =>
-      orderMargin.quote({ place: [{ venue: "futures", price, quantity: signedQuantity }] })
+      orderMargin.quote({ place: [{ venue: orderVenue, price: priceWei, quantity: signedQuantity }] })
         ?.imIncrease;
 
     const asBid = forSide(quantity);
@@ -1044,11 +1059,9 @@ export const PlaceOrderWidget = ({
     return asBid > asAsk ? asBid : asAsk;
   })();
   const requiredMarginLabel =
-    contractMode === "perpetual"
-      ? `${(getEffectiveSize() / leverage).toFixed(2)} USDC`
-      : futuresRequiredMargin !== undefined
-        ? `${usdc(futuresRequiredMargin > 0n ? futuresRequiredMargin : 0n)} USDC`
-        : "—";
+    previewRequiredMargin !== undefined
+      ? `${usdc(previewRequiredMargin > 0n ? previewRequiredMargin : 0n)} USDC`
+      : "—";
   // Show the converted counterpart of the input: Size mode → Quantity, Quantity mode → Size.
   const summaryCounterpartLabel = amountMode === "size" ? "Quantity" : "Size";
   const summaryCounterpartValue =
@@ -1227,7 +1240,18 @@ export const PlaceOrderWidget = ({
                       setAmount(Math.floor(newAmount));
                     } else {
                       const decimals = amountMode === "quantity" ? 6 : 2;
-                      setAmount(newAmount > 0 ? newAmount.toFixed(decimals) : "0");
+                      if (newAmount <= 0) {
+                        setAmount("0");
+                      } else {
+                        const factor = 10 ** decimals;
+                        // Floor at 100% so toFixed rounding cannot walk past the
+                        // last quantity the margin gate accepts.
+                        const scaled =
+                          numValue === 100
+                            ? Math.floor(newAmount * factor)
+                            : Math.round(newAmount * factor);
+                        setAmount((scaled / factor).toFixed(decimals));
+                      }
                     }
                   }}
                   disabled={showOrderForm}
@@ -1331,7 +1355,6 @@ export const PlaceOrderWidget = ({
             offsetPlan={offsetPlan}
             contractMode={contractMode}
             perpsCollection={perpsCollection}
-            leverage={leverage}
             isMarketOrder={orderType === "market"}
             timeInForce={timeInForce}
             closeForm={() => {
