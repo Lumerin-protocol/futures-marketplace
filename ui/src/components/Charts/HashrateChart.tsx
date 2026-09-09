@@ -310,7 +310,6 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   const btcSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const networkHashrateSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
-  const fittedPeriodRef = useRef<TimePeriod | null>(null);
 
   const handleBtcPriceLegendClick = useCallback(() => {
     setIsBtcPriceVisible((prev) => !prev);
@@ -396,9 +395,11 @@ export const HashrateChart: FC<HashrateChartProps> = ({
 
     const chart = createChart(container, {
       autoSize: true,
-      // Prevent accidental zooming (mouse wheel / pinch scale).
-      // We leave panning enabled (default `handleScroll`) so the user can still navigate.
+      // The visible range belongs to the 1D/7D/30D switch, so both zooming
+      // (wheel / pinch) and panning are off; a stray drag or wheel over the pane
+      // would otherwise slide the viewport off the data with no way back.
       handleScale: false,
+      handleScroll: false,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
         textColor: tokens.text.primary,
@@ -525,7 +526,6 @@ export const HashrateChart: FC<HashrateChartProps> = ({
       btcSeriesRef.current = null;
       networkHashrateSeriesRef.current = null;
       priceLinesRef.current = [];
-      fittedPeriodRef.current = null;
     };
   }, []);
 
@@ -539,27 +539,13 @@ export const HashrateChart: FC<HashrateChartProps> = ({
     btcSeriesRef.current?.setData(btcSeriesData);
     networkHashrateSeriesRef.current?.setData(networkHashrateSeriesData);
 
-    // Reframing only on a range switch is what stops background refetches from
-    // throwing away a pan or zoom the user just made.
-    if (hashrateSeriesData.length === 0 || fittedPeriodRef.current === timePeriod) return;
+    if (hashrateSeriesData.length === 0) return;
 
+    // The viewport is fixed, so every update has to reframe: points appended by a
+    // background refetch would otherwise land past the right edge with no pan left
+    // to reach them.
     chartRef.current?.timeScale().fitContent();
-
-    // Every hook keeps serving the previous range while the new one loads, so this
-    // frame is provisional. Leaving the period unrecorded until every query has
-    // settled means whichever one lands last reframes against the real data.
-    if (!isFetching && !isBtcPriceFetching && !isNetworkHashrateFetching) {
-      fittedPeriodRef.current = timePeriod;
-    }
-  }, [
-    hashrateSeriesData,
-    btcSeriesData,
-    networkHashrateSeriesData,
-    timePeriod,
-    isFetching,
-    isBtcPriceFetching,
-    isNetworkHashrateFetching,
-  ]);
+  }, [hashrateSeriesData, btcSeriesData, networkHashrateSeriesData]);
 
   useEffect(() => {
     btcSeriesRef.current?.applyOptions({ visible: isBtcPriceVisible });

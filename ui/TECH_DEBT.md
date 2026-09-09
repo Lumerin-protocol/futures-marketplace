@@ -163,16 +163,14 @@ suppressed rather than "fixed".
 | `components/Widgets/Futures/ClosePerpsPositionModal.tsx` (seed effect) | `marketPrice` is read for the initial value only; listing it would re-reset the form on every price tick and discard user input. |
 | `components/Widgets/Futures/ClosePerpsPositionModal.tsx` (`handleConfirm`) | Quantity is read via `form.getCurrentQuantity()`, so `form.amount` / `form.amountMode` are the real dependencies; `snapBigInt` is redefined every render. |
 | `components/Widgets/Futures/ModifyPerpsOrderModal.tsx` (×3) | Same two patterns as `ClosePerpsPositionModal`. |
-| `components/Widgets/Futures/OrderBookTable.tsx` (target-expiry snap) | With `selectedDateIndex` listed, paging the carousel by hand snaps straight back to the target. |
-| `components/Widgets/Futures/OrderBookTable.tsx` (expiry notification) | `onExpirationAtChange` is a new function on every parent render, so listing it fires the notification on every render. |
-| `components/Widgets/Futures/OrderBookTable.tsx` (refetch on expiry change) | `selectedDateIndex` is the trigger; `orderBookQuery` swaps between the futures and perps query objects, so listing its `refetch` fires an extra request whenever the mode flips. |
+| `components/Widgets/Futures/OrderBookTable.tsx` (refetch on market change) | `selectedExpirationAt` is the trigger; `orderBookQuery` swaps between the futures and perps query objects, so listing its `refetch` fires an extra request whenever the mode flips. |
 | `components/Widgets/Futures/OrderBookTable.tsx` (highlight tracking) | **Would loop:** the effect calls `setPriceHighlights`, and `finalOrderBookDataWithHighlights` is derived from that state. |
 | `components/Widgets/Futures/PlaceOrderWidget.tsx` (slider sync) | The list enumerates the values `calculateMaxQuantity` / `getNumericAmount` read; both are redefined every render. |
 
 Worth revisiting as a group if these components are ever refactored: several would
 stop needing a suppression if the callbacks involved were memoised (`form.reset`,
-`form.getCurrentQuantity`, `onExpirationAtChange`) — `scrollToOrder` in
-`OrderBookTable` was fixed exactly that way and needed no suppression afterwards.
+`form.getCurrentQuantity`) — `scrollToOrder` in `OrderBookTable` was fixed exactly
+that way and needed no suppression afterwards.
 
 ### `noExplicitAny`
 
