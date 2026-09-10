@@ -1215,30 +1215,28 @@ export const PlaceOrderWidget = ({
   };
 
   const previewQuantity = getExpectedQuantity();
-  const previewPrice = getEffectivePrice();
-  // What this order adds to portfolio IM. The side is still unknown here, so
-  // quote the dearer of the two, which is the side the slider ceiling is set
-  // from. IM itself covers everything the account already holds, so the increase
-  // is the part this decision commits.
+  // Margin this order would add to the portfolio's initial margin, quoted
+  // through the same `quoteOrder` the Bid/Ask buttons and the slider ceiling
+  // use — per-side submit price, reduce-only credit — so it agrees with the
+  // review modal's "Margin required" row. The fee reserve is shown there
+  // separately, not folded in here. The side is still unknown at this point,
+  // so show the dearer of the two.
   const previewRequiredMargin = (() => {
-    if (previewQuantity <= 0 || previewPrice <= 0) return undefined;
-    const priceWei = BigInt(Math.round(previewPrice * PAYMENT_TOKEN_SCALE_NUM));
-    const scale = contractMode === "perpetual" ? QUANTITY_SCALE_NUM : 1;
-    const quantity = BigInt(Math.round(previewQuantity * scale));
-    if (quantity === 0n) return 0n;
-    const forSide = (signedQuantity: bigint) =>
-      orderMargin.quote({ place: [{ venue: orderVenue, price: priceWei, quantity: signedQuantity }] })
-        ?.imIncrease;
-
-    const asBid = forSide(quantity);
-    const asAsk = forSide(-quantity);
+    if (previewQuantity <= 0) return undefined;
+    const forSide = (isBuy: boolean) => {
+      const px = getEffectivePrice(isBuy ? "buy" : "sell");
+      if (px <= 0) return undefined;
+      const quote = quoteOrder(BigInt(Math.round(px * PAYMENT_TOKEN_SCALE_NUM)), previewQuantity, isBuy);
+      if (!quote) return undefined;
+      return quote.imIncrease > 0n ? quote.imIncrease : 0n;
+    };
+    const asBid = forSide(true);
+    const asAsk = forSide(false);
     if (asBid === undefined || asAsk === undefined) return undefined;
     return asBid > asAsk ? asBid : asAsk;
   })();
   const requiredMarginLabel =
-    previewRequiredMargin !== undefined
-      ? `${usdc(previewRequiredMargin > 0n ? previewRequiredMargin : 0n)} USDC`
-      : "—";
+    previewRequiredMargin !== undefined ? `${usdc(previewRequiredMargin)} USDC` : "—";
   // Show the converted counterpart of the input: Size mode → Quantity, Quantity mode → Size.
   const summaryCounterpartLabel = amountMode === "size" ? "Quantity" : "Size";
   const summaryCounterpartValue =
