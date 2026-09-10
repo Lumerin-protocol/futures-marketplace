@@ -17,6 +17,7 @@ import {
 } from "lightweight-charts";
 import type { TimePeriod } from "../../hooks/data/useHashRateIndexData";
 import { tokens } from "../../styles/tokens";
+import { DATE_LOCALE } from "../../lib/dates";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 import { Spinner } from "../Spinner.styled";
 
@@ -195,7 +196,7 @@ const toWallClock = (epochMs: number): UTCTimestamp =>
 
 /** Reads a wall-clock timestamp back as the label the user expects to see. */
 const formatWallClock = (time: UTCTimestamp): string =>
-  new Date(time * 1000).toLocaleString(undefined, {
+  new Date(time * 1000).toLocaleString(DATE_LOCALE, {
     year: "numeric",
     month: "short",
     day: "numeric",

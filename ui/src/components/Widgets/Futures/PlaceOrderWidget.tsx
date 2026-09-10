@@ -37,6 +37,7 @@ import type { Participant } from "../../../hooks/data/getUserFuturesOrders";
 import type { PerpsOrder } from "../../../hooks/data/perps/useUserPerpsOrders";
 import type { ContractMode, AccountBalance } from "../../../types/types";
 import type { PerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
+import { formatDateTime } from "../../../lib/dates";
 import { planOffset, type RestingOrder } from "../../../lib/orderUpdatePlan";
 import { useOrderMargin } from "../../../hooks/data/useOrderMargin";
 import {
@@ -1645,7 +1646,7 @@ const ConflictingOrderModal = ({
 
   const isBuy = pendingOrder.quantity > 0;
   const oppositeAction = isBuy ? "Ask" : "Bid";
-  const expirationAtFormatted = externalExpirationAt ? new Date(externalExpirationAt * 1000).toLocaleString() : "N/A";
+  const expirationAtFormatted = externalExpirationAt ? formatDateTime(externalExpirationAt) : "N/A";
   const formatQty = (value: number) => value.toFixed(contractMode === "perpetual" ? 6 : 0);
 
   return (

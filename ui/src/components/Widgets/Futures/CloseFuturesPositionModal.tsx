@@ -14,6 +14,7 @@ import { FUTURES_POSITION_HISTORY_QK } from "../../../hooks/data/useFuturesPosit
 import { USER_FUTURES_TRADES_QK } from "../../../hooks/data/useUserFuturesTrades";
 import { invalidatePortfolioPnl } from "../../../hooks/data/pnl/invalidate";
 import { getOrderBookQueryKey, waitForOrderBookBlockNumber } from "../../../hooks/data/orderBookHelpers";
+import { formatDateTime } from "../../../lib/dates";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { TransactionFormV2 as TransactionForm } from "../../Forms/Shared/MultistepForm";
 import { showAlert } from "../../AlertModal";
@@ -113,8 +114,7 @@ export const CloseFuturesPositionModal = ({
   }, [onClose]);
 
   const formatPrice = (p: bigint) => (Number(p) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-  const formatExpiration = (expirationAtStr: string) =>
-    new Date(Number(expirationAtStr) * 1000).toLocaleString();
+  const formatExpiration = (expirationAtStr: string) => formatDateTime(expirationAtStr);
   const closeQtyDisplay = form.getCurrentQuantity();
   const closeSizeDisplay = form.getCurrentSize();
   const entryPriceValue = position ? Number(position.pricePerDay) / PAYMENT_TOKEN_SCALE_NUM : 0;

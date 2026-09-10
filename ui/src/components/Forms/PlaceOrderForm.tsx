@@ -28,6 +28,7 @@ import type { ContractMode } from "../../types/types";
 import { useOrderMargin } from "../../hooks/data/useOrderMargin";
 import { useLiquidationThresholds } from "../../hooks/data/useLiquidationThresholds";
 import { useGetMarketPrice } from "../../hooks/data/useGetMarketPrice";
+import { formatDateTime } from "../../lib/dates";
 import { type OrderLeg, type OrderMarginQuote, snapshotWithChanges } from "../../lib/orderMargin";
 import { positionBefore, snapshotWithFill } from "../../lib/orderPreview";
 import { mmRequired, type AccountSnapshot } from "@hashpower/portfolio-margin";
@@ -406,10 +407,7 @@ export const PlaceOrderForm: FC<Props> = ({
   const qtyLabel = (value: number) =>
     `${isPerps ? String(Number(value.toFixed(6))) : value.toFixed(0)} ${value === 1 ? "contract" : "contracts"}`;
   const priceLabel = `${(Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} USDC`;
-  const deliveryLabel = new Date(Number(expirationAt) * 1000).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  const deliveryLabel = formatDateTime(expirationAt);
   const tifLabel = TIF_LABELS[timeInForce];
   const pct = (bps: number) => `${(Math.abs(bps) / 100).toFixed(2)}%`;
   const slippageLabel =
