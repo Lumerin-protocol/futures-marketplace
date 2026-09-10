@@ -362,7 +362,7 @@ const CancelButton = styled("button")`
 
 const EmptyState = styled("div")`
   text-align: center;
-  padding: 2rem;
+  padding: 1rem 2rem 4rem 2rem;
   color: ${tokens.text.muted};
   
   p {
