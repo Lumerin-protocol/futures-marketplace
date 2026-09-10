@@ -607,6 +607,9 @@ const RightPanelArea = styled("div")`
   gap: 0;
   min-width: 0;
   overflow-y: auto;
+  /* The panel is a fixed narrow column: anything inside that runs wider than it
+     is clipped rather than allowed to open a horizontal scrollbar. */
+  overflow-x: hidden;
   border: 1px solid ${tokens.border.muted04};
   border-radius: 8px;
 
@@ -640,7 +643,9 @@ const RightPanelArea = styled("div")`
   @media (max-width: 1024px) {
     grid-column: 1;
     grid-row: auto;
-    overflow-y: visible;
+    /* Both axes, not just y: leaving overflow-x hidden here would force the
+       visible overflow-y back to auto and make the stacked panel a scroller. */
+    overflow: visible;
     align-self: auto;
 
     > *:nth-of-type(2) {
