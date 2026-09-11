@@ -27,6 +27,11 @@ export const NetworkBox = styled(ModalBox)`
   }
 `;
 
+const COMPACT_MAX_WIDTH = "460px";
+const COMPACT_PADDING = "2rem";
+const COMPACT_CLOSE_INSET = "1.25rem";
+
+/** Dialog's Paper: elevation 24, which is the top of Material's ramp. */
 export const ModalCard = styled.div<{ $compact?: boolean }>`
   background: ${tokens.modal.bg};
   border: 1px solid ${tokens.border.default};
@@ -37,21 +42,21 @@ export const ModalCard = styled.div<{ $compact?: boolean }>`
   margin: 3rem auto;
   max-width: 600px;
   padding: 2rem 4rem 4rem;
-  box-shadow: ${tokens.shadow.level3};
+  box-shadow: ${tokens.shadow.elevation24};
 
   /* Compact cards pin the close button to the corner so it does not push the
      title down and the content starts at the same offset on every side. */
   ${(p) =>
     p.$compact &&
     css`
-      max-width: 460px;
-      padding: 2rem;
+      max-width: ${COMPACT_MAX_WIDTH};
+      padding: ${COMPACT_PADDING};
       position: relative;
 
       .close {
         position: absolute;
-        top: 1.25rem;
-        right: 1.25rem;
+        top: ${COMPACT_CLOSE_INSET};
+        right: ${COMPACT_CLOSE_INSET};
         margin-left: 0;
       }
     `}
@@ -87,21 +92,54 @@ export const ModalCard = styled.div<{ $compact?: boolean }>`
   }
 `;
 
+/**
+ * IconButton, medium: a 24px glyph in 8px of padding, so the circle lands on
+ * Material's 40px target. The hover and focus washes are `action.hover` and
+ * `action.focus` at their dark-mode opacities.
+ */
 const CloseButtonBase = styled.button`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: none;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  position: relative;
+  margin: 0;
+  padding: 8px;
+  border: 0;
   border-radius: 50%;
-  background: transparent;
+  outline: 0;
+  background-color: transparent;
   color: #ffffff;
+  font-size: 1.5rem;
+  text-align: center;
+  text-decoration: none;
   cursor: pointer;
+  user-select: none;
+  vertical-align: middle;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 150ms ${tokens.motion.easeInOut} 0ms;
+
+  &::-moz-focus-inner {
+    border-style: none;
+  }
 
   &:hover {
-    background: ${tokens.overlay.white08};
+    background-color: ${tokens.overlay.white08};
+
+    @media (hover: none) {
+      background-color: transparent;
+    }
+  }
+
+  &:focus-visible {
+    background-color: ${tokens.overlay.white12};
+  }
+
+  &:disabled {
+    pointer-events: none;
+    color: ${tokens.text.disabled};
   }
 `;
 

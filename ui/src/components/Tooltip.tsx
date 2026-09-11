@@ -3,6 +3,7 @@ import {
   type ReactElement,
   type ReactNode,
   cloneElement,
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -22,11 +23,47 @@ interface TooltipProps {
   disableHoverListener?: boolean;
 }
 
-const OFFSET = 8;
+/** `transitions.duration.shorter`, the timeout MUI's Tooltip hands Grow. */
+const TRANSITION_MS = 200;
+/** MUI's `enterDelay` default. `leaveDelay` is 0, so there is no leave timer. */
+const ENTER_DELAY_MS = 100;
+/**
+ * The gap MUI puts between anchor and bubble, as `marginTop`/`marginBottom`/
+ * `marginLeft`/`marginRight: 14px` on the tooltip. Arrow tooltips reset that
+ * margin to 0 and let the arrow's negative margin cover the distance instead.
+ */
+const GAP_PX = 14;
+/**
+ * Arrow box, `1em` × `0.71em` (= 1em / √2, the hypotenuse of the square inside
+ * it) against the bubble's 11px font, and the pull that lifts it clear of the
+ * bubble's edge.
+ */
+const ARROW_LONG = "1em";
+const ARROW_SHORT = "0.71em";
+const ARROW_PULL = "-0.71em";
+const ARROW_LONG_PX = 11;
+const ARROW_SHORT_PX = 7.81;
+
+/** Grow's origin: the bubble expands out of the edge nearest its anchor. */
+const ORIGIN_TOP = "center bottom";
+const ORIGIN_BOTTOM = "center top";
+const ORIGIN_LEFT = "right center";
+const ORIGIN_RIGHT = "left center";
+/** `options.padding` on Popper's arrow modifier: how close to a corner it may sit. */
+const ARROW_PADDING_PX = 4;
+/** Popper's `preventOverflow` keeps the bubble this far inside the viewport. */
+const VIEWPORT_PADDING_PX = 8;
+
+const isVertical = (placement: Placement) => placement === "top" || placement === "bottom";
 
 /**
  * Hover tooltip. Always wraps the child so a disabled button (no pointer
  * events) can still show a hint — the same reason MUI wraps in a span.
+ *
+ * Positioning stands in for Popper: the bubble is measured, flipped to the
+ * opposite side when the preferred one does not fit, then clamped into the
+ * viewport, with the arrow tracking the anchor's centre the way Popper's arrow
+ * modifier does.
  */
 export const Tooltip = ({
   title,
@@ -37,87 +74,145 @@ export const Tooltip = ({
 }: TooltipProps) => {
   const wrapRef = useRef<HTMLSpanElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const tooltipId = useId();
-  const [open, setOpen] = useState(false);
-  const [coords, setCoords] = useState({ top: 0, left: 0 });
+
+  // `mounted` keeps the bubble in the tree through its exit transition;
+  // `entered` is the flag the transition itself runs off.
+  const [mounted, setMounted] = useState(false);
+  const [entered, setEntered] = useState(false);
+  const [box, setBox] = useState({ top: 0, left: 0, placement, arrowOffset: 0 });
 
   const empty = title == null || title === false || title === "";
 
   const show = () => {
     if (disableHoverListener || empty) return;
-    setOpen(true);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setMounted(true), ENTER_DELAY_MS);
   };
 
+  const hide = useCallback(() => {
+    clearTimeout(timer.current);
+    setEntered(false);
+    timer.current = setTimeout(() => setMounted(false), TRANSITION_MS);
+  }, []);
+
+  useEffect(() => () => clearTimeout(timer.current), []);
+
   useLayoutEffect(() => {
-    if (!open) return;
+    const bubble = bubbleRef.current;
     const anchor = wrapRef.current?.getBoundingClientRect();
-    const bubble = bubbleRef.current?.getBoundingClientRect();
-    if (!anchor) return;
-    const bw = bubble?.width ?? 0;
-    const bh = bubble?.height ?? 0;
-    let top = 0;
-    let left = 0;
-    switch (placement) {
+    if (!mounted || !bubble || !anchor) return;
+
+    // offsetWidth/Height, not the rect: the bubble is still scaled down by the
+    // enter transform while it is being measured.
+    const bw = bubble.offsetWidth;
+    const bh = bubble.offsetHeight;
+    const gap = arrow ? 0 : GAP_PX;
+
+    // Popper's flip modifier: swap to the opposite side when the preferred one
+    // has no room and the opposite one does.
+    const room = {
+      top: anchor.top - gap - VIEWPORT_PADDING_PX,
+      bottom: window.innerHeight - anchor.bottom - gap - VIEWPORT_PADDING_PX,
+      left: anchor.left - gap - VIEWPORT_PADDING_PX,
+      right: window.innerWidth - anchor.right - gap - VIEWPORT_PADDING_PX,
+    };
+    const opposite: Record<Placement, Placement> = {
+      top: "bottom",
+      bottom: "top",
+      left: "right",
+      right: "left",
+    };
+    const need = isVertical(placement) ? bh : bw;
+    const resolved =
+      room[placement] < need && room[opposite[placement]] >= need ? opposite[placement] : placement;
+
+    let top: number;
+    let left: number;
+    switch (resolved) {
+      case "top":
+        top = anchor.top - bh - gap;
+        left = anchor.left + anchor.width / 2 - bw / 2;
+        break;
       case "bottom":
-        top = anchor.bottom + OFFSET;
+        top = anchor.bottom + gap;
         left = anchor.left + anchor.width / 2 - bw / 2;
         break;
       case "left":
         top = anchor.top + anchor.height / 2 - bh / 2;
-        left = anchor.left - bw - OFFSET;
-        break;
-      case "right":
-        top = anchor.top + anchor.height / 2 - bh / 2;
-        left = anchor.right + OFFSET;
+        left = anchor.left - bw - gap;
         break;
       default:
-        top = anchor.top - bh - OFFSET;
-        left = anchor.left + anchor.width / 2 - bw / 2;
+        top = anchor.top + anchor.height / 2 - bh / 2;
+        left = anchor.right + gap;
     }
-    const pad = 8;
-    left = Math.min(Math.max(pad, left), window.innerWidth - bw - pad);
-    top = Math.min(Math.max(pad, top), window.innerHeight - bh - pad);
-    setCoords({ top, left });
-  }, [open, placement]);
+
+    const maxLeft = window.innerWidth - bw - VIEWPORT_PADDING_PX;
+    const maxTop = window.innerHeight - bh - VIEWPORT_PADDING_PX;
+    const clampedLeft = Math.min(Math.max(VIEWPORT_PADDING_PX, left), Math.max(VIEWPORT_PADDING_PX, maxLeft));
+    const clampedTop = Math.min(Math.max(VIEWPORT_PADDING_PX, top), Math.max(VIEWPORT_PADDING_PX, maxTop));
+
+    // The arrow points at the anchor's centre, not at the bubble's, so that a
+    // bubble pushed sideways by the clamp still aims at what it describes.
+    const along = isVertical(resolved) ? ARROW_LONG_PX : ARROW_SHORT_PX;
+    const span = isVertical(resolved) ? bw : bh;
+    const centre = isVertical(resolved)
+      ? anchor.left + anchor.width / 2 - clampedLeft
+      : anchor.top + anchor.height / 2 - clampedTop;
+    const limit = Math.max(ARROW_PADDING_PX, span - ARROW_PADDING_PX - along);
+    const arrowOffset = Math.min(Math.max(ARROW_PADDING_PX, centre - along / 2), limit);
+
+    setBox({ top: clampedTop, left: clampedLeft, placement: resolved, arrowOffset });
+  }, [mounted, placement, arrow]);
+
+  // Kick the enter transition only once the bubble has been placed, so it grows
+  // out of the right corner instead of sliding across the screen.
+  useEffect(() => {
+    if (!mounted) return;
+    const frame = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(frame);
+  }, [mounted]);
 
   useEffect(() => {
-    if (!open) return;
-    const onReposition = () => setOpen(false);
-    window.addEventListener("scroll", onReposition, true);
-    window.addEventListener("resize", onReposition);
+    if (!mounted) return;
+    window.addEventListener("scroll", hide, true);
+    window.addEventListener("resize", hide);
     return () => {
-      window.removeEventListener("scroll", onReposition, true);
-      window.removeEventListener("resize", onReposition);
+      window.removeEventListener("scroll", hide, true);
+      window.removeEventListener("resize", hide);
     };
-  }, [open]);
+  }, [mounted, hide]);
 
   const child = cloneElement(children, {
-    "aria-describedby": open && !empty ? tooltipId : undefined,
+    "aria-describedby": mounted && !empty ? tooltipId : undefined,
   } as Record<string, unknown>);
 
   return (
     <>
-      <Wrap
-        ref={wrapRef}
-        onMouseEnter={show}
-        onMouseLeave={() => setOpen(false)}
-        onFocus={show}
-        onBlur={() => setOpen(false)}
-      >
+      <Wrap ref={wrapRef} onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide}>
         {child}
       </Wrap>
-      {open &&
+      {mounted &&
         !empty &&
         createPortal(
           <Bubble
             ref={bubbleRef}
             id={tooltipId}
             role="tooltip"
-            $placement={placement}
-            $arrow={arrow}
-            style={{ top: coords.top, left: coords.left, visibility: coords.top === 0 && coords.left === 0 ? "hidden" : "visible" }}
+            $placement={box.placement}
+            $entered={entered}
+            style={{ top: box.top, left: box.left }}
           >
             {title}
+            {arrow && (
+              <Arrow
+                $placement={box.placement}
+                style={
+                  isVertical(box.placement) ? { left: box.arrowOffset } : { top: box.arrowOffset }
+                }
+              />
+            )}
           </Bubble>,
           document.body,
         )}
@@ -130,74 +225,119 @@ const Wrap = styled.span`
   max-width: 100%;
 `;
 
-const Bubble = styled.div<{ $placement: Placement; $arrow: boolean }>`
+/**
+ * Grow, as two interpolated values rather than a transition group: opacity over
+ * the full 200ms and the scale over two thirds of it, which is what makes the
+ * bubble settle before it has finished fading in.
+ */
+const Bubble = styled.div<{ $placement: Placement; $entered: boolean }>`
   position: fixed;
-  z-index: 1600;
-  max-width: 280px;
-  padding: 0.4rem 0.65rem;
+  top: 0;
+  left: 0;
+  z-index: 1500;
+  box-sizing: border-box;
+  max-width: 300px;
+  padding: 4px 8px;
   border-radius: ${tokens.radius.sm};
-  background: ${tokens.overlay.black90};
+  background-color: ${tokens.tooltip.bg};
   color: ${tokens.text.onDark};
-  font-size: 0.75rem;
-  line-height: 1.4;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  word-wrap: break-word;
   pointer-events: none;
-  box-shadow: ${tokens.shadow.level2};
+  opacity: ${(p) => (p.$entered ? 1 : 0)};
+  transform: ${(p) => (p.$entered ? "none" : "scale(0.75, 0.5625)")};
+  transition: opacity 200ms ${tokens.motion.easeInOut} 0ms,
+    transform 133ms ${tokens.motion.easeInOut} 0ms;
 
   ${(p) =>
-    p.$arrow &&
-    (p.$placement === "top"
-      ? css`
-          &::after {
-            content: "";
-            position: absolute;
-            width: 0;
-            height: 0;
-            border: 5px solid transparent;
-            top: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            border-top-color: ${tokens.overlay.black90};
-          }
-        `
-      : p.$placement === "bottom"
-        ? css`
-            &::after {
-              content: "";
-              position: absolute;
-              width: 0;
-              height: 0;
-              border: 5px solid transparent;
-              bottom: 100%;
-              left: 50%;
-              transform: translateX(-50%);
-              border-bottom-color: ${tokens.overlay.black90};
-            }
-          `
-        : p.$placement === "left"
-          ? css`
-              &::after {
-                content: "";
-                position: absolute;
-                width: 0;
-                height: 0;
-                border: 5px solid transparent;
-                left: 100%;
-                top: 50%;
-                transform: translateY(-50%);
-                border-left-color: ${tokens.overlay.black90};
-              }
-            `
-          : css`
-              &::after {
-                content: "";
-                position: absolute;
-                width: 0;
-                height: 0;
-                border: 5px solid transparent;
-                right: 100%;
-                top: 50%;
-                transform: translateY(-50%);
-                border-right-color: ${tokens.overlay.black90};
-              }
-            `)}
+    p.$placement === "top" &&
+    css`
+      transform-origin: ${ORIGIN_TOP};
+    `}
+  ${(p) =>
+    p.$placement === "bottom" &&
+    css`
+      transform-origin: ${ORIGIN_BOTTOM};
+    `}
+  ${(p) =>
+    p.$placement === "left" &&
+    css`
+      transform-origin: ${ORIGIN_LEFT};
+    `}
+  ${(p) =>
+    p.$placement === "right" &&
+    css`
+      transform-origin: ${ORIGIN_RIGHT};
+    `}
+`;
+
+/**
+ * A square rotated 45° inside an `overflow: hidden` box, so only the half that
+ * points away from the bubble shows. The negative margin pulls it clear of the
+ * bubble's edge; the per-placement transform origins keep the visible half
+ * filling the box after the rotation.
+ */
+const Arrow = styled.span<{ $placement: Placement }>`
+  position: absolute;
+  box-sizing: border-box;
+  overflow: hidden;
+  width: ${ARROW_LONG};
+  height: ${ARROW_SHORT};
+  color: ${tokens.tooltip.bg};
+
+  &::before {
+    content: "";
+    display: block;
+    margin: auto;
+    width: 100%;
+    height: 100%;
+    background-color: currentColor;
+    transform: rotate(45deg);
+  }
+
+  ${(p) =>
+    p.$placement === "top" &&
+    css`
+      bottom: 0;
+      margin-bottom: ${ARROW_PULL};
+
+      &::before {
+        transform-origin: 100% 0;
+      }
+    `}
+  ${(p) =>
+    p.$placement === "bottom" &&
+    css`
+      top: 0;
+      margin-top: ${ARROW_PULL};
+
+      &::before {
+        transform-origin: 0 100%;
+      }
+    `}
+  ${(p) =>
+    p.$placement === "left" &&
+    css`
+      right: 0;
+      width: ${ARROW_SHORT};
+      height: ${ARROW_LONG};
+      margin-right: ${ARROW_PULL};
+
+      &::before {
+        transform-origin: 0 0;
+      }
+    `}
+  ${(p) =>
+    p.$placement === "right" &&
+    css`
+      left: 0;
+      width: ${ARROW_SHORT};
+      height: ${ARROW_LONG};
+      margin-left: ${ARROW_PULL};
+
+      &::before {
+        transform-origin: 100% 100%;
+      }
+    `}
 `;
