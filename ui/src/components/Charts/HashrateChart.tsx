@@ -1,12 +1,14 @@
 import { type FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styled from "@mui/material/styles/styled";
 import {
+  CandlestickSeries,
   ColorType,
   CrosshairMode,
   LineSeries,
   LineStyle,
   createChart,
   type AutoscaleInfo,
+  type CandlestickData,
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
@@ -16,6 +18,8 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import type { TimePeriod } from "../../hooks/data/useHashRateIndexData";
+import { CHART_RANGE_INTERVAL_LABELS, CHART_RANGE_LABELS, CHART_RANGES } from "../../lib/chartBars";
+import { foldLivePriceIntoCandles, type HashpriceCandle } from "../../lib/chartCandles";
 import { tokens } from "../../styles/tokens";
 import { DATE_LOCALE } from "../../lib/dates";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
@@ -26,6 +30,10 @@ const CHART_HEIGHT = 400;
 const HASHPRICE_LABEL = "Hashprice";
 const BTC_LABEL = "BTC Price";
 const NETWORK_HASHRATE_LABEL = "Network Hashrate";
+
+const CHART_MODE_KEY = "hashrateChart.mode";
+
+export type ChartMode = "line" | "candles";
 
 /**
  * Only `right` and `left` can be rendered as axes, and hashprice and BTC already
@@ -38,7 +46,7 @@ const HASHRATE_SCALE_ID = "network-hashrate";
  * A 7-day trailing average barely moves inside the 1D range — often well under a
  * percent — and autoscaling a span that narrow magnifies it into a dramatic-looking
  * swing. The range is widened to at least this fraction of its own midpoint so a
- * quiet week draws quiet. Over the 30D range real movement exceeds the floor and
+ * quiet week draws quiet. Over the 1M range real movement exceeds the floor and
  * autoscaling takes over on its own.
  */
 const MIN_HASHRATE_RANGE_RATIO = 0.02;
@@ -85,12 +93,26 @@ const PeriodButton = styled("button")<{ $active: boolean }>`
   }
 `;
 
+const SwitchGroup = styled("div")`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+`;
+
 const ChartTitle = styled("div")`
   font-size: 0.7rem;
   font-weight: 500;
   color: ${tokens.text.secondary};
   text-transform: uppercase;
   letter-spacing: 0.03em;
+`;
+
+const ChartIntervalHint = styled("span")`
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: ${tokens.text.muted};
 `;
 
 const ChartControls = styled("div")`
@@ -194,6 +216,16 @@ const StateOverlay = styled("div")`
   pointer-events: none;
 `;
 
+type HashpriceSeries = ISeriesApi<"Line"> | ISeriesApi<"Candlestick">;
+
+const readStoredChartMode = (): ChartMode => {
+  try {
+    return localStorage.getItem(CHART_MODE_KEY) === "candles" ? "candles" : "line";
+  } catch {
+    return "line";
+  }
+};
+
 /**
  * Lightweight Charts renders every timestamp in UTC. Shifting each point by the
  * local UTC offset makes the axis and the crosshair read as local wall-clock
@@ -234,6 +266,39 @@ const toLineData = (points: Array<{ date: Date; value: number }>): LineData<UTCT
   return deduped;
 };
 
+const toCandleData = (candles: HashpriceCandle[]): CandlestickData<UTCTimestamp>[] => {
+  const sorted = candles
+    .map((candle) => ({
+      time: toWallClock(candle.timeMs),
+      open: candle.open,
+      high: candle.high,
+      low: candle.low,
+      close: candle.close,
+    }))
+    .sort((a, b) => a.time - b.time);
+
+  const deduped: CandlestickData<UTCTimestamp>[] = [];
+  for (const point of sorted) {
+    if (deduped.length > 0 && deduped[deduped.length - 1].time === point.time) {
+      deduped[deduped.length - 1] = point;
+    } else {
+      deduped.push(point);
+    }
+  }
+  return deduped;
+};
+
+interface TooltipState {
+  time: UTCTimestamp;
+  hashprice?: number;
+  ohlc?: { open: number; high: number; low: number; close: number };
+  btc?: number;
+  networkHashrate?: number;
+  top: number;
+  offsetX: number;
+  anchorRight: boolean;
+}
+
 const readSeriesValue = (
   param: MouseEventParams<Time>,
   series: ISeriesApi<"Line"> | null,
@@ -243,15 +308,15 @@ const readSeriesValue = (
   return point && "value" in point ? point.value : undefined;
 };
 
-interface TooltipState {
-  time: UTCTimestamp;
-  hashprice?: number;
-  btc?: number;
-  networkHashrate?: number;
-  top: number;
-  offsetX: number;
-  anchorRight: boolean;
-}
+const readCandleOhlc = (
+  param: MouseEventParams<Time>,
+  series: ISeriesApi<"Candlestick"> | null,
+): TooltipState["ohlc"] => {
+  if (!series) return undefined;
+  const point = param.seriesData.get(series);
+  if (!point || !("open" in point)) return undefined;
+  return { open: point.open, high: point.high, low: point.low, close: point.close };
+};
 
 interface HashrateChartProps {
   // The index hooks emit `updatedAt` as either a raw subgraph string or an
@@ -261,6 +326,7 @@ interface HashrateChartProps {
     updatedAt?: string | number;
     priceToken: number;
   }>;
+  candles?: HashpriceCandle[];
   btcPriceData?: Array<{
     updatedAtDate?: Date;
     updatedAt?: string | number;
@@ -276,9 +342,11 @@ interface HashrateChartProps {
     hashrateEhS: number;
   }>;
   isLoading?: boolean;
+  isCandlesLoading?: boolean;
   isBtcPriceLoading?: boolean;
   isNetworkHashrateLoading?: boolean;
   isFetching?: boolean;
+  isCandlesFetching?: boolean;
   isBtcPriceFetching?: boolean;
   isNetworkHashrateFetching?: boolean;
   marketPrice?: bigint | null;
@@ -294,12 +362,15 @@ interface HashrateChartProps {
 
 export const HashrateChart: FC<HashrateChartProps> = ({
   data,
+  candles = [],
   btcPriceData,
   networkHashrateData,
   isLoading = false,
+  isCandlesLoading = false,
   isBtcPriceLoading = false,
   isNetworkHashrateLoading = false,
   isFetching = false,
+  isCandlesFetching = false,
   isBtcPriceFetching = false,
   isNetworkHashrateFetching = false,
   marketPrice,
@@ -310,6 +381,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   timePeriod,
   onTimePeriodChange,
 }) => {
+  const [chartMode, setChartMode] = useState<ChartMode>(readStoredChartMode);
   const [isBtcPriceVisible, setIsBtcPriceVisible] = useState(false);
   const [isNetworkHashrateVisible, setIsNetworkHashrateVisible] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
@@ -317,9 +389,11 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const hashSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const btcSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const networkHashrateSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
+  const priceLinesOwnerRef = useRef<HashpriceSeries | null>(null);
 
   const handleBtcPriceLegendClick = useCallback(() => {
     setIsBtcPriceVisible((prev) => !prev);
@@ -327,6 +401,15 @@ export const HashrateChart: FC<HashrateChartProps> = ({
 
   const handleNetworkHashrateLegendClick = useCallback(() => {
     setIsNetworkHashrateVisible((prev) => !prev);
+  }, []);
+
+  const handleChartModeChange = useCallback((mode: ChartMode) => {
+    setChartMode(mode);
+    try {
+      localStorage.setItem(CHART_MODE_KEY, mode);
+    } catch {
+      // Persistence is best-effort; the toggle still works for this session.
+    }
   }, []);
 
   // Merge market price with historical data if it differs from the first item
@@ -359,6 +442,12 @@ export const HashrateChart: FC<HashrateChartProps> = ({
     return data;
   }, [data, marketPrice, marketPriceFetchedAt]);
 
+  const livePriceUsd = marketPrice != null ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : undefined;
+  const enhancedCandles = useMemo(
+    () => foldLivePriceIntoCandles(candles, livePriceUsd),
+    [candles, livePriceUsd],
+  );
+
   const hashrateSeriesData = useMemo(() => {
     const points: Array<{ date: Date; value: number }> = [];
     for (const item of enhancedData) {
@@ -370,6 +459,8 @@ export const HashrateChart: FC<HashrateChartProps> = ({
     }
     return toLineData(points);
   }, [enhancedData]);
+
+  const candleSeriesData = useMemo(() => toCandleData(enhancedCandles), [enhancedCandles]);
 
   const btcSeriesData = useMemo(() => {
     if (!btcPriceData || btcPriceData.length === 0) return [];
@@ -403,9 +494,11 @@ export const HashrateChart: FC<HashrateChartProps> = ({
     const container = containerRef.current;
     if (!container) return;
 
+    const isCandles = readStoredChartMode() === "candles";
+
     const chart = createChart(container, {
       autoSize: true,
-      // The visible range belongs to the 1D/7D/30D switch, so both zooming
+      // The visible range belongs to the 1D/5D/1M switch, so both zooming
       // (wheel / pinch) and panning are off; a stray drag or wheel over the pane
       // would otherwise slide the viewport off the data with no way back.
       handleScale: false,
@@ -448,6 +541,22 @@ export const HashrateChart: FC<HashrateChartProps> = ({
       priceScaleId: "right",
       priceLineVisible: false,
       pointMarkersVisible: false,
+      visible: !isCandles,
+      lastValueVisible: !isCandles,
+      priceFormat: { type: "price", precision: 2, minMove: 0.01 },
+    });
+
+    const candleSeries = chart.addSeries(CandlestickSeries, {
+      title: HASHPRICE_LABEL,
+      upColor: tokens.trading.long,
+      downColor: tokens.trading.short,
+      wickUpColor: tokens.trading.long,
+      wickDownColor: tokens.trading.short,
+      borderVisible: false,
+      priceScaleId: "right",
+      priceLineVisible: false,
+      visible: isCandles,
+      lastValueVisible: isCandles,
       priceFormat: { type: "price", precision: 2, minMove: 0.01 },
     });
 
@@ -494,13 +603,15 @@ export const HashrateChart: FC<HashrateChartProps> = ({
         return;
       }
 
-      const hashprice = readSeriesValue(param, hashSeries);
+      const candlesVisible = candleSeries.options().visible;
+      const ohlc = candlesVisible ? readCandleOhlc(param, candleSeries) : undefined;
+      const hashprice = candlesVisible ? undefined : readSeriesValue(param, hashSeries);
       const btc = btcSeries.options().visible ? readSeriesValue(param, btcSeries) : undefined;
       const networkHashrate = networkHashrateSeries.options().visible
         ? readSeriesValue(param, networkHashrateSeries)
         : undefined;
 
-      if (hashprice === undefined && btc === undefined && networkHashrate === undefined) {
+      if (hashprice === undefined && ohlc === undefined && btc === undefined && networkHashrate === undefined) {
         setTooltip(null);
         return;
       }
@@ -513,6 +624,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
       setTooltip({
         time: param.time as UTCTimestamp,
         hashprice,
+        ohlc,
         btc,
         networkHashrate,
         top: Math.max(8, param.point.y - 12),
@@ -525,6 +637,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
 
     chartRef.current = chart;
     hashSeriesRef.current = hashSeries;
+    candleSeriesRef.current = candleSeries;
     btcSeriesRef.current = btcSeries;
     networkHashrateSeriesRef.current = networkHashrateSeries;
 
@@ -533,11 +646,19 @@ export const HashrateChart: FC<HashrateChartProps> = ({
       chart.remove();
       chartRef.current = null;
       hashSeriesRef.current = null;
+      candleSeriesRef.current = null;
       btcSeriesRef.current = null;
       networkHashrateSeriesRef.current = null;
       priceLinesRef.current = [];
+      priceLinesOwnerRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const isCandles = chartMode === "candles";
+    hashSeriesRef.current?.applyOptions({ visible: !isCandles, lastValueVisible: !isCandles });
+    candleSeriesRef.current?.applyOptions({ visible: isCandles, lastValueVisible: isCandles });
+  }, [chartMode]);
 
   useEffect(() => {
     // Both series are filled before the range is measured on purpose. The time
@@ -545,17 +666,26 @@ export const HashrateChart: FC<HashrateChartProps> = ({
     // visibility, so measuring while one series still holds the previous
     // period's denser points sizes the viewport for far more slots than the new
     // data has, leaving the chart squeezed against the right edge.
-    hashSeriesRef.current?.setData(hashrateSeriesData);
+    // The hidden hashprice series is cleared for the same reason: 1D ticks would
+    // otherwise dominate the scale while hourly candles are on screen.
+    if (chartMode === "candles") {
+      hashSeriesRef.current?.setData([]);
+      candleSeriesRef.current?.setData(candleSeriesData);
+    } else {
+      candleSeriesRef.current?.setData([]);
+      hashSeriesRef.current?.setData(hashrateSeriesData);
+    }
     btcSeriesRef.current?.setData(btcSeriesData);
     networkHashrateSeriesRef.current?.setData(networkHashrateSeriesData);
 
-    if (hashrateSeriesData.length === 0) return;
+    const primaryLength = chartMode === "candles" ? candleSeriesData.length : hashrateSeriesData.length;
+    if (primaryLength === 0) return;
 
     // The viewport is fixed, so every update has to reframe: points appended by a
     // background refetch would otherwise land past the right edge with no pan left
     // to reach them.
     chartRef.current?.timeScale().fitContent();
-  }, [hashrateSeriesData, btcSeriesData, networkHashrateSeriesData]);
+  }, [chartMode, hashrateSeriesData, candleSeriesData, btcSeriesData, networkHashrateSeriesData]);
 
   useEffect(() => {
     btcSeriesRef.current?.applyOptions({ visible: isBtcPriceVisible });
@@ -567,13 +697,22 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   }, [isNetworkHashrateVisible]);
 
   useEffect(() => {
-    const series = hashSeriesRef.current;
-    if (!series) return;
-
-    for (const line of priceLinesRef.current) {
-      series.removePriceLine(line);
+    const owner = priceLinesOwnerRef.current;
+    if (owner) {
+      for (const line of priceLinesRef.current) {
+        owner.removePriceLine(line);
+      }
     }
     priceLinesRef.current = [];
+
+    const series = chartMode === "candles" ? candleSeriesRef.current : hashSeriesRef.current;
+    if (!series) return;
+    priceLinesOwnerRef.current = series;
+
+    const rangeValues =
+      chartMode === "candles"
+        ? candleSeriesData.flatMap((candle) => [candle.high, candle.low])
+        : hashrateSeriesData.map((point) => point.value);
 
     if (entryPrice) {
       priceLinesRef.current.push(
@@ -588,10 +727,9 @@ export const HashrateChart: FC<HashrateChartProps> = ({
       );
     }
 
-    if (liquidationPrice != null && hashrateSeriesData.length > 0) {
-      const values = hashrateSeriesData.map((point) => point.value);
-      const dataMin = Math.min(...values);
-      const dataMax = Math.max(...values);
+    if (liquidationPrice != null && rangeValues.length > 0) {
+      const dataMin = Math.min(...rangeValues);
+      const dataMax = Math.max(...rangeValues);
       const padding = (dataMax - dataMin) * 0.1;
 
       // Pin an off-range threshold to the edge of the axis. The title carries
@@ -610,14 +748,23 @@ export const HashrateChart: FC<HashrateChartProps> = ({
         }),
       );
     }
-  }, [entryPrice, liquidationPrice, liquidationDirection, hashrateSeriesData]);
+  }, [chartMode, entryPrice, liquidationPrice, liquidationDirection, hashrateSeriesData, candleSeriesData]);
 
-  const hasData = hashrateSeriesData.length > 0;
-  const isInitialLoad = (isLoading || isBtcPriceLoading || isNetworkHashrateLoading) && !hasData;
+  const hasData = chartMode === "candles" ? candleSeriesData.length > 0 : hashrateSeriesData.length > 0;
+  const isInitialLoad =
+    chartMode === "candles"
+      ? isCandlesLoading && !hasData
+      : (isLoading || isBtcPriceLoading || isNetworkHashrateLoading) && !hasData;
+  const isUpdating =
+    hasData &&
+    (chartMode === "candles" ? isCandlesFetching : isFetching || isBtcPriceFetching || isNetworkHashrateFetching);
 
   return (
     <>
-      <ChartTitle>Hashprice Index</ChartTitle>
+      <ChartTitle>
+        Hashprice Index
+        <ChartIntervalHint> · {CHART_RANGE_INTERVAL_LABELS[timePeriod]}</ChartIntervalHint>
+      </ChartTitle>
       <ChartControls>
         <Legend>
           <LegendItem>
@@ -641,17 +788,38 @@ export const HashrateChart: FC<HashrateChartProps> = ({
             <span>{NETWORK_HASHRATE_LABEL}</span>
           </LegendButton>
         </Legend>
-        <PeriodSwitch>
-          <PeriodButton $active={timePeriod === "day"} onClick={() => onTimePeriodChange("day")}>
-            1D
-          </PeriodButton>
-          <PeriodButton $active={timePeriod === "week"} onClick={() => onTimePeriodChange("week")}>
-            7D
-          </PeriodButton>
-          <PeriodButton $active={timePeriod === "month"} onClick={() => onTimePeriodChange("month")}>
-            30D
-          </PeriodButton>
-        </PeriodSwitch>
+        <SwitchGroup>
+          <PeriodSwitch>
+            <PeriodButton
+              type="button"
+              $active={chartMode === "line"}
+              aria-pressed={chartMode === "line"}
+              onClick={() => handleChartModeChange("line")}
+            >
+              Line
+            </PeriodButton>
+            <PeriodButton
+              type="button"
+              $active={chartMode === "candles"}
+              aria-pressed={chartMode === "candles"}
+              onClick={() => handleChartModeChange("candles")}
+            >
+              Candles
+            </PeriodButton>
+          </PeriodSwitch>
+          <PeriodSwitch>
+            {CHART_RANGES.map((range) => (
+              <PeriodButton
+                key={range}
+                type="button"
+                $active={timePeriod === range}
+                onClick={() => onTimePeriodChange(range)}
+              >
+                {CHART_RANGE_LABELS[range]}
+              </PeriodButton>
+            ))}
+          </PeriodSwitch>
+        </SwitchGroup>
       </ChartControls>
       <ChartArea>
         <ChartCanvas ref={containerRef} />
@@ -665,6 +833,19 @@ export const HashrateChart: FC<HashrateChartProps> = ({
             }
           >
             <TooltipTime>{formatWallClock(tooltip.time)}</TooltipTime>
+            {tooltip.ohlc !== undefined && (
+              <div>
+                <span
+                  style={{
+                    color: tooltip.ohlc.close >= tooltip.ohlc.open ? tokens.trading.long : tokens.trading.short,
+                  }}
+                >
+                  {"\u25CF"}
+                </span>{" "}
+                <b>{HASHPRICE_LABEL}:</b> O {tooltip.ohlc.open.toFixed(2)} H {tooltip.ohlc.high.toFixed(2)} L{" "}
+                {tooltip.ohlc.low.toFixed(2)} C {tooltip.ohlc.close.toFixed(2)}
+              </div>
+            )}
             {tooltip.hashprice !== undefined && (
               <div>
                 <span style={{ color: tokens.trading.long }}>{"\u25CF"}</span> <b>{HASHPRICE_LABEL}:</b>{" "}
@@ -697,7 +878,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
           <StateOverlay style={{ background: tokens.app.bg, fontSize: "18px" }}>No data available</StateOverlay>
         )}
 
-        {hasData && (isFetching || isBtcPriceFetching || isNetworkHashrateFetching) && (
+        {isUpdating && (
           <StateOverlay
             style={{
               background: "rgba(15, 17, 23, 0.55)",

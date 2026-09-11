@@ -14,6 +14,7 @@ import { FuturesMobileLayout } from "../../components/Widgets/Futures/mobile/Fut
 import { useIsMobileTradingLayout } from "../../components/Widgets/Futures/mobile/mobileTradingLayout";
 import { useLiquidationNotifications } from "../../hooks/data/useLiquidationNotifications";
 import { useHashrateIndexData, type TimePeriod } from "../../hooks/data/useHashRateIndexData";
+import { useHashpriceCandles } from "../../hooks/data/useHashpriceCandles";
 import { useBtcPriceIndexData } from "../../hooks/data/useBtcPriceIndexData";
 import { useNetworkHashrateIndexData } from "../../hooks/data/useNetworkHashrateIndexData";
 import { getUserFuturesOrders } from "../../hooks/data/getUserFuturesOrders";
@@ -114,8 +115,9 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     }
   }, [address]);
 
-  const [chartTimePeriod, setChartTimePeriod] = useState<TimePeriod>("week");
+  const [chartTimePeriod, setChartTimePeriod] = useState<TimePeriod>("5d");
   const hashrateQuery = useHashrateIndexData({ timePeriod: chartTimePeriod });
+  const candlesQuery = useHashpriceCandles({ timePeriod: chartTimePeriod });
   const btcPriceQuery = useBtcPriceIndexData({ timePeriod: chartTimePeriod });
   const networkHashrateQuery = useNetworkHashrateIndexData({ timePeriod: chartTimePeriod });
   const contractSpecsQuery = useFuturesContractSpecs();
@@ -368,12 +370,15 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     >
       <HashrateChart
         data={hashrateQuery.data || []}
+        candles={candlesQuery.data || []}
         btcPriceData={btcPriceQuery.data || []}
         networkHashrateData={networkHashrateQuery.data || []}
         isLoading={hashrateQuery.isLoading}
+        isCandlesLoading={candlesQuery.isLoading}
         isBtcPriceLoading={btcPriceQuery.isLoading}
         isNetworkHashrateLoading={networkHashrateQuery.isLoading}
         isFetching={hashrateQuery.isFetching}
+        isCandlesFetching={candlesQuery.isFetching}
         isBtcPriceFetching={btcPriceQuery.isFetching}
         isNetworkHashrateFetching={networkHashrateQuery.isFetching}
         marketPrice={marketPrice}
