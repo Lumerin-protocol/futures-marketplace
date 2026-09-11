@@ -136,13 +136,12 @@ export const ContractSpecsQuery = gql`
 `;
 
 export const HashrateIndexQuery = gql`
-  query HashpriceIndex($startDate: BigInt!, $first: Int!, $skip: Int!) {
+  query HashpriceIndex($startDate: BigInt!, $cursor: BigInt!, $first: Int!) {
     hashpriceUsds(
-      where: { timestamp_gte: $startDate }
+      where: { timestamp_gte: $startDate, timestamp_lt: $cursor }
       orderBy: timestamp
       orderDirection: desc
       first: $first
-      skip: $skip
     ) {
       blockNumber
       id
@@ -161,6 +160,28 @@ export const AggregatedHashrateIndexQuery = gql`
     timestamp
   }
 }`;
+
+export const HashpriceCandlesQuery = gql`
+  query HashpriceCandlesQuery($interval: String!, $first: Int!, $startTimestamp: BigInt!) {
+    hashpriceUsdCandles(
+      interval: $interval
+      first: $first
+      current: include
+      orderBy: timestamp
+      orderDirection: desc
+      where: { timestamp_gte: $startTimestamp }
+    ) {
+      id
+      open
+      high
+      low
+      close
+      sum
+      count
+      timestamp
+    }
+  }
+`;
 
 // Historical (closed) PositionSessions, paged with first/skip and ordered
 // newest-first. Mirrors the active `PositionsBookQuery` shape — the only
@@ -281,13 +302,12 @@ export const RecentTradesQuery = gql`
 
 // BTC Price Oracle queries (similar to Hashrate Index)
 export const BtcPriceIndexQuery = gql`
-  query BtcPriceIndex($startDate: BigInt!, $first: Int!, $skip: Int!) {
+  query BtcPriceIndex($startDate: BigInt!, $cursor: BigInt!, $first: Int!) {
     btcUsds(
-      where: { timestamp_gte: $startDate }
+      where: { timestamp_gte: $startDate, timestamp_lt: $cursor }
       orderBy: timestamp
       orderDirection: desc
       first: $first
-      skip: $skip
     ) {
       blockNumber
       id
@@ -299,7 +319,15 @@ export const BtcPriceIndexQuery = gql`
 
 export const AggregatedBtcPriceIndexQuery = gql`
   query AggregatedBtcPriceIndexQuery($interval: String!, $first: Int!, $skip: Int!, $startTimestamp: BigInt!) {
-    btcUsdCandles(interval: $interval, first: $first, skip: $skip, where: { timestamp_gte: $startTimestamp }) {
+    btcUsdCandles(
+      interval: $interval
+      first: $first
+      skip: $skip
+      current: include
+      orderBy: timestamp
+      orderDirection: desc
+      where: { timestamp_gte: $startTimestamp }
+    ) {
       count
       id
       sum
@@ -317,13 +345,12 @@ export const AggregatedBtcPriceIndexQuery = gql`
 // discovery is Poisson, so a 1-day estimate carries roughly 8% standard error
 // against 3% for the 7-day one, and the shorter series mostly plots mining luck.
 export const NetworkHashrateIndexQuery = gql`
-  query NetworkHashrateIndex($startDate: BigInt!, $first: Int!, $skip: Int!) {
+  query NetworkHashrateIndex($startDate: BigInt!, $cursor: BigInt!, $first: Int!) {
     networkHashrate7Ds(
-      where: { timestamp_gte: $startDate }
+      where: { timestamp_gte: $startDate, timestamp_lt: $cursor }
       orderBy: timestamp
       orderDirection: desc
       first: $first
-      skip: $skip
     ) {
       blockNumber
       id
@@ -339,6 +366,9 @@ export const AggregatedNetworkHashrateIndexQuery = gql`
       interval: $interval
       first: $first
       skip: $skip
+      current: include
+      orderBy: timestamp
+      orderDirection: desc
       where: { timestamp_gte: $startTimestamp }
     ) {
       count

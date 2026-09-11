@@ -1,10 +1,11 @@
-import { graphqlRequest } from "./graphql";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { backgroundRefetchOpts, indexGcTimeMs, indexStaleTimeMs } from "./config";
-import { NetworkHashrateIndexQuery, AggregatedNetworkHashrateIndexQuery } from "./graphql-queries";
+import { backgroundRefetchOpts, indexGcTimeMs } from "./config";
+import { AggregatedNetworkHashrateIndexQuery, NetworkHashrateIndexQuery } from "./graphql-queries";
 import type { TimePeriod } from "./useHashRateIndexData";
-
-const PAGE_SIZE = 250;
+import { paginateOracleTicks } from "./paginateOracleTicks";
+import { fetchOracleHourAggRows, hourAggToAverageTick } from "./fetchOracleHourAverages";
+import { chartRangeSpec, rollupAverageTicks, startMicrosForRange, type AverageTick } from "../../lib/chartBars";
+import { subgraphTimestampToMs } from "../../lib/chartCandles";
 
 /** The subgraph stores hashes per second; the chart reads exahashes per second. */
 const EXAHASH = 10 ** 18;
@@ -16,142 +17,51 @@ type NetworkHashrateIndexItem = {
   id: string | number;
 };
 
-// graph-node derives the collection name from the entity, capitalising the `d`
-// of `7d` as a word of its own: `NetworkHashrate7d` is queried as
-// `networkHashrate7Ds`, not `networkHashrate7ds`.
-type NetworkHashrateIndexRes = {
-  networkHashrate7Ds: NetworkHashrateIndexItem[];
-};
-
-type AggregatedNetworkHashrateIndexItem = {
-  count: string;
-  id: string;
-  sum: string;
-  timestamp: string;
-};
-
-type AggregatedNetworkHashrateIndexRes = {
-  networkHashrate7DCandles: AggregatedNetworkHashrateIndexItem[];
-};
-
 export const NETWORK_HASHRATE_INDEX_QK = "networkHashrateIndex";
 
 export const useNetworkHashrateIndexData = (props?: { refetch?: boolean; timePeriod?: TimePeriod }) => {
-  const timePeriod = props?.timePeriod ?? "day";
+  const timePeriod = props?.timePeriod ?? "5d";
 
-  const query = useQuery({
+  return useQuery({
     queryKey: [NETWORK_HASHRATE_INDEX_QK, timePeriod],
     queryFn: () => fetchNetworkHashrateIndexData(timePeriod),
     placeholderData: keepPreviousData,
-    staleTime: indexStaleTimeMs[timePeriod],
+    staleTime: chartRangeSpec(timePeriod).intervalMs,
     gcTime: indexGcTimeMs,
     ...(props?.refetch ? backgroundRefetchOpts : {}),
   });
-
-  return query;
 };
 
 async function fetchNetworkHashrateIndexData(timePeriod: TimePeriod) {
-  if (timePeriod === "week" || timePeriod === "month") {
-    return fetchAggregatedNetworkHashrateIndex(timePeriod);
-  }
-  return fetchDayNetworkHashrateIndex();
-}
+  const spec = chartRangeSpec(timePeriod);
+  const startMicros = startMicrosForRange(timePeriod);
 
-// Unlike the price feeds there is no bundled seed for this series: it was
-// indexed from the oracle's start block, so the subgraph already reaches back
-// past the widest chart range on its own. The one gap is the oracle's first
-// ~1008 Bitcoin blocks, which predate a full 7-day window and so carry no rows.
-async function fetchDayNetworkHashrateIndex() {
-  const now = Math.floor(Date.now() / 1000);
-  const startDate = now - 24 * 60 * 60; // 1 day
-  const startMicros = BigInt(startDate) * 1_000_000n;
-
-  // Fetch all data using cursor-based pagination
-  let allIndexes: NetworkHashrateIndexItem[] = [];
-  let skip = 0;
-  let hasMore = true;
-
-  while (hasMore) {
-    const req = await graphqlRequest<NetworkHashrateIndexRes>(
+  let ticks: AverageTick[];
+  if (spec.source === "tick") {
+    const allIndexes = await paginateOracleTicks<NetworkHashrateIndexItem>(
       NetworkHashrateIndexQuery,
-      {
-        startDate: startMicros.toString(),
-        first: PAGE_SIZE,
-        skip,
-      },
-      process.env.REACT_APP_SUBGRAPH_ORACLES_URL,
+      "networkHashrate7Ds",
+      startMicros,
     );
-
-    allIndexes = [...allIndexes, ...req.networkHashrate7Ds];
-
-    if (req.networkHashrate7Ds.length < PAGE_SIZE) {
-      hasMore = false;
-    } else {
-      skip += PAGE_SIZE;
-    }
-  }
-
-  allIndexes.sort((a, b) => Number(BigInt(b.timestamp) - BigInt(a.timestamp)));
-
-  return allIndexes.map((item) => ({
-    updatedAt: +item.timestamp / 1000,
-    updatedAtDate: new Date(+item.timestamp / 1000),
-    id: item.id,
-    hashrateEhS: Number(item.hashrateHpS) / EXAHASH,
-  }));
-}
-
-async function fetchAggregatedNetworkHashrateIndex(timePeriod: "week" | "month") {
-  const interval = timePeriod === "week" ? "hour" : "day";
-
-  const now = Math.floor(Date.now() / 1000);
-  const daysInSeconds = timePeriod === "week" ? 7 * 24 * 60 * 60 : 31 * 24 * 60 * 60;
-  const startTimestamp = Math.floor((now - daysInSeconds) * 1000 * 1000).toString();
-
-  // Fetch all data using cursor-based pagination
-  let allCandles: AggregatedNetworkHashrateIndexItem[] = [];
-  let skip = 0;
-  let hasMore = true;
-
-  while (hasMore) {
-    const req = await graphqlRequest<AggregatedNetworkHashrateIndexRes>(
+    ticks = allIndexes.map((item) => ({
+      id: String(item.id),
+      timeMs: subgraphTimestampToMs(item.timestamp),
+      sum: Number(item.hashrateHpS),
+      count: 1,
+    }));
+  } else {
+    const rows = await fetchOracleHourAggRows(
       AggregatedNetworkHashrateIndexQuery,
-      { interval, first: PAGE_SIZE, skip, startTimestamp },
-      process.env.REACT_APP_SUBGRAPH_ORACLES_URL,
+      "networkHashrate7DCandles",
+      startMicros,
     );
-
-    allCandles = [...allCandles, ...req.networkHashrate7DCandles];
-
-    if (req.networkHashrate7DCandles.length < PAGE_SIZE) {
-      hasMore = false;
-    } else {
-      skip += PAGE_SIZE;
-    }
+    ticks = rows.map(hourAggToAverageTick);
   }
 
-  allCandles.sort((a, b) => Number(BigInt(b.timestamp) - BigInt(a.timestamp)));
-
-  return allCandles.map((item) => {
-    const count = Number(item.count);
-    const sum = Number(item.sum);
-
-    if (count === 0 || sum === 0) {
-      return {
-        updatedAt: +item.timestamp / 1000,
-        updatedAtDate: new Date(+item.timestamp / 1000),
-        id: item.id,
-        hashrateEhS: 0,
-      };
-    }
-
-    // Every row in the bucket is already a 7-day average, so this only decimates
-    // the series down to one point per interval rather than smoothing it further.
-    return {
-      updatedAt: +item.timestamp / 1000,
-      updatedAtDate: new Date(+item.timestamp / 1000),
-      id: item.id,
-      hashrateEhS: sum / count / EXAHASH,
-    };
-  });
+  return rollupAverageTicks(ticks, spec.intervalMs).map((bucket) => ({
+    updatedAt: bucket.timeMs,
+    updatedAtDate: new Date(bucket.timeMs),
+    id: bucket.id,
+    hashrateEhS: bucket.sum / bucket.count / EXAHASH,
+  }));
 }
