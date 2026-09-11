@@ -196,7 +196,7 @@ export const ClosePositionForm: FC<ClosePositionFormProps> = ({
       <Edit>
         {/* The position, stated the way the review states the order. */}
         <Section>
-          <SectionTitle>Open position</SectionTitle>
+          <SectionTitle>Your position</SectionTitle>
           <Headline>
             <HeadlineTop>
               <SideBadge $isBuy={isLong}>{isLong ? "Long" : "Short"}</SideBadge>
