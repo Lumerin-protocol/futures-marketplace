@@ -114,20 +114,9 @@ in the UI, since that one looks like a missing behaviour rather than a dead prop
 Nothing in `src` imports it. Wallet connection goes through appkit directly. Either
 it was superseded and should be deleted, or a migration to it was never finished.
 
-## 6. `@types/node` is pinned at v12
+## 6. `@types/node` (resolved)
 
-**Where:** `package.json` (`"@types/node": "^12.20.19"`), `vite-plugin-seed-meta.ts`
-
-v12 predates the `node:` module protocol, which `@types/node` only started declaring
-in v16. Rewriting `import ... from "fs"` to `"node:fs"` in the build-tooling files
-therefore fails `tsc --noEmit` with `TS2307: Cannot find module 'node:fs'`, even
-though it is the form Biome (and Node itself) prefers. The rule is suppressed at the
-top of `vite-plugin-seed-meta.ts` instead.
-
-**To resolve:** bump `@types/node` to something matching the Node the project
-actually runs on (the repo requires Node 22), then drop the suppression and use the
-`node:` prefix. Expect the bump to surface unrelated type errors, which is why it was
-left out of this pass.
+Bumped to v24 to match Node 24 LTS. `vite-plugin-seed-meta.ts` now uses the `node:` import protocol.
 
 ## 7. Stale `node_modules/@wagmi/core`
 
@@ -183,9 +172,3 @@ that way and needed no suppression afterwards.
 | Location | Reason |
 | --- | --- |
 | `lib/formatUnits.test.ts` (file-level) | Table-driven tests; pre-existing. |
-
-### `useNodejsImportProtocol`
-
-| Location | Reason |
-| --- | --- |
-| `vite-plugin-seed-meta.ts` (file-level) | `@types/node` is pinned at v12 and cannot resolve `node:fs` / `node:path`. See section 6. |
