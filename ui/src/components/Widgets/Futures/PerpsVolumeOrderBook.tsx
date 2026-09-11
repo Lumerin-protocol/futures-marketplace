@@ -386,7 +386,6 @@ export const PerpsVolumeOrderBook = ({
 const Container = styled("div")<{ $compact?: boolean }>`
   width: 100%;
   height: 100%;
-  min-height: ${(props) => (props.$compact ? "0" : "437px")};
   display: flex;
   flex-direction: column;
 `;
