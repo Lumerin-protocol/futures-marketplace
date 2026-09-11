@@ -17,6 +17,7 @@ import { useModifyOrder, useUpdateFuturesOrders } from "../../../hooks/data/useM
 import { useOrderMargin } from "../../../hooks/data/useOrderMargin";
 import { useMakerTakerFees } from "../../../hooks/data/useMakerTakerFees";
 import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
+import { formatDateTime } from "../../../lib/dates";
 import { planShrink, type RestingOrder } from "../../../lib/orderUpdatePlan";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import type { AccountBalance, ContractMode } from "../../../types/types";
@@ -255,6 +256,7 @@ export const ModifyFuturesOrderModal = ({
       onAmountChange={form.handleAmountChange}
       onAmountModeChange={form.handleAmountModeChange}
       onSliderChange={form.handleSliderChange}
+      onSliderCommitted={form.handleSliderCommitted}
       onIncrementPrice={form.incrementPrice}
       onDecrementPrice={form.decrementPrice}
     />
@@ -310,7 +312,7 @@ export const ModifyFuturesOrderModal = ({
                   <div className="flex justify-between">
                     <span className="text-gray-300">Expiration Date:</span>
                     <span className="text-white">
-                      {new Date(Number(order.expirationAt) * 1000).toLocaleString()}
+                      {formatDateTime(order.expirationAt)}
                     </span>
                   </div>
                   {renderChange("Price", `${oldPrice.toFixed(2)} USDC`, `${form.currentPrice.toFixed(2)} USDC`)}

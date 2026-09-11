@@ -1,5 +1,4 @@
 import { type FC, type ReactNode, useMemo, useState } from "react";
-import styled from "@mui/material/styles/styled";
 import {
   waitForOrderBookBlockNumber,
   getOrderBookQueryKey,
@@ -28,9 +27,10 @@ import type { ContractMode } from "../../types/types";
 import { useOrderMargin } from "../../hooks/data/useOrderMargin";
 import { useLiquidationThresholds } from "../../hooks/data/useLiquidationThresholds";
 import { useGetMarketPrice } from "../../hooks/data/useGetMarketPrice";
+import { formatMonthDay } from "../../lib/dates";
 import { type OrderLeg, type OrderMarginQuote, snapshotWithChanges } from "../../lib/orderMargin";
 import { positionBefore, snapshotWithFill } from "../../lib/orderPreview";
-import { mmRequired, type AccountSnapshot } from "@hashpower/portfolio-margin";
+import { imRequired, mmRequired, type AccountSnapshot } from "@hashpower/portfolio-margin";
 import {
   formatMarginRatio,
   MARGIN_RATIO_THRESHOLDS,
@@ -42,8 +42,6 @@ import {
   solveLiquidationThresholds,
   type LiquidationLevel,
 } from "../../lib/portfolioMargin";
-import Tooltip from "@mui/material/Tooltip";
-import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import { useMakerTakerFees } from "../../hooks/data/useMakerTakerFees";
 import { usePointsHookWeights } from "../../hooks/data/usePointsHookWeights";
 import type { PerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
@@ -55,7 +53,30 @@ import {
 import { quoteOrderFees } from "../../lib/orderFees";
 import { type OrderExecution, summarizeOrderExecution } from "../../lib/orderExecution";
 import { TimeInForce, type TimeInForceValue } from "../../types/timeInForce";
-import { tokens } from "../../styles/tokens";
+import {
+  Bright,
+  CostCard,
+  CostDivider,
+  CostRow,
+  Delta,
+  GroupDivider,
+  Headline,
+  HeadlineAt,
+  HeadlineDelivery,
+  HeadlineDetail,
+  HeadlineMeta,
+  HeadlineStat,
+  HeadlineStats,
+  HeadlineTitle,
+  HeadlineTop,
+  HelpTip,
+  Note,
+  Review,
+  Section,
+  SectionTitle,
+  SideBadge,
+  type Tone,
+} from "./Shared/ReviewPrimitives";
 
 const TIF_LABELS: Record<TimeInForceValue, string> = {
   [TimeInForce.GTC]: "GTC",
@@ -96,13 +117,52 @@ interface Props {
   /** Fraction (0.05 = 5%) by which the widget slipped the mark to price a market order. */
   marketSlippage?: number;
   timeInForce?: TimeInForceValue;
+  /** Modal title; defaults to "Place Bid/Ask Order". Set when this order is the means to some other end, e.g. closing a position. */
+  title?: string;
+  /** Label of the confirm button; defaults to the title. */
+  executeLabel?: string;
+  /**
+   * Caption over the order card on the review step. Unset when the modal title
+   * already names the order; set when it names the goal instead, so the card
+   * can be tied back to the step that produced it ("Closing order").
+   */
+  orderCaption?: string;
+  /** Where "Back" on the review step goes. Without it the modal closes. */
+  onBack?: () => void;
 }
-
-/** Colour a figure by how much risk it carries: none, worth a look, or acting on. */
-type Tone = "neutral" | "caution" | "danger";
 
 const toneOf = (tier: MarginTier): Tone =>
   tier === "healthy" ? "neutral" : tier === "caution" ? "caution" : "danger";
+
+/** The account's risk figures at one moment, as the "After this order" card shows them. */
+interface RiskFigures {
+  /** `balance − IM − reserved fee`: what is left to trade with. */
+  available: bigint;
+  liq: LiquidationLevel | undefined;
+  underwater: boolean;
+  /** `MM / balance × 100`, the header's margin ratio; `null` with no balance. */
+  ratio: number | null;
+}
+
+/** Which of the figures differ between two moments. */
+interface RiskChanges {
+  available: boolean;
+  liq: boolean;
+  ratio: boolean;
+}
+
+const NO_CHANGES: RiskChanges = { available: false, liq: false, ratio: false };
+
+function riskChanges(from: RiskFigures, to: RiskFigures): RiskChanges {
+  return {
+    available: from.available !== to.available,
+    liq:
+      from.underwater !== to.underwater ||
+      from.liq?.price !== to.liq?.price ||
+      from.liq?.direction !== to.liq?.direction,
+    ratio: from.ratio !== to.ratio,
+  };
+}
 
 export const PlaceOrderForm: FC<Props> = ({
   price,
@@ -118,6 +178,10 @@ export const PlaceOrderForm: FC<Props> = ({
   isMarketOrder = false,
   marketSlippage,
   timeInForce = TimeInForce.GTC,
+  title,
+  executeLabel,
+  orderCaption,
+  onBack,
 }) => {
   // Conditionally use futures or perps create order hook
   const futuresCreateOrder = useCreateOrder();
@@ -221,24 +285,21 @@ export const PlaceOrderForm: FC<Props> = ({
         : marginQuote.imIncrease > 0n
           ? marginQuote.imIncrease
           : 0n;
-  // `headroom` is balance − IM after − reserved fee: what is left to trade with.
-  const availableAfter = marginQuote?.headroom;
-  const availableBefore = marginQuote
-    ? marginQuote.headroom + marginQuote.imIncrease + marginQuote.reservedFee
-    : undefined;
-
   /**
-   * How the account's risk figures move because of the placed part.
+   * How the account's risk figures move because of the placed part, read at
+   * three moments: as it stands, once the order is *placed*, and once it has
+   * *filled*.
    *
-   * Liquidation level and margin ratio are read off the *placed* snapshot: the
-   * engine stresses a resting order as if it had filled in the worse direction,
-   * so both change the moment the order lands (a reducing order, by the same
-   * rule, only improves them once it fills). The position is read off the
-   * *filled* snapshot — it is the one figure that waits for a match, so it is
-   * the only row labelled conditional for a GTC limit.
+   * The engine stresses a resting order as if it had filled in the worse
+   * direction, so an order that adds exposure moves the figures the moment it
+   * lands, while one that reduces exposure — a close — earns nothing until it
+   * fills. Which moment a row is shown at is decided below, per figure: an
+   * order that cannot rest has no "placed" state at all, and for one that can,
+   * a figure that only moves on fill belongs under "If fully filled".
    *
    * Same snapshot, shocks and mark the margin quote and the page's risk panel
-   * read, so the "before" figures match what the header shows.
+   * read, so the "before" figures match what the header shows and the placed
+   * available balance equals the quote's headroom.
    */
   const {
     snapshot: riskSnapshot,
@@ -248,17 +309,14 @@ export const PlaceOrderForm: FC<Props> = ({
     alreadyUnderwater: liveUnderwater,
   } = useLiquidationThresholds(address);
   const { data: marketPrice } = useGetMarketPrice();
+  const reservedFee = marginQuote?.reservedFee ?? 0n;
   const fillPreview = useMemo<
     | {
         positionBefore: bigint;
         positionAfter: bigint;
-        liqBefore: LiquidationLevel | undefined;
-        liqAfter: LiquidationLevel | undefined;
-        underwaterBefore: boolean;
-        underwaterAfter: boolean;
-        /** `MM / balance × 100`, the header's margin ratio; `null` with no balance. */
-        ratioBefore: number | null;
-        ratioAfter: number | null;
+        before: RiskFigures;
+        placed: RiskFigures;
+        filled: RiskFigures;
       }
     | undefined
   >(() => {
@@ -276,19 +334,22 @@ export const PlaceOrderForm: FC<Props> = ({
 
     const placed = snapshotWithChanges(snapshot, params, { place: [leg] });
     const filled = snapshotWithFill(snapshot, params, leg, expiry);
-    const before = solveLiquidationThresholds(snapshot, params, mark);
-    const after = solveLiquidationThresholds(placed, params, mark);
-    const ratio = (snap: AccountSnapshot): number | null =>
-      snap.balance === 0n ? null : (Number(mmRequired(snap, params, mark)) / Number(snap.balance)) * 100;
+    // The fee is held back from placement on, so it is in every state but "before".
+    const figures = (snap: AccountSnapshot, fee: bigint): RiskFigures => {
+      const thresholds = solveLiquidationThresholds(snap, params, mark);
+      return {
+        available: snap.balance - imRequired(snap, params, mark) - fee,
+        liq: pickLiquidationLevel(snap, params, thresholds, mark),
+        underwater: thresholds.alreadyUnderwater,
+        ratio: snap.balance === 0n ? null : (Number(mmRequired(snap, params, mark)) / Number(snap.balance)) * 100,
+      };
+    };
     return {
       positionBefore: positionBefore(snapshot, leg, expiry),
       positionAfter: positionBefore(filled, leg, expiry),
-      liqBefore: pickLiquidationLevel(snapshot, params, before, mark),
-      liqAfter: pickLiquidationLevel(placed, params, after, mark),
-      underwaterBefore: before.alreadyUnderwater,
-      underwaterAfter: after.alreadyUnderwater,
-      ratioBefore: ratio(snapshot),
-      ratioAfter: ratio(placed),
+      before: figures(snapshot, 0n),
+      placed: figures(placed, reservedFee),
+      filled: figures(filled, reservedFee),
     };
   }, [
     riskSnapshot,
@@ -299,7 +360,9 @@ export const PlaceOrderForm: FC<Props> = ({
     price,
     isBuy,
     expirationAt,
+    reservedFee,
   ]);
+  const availableBefore = fillPreview?.before.available;
 
   const positionLabel = (net: bigint): string => {
     if (net === 0n) return "Flat";
@@ -308,18 +371,11 @@ export const PlaceOrderForm: FC<Props> = ({
     const formatted = contractMode === "perpetual" ? String(Number(size.toFixed(6))) : size.toFixed(0);
     return `${net > 0n ? "Long" : "Short"} ${formatted}`;
   };
-  // The direction the mark has to move to hit the level. When before and after
-  // agree it goes in the row label once; when the fill flips it (a net long
-  // becoming net short), each value carries its own arrow.
-  const liqDirections = new Set(
-    [fillPreview?.liqBefore, fillPreview?.liqAfter].flatMap((l) => (l ? [l.direction] : [])),
-  );
-  const liqDirectionShared = liqDirections.size === 1 ? [...liqDirections][0] : undefined;
-  const liqLabel = (level: LiquidationLevel | undefined, underwater: boolean): string => {
-    if (underwater) return "Liquidatable";
-    if (!level) return "None";
-    const arrow = liqDirectionShared ? "" : level.direction === "down" ? "↓ " : "↑ ";
-    return `${arrow}${usdc(level.price)}`;
+  const liqLabel = (figures: RiskFigures, sharedDirection: LiquidationLevel["direction"] | undefined): string => {
+    if (figures.underwater) return "Liquidatable";
+    if (!figures.liq) return "None";
+    const arrow = sharedDirection ? "" : figures.liq.direction === "down" ? "↓ " : "↑ ";
+    return `${arrow}${usdc(figures.liq.price)}`;
   };
   /** Result-step variant: before and now are independent reads, so each carries its arrow. */
   const liqLabelWithArrow = (level: LiquidationLevel | undefined, underwater: boolean): string => {
@@ -327,25 +383,93 @@ export const PlaceOrderForm: FC<Props> = ({
     if (!level) return "None";
     return `${level.direction === "down" ? "↓" : "↑"} ${usdc(level.price)}`;
   };
-  const liqRowLabel =
-    liqDirectionShared === "down"
-      ? "Liq. price (below)"
-      : liqDirectionShared === "up"
-        ? "Liq. price (above)"
-        : "Liq. price";
   const ratioTone = (ratio: number | null): Tone =>
     ratio === null ? "neutral" : toneOf(tierAtEntry(ratio, MARGIN_RATIO_THRESHOLDS));
   // Opening from flat is obvious from the badge; the row earns its place when
   // it reduces, closes or flips something the user already holds.
   const showPosition = fillPreview !== undefined && fillPreview.positionBefore !== 0n;
-  const showLiquidation =
-    fillPreview !== undefined &&
-    (fillPreview.liqBefore !== undefined ||
-      fillPreview.liqAfter !== undefined ||
-      fillPreview.underwaterBefore ||
-      fillPreview.underwaterAfter);
-  const showRatio =
-    fillPreview !== undefined && (fillPreview.ratioBefore !== null || fillPreview.ratioAfter !== null);
+
+  // A GTC limit may fill now (taker) or rest and fill later (maker); market,
+  // IOC and FOK never rest, so they are takers for whatever they fill.
+  const canRest = !isMarketOrder && timeInForce === TimeInForce.GTC;
+  /**
+   * Which figures move between two states. For an order that can rest, the
+   * ones that move at placement go above the "If fully filled" rule and the
+   * ones that move only on fill go under it; a figure that moves at neither
+   * is left out rather than shown as `x → x`. An order that cannot rest is
+   * either filled or gone, so its one comparison is before → filled.
+   */
+  const atPlacement = fillPreview && canRest ? riskChanges(fillPreview.before, fillPreview.placed) : NO_CHANGES;
+  const atFill = fillPreview
+    ? canRest
+      ? riskChanges(fillPreview.placed, fillPreview.filled)
+      : riskChanges(fillPreview.before, fillPreview.filled)
+    : NO_CHANGES;
+  const anyChange = (c: RiskChanges) => c.available || c.liq || c.ratio;
+  // Rows the card shows right away, and rows that wait for the fill. For an
+  // order that cannot rest everything is "right away" in the sense that there
+  // is no other moment; the position row still closes the card.
+  const hasImmediateRows = anyChange(canRest ? atPlacement : atFill);
+  const hasFillRows = showPosition || (canRest && anyChange(atFill));
+
+  /** The rows for one comparison, in the card's fixed order. */
+  const riskRows = (from: RiskFigures, to: RiskFigures, show: RiskChanges): ReactNode => {
+    // When both levels lie the same way the direction goes in the label once;
+    // when the fill flips it (a net long becoming net short) each value carries its arrow.
+    const directions = new Set([from.liq, to.liq].flatMap((l) => (l ? [l.direction] : [])));
+    const shared = directions.size === 1 ? [...directions][0] : undefined;
+    return (
+      <>
+        {show.available && (
+          <CostRow
+            muted
+            label="Available balance"
+            value={
+              <Delta
+                before={usdc(from.available)}
+                after={usdc(to.available)}
+                tone={to.available < 0n ? "danger" : "neutral"}
+              />
+            }
+          />
+        )}
+        {show.liq && (
+          <CostRow
+            muted
+            label={shared === "down" ? "Liq. price (below)" : shared === "up" ? "Liq. price (above)" : "Liq. price"}
+            tooltip={`The mark price at which the account can be liquidated — ${
+              shared === "down"
+                ? "the price has to fall to reach it"
+                : shared === "up"
+                  ? "the price has to rise to reach it"
+                  : "each arrow shows which way the price has to move"
+            }. The margin engine counts a resting order as if it had already filled, so an order that adds exposure moves this the moment it is placed, and one that reduces exposure only once it fills. Account-wide: one collateral pool backs every futures and perps position.`}
+            value={
+              <Delta
+                before={liqLabel(from, shared)}
+                after={liqLabel(to, shared)}
+                tone={to.underwater ? "danger" : "neutral"}
+              />
+            }
+          />
+        )}
+        {show.ratio && (
+          <CostRow
+            muted
+            label="Margin ratio"
+            tooltip={`Maintenance margin ÷ balance — the same figure as the balance panel. The margin engine counts a resting order as if it had already filled, so an order that adds exposure moves this the moment it is placed, and one that reduces exposure only once it fills. Amber from ${MARGIN_RATIO_THRESHOLDS.caution}%, red from ${MARGIN_RATIO_THRESHOLDS.danger}%; the account can be liquidated at 100%.`}
+            value={
+              <Delta
+                before={formatMarginRatio(from.ratio)}
+                after={formatMarginRatio(to.ratio)}
+                tone={ratioTone(to.ratio)}
+              />
+            }
+          />
+        )}
+      </>
+    );
+  };
   // FOK either fills in full or is cancelled, so its outcome is not conditional.
   const fillIsConditional = timeInForce !== TimeInForce.FOK;
   // The book drifts between this screen and the transaction, so how much
@@ -353,7 +477,7 @@ export const PlaceOrderForm: FC<Props> = ({
   // lands. Everything above is a bound; this says which way.
   const fillNote = fillIsConditional
     ? timeInForce === TimeInForce.GTC && !isMarketOrder
-      ? "The book may move before this lands: part of the order can match immediately and the rest may rest, so fees and points fall between the maker and taker figures, and the position may build in steps. Margin, liquidation price and margin ratio already assume the whole order."
+      ? "The book may move before this lands: part of the order can match immediately and the rest may rest, so fees and points fall between the maker and taker figures, and the position may build in steps. Figures above the rule apply as soon as the order is placed; those under it need the fill."
       : "The book may move before this lands: whatever cannot be matched immediately is cancelled, so the fill may be partial. Figures assume a full fill; a partial one costs less and moves the account less."
     : undefined;
 
@@ -386,9 +510,6 @@ export const PlaceOrderForm: FC<Props> = ({
     return isPerps ? (price * nativeQty) / QUANTITY_SCALE : price * nativeQty;
   })();
 
-  // A GTC limit may fill now (taker) or rest and fill later (maker); market,
-  // IOC and FOK never rest, so they are takers for whatever they fill.
-  const canRest = !isMarketOrder && timeInForce === TimeInForce.GTC;
   const makerFeeBps = isPerps ? perpsCollection?.makerFeeBps : futuresMakerFeeBps;
   const takerFeeBps = isPerps ? perpsCollection?.takerFeeBps : futuresTakerFeeBps;
   const feeRatesLoading = isPerps ? perpsCollection === undefined : isFeesLoading;
@@ -406,10 +527,7 @@ export const PlaceOrderForm: FC<Props> = ({
   const qtyLabel = (value: number) =>
     `${isPerps ? String(Number(value.toFixed(6))) : value.toFixed(0)} ${value === 1 ? "contract" : "contracts"}`;
   const priceLabel = `${(Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} USDC`;
-  const deliveryLabel = new Date(Number(expirationAt) * 1000).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  const expiresLabel = formatMonthDay(expirationAt);
   const tifLabel = TIF_LABELS[timeInForce];
   const pct = (bps: number) => `${(Math.abs(bps) / 100).toFixed(2)}%`;
   const slippageLabel =
@@ -523,68 +641,75 @@ export const PlaceOrderForm: FC<Props> = ({
     };
   })();
 
+  const defaultTitle = offsetPlan ? "Offset Order" : isBuy ? "Place Bid Order" : "Place Ask Order";
+  const modalTitle = title ?? defaultTitle;
+
   return (
     <TransactionForm
       onClose={closeForm}
-      title={offsetPlan ? "Offset Order" : isBuy ? "Place Bid Order" : "Place Ask Order"}
+      onBack={onBack}
+      title={modalTitle}
       description={""}
-      executeLabel={offsetPlan ? "Offset Order" : `Place ${isBuy ? "Bid" : "Ask"} Order`}
+      executeLabel={executeLabel ?? modalTitle}
       reviewForm={(_props) => (
         <Review>
           {/* What the order is — the terms the user just entered, in one glance. */}
-          <Headline>
-            <HeadlineTop>
-              <SideBadge $isBuy={isBuy}>{isBuy ? "Bid" : "Ask"}</SideBadge>
-              <HeadlineMeta>
-                {[isMarketOrder ? "Market" : "Limit", tifLabel, slippageLabel]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </HeadlineMeta>
-              {contractMode === "futures" && (
-                <HeadlineDelivery>
-                  <span>Delivers</span> {deliveryLabel}
-                </HeadlineDelivery>
-              )}
-            </HeadlineTop>
-            {/* Contracts at price is the order as entered; the notional beneath is
-                the USDC it adds up to, which is how perps traders size a trade. */}
-            <HeadlineTitle>
-              {qtyLabel(absoluteQuantity)}
-              <HeadlineAt> {isMarketOrder ? "at market" : `@ ${priceLabel}`}</HeadlineAt>
-            </HeadlineTitle>
-            <HeadlineStats>
-              <HeadlineStat>
-                <span>Notional</span>
-                <strong>{sizeUSDC.toFixed(2)} USDC</strong>
-              </HeadlineStat>
-              {!pointsAreZero && (
+          <Section>
+            {orderCaption && <SectionTitle>{orderCaption}</SectionTitle>}
+            <Headline>
+              <HeadlineTop>
+                <SideBadge $isBuy={isBuy}>{isBuy ? "Bid" : "Ask"}</SideBadge>
+                <HeadlineMeta>
+                  {[isMarketOrder ? "Market" : "Limit", tifLabel, slippageLabel]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </HeadlineMeta>
+                {contractMode === "futures" && (
+                  <HeadlineDelivery>
+                    <span>Expires</span> {expiresLabel}
+                  </HeadlineDelivery>
+                )}
+              </HeadlineTop>
+              {/* Contracts at price is the order as entered; the notional beneath is
+                  the USDC it adds up to, which is how perps traders size a trade. */}
+              <HeadlineTitle>
+                {qtyLabel(absoluteQuantity)}
+                <HeadlineAt> {isMarketOrder ? "at market" : `@ ${priceLabel}`}</HeadlineAt>
+              </HeadlineTitle>
+              <HeadlineStats>
                 <HeadlineStat>
-                  <span>
-                    {canRest ? "Points maker/taker" : "Points taker"}
-                    <HelpTip
-                      title={
-                        canRest
-                          ? "Estimated points for a full fill, credited as the order is matched. Maker points for the part that rests on the book until filled, taker points for the part matched immediately — a partial match earns a mix. A resting order earns nothing until it fills."
-                          : "Estimated points, credited when the order is matched. This order cannot rest on the book, so it earns taker points."
-                      }
-                    />
-                  </span>
-                  <strong>
-                    {makerReward !== null && takerReward !== null
-                      ? canRest
-                        ? `${makerReward.toFixed(2)} / ${takerReward.toFixed(2)} pts`
-                        : `${takerReward.toFixed(2)} pts`
-                      : isWeightsLoading
-                        ? "Loading…"
-                        : "—"}
-                  </strong>
+                  <span>Notional</span>
+                  <strong>{sizeUSDC.toFixed(2)} USDC</strong>
                 </HeadlineStat>
-              )}
-            </HeadlineStats>
-          </Headline>
+                {!pointsAreZero && (
+                  <HeadlineStat>
+                    <span>
+                      Points
+                      <HelpTip
+                        title={
+                          canRest
+                            ? "Estimated points for a full fill, credited as the order is matched. Maker points for the part that rests on the book until filled, taker points for the part matched immediately — a partial match earns a mix. A resting order earns nothing until it fills."
+                            : "Estimated points, credited when the order is matched. This order cannot rest on the book, so it earns taker points."
+                        }
+                      />
+                    </span>
+                    <strong>
+                      {makerReward !== null && takerReward !== null
+                        ? canRest
+                          ? `${makerReward.toFixed(2)} / ${takerReward.toFixed(2)} pts`
+                          : `${takerReward.toFixed(2)} pts`
+                        : isWeightsLoading
+                          ? "Loading…"
+                          : "—"}
+                    </strong>
+                  </HeadlineStat>
+                )}
+              </HeadlineStats>
+            </Headline>
+          </Section>
 
           {offsetPlan && (
-            <OffsetNote>
+            <Note>
               Nets <strong>{qtyLabel(offsetPlan.offsetQty)}</strong> against your resting{" "}
               {oppositeAction} in one transaction — nothing is sent to the market for that part.{" "}
               {offsetPlan.leftoverQty > 0
@@ -592,7 +717,7 @@ export const PlaceOrderForm: FC<Props> = ({
                     isBuy ? "bid" : "ask"
                   }; the costs below are for that part only.`
                 : "Nothing new is placed, so no margin or fee is required."}
-            </OffsetNote>
+            </Note>
           )}
 
           {/* What it costs — the part the user has not seen yet. */}
@@ -630,88 +755,45 @@ export const PlaceOrderForm: FC<Props> = ({
             </Section>
           )}
 
-          {/* How the account changes. Points lead as the incentive. Balance,
-              liquidation level and margin ratio all move at placement — the
-              engine charges a resting order as if it had filled — so only the
-              position waits for a match and sits under "If filled". */}
-          {!placesNothing && (
-              <Section>
-                <SectionTitle>
-                  After this order
-                  {fillNote && <HelpTip title={fillNote} />}
-                </SectionTitle>
-                <CostCard>
-                  {availableBefore !== undefined && availableAfter !== undefined && (
-                    <CostRow
-                      muted
-                      label="Available balance"
-                      value={
-                        <Delta
-                          before={usdc(availableBefore)}
-                          after={usdc(availableAfter)}
-                          tone={availableAfter < 0n ? "danger" : "neutral"}
-                        />
-                      }
-                    />
-                  )}
-                  {showLiquidation && fillPreview && (
-                    <CostRow
-                      muted
-                      label={liqRowLabel}
-                      tooltip={`The mark price at which the account can be liquidated, before and after this order — ${
-                        liqDirectionShared === "down"
-                          ? "the price has to fall to reach it"
-                          : liqDirectionShared === "up"
-                            ? "the price has to rise to reach it"
-                            : "each arrow shows which way the price has to move"
-                      }. Changes as soon as the order is placed: the margin engine counts a resting order as if it had already filled, so an order that reduces your exposure only improves this once it fills. Account-wide: one collateral pool backs every futures and perps position.`}
-                      value={
-                        <Delta
-                          before={liqLabel(fillPreview.liqBefore, fillPreview.underwaterBefore)}
-                          after={liqLabel(fillPreview.liqAfter, fillPreview.underwaterAfter)}
-                          tone={fillPreview.underwaterAfter ? "danger" : "neutral"}
-                        />
-                      }
-                    />
-                  )}
-                  {showRatio && fillPreview && (
-                    <CostRow
-                      muted
-                      label="Margin ratio"
-                      tooltip={`Maintenance margin ÷ balance, before and after this order — the same figure as the balance panel. Changes as soon as the order is placed, since the margin engine counts a resting order as if it had already filled. Amber from ${MARGIN_RATIO_THRESHOLDS.caution}%, red from ${MARGIN_RATIO_THRESHOLDS.danger}%; the account can be liquidated at 100%.`}
-                      value={
-                        <Delta
-                          before={formatMarginRatio(fillPreview.ratioBefore)}
-                          after={formatMarginRatio(fillPreview.ratioAfter)}
-                          tone={ratioTone(fillPreview.ratioAfter)}
-                        />
-                      }
-                    />
-                  )}
-                  {showPosition && fillPreview && (
-                    <>
-                      {fillIsConditional ? (
-                        <GroupDivider>
-                          <span>If fully filled</span>
-                        </GroupDivider>
-                      ) : (
-                        <CostDivider />
-                      )}
-                      <CostRow
-                        muted
-                        label="Position"
-                        value={
-                          <Delta
-                            before={positionLabel(fillPreview.positionBefore)}
-                            after={positionLabel(fillPreview.positionAfter)}
-                          />
-                        }
+          {/* How the account changes. For an order that can rest, what moves at
+              placement sits above the rule and what waits for a match — the
+              position, and any figure the engine only credits on fill — under
+              it. An order that cannot rest is either filled or gone, so every
+              row is the filled state and the note on the title says so. */}
+          {!placesNothing && fillPreview && (hasImmediateRows || hasFillRows) && (
+            <Section>
+              <SectionTitle>
+                After this order
+                {fillNote && <HelpTip title={fillNote} />}
+              </SectionTitle>
+              <CostCard>
+                {canRest
+                  ? riskRows(fillPreview.before, fillPreview.placed, atPlacement)
+                  : riskRows(fillPreview.before, fillPreview.filled, atFill)}
+                {hasFillRows &&
+                  (canRest ? (
+                    <GroupDivider>
+                      <span>If fully filled</span>
+                    </GroupDivider>
+                  ) : (
+                    hasImmediateRows && <CostDivider />
+                  ))}
+                {canRest && riskRows(fillPreview.placed, fillPreview.filled, atFill)}
+                {showPosition && (
+                  <CostRow
+                    muted
+                    label="Position"
+                    value={
+                      <Delta
+                        before={positionLabel(fillPreview.positionBefore)}
+                        after={positionLabel(fillPreview.positionAfter)}
                       />
-                    </>
-                  )}
-                </CostCard>
-              </Section>
-            )}
+                    }
+                  />
+                )}
+              </CostCard>
+            </Section>
+          )}
         </Review>
       )}
       resultForm={(_props) =>
@@ -848,7 +930,7 @@ export const PlaceOrderForm: FC<Props> = ({
       }
       transactionSteps={[
         {
-          label: offsetPlan ? "Offset Order" : `Place ${isBuy ? "Bid" : "Ask"} Order`,
+          label: executeLabel ?? modalTitle,
           action: async () => {
             // Check for conflicting order before proceeding. The offset path is
             // the deliberate resolution of that conflict, so it never applies.
@@ -867,8 +949,8 @@ export const PlaceOrderForm: FC<Props> = ({
             setBaseline({
               available: availableBefore,
               im: orderMargin.currentIm,
-              liq: fillPreview?.liqBefore,
-              underwater: fillPreview?.underwaterBefore ?? false,
+              liq: fillPreview?.before.liq,
+              underwater: fillPreview?.before.underwater ?? false,
             });
 
             let txhash: `0x${string}` | undefined;
@@ -990,294 +1072,3 @@ export const PlaceOrderForm: FC<Props> = ({
     />
   );
 };
-
-const HelpTip = ({ title }: { title: string }) => (
-  <Tooltip title={title} arrow placement="top">
-    <HelpOutlineIcon sx={{ fontSize: 14, cursor: "help", color: tokens.text.muted }} />
-  </Tooltip>
-);
-
-/** One line of the cost card: label on the left, USDC on the right, optional hint under it. */
-const CostRow = ({
-  label,
-  tooltip,
-  value,
-  hint,
-  emphasis = false,
-  muted = false,
-}: {
-  label: string;
-  tooltip?: string;
-  value: ReactNode;
-  hint?: ReactNode;
-  emphasis?: boolean;
-  muted?: boolean;
-}) => (
-  <CostRowRoot>
-    <CostRowMain>
-      <CostLabel $emphasis={emphasis} $muted={muted}>
-        {label}
-        {tooltip && <HelpTip title={tooltip} />}
-      </CostLabel>
-      <CostValue $emphasis={emphasis} $muted={muted}>
-        {value}
-      </CostValue>
-    </CostRowMain>
-    {hint && <CostHint>{hint}</CostHint>}
-  </CostRowRoot>
-);
-
-/** `before → after`, with the after value carrying the emphasis and the risk colour. */
-const Delta = ({
-  before,
-  after,
-  tone = "neutral",
-}: {
-  before: string;
-  after: string;
-  tone?: Tone;
-}) => (
-  <>
-    <Muted>{before}</Muted>
-    <Arrow>→</Arrow>
-    <Balance $tone={tone}>{after}</Balance>
-  </>
-);
-
-const Review = styled("div")`
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-`;
-
-const Headline = styled("div")`
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  padding: 0.875rem 1rem;
-  background: ${tokens.surface.inputIsland};
-  border: 1px solid ${tokens.border.default};
-  border-radius: ${tokens.radius.md};
-`;
-
-const HeadlineTop = styled("div")`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-`;
-
-const SideBadge = styled("span")<{ $isBuy: boolean }>`
-  display: inline-block;
-  padding: 0.15rem 0.5rem;
-  border-radius: ${tokens.radius.sm};
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  background: ${(p) => (p.$isBuy ? tokens.trading.longHighlightBg : tokens.trading.shortHighlightBg)};
-  color: ${(p) => (p.$isBuy ? tokens.trading.long : tokens.trading.short)};
-`;
-
-const HeadlineMeta = styled("span")`
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: ${tokens.text.secondary};
-`;
-
-const HeadlineDelivery = styled("span")`
-  margin-left: auto;
-  font-size: 0.75rem;
-  color: ${tokens.text.secondary};
-  white-space: nowrap;
-
-  span {
-    color: ${tokens.text.muted};
-  }
-`;
-
-const HeadlineTitle = styled("div")`
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: ${tokens.text.onDark};
-  line-height: 1.3;
-  font-variant-numeric: tabular-nums;
-`;
-
-const HeadlineAt = styled("span")`
-  font-weight: 500;
-  color: ${tokens.text.secondary};
-`;
-
-const HeadlineDetail = styled("div")`
-  font-size: 0.8125rem;
-  color: ${tokens.text.secondary};
-`;
-
-/** Sits directly under the title as its sub-line: notional on the left, points on the right. */
-const HeadlineStats = styled("div")`
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0.25rem 1rem;
-`;
-
-const HeadlineStat = styled("div")`
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.4rem;
-  font-size: 0.875rem;
-  font-variant-numeric: tabular-nums;
-
-  span {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    color: ${tokens.text.secondary};
-  }
-
-  strong {
-    color: ${tokens.text.onDark};
-    font-weight: 600;
-  }
-`;
-
-const OffsetNote = styled("p")`
-  margin: 0;
-  padding: 0.75rem 1rem;
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  color: ${tokens.text.secondary};
-  background: ${tokens.trading.infoRowBg};
-  border: 1px solid ${tokens.trading.infoBorder};
-  border-radius: ${tokens.radius.md};
-
-  strong {
-    color: ${tokens.text.onDark};
-    font-weight: 600;
-  }
-`;
-
-const Section = styled("section")`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-`;
-
-const SectionTitle = styled("h3")`
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  margin: 0;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: ${tokens.text.secondary};
-`;
-
-const CostCard = styled("div")`
-  display: flex;
-  flex-direction: column;
-  gap: 0.625rem;
-  padding: 0.875rem 1rem;
-  border: 1px solid ${tokens.border.default};
-  border-radius: ${tokens.radius.md};
-`;
-
-const CostRowRoot = styled("div")`
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-`;
-
-const CostRowMain = styled("div")`
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 1rem;
-`;
-
-const CostLabel = styled("span")<{ $emphasis: boolean; $muted: boolean }>`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: ${(p) => (p.$emphasis ? "0.9375rem" : p.$muted ? "0.8125rem" : "0.875rem")};
-  font-weight: ${(p) => (p.$emphasis ? 600 : 400)};
-  color: ${(p) => (p.$emphasis ? tokens.text.onDark : p.$muted ? tokens.text.muted : tokens.text.secondary)};
-`;
-
-const CostValue = styled("span")<{ $emphasis: boolean; $muted: boolean }>`
-  display: inline-flex;
-  align-items: baseline;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  font-size: ${(p) => (p.$emphasis ? "1.125rem" : p.$muted ? "0.8125rem" : "0.9375rem")};
-  font-weight: ${(p) => (p.$emphasis ? 700 : 500)};
-  color: ${(p) => (p.$muted ? tokens.text.secondary : tokens.text.onDark)};
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-`;
-
-/** Full-white for the one figure that is a reward rather than a cost. */
-const Bright = styled("span")`
-  color: #fff;
-  font-weight: 600;
-`;
-
-const Muted = styled("span")`
-  color: ${tokens.text.muted};
-  font-weight: 400;
-`;
-
-const Arrow = styled("span")`
-  color: ${tokens.text.muted};
-  font-weight: 400;
-`;
-
-const Balance = styled("span")<{ $tone: Tone }>`
-  color: ${(p) =>
-    p.$tone === "danger"
-      ? tokens.trading.short
-      : p.$tone === "caution"
-        ? tokens.trading.highlight
-        : tokens.text.onDark};
-`;
-
-const CostHint = styled("div")`
-  font-size: 0.75rem;
-  line-height: 1.4;
-  color: ${tokens.text.muted};
-  font-variant-numeric: tabular-nums;
-`;
-
-/** A rule with its label sitting on the line: `IF FILLED ────────`. */
-const GroupDivider = styled("div")`
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  margin: 0.125rem 0;
-
-  span {
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: ${tokens.text.muted};
-    white-space: nowrap;
-  }
-
-  &::after {
-    content: "";
-    flex: 1;
-    border-top: 1px solid ${tokens.border.default};
-  }
-`;
-
-const CostDivider = styled("hr")`
-  margin: 0.125rem 0;
-  border: none;
-  border-top: 1px solid ${tokens.border.default};
-`;

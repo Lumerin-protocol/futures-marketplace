@@ -26,6 +26,12 @@ interface TransactionFormProps {
   onClose: () => void;
   /** Label of the review step's primary button; defaults to "Execute". */
   executeLabel?: string;
+  /**
+   * Where "Back" on the review step goes when the form has no input step of
+   * its own — e.g. the caller renders the inputs and swaps this form in for
+   * review. Without it, Back closes the form.
+   */
+  onBack?: () => void;
 }
 
 export const TransactionForm = (props: TransactionFormProps) => {
@@ -196,7 +202,10 @@ export const TransactionFormV2 = (props: TransactionFormProps) => {
                     await handleExecuteTransaction();
                   },
                 }}
-                secondary={{ label: "Back", onClick: () => p.prevStep() }}
+                secondary={{
+                  label: "Back",
+                  onClick: () => (props.onBack && !props.inputForm ? props.onBack() : p.prevStep()),
+                }}
               />
             </>
           ),

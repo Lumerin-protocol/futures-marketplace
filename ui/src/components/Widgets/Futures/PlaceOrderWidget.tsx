@@ -1,27 +1,10 @@
 import styled from "@mui/material/styles/styled";
-import { keyframes, css } from "@emotion/react";
+import { css } from "@emotion/react";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { type ComponentProps, type CSSProperties, useState, useEffect, useId, useMemo, useRef } from "react";
-import Slider, { SliderMark } from "@mui/material/Slider";
+import { SliderMark } from "@mui/material/Slider";
 import Tooltip from "@mui/material/Tooltip";
 import { tokens } from "../../../styles/tokens";
-
-// Pulsing background animation - single blue color for all inputs
-const pulseYellow = keyframes`
-  0%, 100% {
-    background-color: ${tokens.perps.highlightBorder};
-  }
-  50% {
-    background-color: ${tokens.perps.highlightBorderStrong};
-  }
-`;
-
-const getPulseAnimation = (isHighlighted?: boolean) => {
-  if (isHighlighted) {
-    return css`${pulseYellow} 1.5s ease-in-out infinite`;
-  }
-  return "none";
-};
 import { useAccount } from "wagmi";
 import { useAppKit } from "@reown/appkit/react";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
@@ -30,6 +13,8 @@ import { ModalItem } from "../../Modal";
 import { showAlert } from "../../AlertModal";
 import { PrimaryButton, SecondaryButton } from "../../Forms/FormButtons/Buttons.styled";
 import { PlaceOrderForm, type OrderOffsetPlan } from "../../Forms/PlaceOrderForm";
+import { PERCENT_MARKS, StyledSlider } from "../../Forms/Shared/StyledSlider";
+import { percentForQuantity, quantityAtPercent, snapQuantityDown } from "../../../lib/sliderSnap";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
@@ -37,6 +22,7 @@ import type { Participant } from "../../../hooks/data/getUserFuturesOrders";
 import type { PerpsOrder } from "../../../hooks/data/perps/useUserPerpsOrders";
 import type { ContractMode, AccountBalance } from "../../../types/types";
 import type { PerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
+import { formatDateTime } from "../../../lib/dates";
 import { planOffset, type RestingOrder } from "../../../lib/orderUpdatePlan";
 import { useOrderMargin } from "../../../hooks/data/useOrderMargin";
 import {
@@ -46,8 +32,19 @@ import {
 } from "../../Forms/Shared/AmountInputForm";
 import { feeReserverFor, useMakerTakerFees } from "../../../hooks/data/useMakerTakerFees";
 import type { OrderVenue } from "../../../lib/orderMargin";
-import { ModeToggle, ModeButton, type AmountMode } from "./PerpsOrderFormFields";
-import { MOBILE_TOGGLE_METRICS } from "./mobile/mobileTradingLayout";
+import type { AmountMode } from "./PerpsOrderFormFields";
+import {
+  AmountInputWrapper,
+  AmountModeDropdown,
+  InputGroup,
+  ModeButton,
+  ModeToggle,
+  OrderTypeRow,
+  PriceButton,
+  PriceInputContainer,
+  pulseHighlight,
+  SliderContainer,
+} from "../../Forms/Shared/OrderFields";
 import { useSimulatePerpsOrder } from "../../../hooks/data/perps/useSimulatePerpsOrder";
 import { useSimulateFuturesOrder } from "../../../hooks/data/useSimulateFuturesOrder";
 import {
@@ -494,11 +491,7 @@ export const PlaceOrderWidget = ({
    * on to the other side's max. Hovering the dot says which side and how much.
    */
   const sliderMarks = (): { marks: { value: number; label?: string }[]; cap: CapMarkInfo | undefined } => {
-    // Only the middle label carries the unit; the rest read as plain numbers.
-    const quarters = [0, 25, 50, 75, 100].map((value) => ({
-      value,
-      label: value === 50 ? `${value}%` : `${value}`,
-    }));
+    const quarters = PERCENT_MARKS;
     const max = calculateMaxQuantity();
     const buyCap = sideCapacity(true);
     const sellCap = sideCapacity(false);
@@ -589,8 +582,8 @@ export const PlaceOrderWidget = ({
    * futures, six decimals for perps. Down, never nearest — a ceiling rounded up
    * by a millionth is a ceiling the gate rejects.
    */
-  const snapQty = (qty: number): number =>
-    contractMode === "perpetual" ? Math.floor(qty * 1e6 + 1e-6) / 1e6 : Math.floor(qty);
+  const qtyDecimals = contractMode === "perpetual" ? 6 : 0;
+  const snapQty = (qty: number): number => snapQuantityDown(qty, qtyDecimals);
 
   /** The amount field's value for `qty`, in the field's current unit. */
   const amountFromQty = (qty: number): number | string => {
@@ -608,8 +601,7 @@ export const PlaceOrderWidget = ({
   };
 
   /** Where `qty` sits on the 0–100 track, for a given ceiling. */
-  const sliderPercentFor = (qty: number, maxQty: number): number =>
-    maxQty > 0 ? Math.round(Math.min(100, Math.max(0, (qty / maxQty) * 100))) : 0;
+  const sliderPercentFor = percentForQuantity;
 
   // Highlight price/amount inputs when the user clicks the order book
   // (`highlightMode === "inputs"`). `highlightMode === "buttons"` pulses Bid/Ask
@@ -926,14 +918,7 @@ export const PlaceOrderWidget = ({
   const DOT_SNAP_POINTS = 3;
 
   /** The quantity a slider position stands for, snapped to what the venue can place. */
-  const qtyAtSliderValue = (value: number, maxQty: number): number => {
-    // Interior positions round to the nearest placeable quantity so the thumb
-    // feels balanced; only the ceiling is floored, since that is a real limit.
-    const raw = (maxQty * value) / 100;
-    const nearest =
-      contractMode === "perpetual" ? Math.round(raw * 1e6) / 1e6 : Math.round(raw);
-    return Math.min(nearest, snapQty(maxQty));
-  };
+  const qtyAtSliderValue = (value: number, maxQty: number): number => quantityAtPercent(value, maxQty, qtyDecimals);
 
   /**
    * Thumb moving: pull it onto the dot when near, otherwise convert the position
@@ -1215,30 +1200,28 @@ export const PlaceOrderWidget = ({
   };
 
   const previewQuantity = getExpectedQuantity();
-  const previewPrice = getEffectivePrice();
-  // What this order adds to portfolio IM. The side is still unknown here, so
-  // quote the dearer of the two, which is the side the slider ceiling is set
-  // from. IM itself covers everything the account already holds, so the increase
-  // is the part this decision commits.
+  // Margin this order would add to the portfolio's initial margin, quoted
+  // through the same `quoteOrder` the Bid/Ask buttons and the slider ceiling
+  // use — per-side submit price, reduce-only credit — so it agrees with the
+  // review modal's "Margin required" row. The fee reserve is shown there
+  // separately, not folded in here. The side is still unknown at this point,
+  // so show the dearer of the two.
   const previewRequiredMargin = (() => {
-    if (previewQuantity <= 0 || previewPrice <= 0) return undefined;
-    const priceWei = BigInt(Math.round(previewPrice * PAYMENT_TOKEN_SCALE_NUM));
-    const scale = contractMode === "perpetual" ? QUANTITY_SCALE_NUM : 1;
-    const quantity = BigInt(Math.round(previewQuantity * scale));
-    if (quantity === 0n) return 0n;
-    const forSide = (signedQuantity: bigint) =>
-      orderMargin.quote({ place: [{ venue: orderVenue, price: priceWei, quantity: signedQuantity }] })
-        ?.imIncrease;
-
-    const asBid = forSide(quantity);
-    const asAsk = forSide(-quantity);
+    if (previewQuantity <= 0) return undefined;
+    const forSide = (isBuy: boolean) => {
+      const px = getEffectivePrice(isBuy ? "buy" : "sell");
+      if (px <= 0) return undefined;
+      const quote = quoteOrder(BigInt(Math.round(px * PAYMENT_TOKEN_SCALE_NUM)), previewQuantity, isBuy);
+      if (!quote) return undefined;
+      return quote.imIncrease > 0n ? quote.imIncrease : 0n;
+    };
+    const asBid = forSide(true);
+    const asAsk = forSide(false);
     if (asBid === undefined || asAsk === undefined) return undefined;
     return asBid > asAsk ? asBid : asAsk;
   })();
   const requiredMarginLabel =
-    previewRequiredMargin !== undefined
-      ? `${usdc(previewRequiredMargin > 0n ? previewRequiredMargin : 0n)} USDC`
-      : "—";
+    previewRequiredMargin !== undefined ? `${usdc(previewRequiredMargin)} USDC` : "—";
   // Show the converted counterpart of the input: Size mode → Quantity, Quantity mode → Size.
   const summaryCounterpartLabel = amountMode === "size" ? "Quantity" : "Size";
   const summaryCounterpartValue =
@@ -1647,7 +1630,7 @@ const ConflictingOrderModal = ({
 
   const isBuy = pendingOrder.quantity > 0;
   const oppositeAction = isBuy ? "Ask" : "Bid";
-  const expirationAtFormatted = externalExpirationAt ? new Date(externalExpirationAt * 1000).toLocaleString() : "N/A";
+  const expirationAtFormatted = externalExpirationAt ? formatDateTime(externalExpirationAt) : "N/A";
   const formatQty = (value: number) => value.toFixed(contractMode === "perpetual" ? 6 : 0);
 
   return (
@@ -1846,50 +1829,6 @@ const InputSection = styled("div")`
   width: 100%;
 `;
 
-const InputGroup = styled("div")<{ $isHighlighted?: boolean }>`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  flex: 1;
-  
-  label {
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: ${tokens.text.secondary};
-  }
-  
-  input {
-    box-sizing: border-box;
-    height: 48px;
-    padding: 0 0.75rem;
-    line-height: 1;
-    border: 1px solid ${tokens.overlay.white20};
-    border-radius: 6px;
-    color: ${tokens.text.onDark};
-    font-size: 1rem;
-    transition: border-color 0.2s ease;
-    width: 100%;
-    animation: ${(props) => getPulseAnimation(props.$isHighlighted)};
-    background: ${(props) => (props.$isHighlighted ? undefined : tokens.surface.inputIsland)};
-    
-    &:focus {
-      outline: none;
-      border-color: ${tokens.accent.main};
-      background: ${tokens.surface.inputIsland};
-    }
-    
-    &::placeholder {
-      color: ${tokens.text.muted};
-    }
-  }
-
-  @media (max-width: 768px) {
-    input {
-      height: auto;
-    }
-  }
-`;
-
 const _MinMarginLabel = styled("div")`
   font-size: 0.75rem;
   color: ${tokens.text.secondary};
@@ -1905,94 +1844,6 @@ const _ExpectedQuantityLabel = styled("div")`
   font-weight: 500;
 `;
 
-
-const PriceInputContainer = styled("div")<{ $isHighlighted?: boolean }>`
-  display: flex;
-  align-items: stretch;
-  gap: 0.5rem;
-  height: 48px;
-
-  input {
-    flex: 1;
-    height: 100%;
-    min-width: 0;
-    border-radius: 0;
-    border-left: none;
-    border-right: none;
-    border-top: 1px solid ${tokens.overlay.white20};
-    border-bottom: 1px solid ${tokens.overlay.white20};
-    animation: ${(props) => getPulseAnimation(props.$isHighlighted)};
-    background: ${(props) => (props.$isHighlighted ? undefined : tokens.surface.inputIsland)};
-
-    &:focus {
-      border-left: 1px solid ${tokens.accent.main};
-      border-right: 1px solid ${tokens.accent.main};
-    }
-  }
-
-  /* MOBILE-ONLY: drop the fixed height so compact padding from the mobile
-     layout can size the row; steppers still stretch with align-items. */
-  @media (max-width: 768px) {
-    height: auto;
-  }
-`;
-
-const PriceButton = styled("button")<{ $isHighlighted?: boolean }>`
-  box-sizing: border-box;
-  padding: 0 1rem;
-  color: ${tokens.text.onDark};
-  border: 1px solid ${tokens.overlay.white20};
-  border-radius: 6px;
-  font-size: 1.2rem;
-  font-weight: 600;
-  line-height: 1;
-  cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease;
-  min-width: 44px;
-  min-height: 0;
-  height: auto;
-  align-self: stretch;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: ${(props) => getPulseAnimation(props.$isHighlighted)};
-  background: ${(props) => (props.$isHighlighted ? undefined : tokens.surface.inputIsland)};
-  
-  &:hover:not(:disabled) {
-    background: ${tokens.surface.inputIslandHover};
-    border-color: ${tokens.overlay.white30};
-  }
-  
-  &:active:not(:disabled) {
-    background: ${tokens.scrollbar.hover};
-  }
-  
-  &:disabled {
-    background: ${tokens.surface.card};
-    border-color: ${tokens.overlay.white10};
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
-  
-  &:first-of-type {
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-  }
-  
-  &:last-child {
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-  }
-
-  /* MOBILE-ONLY (see MOBILE_TRADING_QUERY): drop the fixed 48px height so the
-     steppers stretch to exactly the price input's height beside them. */
-  @media (max-width: 768px) {
-    height: auto;
-    padding: 0 0.45rem;
-    min-width: 28px;
-    font-size: 1rem;
-  }
-`;
 
 /** Tooltip anchor: a disabled button fires no pointer events, so the wrapper takes them. */
 const ButtonSlot = styled("span")`
@@ -2043,7 +1894,7 @@ const BuyButton = styled("button")<{ $isHighlighted?: boolean; $isCapped?: boole
   cursor: pointer;
   transition: transform 0.1s ease;
   min-width: 120px;
-  animation: ${(props) => (props.$isHighlighted ? css`${pulseYellow} 1.5s ease-in-out infinite` : "none")};
+  animation: ${(props) => (props.$isHighlighted ? css`${pulseHighlight} 1.5s ease-in-out infinite` : "none")};
   &:hover:not(:disabled) {
     background: ${tokens.trading.longHover};
     transform: translateY(-1px);
@@ -2085,7 +1936,7 @@ const SellButton = styled("button")<{ $isHighlighted?: boolean; $isCapped?: bool
   cursor: pointer;
   transition: transform 0.1s ease;
   min-width: 120px;
-  animation: ${(props) => (props.$isHighlighted ? css`${pulseYellow} 1.5s ease-in-out infinite` : "none")};
+  animation: ${(props) => (props.$isHighlighted ? css`${pulseHighlight} 1.5s ease-in-out infinite` : "none")};
   &:hover:not(:disabled) {
     background: ${tokens.trading.shortHover};
     transform: translateY(-1px);
@@ -2140,13 +1991,6 @@ const OrderSummaryRow = styled("div")`
     color: ${tokens.text.onDark};
     font-weight: 500;
   }
-`;
-
-const SliderContainer = styled("div")`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
 `;
 
 /** Where the smaller side's capacity ends on the slider, and what to say about it. */
@@ -2208,151 +2052,6 @@ const CapMark = styled("span")<{ $color: string }>`
   }
 `;
 
-/**
- * `$lastMarkIndex` is the index of the final mark: its label is pinned to the
- * right edge (and the first mark's to the left) so the labels stay inside the
- * bar's width instead of hanging off either end.
- */
-const StyledSlider = styled(Slider, {
-  shouldForwardProp: (prop) => prop !== "$lastMarkIndex",
-})<{ $lastMarkIndex?: number }>`
-  color: ${tokens.text.primary};
-  height: 6px;
-  padding: 13px 0;
-
-  & .MuiSlider-markLabel[data-index="0"] {
-    transform: translateX(0);
-  }
-
-  ${(p) =>
-    p.$lastMarkIndex !== undefined &&
-    `
-  & .MuiSlider-markLabel[data-index="${p.$lastMarkIndex}"] {
-    transform: translateX(-100%);
-  }
-  `}
-  
-  /* Halo sized so thumb + halo at 0% / 100% (9px + 7px) stays within the
-     card's 1rem side padding instead of reaching the page edge. */
-  & .MuiSlider-thumb {
-    width: 18px;
-    height: 18px;
-    background-color: ${tokens.neutralButton.bg};
-    transition: all 0.2s ease;
-
-    &:hover,
-    &.Mui-focusVisible {
-      box-shadow: 0 0 0 5px ${tokens.overlay.white16};
-      background-color: ${tokens.neutralButton.hover};
-    }
-    
-    &.Mui-active {
-      box-shadow: 0 0 0 7px ${tokens.overlay.white16};
-    }
-  }
-  
-  & .MuiSlider-track {
-    height: 6px;
-    border: none;
-    background-color: ${tokens.neutralButton.bg};
-  }
-
-  & .MuiSlider-rail {
-    height: 6px;
-    background-color: ${tokens.surface.inputIsland};
-    opacity: 1;
-  }
-  
-  & .MuiSlider-mark {
-    width: 2px;
-    height: 6px;
-    background-color: ${tokens.overlay.white50};
-    opacity: 1;
-  }
-  
-  & .MuiSlider-markActive {
-    background-color: ${tokens.overlay.black30};
-  }
-  
-  & .MuiSlider-markLabel {
-    color: ${tokens.text.secondary};
-    font-size: 0.75rem;
-    top: 26px;
-  }
-  
-  & .MuiSlider-valueLabel {
-    background-color: ${tokens.surface.inputIsland};
-    color: #FFFFFF;
-    border-radius: 4px;
-    padding: 4px 8px;
-    font-size: 0.75rem;
-  }
-
-  /* "auto" also pops the value on hover; only show it while the thumb is
-     actually being dragged, when the amount field is not yet settled. */
-  & .MuiSlider-thumb:not(.Mui-active) .MuiSlider-valueLabel {
-    display: none;
-  }
-  
-  /* MOBILE-ONLY (see MOBILE_TRADING_QUERY): the form only gets half the screen,
-     so the thumb and its tick labels shrink to stay proportionate. */
-  @media (max-width: 768px) {
-    & .MuiSlider-thumb {
-      width: 12px;
-      height: 12px;
-
-      &:hover,
-      &.Mui-focusVisible {
-        box-shadow: 0 0 0 4px ${tokens.overlay.white16};
-      }
-
-      &.Mui-active {
-        box-shadow: 0 0 0 6px ${tokens.overlay.white16};
-      }
-    }
-
-    & .MuiSlider-markLabel {
-      font-size: 0.6rem;
-    }
-  }
-
-  &.Mui-disabled {
-    color: ${tokens.text.muted};
-    
-    & .MuiSlider-thumb {
-      background-color: ${tokens.surface.tabMuted};
-    }
-    
-    & .MuiSlider-track {
-      background-color: ${tokens.surface.tabMuted};
-    }
-    
-    & .MuiSlider-mark {
-      background-color: ${tokens.slider.thumbMuted};
-    }
-  }
-`;
-
-const OrderTypeRow = styled("div")`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  padding-top: 0.25rem;
-
-  /* MOBILE-ONLY (see MOBILE_TRADING_QUERY): the Limit/Market, time-in-force and
-     leverage toggles take the same metrics as the order book's view switcher
-     next to them, so both columns start at the same height. */
-  @media (max-width: 768px) {
-    gap: 0.3rem;
-
-    button {
-      ${MOBILE_TOGGLE_METRICS}
-    }
-  }
-`;
-
 const _SliderInfoContainer = styled("div")`
   display: flex;
   justify-content: center;
@@ -2365,90 +2064,4 @@ const _SliderInfo = styled("span")`
   font-weight: 500;
   text-align: center;
   font-size: 0.875rem;
-`;
-
-const AmountInputWrapper = styled("div")`
-  display: flex;
-  align-items: stretch;
-  box-sizing: border-box;
-  height: 48px;
-  border: 1px solid ${tokens.overlay.white20};
-  border-radius: 6px;
-  overflow: hidden;
-  background: ${tokens.surface.inputIsland};
-  transition: border-color 0.2s ease, background-color 0.2s ease;
-
-  &:focus-within {
-    border-color: ${tokens.brand.blue};
-    background: ${tokens.surface.inputIsland};
-  }
-
-  @media (max-width: 768px) {
-    height: auto;
-  }
-
-  /* Override InputGroup's generic input styles for the inner input */
-  input {
-    flex: 1 !important;
-    width: auto !important;
-    height: 100% !important;
-    border: none !important;
-    border-radius: 0 !important;
-    background: transparent !important;
-    animation: none !important;
-    min-width: 0;
-
-    &:focus {
-      outline: none;
-      border-color: transparent !important;
-      background: transparent !important;
-    }
-
-    &::placeholder {
-      color: ${tokens.text.muted};
-    }
-
-    &:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-  }
-`;
-
-const AmountModeDropdown = styled("select")`
-  appearance: none;
-  padding: 0 0.75rem;
-  border: none;
-  border-left: 1px solid ${tokens.overlay.white15};
-  border-radius: 0;
-  background: transparent;
-  color: ${tokens.text.onDark};
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  min-width: 56px;
-  text-align: center;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23${tokens.text.secondary.slice(1)}'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.4rem center;
-  padding-right: 1.4rem;
-  transition: background-color 0.15s ease;
-
-  &:hover:not(:disabled) {
-    background-color: ${tokens.overlay.white08};
-  }
-
-  &:focus {
-    outline: none;
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  option {
-    background: ${tokens.surface.inputIsland};
-    color: ${tokens.text.onDark};
-  }
 `;
