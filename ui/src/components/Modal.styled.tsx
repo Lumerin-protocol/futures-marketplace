@@ -1,5 +1,7 @@
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import { tokens } from "../styles/tokens";
+import { CloseIcon } from "./icons";
+import type { ComponentProps } from "react";
 
 export const ModalBox = styled("div")`
   padding: 40px;
@@ -82,6 +84,30 @@ export const ModalCard = styled("div")<{ $compact?: boolean }>`
     max-width: 90%;
   }
 `;
+
+const CloseButtonBase = styled("button")`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+
+  &:hover {
+    background: ${tokens.overlay.white08};
+  }
+`;
+
+export const ModalCloseButton = (props: ComponentProps<typeof CloseButtonBase>) => (
+  <CloseButtonBase type="button" aria-label="Close" {...props} />
+);
+
+export const ModalCloseIcon = CloseIcon;
 
 export const ContractLink = styled("a")`
   font-size: 0.8rem;

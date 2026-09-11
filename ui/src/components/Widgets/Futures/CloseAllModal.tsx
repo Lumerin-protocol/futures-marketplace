@@ -1,10 +1,8 @@
 import { tokens } from "../../../styles/tokens";
 import { useState, useMemo, useCallback } from "react";
-import styled from "@mui/material/styles/styled";
-import Modal from "@mui/material/Modal";
-import CloseIcon from "@mui/icons-material/Close";
-import IconButton from "@mui/material/IconButton";
-import { ModalCard } from "../../Modal.styled";
+import styled from "@emotion/styled";
+import { Modal } from "../../Modal";
+import { ModalCard, ModalCloseButton, ModalCloseIcon } from "../../Modal.styled";
 import { ModalActions, ModalCancelButton, ModalConfirmButton } from "./PerpsOrderFormFields";
 import type { PositionSession } from "../../../hooks/data/perps/useUserPositionSessions";
 import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
@@ -109,13 +107,9 @@ export const CloseAllModal = ({ open, onClose, positionSessions, marketPrice }: 
   return (
     <Modal open={open} onClose={handleClose}>
       <CloseAllModalCard>
-        <IconButton
-          className="close"
-          sx={{ color: "white" }}
-          onClick={handleClose}
-        >
-          <CloseIcon />
-        </IconButton>
+        <ModalCloseButton className="close" onClick={handleClose}>
+          <ModalCloseIcon />
+        </ModalCloseButton>
 
         <h2>Close All Positions</h2>
 

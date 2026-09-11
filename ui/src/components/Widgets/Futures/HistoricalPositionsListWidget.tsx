@@ -1,5 +1,5 @@
 import { tokens } from "../../../styles/tokens";
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import { useMemo, useState } from "react";
 import type { HistoricalPosition } from "../../../hooks/data/useHistoricalPositions";
 import { DateTimeCell } from "../../DateTimeCell";

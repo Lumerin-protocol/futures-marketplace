@@ -1,5 +1,5 @@
 import { type FC, useEffect, useState } from "react";
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import type { Participant } from "../../hooks/data/getUserFuturesOrders";
 import type { PerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
 import { useSimulateFuturesOrder } from "../../hooks/data/useSimulateFuturesOrder";

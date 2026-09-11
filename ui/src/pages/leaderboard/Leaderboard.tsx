@@ -1,8 +1,8 @@
 import { type FC, useMemo } from "react";
 import { useAccount } from "wagmi";
-import Tooltip from "@mui/material/Tooltip";
-import useMediaQuery from "@mui/material/useMediaQuery";
-import styled from "@mui/material/styles/styled";
+import { Tooltip } from "../../components/Tooltip";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
+import styled from "@emotion/styled";
 import { tokens } from "../../styles/tokens";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
 import { truncateAddress } from "../../utils/formatters";
@@ -45,7 +45,7 @@ const formatRate = (weight?: bigint, scale?: bigint) => {
 
 export const Leaderboard: FC = () => {
   const { address, isConnected } = useAccount();
-  const isMobile = useMediaQuery("(max-width: 600px)", { noSsr: true });
+  const isMobile = useMediaQuery("(max-width: 600px)");
   const { wMaker, wTaker, weightScale } = usePointsHookWeights();
 
   const { data: rawLeaderboard = [], isLoading: isLeaderboardLoading } = usePointsLeaderboard(20);

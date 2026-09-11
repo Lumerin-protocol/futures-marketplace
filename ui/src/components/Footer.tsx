@@ -4,11 +4,9 @@ import { faTelegram } from "@fortawesome/free-brands-svg-icons/faTelegram";
 import { faTiktok } from "@fortawesome/free-brands-svg-icons/faTiktok";
 import { faXTwitter } from "@fortawesome/free-brands-svg-icons/faXTwitter";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import FlagCircleIcon from "@mui/icons-material/FlagCircle";
-import HelpIcon from "@mui/icons-material/Help";
-import ShieldIcon from "@mui/icons-material/Shield";
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import { tokens } from "../styles/tokens";
+import { FlagCircleIcon, HelpIcon, ShieldIcon } from "./icons";
 
 const socials = [
   { link: "https://discord.gg/lumerin", icon: faDiscord },
@@ -32,7 +30,7 @@ export const Footer = () => {
           <LinksRow>
             {resources.map((item) => (
               <ResourceLink href={item.href} target="_blank" rel="noreferrer" key={item.label}>
-                <item.icon style={{ fill: tokens.accent.main, fontSize: "20px" }} />
+                <item.icon style={{ color: tokens.accent.main, fontSize: "20px" }} />
                 <span>{item.label}</span>
               </ResourceLink>
             ))}

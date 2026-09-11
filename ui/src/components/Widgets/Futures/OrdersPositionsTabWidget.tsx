@@ -1,6 +1,6 @@
 import { tokens } from "../../../styles/tokens";
 import { useState, useMemo, useEffect, useRef } from "react";
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { TabSwitch } from "../../TabSwitch";
 import { OrdersListWidget } from "./OrdersListWidget";

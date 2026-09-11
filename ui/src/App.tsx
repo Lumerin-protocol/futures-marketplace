@@ -1,11 +1,9 @@
-import Box from "@mui/material/Box";
-import { ThemeProvider } from "@mui/material/styles";
 import type { FC } from "react";
-import { darkTheme } from "./styles/themeOptions";
-import { tokens } from "./styles/tokens";
+import styled from "@emotion/styled";
 import { Router } from "./Router";
 import { AlertModalHost } from "./components/AlertModal";
 import useAnalytics from "./hooks/useAnalytics";
+import { tokens } from "./styles/tokens";
 
 // No Web3Provider here on purpose: wagmi/@reown/appkit stays a lazy chunk
 // (see Web3ProviderLazy.ts), mounted only at the specific spots that need
@@ -15,11 +13,14 @@ import useAnalytics from "./hooks/useAnalytics";
 export const App: FC = () => {
   useAnalytics({ loadOn: "idle" });
   return (
-    <ThemeProvider theme={darkTheme}>
-      <Box sx={{ minHeight: "100vh", bgcolor: tokens.app.bg }}>
-        <Router />
-      </Box>
+    <AppRoot>
+      <Router />
       <AlertModalHost />
-    </ThemeProvider>
+    </AppRoot>
   );
 };
+
+const AppRoot = styled("div")`
+  min-height: 100vh;
+  background-color: ${tokens.app.bg};
+`;

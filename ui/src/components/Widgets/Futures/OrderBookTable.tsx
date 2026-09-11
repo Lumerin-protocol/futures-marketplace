@@ -1,5 +1,5 @@
 import { tokens } from "../../../styles/tokens";
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useAggregateOrderBook } from "../../../hooks/data/useAggregateOrderBook";

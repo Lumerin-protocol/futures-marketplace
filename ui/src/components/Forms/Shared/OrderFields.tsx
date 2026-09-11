@@ -6,7 +6,7 @@
  * from these, so they all feel like one control set; callers add spacing and
  * size variants on top rather than redrawing the parts.
  */
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import { css, keyframes } from "@emotion/react";
 import { tokens } from "../../../styles/tokens";
 import { MOBILE_TOGGLE_METRICS } from "../../Widgets/Futures/mobile/mobileTradingLayout";

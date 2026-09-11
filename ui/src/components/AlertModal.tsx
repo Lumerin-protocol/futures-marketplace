@@ -1,9 +1,9 @@
-import Modal from "@mui/material/Modal";
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import type { FC } from "react";
 import { useSyncExternalStore } from "react";
 import { tokens } from "../styles/tokens";
 import { FormButtonsWrapper, PrimaryButton, SecondaryButton } from "./Forms/FormButtons/Buttons.styled";
+import { Modal } from "./Modal";
 import { ModalCard } from "./Modal.styled";
 import { type AlertVariant, getAlertQueue, resolveCurrentAlert, subscribeAlerts } from "./AlertModal.store";
 
@@ -28,7 +28,7 @@ export const AlertModalHost: FC = () => {
   }
 
   return (
-    <Modal open disableEnforceFocus disableEscapeKeyDown sx={{ zIndex: ALERT_Z_INDEX }}>
+    <Modal open disableEscapeKeyDown zIndex={ALERT_Z_INDEX}>
       <AlertCard
         role="alertdialog"
         aria-labelledby="alert-modal-title"

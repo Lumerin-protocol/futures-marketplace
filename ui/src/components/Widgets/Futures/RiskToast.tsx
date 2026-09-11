@@ -1,6 +1,6 @@
-import styled from "@mui/material/styles/styled";
-import CloseIcon from "@mui/icons-material/Close";
+import styled from "@emotion/styled";
 import { tokens } from "../../../styles/tokens";
+import { CloseIcon } from "../../icons";
 
 export type RiskToastVariant = "warning" | "danger";
 

@@ -1,11 +1,9 @@
 import { tokens } from "../../../styles/tokens";
 import { useState, useMemo, useEffect } from "react";
-import styled from "@mui/material/styles/styled";
-import Modal from "@mui/material/Modal";
-import CloseIcon from "@mui/icons-material/Close";
-import IconButton from "@mui/material/IconButton";
+import styled from "@emotion/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
-import { ModalCard } from "../../Modal.styled";
+import { Modal } from "../../Modal";
+import { ModalCard, ModalCloseButton, ModalCloseIcon } from "../../Modal.styled";
 import { TabSwitch } from "../../TabSwitch";
 import { useCancelPerpsOrder } from "../../../hooks/data/perps/useCancelPerpsOrder";
 import { useQueryClient } from "@tanstack/react-query";
@@ -471,9 +469,9 @@ const CancelOrderConfirmModal = ({ open, order, participantAddress, onClose, onC
   return (
     <Modal open={open} onClose={onClose}>
       <PerpsModalCard>
-        <IconButton className="close" sx={{ color: "white" }} onClick={onClose}>
-          <CloseIcon />
-        </IconButton>
+        <ModalCloseButton className="close" onClick={onClose}>
+          <ModalCloseIcon />
+        </ModalCloseButton>
 
         <TransactionForm
           onClose={onClose}
@@ -1158,13 +1156,9 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
       onClose={onClose}
     >
       <TradesModalCard>
-        <IconButton 
-          className="close" 
-          sx={{ color: "white" }} 
-          onClick={onClose}
-        >
-          <CloseIcon />
-        </IconButton>
+        <ModalCloseButton className="close" onClick={onClose}>
+          <ModalCloseIcon />
+        </ModalCloseButton>
         
         <h2>Trades ({sortedTrades.length})</h2>
         

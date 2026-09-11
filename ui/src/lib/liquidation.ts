@@ -1,4 +1,4 @@
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import { tokens } from "../styles/tokens";
 import type { LiquidationDirection } from "./portfolioMargin";
 import { PAYMENT_TOKEN_SCALE_NUM } from "./units";
@@ -32,7 +32,7 @@ const ACCOUNT_WIDE_NOTE =
 
 /**
  * Spells out the level from `pickLiquidationLevel` for the header stat and the
- * positions-table column. Returns a plain string, so it works equally in a MUI
+ * positions-table column. Returns a plain string, so it works equally in a
  * `Tooltip` and a native `title` attribute.
  *
  * Wording is "can be liquidated" rather than "is liquidated": crossing the

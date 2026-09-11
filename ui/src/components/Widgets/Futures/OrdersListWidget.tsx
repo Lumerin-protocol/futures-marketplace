@@ -1,6 +1,6 @@
 import { tokens } from "../../../styles/tokens";
 import { useState } from "react";
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import type { Participant, ParticipantOrder } from "../../../hooks/data/getUserFuturesOrders";
 import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";

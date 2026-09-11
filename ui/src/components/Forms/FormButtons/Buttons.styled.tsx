@@ -1,5 +1,5 @@
-import styled from "@mui/material/styles/styled";
-import Tooltip from "@mui/material/Tooltip";
+import styled from "@emotion/styled";
+import { Tooltip } from "../../Tooltip";
 import { tokens } from "../../../styles/tokens";
 import type { ComponentProps } from "react";
 

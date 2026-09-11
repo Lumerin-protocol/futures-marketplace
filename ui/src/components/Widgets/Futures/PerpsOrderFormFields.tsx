@@ -1,5 +1,5 @@
 import { type ReactNode, useId, useState } from "react";
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import { tokens } from "../../../styles/tokens";
 import {
   handleNumericDecimalInput6Decimals,
@@ -432,8 +432,8 @@ export const InputsSection = styled("div")`
       font-size: 0.8rem;
     }
 
-    /* MUI reserves 20px under a marked slider for its labels; they need 12. */
-    .MuiSlider-marked {
+    /* Tick labels sit under the bar; compact fields don't need MUI's 20px reserve. */
+    [role="slider"] {
       margin-bottom: 12px;
     }
   }

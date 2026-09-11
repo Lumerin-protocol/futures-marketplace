@@ -1,11 +1,11 @@
-import styled from "@mui/material/styles/styled";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import styled from "@emotion/styled";
 import { tokens } from "../../../styles/tokens";
 import { useRecentTrades } from "../../../hooks/data/useRecentTrades";
 import { useFuturesTokenInfo } from "../../../hooks/data/useFuturesTokenInfo";
 import { usePerpsTokenInfo } from "../../../hooks/data/perps/usePerpsTokenInfo";
 import { getTxUrl } from "../../../lib/indexer";
 import type { ContractMode } from "../../../types/types";
+import { OpenInNewIcon } from "../../icons";
 
 interface TradesListProps {
   contractMode?: ContractMode;
@@ -61,7 +61,7 @@ export const TradesList = ({ contractMode = "futures" }: TradesListProps) => {
                 rel="noopener noreferrer"
                 aria-label="View transaction"
               >
-                <OpenInNewIcon sx={{ fontSize: 13 }} />
+                <OpenInNewIcon style={{ fontSize: 13 }} />
               </TxLink>
             </TimeCol>
           </Row>

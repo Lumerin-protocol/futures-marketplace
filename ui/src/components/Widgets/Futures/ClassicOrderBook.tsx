@@ -1,4 +1,4 @@
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import { tokens } from "../../../styles/tokens";
 import type { OrderBookData } from "./orderBookHelpers";
 import type { ContractMode } from "../../../types/types";

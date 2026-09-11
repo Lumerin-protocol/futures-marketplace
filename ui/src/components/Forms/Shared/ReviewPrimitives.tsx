@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import styled from "@mui/material/styles/styled";
-import Tooltip from "@mui/material/Tooltip";
-import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import styled from "@emotion/styled";
+import { Tooltip } from "../../Tooltip";
+import { HelpOutlineIcon } from "../../icons";
 import { tokens } from "../../../styles/tokens";
 
 /**
@@ -16,7 +16,7 @@ export type Tone = "neutral" | "caution" | "danger";
 
 export const HelpTip = ({ title }: { title: string }) => (
   <Tooltip title={title} arrow placement="top">
-    <HelpOutlineIcon sx={{ fontSize: 14, cursor: "help", color: tokens.text.muted }} />
+    <HelpOutlineIcon style={{ width: 14, height: 14, cursor: "help", color: tokens.text.muted }} />
   </Tooltip>
 );
 

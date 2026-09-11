@@ -1,4 +1,4 @@
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 
 export const InputWrapper = styled("div")`
   width: 100%;
@@ -7,9 +7,6 @@ export const InputWrapper = styled("div")`
 
   label {
     font-size: 1rem;
-  }
-  .MuiTextField-root {
-    width: 100%;
   }
 `;
 

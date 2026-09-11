@@ -1,5 +1,5 @@
 import { useAccount } from "wagmi";
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import { AddressLength } from "../../types/types";
 import { PrimaryButton } from "../Forms/FormButtons/Buttons.styled";
 import { useAppKit } from "@reown/appkit/react";
