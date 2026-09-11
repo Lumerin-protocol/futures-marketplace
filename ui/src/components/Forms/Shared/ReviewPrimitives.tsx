@@ -76,8 +76,8 @@ export const Review = styled("div")`
 export const Headline = styled("div")`
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
-  padding: 0.875rem 1rem;
+  gap: 0.625rem;
+  padding: 1rem;
   background: ${tokens.surface.inputIsland};
   border: 1px solid ${tokens.border.default};
   border-radius: ${tokens.radius.md};
@@ -96,28 +96,26 @@ export const SideBadge = styled("span")<{ $isBuy: boolean }>`
   padding: 0.15rem 0.5rem;
   border-radius: ${tokens.radius.sm};
   font-size: 0.75rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   background: ${(p) => (p.$isBuy ? tokens.trading.longHighlightBg : tokens.trading.shortHighlightBg)};
   color: ${(p) => (p.$isBuy ? tokens.trading.long : tokens.trading.short)};
 `;
 
+/* Two roles only inside the card: values are 600 in the bright text colour,
+   labels and meta are 400 in the secondary one, and everything that is not
+   the title shares one size. */
 export const HeadlineMeta = styled("span")`
-  font-size: 0.8rem;
-  font-weight: 500;
+  font-size: 0.8125rem;
   color: ${tokens.text.secondary};
 `;
 
 export const HeadlineDelivery = styled("span")`
   margin-left: auto;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   color: ${tokens.text.secondary};
   white-space: nowrap;
-
-  span {
-    color: ${tokens.text.muted};
-  }
 `;
 
 export const HeadlineTitle = styled("div")`
@@ -129,7 +127,7 @@ export const HeadlineTitle = styled("div")`
 `;
 
 export const HeadlineAt = styled("span")`
-  font-weight: 500;
+  font-weight: 400;
   color: ${tokens.text.secondary};
 `;
 
@@ -151,7 +149,7 @@ export const HeadlineStat = styled("div")`
   display: inline-flex;
   align-items: baseline;
   gap: 0.4rem;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
 
   span {
@@ -178,7 +176,8 @@ export const SectionTitle = styled("h3")`
   align-items: center;
   gap: 0.35rem;
   margin: 0;
-  font-size: 0.7rem;
+  /* Caps at 12px read a clear step above the 0.8rem lowercase labels below. */
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -267,6 +266,23 @@ export const CostHint = styled("div")`
   line-height: 1.4;
   color: ${tokens.text.muted};
   font-variant-numeric: tabular-nums;
+`;
+
+/** A short explanation in a quiet box; `strong` picks out the one thing to remember. */
+export const Note = styled("p")`
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: ${tokens.text.secondary};
+  background: ${tokens.trading.infoRowBg};
+  border: 1px solid ${tokens.trading.infoBorder};
+  border-radius: ${tokens.radius.md};
+
+  strong {
+    color: ${tokens.text.onDark};
+    font-weight: 600;
+  }
 `;
 
 /** A rule with its label sitting on the line: `IF FILLED ────────`. */

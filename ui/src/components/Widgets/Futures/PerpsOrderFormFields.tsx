@@ -1,10 +1,18 @@
-import { useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import styled from "@mui/material/styles/styled";
 import { tokens } from "../../../styles/tokens";
 import {
   handleNumericDecimalInput6Decimals,
   handleNumericIntegerInput,
 } from "../../Forms/Shared/AmountInputForm";
+import {
+  AmountInputWrapper,
+  AmountModeDropdown,
+  InputGroup,
+  PriceButton,
+  PriceInputContainer,
+  SliderContainer,
+} from "../../Forms/Shared/OrderFields";
 import { percentSliderProps, StyledSlider } from "../../Forms/Shared/StyledSlider";
 import { percentForQuantity, quantityAtPercent } from "../../../lib/sliderSnap";
 import { ModalCard } from "../../Modal.styled";
@@ -188,6 +196,7 @@ interface PerpsOrderFormFieldsProps {
   amountMode: AmountMode;
   sliderValue: number;
   disabled?: boolean;
+  /** Market orders have no price to edit; the group is left out, as in the sidebar. */
   hidePriceInput?: boolean;
   priceLabel?: string;
   quantityLabel?: string;
@@ -198,10 +207,12 @@ interface PerpsOrderFormFieldsProps {
   currentSize: number;
   realizedPnl?: number | null;
   /**
-   * Summarise only what the user did not type: the size when the amount is a
-   * quantity, the quantity when it is a size. Otherwise both rows are shown.
+   * Tighter variant: 0.8rem labels, 40px fields, 6px label-to-input, and no
+   * trailing margin — the caller spaces it.
    */
-  summaryCounterpartOnly?: boolean;
+  compact?: boolean;
+  /** Replaces the summary card; `null` renders nothing there. */
+  summary?: ReactNode;
   onPriceChange: (price: string) => void;
   onAmountChange: (amount: string) => void;
   onAmountModeChange: (mode: AmountMode) => void;
@@ -212,6 +223,11 @@ interface PerpsOrderFormFieldsProps {
   onDecrementPrice: () => void;
 }
 
+/**
+ * The sidebar's fields, in a modal: price with steppers, amount with the
+ * Size/Quantity dropdown inside it, the percent slider. Built from the same
+ * primitives as the sidebar (Forms/Shared/OrderFields) so the two feel alike.
+ */
 export const PerpsOrderFormFields = ({
   price,
   amount,
@@ -226,7 +242,8 @@ export const PerpsOrderFormFields = ({
   currentQuantity,
   currentSize,
   realizedPnl,
-  summaryCounterpartOnly = false,
+  compact = false,
+  summary,
   onPriceChange,
   onAmountChange,
   onAmountModeChange,
@@ -234,97 +251,98 @@ export const PerpsOrderFormFields = ({
   onSliderCommitted,
   onIncrementPrice,
   onDecrementPrice,
-}: PerpsOrderFormFieldsProps) => (
-  <>
-    <InputsSection>
-      {!hidePriceInput && (
+}: PerpsOrderFormFieldsProps) => {
+  const fieldId = useId();
+  return (
+    <>
+      <InputsSection className={compact ? "compact" : undefined}>
+        {!hidePriceInput && (
+          <InputGroup>
+            <label htmlFor={`${fieldId}-price`}>{priceLabel}</label>
+            <PriceInputContainer className="field">
+              <PriceButton onClick={onDecrementPrice} disabled={disabled}>
+                −
+              </PriceButton>
+              <input
+                id={`${fieldId}-price`}
+                type="text"
+                value={price}
+                onChange={(e) => onPriceChange(e.target.value)}
+                onBeforeInput={handleNumericDecimalInput6Decimals}
+                inputMode="decimal"
+                placeholder="0.00"
+                disabled={disabled}
+              />
+              <PriceButton onClick={onIncrementPrice} disabled={disabled}>
+                +
+              </PriceButton>
+            </PriceInputContainer>
+          </InputGroup>
+        )}
+
         <InputGroup>
-          <InputLabel>{priceLabel}</InputLabel>
-          <PriceInputContainer>
-            <PriceStepButton onClick={onDecrementPrice} disabled={disabled}>−</PriceStepButton>
-            <PriceInput
+          <label htmlFor={`${fieldId}-amount`}>{amountMode === "size" ? sizeLabel : quantityLabel}</label>
+          <AmountInputWrapper className="field">
+            <input
+              id={`${fieldId}-amount`}
               type="text"
-              value={price}
-              onChange={(e) => onPriceChange(e.target.value)}
-              onBeforeInput={handleNumericDecimalInput6Decimals}
+              value={amount}
+              onChange={(e) => onAmountChange(e.target.value.replace("-", ""))}
+              onBeforeInput={
+                quantityDecimals === 0 && amountMode === "quantity"
+                  ? handleNumericIntegerInput
+                  : handleNumericDecimalInput6Decimals
+              }
               inputMode="decimal"
               placeholder="0.00"
               disabled={disabled}
             />
-            <PriceStepButton onClick={onIncrementPrice} disabled={disabled}>+</PriceStepButton>
-          </PriceInputContainer>
+            <AmountModeDropdown
+              value={amountMode}
+              onChange={(e) => onAmountModeChange(e.target.value as AmountMode)}
+              disabled={disabled}
+            >
+              <option value="size">Size</option>
+              <option value="quantity">Quantity</option>
+            </AmountModeDropdown>
+          </AmountInputWrapper>
+          <SliderContainer>
+            <StyledSlider
+              value={sliderValue}
+              onChange={onSliderChange}
+              onChangeCommitted={onSliderCommitted}
+              disabled={disabled}
+              {...percentSliderProps}
+            />
+          </SliderContainer>
         </InputGroup>
-      )}
+      </InputsSection>
 
-      <InputGroup>
-        <AmountLabelRow>
-          <InputLabel>Amount</InputLabel>
-          <ModeToggle>
-            <ModeButton
-              $active={amountMode === "size"}
-              onClick={() => onAmountModeChange("size")}
-              disabled={disabled}
-            >
-              Size (USDC)
-            </ModeButton>
-            <ModeButton
-              $active={amountMode === "quantity"}
-              onClick={() => onAmountModeChange("quantity")}
-              disabled={disabled}
-            >
-              Quantity
-            </ModeButton>
-          </ModeToggle>
-        </AmountLabelRow>
-        <AmountInput
-          type="text"
-          value={amount}
-          onChange={(e) => onAmountChange(e.target.value.replace("-", ""))}
-          onBeforeInput={
-            quantityDecimals === 0 && amountMode === "quantity"
-              ? handleNumericIntegerInput
-              : handleNumericDecimalInput6Decimals
-          }
-          inputMode="decimal"
-          placeholder="0.00"
-          disabled={disabled}
-        />
-        <SliderContainer>
-          <StyledSlider
-            value={sliderValue}
-            onChange={onSliderChange}
-            onChangeCommitted={onSliderCommitted}
-            disabled={disabled}
-            {...percentSliderProps}
-          />
-        </SliderContainer>
-      </InputGroup>
-    </InputsSection>
-
-    <OrderSummary>
-      {!(summaryCounterpartOnly && amountMode === "quantity") && (
-        <SummaryRow>
-          <SummaryLabel>{quantityLabel}</SummaryLabel>
-          <SummaryValue>{currentQuantity.toFixed(quantityDecimals)}</SummaryValue>
-        </SummaryRow>
+      {summary !== undefined ? (
+        summary
+      ) : (
+        <OrderSummary>
+          <SummaryRow>
+            <SummaryLabel>{quantityLabel}</SummaryLabel>
+            <SummaryValue>{currentQuantity.toFixed(quantityDecimals)}</SummaryValue>
+          </SummaryRow>
+          <SummaryRow>
+            <SummaryLabel>{sizeLabel}</SummaryLabel>
+            <SummaryValue>{currentSize.toFixed(2)}</SummaryValue>
+          </SummaryRow>
+          {realizedPnl != null && (
+            <SummaryRow>
+              <SummaryLabel>Expected Realized PnL</SummaryLabel>
+              <SummaryPnLValue $isPositive={realizedPnl >= 0}>
+                {realizedPnl >= 0 ? "+" : ""}{realizedPnl.toFixed(2)} USDC
+              </SummaryPnLValue>
+            </SummaryRow>
+          )}
+        </OrderSummary>
       )}
-      {!(summaryCounterpartOnly && amountMode === "size") && (
-        <SummaryRow>
-          <SummaryLabel>{sizeLabel}</SummaryLabel>
-          <SummaryValue>{currentSize.toFixed(2)}</SummaryValue>
-        </SummaryRow>
-      )}
-      {realizedPnl != null && (
-        <SummaryRow>
-          <SummaryLabel>Expected Realized PnL</SummaryLabel>
-          <SummaryPnLValue $isPositive={realizedPnl >= 0}>
-            {realizedPnl >= 0 ? "+" : ""}{realizedPnl.toFixed(2)} USDC
-          </SummaryPnLValue>
-        </SummaryRow>
-      )}
-    </OrderSummary>
-  </>
-);
+    </>
+  );
+};
 
 // ── Shared styled components ──────────────────────────────────────────────────
 
@@ -388,136 +406,37 @@ export const InputsSection = styled("div")`
   flex-direction: column;
   gap: 1rem;
   margin-bottom: 1.25rem;
-`;
 
-export const InputGroup = styled("div")`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-`;
+  /* Compact variant (see PerpsOrderFormFields.compact): smaller labels, 40px
+     fields, tight label-to-input, and the caller owns the outer spacing. */
+  &.compact {
+    margin-bottom: 0;
 
-export const InputLabel = styled("label")`
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: ${tokens.text.secondary};
-`;
+    & > * {
+      gap: 0.375rem;
+    }
 
-export const AmountLabelRow = styled("div")`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-`;
+    label {
+      font-size: 0.8rem;
+    }
 
-export const ModeToggle = styled("div")`
-  display: flex;
-  border: 1px solid ${tokens.overlay.white15};
-  border-radius: 6px;
-  overflow: hidden;
-`;
+    .field {
+      height: 40px;
+    }
 
-export const ModeButton = styled("button")<{ $active: boolean }>`
-  padding: 0.25rem 0.625rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  border: none;
-  transition: background 0.15s ease, color 0.15s ease;
-  background: ${(props) => (props.$active ? tokens.surface.tabActive : "transparent")};
-  color: ${(props) => (props.$active ? "#FFFFFF" : tokens.text.secondary)};
+    input {
+      font-size: 0.9375rem;
+    }
 
-  &:hover:not(:disabled) {
-    background: ${(props) => (props.$active ? tokens.surface.tabHover : tokens.overlay.white08)};
-    color: #FFFFFF;
+    select {
+      font-size: 0.8rem;
+    }
+
+    /* MUI reserves 20px under a marked slider for its labels; they need 12. */
+    .MuiSlider-marked {
+      margin-bottom: 12px;
+    }
   }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
-`;
-
-export const PriceInputContainer = styled("div")`
-  display: flex;
-  align-items: center;
-  gap: 0;
-`;
-
-export const PriceStepButton = styled("button")`
-  padding: 0.75rem 1rem;
-  color: ${tokens.text.onDark};
-  border: 1px solid ${tokens.overlay.white20};
-  background: ${tokens.surface.inputIsland};
-  font-size: 1.2rem;
-  font-weight: 600;
-  cursor: pointer;
-  min-width: 44px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.2s ease;
-
-  &:first-of-type {
-    border-radius: 6px 0 0 6px;
-  }
-
-  &:last-of-type {
-    border-radius: 0 6px 6px 0;
-  }
-
-  &:hover:not(:disabled) {
-    background: ${tokens.surface.inputIslandHover};
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-`;
-
-const sharedInputStyles = `
-  padding: 0.75rem;
-  border: 1px solid ${tokens.overlay.white20};
-  border-radius: 0;
-  color: ${tokens.text.onDark};
-  font-size: 1rem;
-  width: 100%;
-  flex: 1;
-  background: ${tokens.surface.inputIsland};
-  transition: border-color 0.2s ease;
-
-  &:focus {
-    outline: none;
-    border-color: ${tokens.accent.main};
-    background: ${tokens.surface.inputIsland};
-  }
-
-  &::placeholder {
-    color: ${tokens.text.muted};
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-`;
-
-export const PriceInput = styled("input")`
-  ${sharedInputStyles}
-  box-sizing: border-box;
-  height: 48px;
-`;
-
-export const AmountInput = styled("input")`
-  ${sharedInputStyles}
-  border-radius: 6px;
-`;
-
-/* Full width like the order widget's: the bar spans the input above it and the
-   first/last labels sit flush with its edges. */
-export const SliderContainer = styled("div")`
-  margin-top: 0.5rem;
 `;
 
 export const OrderSummary = styled("div")`

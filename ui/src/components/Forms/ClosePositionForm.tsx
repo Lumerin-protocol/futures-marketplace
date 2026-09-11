@@ -4,21 +4,18 @@ import type { Participant } from "../../hooks/data/getUserFuturesOrders";
 import type { PerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
 import { useSimulateFuturesOrder } from "../../hooks/data/useSimulateFuturesOrder";
 import { useSimulatePerpsOrder } from "../../hooks/data/perps/useSimulatePerpsOrder";
-import { formatDateTime } from "../../lib/dates";
+import { formatMonthDay } from "../../lib/dates";
 import { closingIntent } from "../../lib/exitAll";
 import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE_NUM } from "../../lib/units";
 import { TimeInForce } from "../../types/timeInForce";
 import type { ContractMode } from "../../types/types";
 import { showAlert } from "../AlertModal";
-import {
-  ModeButton,
-  ModeToggle,
-  PerpsOrderFormFields,
-  usePerpsOrderForm,
-} from "../Widgets/Futures/PerpsOrderFormFields";
+import { PerpsOrderFormFields, usePerpsOrderForm } from "../Widgets/Futures/PerpsOrderFormFields";
 import { PlaceOrderForm } from "./PlaceOrderForm";
 import { MultistepFormActions } from "./Shared/MultistepForm";
+import { ModeButton, ModeToggle, OrderTypeRow } from "./Shared/OrderFields";
 import {
+  CostCard,
   CostHint,
   Headline,
   HeadlineAt,
@@ -112,12 +109,8 @@ export const ClosePositionForm: FC<ClosePositionFormProps> = ({
     const step = priceStep > 0n ? priceStep : 1n;
     return ((raw + step / 2n) / step) * step;
   })();
-  const submitPriceNum = submitPrice !== undefined ? Number(submitPrice) / PAYMENT_TOKEN_SCALE_NUM : 0;
-
   // Closing a long sells, closing a short buys.
   const signedCloseQty = isLong ? -closeQty : closeQty;
-  const expectedPnl =
-    submitPriceNum > 0 && closeQty > 0 ? (submitPriceNum - entryPrice) * closeQty * (isLong ? 1 : -1) : null;
   const unrealizedPnl = mark !== undefined ? (mark - entryPrice) * maxQuantity * (isLong ? 1 : -1) : undefined;
 
   // Market closes are IOC: whatever the book cannot fill within the cap is
@@ -174,6 +167,7 @@ export const ClosePositionForm: FC<ClosePositionFormProps> = ({
       <PlaceOrderForm
         title="Close Position"
         executeLabel="Close Position"
+        orderCaption="Closing order"
         price={submitPrice}
         expirationAt={position.expirationAt ?? 0n}
         quantity={signedCloseQty}
@@ -194,83 +188,83 @@ export const ClosePositionForm: FC<ClosePositionFormProps> = ({
     <>
       <h2>Close Position</h2>
       <Edit>
-        {/* The position, stated the way the review states the order. */}
+        {/* What is held, stated the way the review states an order. */}
         <Section>
           <SectionTitle>Your position</SectionTitle>
-          <Headline>
-            <HeadlineTop>
-              <SideBadge $isBuy={isLong}>{isLong ? "Long" : "Short"}</SideBadge>
-              {position.expirationAt !== undefined && (
-                <HeadlineDelivery>
-                  <span>Delivers</span> {formatDateTime(position.expirationAt)}
-                </HeadlineDelivery>
-              )}
-            </HeadlineTop>
-            <HeadlineTitle>
-              {qtyLabel(maxQuantity)}
-              <HeadlineAt> @ {usdc(entryPrice)} entry</HeadlineAt>
-            </HeadlineTitle>
-            <HeadlineStats>
+          <PositionCard>
+          <HeadlineTop>
+            <SideBadge $isBuy={isLong}>{isLong ? "Long" : "Short"}</SideBadge>
+            {position.expirationAt !== undefined && (
+              <HeadlineDelivery>
+                <span>Expires</span> {formatMonthDay(position.expirationAt)}
+              </HeadlineDelivery>
+            )}
+          </HeadlineTop>
+          <HeadlineTitle className="title">
+            {qtyLabel(maxQuantity)}
+            <HeadlineAt> @ {usdc(entryPrice)}</HeadlineAt>
+          </HeadlineTitle>
+          <HeadlineStats>
+            <HeadlineStat>
+              <span>Mark</span>
+              <strong>{mark !== undefined ? usdc(mark) : "—"}</strong>
+            </HeadlineStat>
+            {unrealizedPnl !== undefined && (
               <HeadlineStat>
-                <span>Mark</span>
-                <strong>{mark !== undefined ? usdc(mark) : "—"}</strong>
+                <span>Unrealized PnL</span>
+                <PnlValue $positive={unrealizedPnl >= 0}>{signed(unrealizedPnl)}</PnlValue>
               </HeadlineStat>
-              {unrealizedPnl !== undefined && (
-                <HeadlineStat>
-                  <span>Unrealized PnL</span>
-                  <PnlValue $positive={unrealizedPnl >= 0}>{signed(unrealizedPnl)}</PnlValue>
-                </HeadlineStat>
-              )}
-            </HeadlineStats>
-          </Headline>
+            )}
+          </HeadlineStats>
+          </PositionCard>
         </Section>
 
-        <OrderTypeRow>
-          <ModeToggle>
-            <ModeButton $active={orderType === "limit"} onClick={() => setOrderType("limit")}>
-              Limit
-            </ModeButton>
-            <ModeButton
-              $active={orderType === "market"}
-              disabled={mark === undefined}
-              onClick={() => {
-                setOrderType("market");
-                if (mark !== undefined) form.handlePriceChange(mark.toFixed(2));
-              }}
-            >
-              Market
-            </ModeButton>
-          </ModeToggle>
-          {orderType === "market" && (
-            <CostHint>
-              Fills now at the best available price, no worse than {CLOSE_MARKET_SLIPPAGE * 100}% from the mark; anything
-              the book cannot fill within that is left open.
-            </CostHint>
-          )}
-        </OrderTypeRow>
-
-        <PerpsOrderFormFields
-          price={form.price}
-          amount={form.amount}
-          amountMode={form.amountMode}
-          sliderValue={form.sliderValue}
-          hidePriceInput={orderType === "market"}
-          priceLabel="Close Price (USDC)"
-          quantityLabel="Close Quantity"
-          sizeLabel="Close Size (USDC)"
-          quantityDecimals={isPerps ? 6 : 0}
-          currentQuantity={closeQty}
-          currentSize={form.getCurrentSize()}
-          realizedPnl={expectedPnl}
-          summaryCounterpartOnly
-          onPriceChange={form.handlePriceChange}
-          onAmountChange={form.handleAmountChange}
-          onAmountModeChange={form.handleAmountModeChange}
-          onSliderChange={form.handleSliderChange}
-          onSliderCommitted={form.handleSliderCommitted}
-          onIncrementPrice={form.incrementPrice}
-          onDecrementPrice={form.decrementPrice}
-        />
+        {/* The order that closes it, laid out as the sidebar lays out a new one:
+            Limit/Market on top, then price, then amount with its slider. */}
+        <Section>
+          <SectionTitle>Closing order</SectionTitle>
+          <OrderCard>
+            <OrderTypeRow>
+              <ModeToggle>
+                <ModeButton $active={orderType === "limit"} onClick={() => setOrderType("limit")}>
+                  Limit
+                </ModeButton>
+                <ModeButton
+                  $active={orderType === "market"}
+                  disabled={mark === undefined}
+                  onClick={() => {
+                    setOrderType("market");
+                    if (mark !== undefined) form.handlePriceChange(mark.toFixed(2));
+                  }}
+                >
+                  Market
+                </ModeButton>
+              </ModeToggle>
+              {orderType === "market" && (
+                <CostHint>Fills now, up to {CLOSE_MARKET_SLIPPAGE * 100}% from mark</CostHint>
+              )}
+            </OrderTypeRow>
+            <PerpsOrderFormFields
+              compact
+              price={form.price}
+              amount={form.amount}
+              amountMode={form.amountMode}
+              sliderValue={form.sliderValue}
+              hidePriceInput={orderType === "market"}
+              quantityDecimals={isPerps ? 6 : 0}
+              currentQuantity={closeQty}
+              currentSize={form.getCurrentSize()}
+              summary={null}
+              onPriceChange={form.handlePriceChange}
+              onAmountChange={form.handleAmountChange}
+              onAmountModeChange={form.handleAmountModeChange}
+              onSliderChange={form.handleSliderChange}
+              onSliderCommitted={form.handleSliderCommitted}
+              onIncrementPrice={form.incrementPrice}
+              onDecrementPrice={form.decrementPrice}
+            />
+          </OrderCard>
+        </Section>
       </Edit>
 
       <Actions>
@@ -283,35 +277,29 @@ export const ClosePositionForm: FC<ClosePositionFormProps> = ({
   );
 };
 
-/* The shared field blocks space themselves with bottom margins for the older
-   modals; here the column gap does that job, so the margins are zeroed. The
-   doubled selector outranks the blocks' own class, which is inserted later. */
+/* Two titled sections, then buttons: one rhythm. */
 const Edit = styled("div")`
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.5rem;
+`;
 
-  && > * {
-    margin-bottom: 0;
-  }
-
-  /* MUI reserves 20px under a marked slider for its labels; they only need 12. */
-  && .MuiSlider-marked {
-    margin-bottom: 12px;
+/* The review headline, one step down in size: here it is context, not the headline. */
+const PositionCard = styled(Headline)`
+  .title {
+    font-size: 1.125rem;
   }
 `;
 
-/* Tighter than the review step's default: the summary card above is already a
-   full stop, so the buttons do not need 2rem of air. */
+/* The review pairs a filled headline card with an outlined cost card; the edit
+   phase mirrors it — filled position, outlined order — so the inputs, which are
+   filled themselves, still stand out inside their group. */
+const OrderCard = styled(CostCard)`
+  gap: 1rem;
+`;
+
 const Actions = styled("div")`
   && > div {
-    margin-top: 1.25rem;
+    margin-top: 1.5rem;
   }
-`;
-
-const OrderTypeRow = styled("div")`
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.5rem;
 `;

@@ -1,27 +1,10 @@
 import styled from "@mui/material/styles/styled";
-import { keyframes, css } from "@emotion/react";
+import { css } from "@emotion/react";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { type ComponentProps, type CSSProperties, useState, useEffect, useId, useMemo, useRef } from "react";
 import { SliderMark } from "@mui/material/Slider";
 import Tooltip from "@mui/material/Tooltip";
 import { tokens } from "../../../styles/tokens";
-
-// Pulsing background animation - single blue color for all inputs
-const pulseYellow = keyframes`
-  0%, 100% {
-    background-color: ${tokens.perps.highlightBorder};
-  }
-  50% {
-    background-color: ${tokens.perps.highlightBorderStrong};
-  }
-`;
-
-const getPulseAnimation = (isHighlighted?: boolean) => {
-  if (isHighlighted) {
-    return css`${pulseYellow} 1.5s ease-in-out infinite`;
-  }
-  return "none";
-};
 import { useAccount } from "wagmi";
 import { useAppKit } from "@reown/appkit/react";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
@@ -49,8 +32,19 @@ import {
 } from "../../Forms/Shared/AmountInputForm";
 import { feeReserverFor, useMakerTakerFees } from "../../../hooks/data/useMakerTakerFees";
 import type { OrderVenue } from "../../../lib/orderMargin";
-import { ModeToggle, ModeButton, type AmountMode } from "./PerpsOrderFormFields";
-import { MOBILE_TOGGLE_METRICS } from "./mobile/mobileTradingLayout";
+import type { AmountMode } from "./PerpsOrderFormFields";
+import {
+  AmountInputWrapper,
+  AmountModeDropdown,
+  InputGroup,
+  ModeButton,
+  ModeToggle,
+  OrderTypeRow,
+  PriceButton,
+  PriceInputContainer,
+  pulseHighlight,
+  SliderContainer,
+} from "../../Forms/Shared/OrderFields";
 import { useSimulatePerpsOrder } from "../../../hooks/data/perps/useSimulatePerpsOrder";
 import { useSimulateFuturesOrder } from "../../../hooks/data/useSimulateFuturesOrder";
 import {
@@ -1835,50 +1829,6 @@ const InputSection = styled("div")`
   width: 100%;
 `;
 
-const InputGroup = styled("div")<{ $isHighlighted?: boolean }>`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  flex: 1;
-  
-  label {
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: ${tokens.text.secondary};
-  }
-  
-  input {
-    box-sizing: border-box;
-    height: 48px;
-    padding: 0 0.75rem;
-    line-height: 1;
-    border: 1px solid ${tokens.overlay.white20};
-    border-radius: 6px;
-    color: ${tokens.text.onDark};
-    font-size: 1rem;
-    transition: border-color 0.2s ease;
-    width: 100%;
-    animation: ${(props) => getPulseAnimation(props.$isHighlighted)};
-    background: ${(props) => (props.$isHighlighted ? undefined : tokens.surface.inputIsland)};
-    
-    &:focus {
-      outline: none;
-      border-color: ${tokens.accent.main};
-      background: ${tokens.surface.inputIsland};
-    }
-    
-    &::placeholder {
-      color: ${tokens.text.muted};
-    }
-  }
-
-  @media (max-width: 768px) {
-    input {
-      height: auto;
-    }
-  }
-`;
-
 const _MinMarginLabel = styled("div")`
   font-size: 0.75rem;
   color: ${tokens.text.secondary};
@@ -1894,94 +1844,6 @@ const _ExpectedQuantityLabel = styled("div")`
   font-weight: 500;
 `;
 
-
-const PriceInputContainer = styled("div")<{ $isHighlighted?: boolean }>`
-  display: flex;
-  align-items: stretch;
-  gap: 0.5rem;
-  height: 48px;
-
-  input {
-    flex: 1;
-    height: 100%;
-    min-width: 0;
-    border-radius: 0;
-    border-left: none;
-    border-right: none;
-    border-top: 1px solid ${tokens.overlay.white20};
-    border-bottom: 1px solid ${tokens.overlay.white20};
-    animation: ${(props) => getPulseAnimation(props.$isHighlighted)};
-    background: ${(props) => (props.$isHighlighted ? undefined : tokens.surface.inputIsland)};
-
-    &:focus {
-      border-left: 1px solid ${tokens.accent.main};
-      border-right: 1px solid ${tokens.accent.main};
-    }
-  }
-
-  /* MOBILE-ONLY: drop the fixed height so compact padding from the mobile
-     layout can size the row; steppers still stretch with align-items. */
-  @media (max-width: 768px) {
-    height: auto;
-  }
-`;
-
-const PriceButton = styled("button")<{ $isHighlighted?: boolean }>`
-  box-sizing: border-box;
-  padding: 0 1rem;
-  color: ${tokens.text.onDark};
-  border: 1px solid ${tokens.overlay.white20};
-  border-radius: 6px;
-  font-size: 1.2rem;
-  font-weight: 600;
-  line-height: 1;
-  cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease;
-  min-width: 44px;
-  min-height: 0;
-  height: auto;
-  align-self: stretch;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: ${(props) => getPulseAnimation(props.$isHighlighted)};
-  background: ${(props) => (props.$isHighlighted ? undefined : tokens.surface.inputIsland)};
-  
-  &:hover:not(:disabled) {
-    background: ${tokens.surface.inputIslandHover};
-    border-color: ${tokens.overlay.white30};
-  }
-  
-  &:active:not(:disabled) {
-    background: ${tokens.scrollbar.hover};
-  }
-  
-  &:disabled {
-    background: ${tokens.surface.card};
-    border-color: ${tokens.overlay.white10};
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
-  
-  &:first-of-type {
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-  }
-  
-  &:last-child {
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-  }
-
-  /* MOBILE-ONLY (see MOBILE_TRADING_QUERY): drop the fixed 48px height so the
-     steppers stretch to exactly the price input's height beside them. */
-  @media (max-width: 768px) {
-    height: auto;
-    padding: 0 0.45rem;
-    min-width: 28px;
-    font-size: 1rem;
-  }
-`;
 
 /** Tooltip anchor: a disabled button fires no pointer events, so the wrapper takes them. */
 const ButtonSlot = styled("span")`
@@ -2032,7 +1894,7 @@ const BuyButton = styled("button")<{ $isHighlighted?: boolean; $isCapped?: boole
   cursor: pointer;
   transition: transform 0.1s ease;
   min-width: 120px;
-  animation: ${(props) => (props.$isHighlighted ? css`${pulseYellow} 1.5s ease-in-out infinite` : "none")};
+  animation: ${(props) => (props.$isHighlighted ? css`${pulseHighlight} 1.5s ease-in-out infinite` : "none")};
   &:hover:not(:disabled) {
     background: ${tokens.trading.longHover};
     transform: translateY(-1px);
@@ -2074,7 +1936,7 @@ const SellButton = styled("button")<{ $isHighlighted?: boolean; $isCapped?: bool
   cursor: pointer;
   transition: transform 0.1s ease;
   min-width: 120px;
-  animation: ${(props) => (props.$isHighlighted ? css`${pulseYellow} 1.5s ease-in-out infinite` : "none")};
+  animation: ${(props) => (props.$isHighlighted ? css`${pulseHighlight} 1.5s ease-in-out infinite` : "none")};
   &:hover:not(:disabled) {
     background: ${tokens.trading.shortHover};
     transform: translateY(-1px);
@@ -2129,13 +1991,6 @@ const OrderSummaryRow = styled("div")`
     color: ${tokens.text.onDark};
     font-weight: 500;
   }
-`;
-
-const SliderContainer = styled("div")`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
 `;
 
 /** Where the smaller side's capacity ends on the slider, and what to say about it. */
@@ -2197,26 +2052,6 @@ const CapMark = styled("span")<{ $color: string }>`
   }
 `;
 
-const OrderTypeRow = styled("div")`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  padding-top: 0.25rem;
-
-  /* MOBILE-ONLY (see MOBILE_TRADING_QUERY): the Limit/Market, time-in-force and
-     leverage toggles take the same metrics as the order book's view switcher
-     next to them, so both columns start at the same height. */
-  @media (max-width: 768px) {
-    gap: 0.3rem;
-
-    button {
-      ${MOBILE_TOGGLE_METRICS}
-    }
-  }
-`;
-
 const _SliderInfoContainer = styled("div")`
   display: flex;
   justify-content: center;
@@ -2229,90 +2064,4 @@ const _SliderInfo = styled("span")`
   font-weight: 500;
   text-align: center;
   font-size: 0.875rem;
-`;
-
-const AmountInputWrapper = styled("div")`
-  display: flex;
-  align-items: stretch;
-  box-sizing: border-box;
-  height: 48px;
-  border: 1px solid ${tokens.overlay.white20};
-  border-radius: 6px;
-  overflow: hidden;
-  background: ${tokens.surface.inputIsland};
-  transition: border-color 0.2s ease, background-color 0.2s ease;
-
-  &:focus-within {
-    border-color: ${tokens.brand.blue};
-    background: ${tokens.surface.inputIsland};
-  }
-
-  @media (max-width: 768px) {
-    height: auto;
-  }
-
-  /* Override InputGroup's generic input styles for the inner input */
-  input {
-    flex: 1 !important;
-    width: auto !important;
-    height: 100% !important;
-    border: none !important;
-    border-radius: 0 !important;
-    background: transparent !important;
-    animation: none !important;
-    min-width: 0;
-
-    &:focus {
-      outline: none;
-      border-color: transparent !important;
-      background: transparent !important;
-    }
-
-    &::placeholder {
-      color: ${tokens.text.muted};
-    }
-
-    &:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-  }
-`;
-
-const AmountModeDropdown = styled("select")`
-  appearance: none;
-  padding: 0 0.75rem;
-  border: none;
-  border-left: 1px solid ${tokens.overlay.white15};
-  border-radius: 0;
-  background: transparent;
-  color: ${tokens.text.onDark};
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  min-width: 56px;
-  text-align: center;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23${tokens.text.secondary.slice(1)}'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.4rem center;
-  padding-right: 1.4rem;
-  transition: background-color 0.15s ease;
-
-  &:hover:not(:disabled) {
-    background-color: ${tokens.overlay.white08};
-  }
-
-  &:focus {
-    outline: none;
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  option {
-    background: ${tokens.surface.inputIsland};
-    color: ${tokens.text.onDark};
-  }
 `;
