@@ -1,9 +1,8 @@
-import styled from "@mui/material/styles/styled";
-import Box from "@mui/material/Box";
+import styled from "@emotion/styled";
 import type { FC, PropsWithChildren } from "react";
 import { Header } from "../Header";
 import { Footer } from "../Footer";
-import { useMediaQuery } from "@mui/material";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 
 type Props = PropsWithChildren;
 
@@ -12,23 +11,13 @@ export const DefaultLayout: FC<Props> = ({ children }) => {
 
   return (
     <BodyWrapper>
-      <Box
-        sx={{
-          flexGrow: 1,
-          p: isMobile ? 2 : 3,
-          width: "100%",
-          minHeight: "100vh",
-          color: "white",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
+      <Page $mobile={isMobile}>
         <ContentWrapper>
           <Header />
-          <Box component="main">{children}</Box>
+          <Main>{children}</Main>
         </ContentWrapper>
         <Footer />
-      </Box>
+      </Page>
     </BodyWrapper>
   );
 };
@@ -36,6 +25,18 @@ export const DefaultLayout: FC<Props> = ({ children }) => {
 const BodyWrapper = styled("div")`
   display: flex;
 `;
+
+const Page = styled("div")<{ $mobile: boolean }>`
+  flex-grow: 1;
+  padding: ${(p) => (p.$mobile ? "16px" : "24px")};
+  width: 100%;
+  min-height: 100vh;
+  color: white;
+  display: flex;
+  flex-direction: column;
+`;
+
+const Main = styled("main")``;
 
 const ContentWrapper = styled("div")`
   max-width: 1920px;

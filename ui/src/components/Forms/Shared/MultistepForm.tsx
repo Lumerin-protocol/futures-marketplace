@@ -1,10 +1,7 @@
 import { type FC, Fragment, type ReactNode, useState } from "react";
-import Button from "@mui/material/Button";
-import Alert from "@mui/material/Alert";
-import styled from "@mui/material/styles/styled";
-import CheckCircle from "@mui/icons-material/CheckCircle";
-import SkipNext from "@mui/icons-material/SkipNext";
-import ErrorIcon from "@mui/icons-material/Error";
+import styled from "@emotion/styled";
+import { CheckCircle, ErrorIcon, SkipNext } from "../../icons";
+import { InlineAlert } from "../../InlineAlert";
 import { PrimaryButton, SecondaryButton } from "../FormButtons/Buttons.styled";
 import { truncateAddress } from "../../../utils/formatters";
 import { BaseError, ContractFunctionRevertedError, UserRejectedRequestError } from "viem";
@@ -249,9 +246,9 @@ export const MultipleTransactionProgress = (props: {
   const { showError, onToggleShowError } = props;
   return (
     <div>
-      <Alert severity="warning" sx={{ margin: "0 0 1em 0" }}>
+      <InlineAlert severity="warning">
         You will be prompted to approve {Object.entries(props.txState).length} transactions through your wallet.
-      </Alert>
+      </InlineAlert>
       <Steps>
         {Object.entries(props.txState).map(([index, tx]) => (
           <StepStyled key={index}>
@@ -260,16 +257,14 @@ export const MultipleTransactionProgress = (props: {
             <StepProgressRow>
               <StepProgressLabel>{getStepProgressLabel(tx)}</StepProgressLabel>
               {tx.error && (
-                <RetryButton size="small" type="button" color="error" onClick={() => props.onRetry(Number(index))}>
+                <RetryButton type="button" onClick={() => props.onRetry(Number(index))}>
                   Retry
                 </RetryButton>
               )}
               {tx.error && (
                 <RetryButton
                   style={{ padding: "0 10px" }}
-                  size="small"
                   type="button"
-                  color="error"
                   onClick={onToggleShowError}
                 >
                   {showError ? "Hide" : "Show"} Details
@@ -293,9 +288,14 @@ export const MultipleTransactionProgress = (props: {
   );
 };
 
-const RetryButton = styled(Button)`
-  padding: 0.1em 0.1em;
+const RetryButton = styled("button")`
+  padding: 0.1em 0.4em;
+  border: none;
+  border-radius: ${tokens.radius.sm};
+  color: ${tokens.text.onDark};
   background-color: ${tokens.multistep.errorOverlay};
+  cursor: pointer;
+  font: inherit;
 `;
 
 function mapErrorToString(error: Error): string {

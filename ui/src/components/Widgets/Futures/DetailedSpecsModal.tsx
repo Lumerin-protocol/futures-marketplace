@@ -1,6 +1,6 @@
 import { tokens } from "../../../styles/tokens";
-import styled from "@mui/material/styles/styled";
-import Tooltip from "@mui/material/Tooltip";
+import styled from "@emotion/styled";
+import { Tooltip } from "../../Tooltip";
 import { useMemo, useState, type ReactNode } from "react";
 import { formatHashratePHPS, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { useGetExpirationDates } from "../../../hooks/data/useGetExpirationDates";

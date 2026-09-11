@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { tokens } from "../../../styles/tokens";
 import { useIsMobileTradingLayout } from "./mobile/mobileTradingLayout";

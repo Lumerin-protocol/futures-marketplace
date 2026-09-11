@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
-import styled from "@mui/material/styles/styled";
-import ShowChartIcon from "@mui/icons-material/ShowChart";
+import styled from "@emotion/styled";
 import { tokens } from "../../../../styles/tokens";
+import { ShowChartIcon } from "../../../icons";
 
 // MOBILE-ONLY trading layout (see MOBILE_TRADING_QUERY). The desktop grid in
 // Futures.tsx is not mounted at these widths, so every style in this file is

@@ -1,4 +1,4 @@
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import { tokens } from "../styles/tokens";
 
 interface LoadMoreButtonProps {

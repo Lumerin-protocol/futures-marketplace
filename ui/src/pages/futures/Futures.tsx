@@ -35,7 +35,7 @@ import { useTradableExpirations } from "../../hooks/data/useGetExpirationDates";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
 import type { Instrument } from "../../lib/instruments";
 import type { ContractMode } from "../../types/types";
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 
 interface TradingPageProps {

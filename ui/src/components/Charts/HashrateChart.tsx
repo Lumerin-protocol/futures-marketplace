@@ -1,5 +1,5 @@
 import { type FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import {
   CandlestickSeries,
   ColorType,

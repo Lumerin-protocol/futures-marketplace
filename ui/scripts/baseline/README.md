@@ -12,6 +12,7 @@ That production-builds, profiles `/trade/futures` at 1440×900 via Playwright, a
 | --- | --- |
 | `emotion-before.json` | Vite 6.4.3, React 18.3.1, Node 22 engines, Emotion + MUI |
 | `vite8-react19.json` | Vite 8.3.0 (Rolldown), React 19.3.0, Node ≥24, same Emotion + MUI |
+| `no-mui.json` | Vite 8.3.0, React 19.3.0, Emotion `styled` only (MUI widgets replaced) |
 
 Runtime numbers are one cold localhost load. Treat milliseconds as directional. Bundle gzip is from the production `build/` sourcemaps.
 
@@ -37,10 +38,34 @@ React 19 itself is heavier in the first-load graph (React bucket 139 KB → 214 
 
 Emotion’s runtime CSS tax did not move: still ~400 CSSOM inserts and ~18 ms of serialize/stylis. That is the delta a compile-time CSS compiler (next-yak) is supposed to remove.
 
+## Dropping MUI (same Vite 8 / React 19 / Emotion)
+
+Same toolchain as `vite8-react19.json`. Widgets (Tooltip, Modal, Select, Slider, TextField, …) are local Emotion `styled` components; `@mui/material` is gone. Compare against that snapshot, not `emotion-before.json`.
+
+| | Vite 8 / React 19 / MUI | No MUI | Change |
+| --- | --- | --- | --- |
+| All JS gzip | 1752 KB | 1684 KB | **−68 KB (−4%)** |
+| JS raw | 6439 KB | 6231 KB | −208 KB |
+| Entry chunk gzip | 96 KB | 89 KB | −7 KB |
+| First-load shell gzip | 169 KB | 129 KB | **−40 KB (−24%)** |
+| Styling JS raw | 247 KB (MUI + Popper + Emotion) | 20 KB (Emotion only) | **−227 KB (−92%)** |
+| MUI in the shell | 96 KB raw | 0 | gone from first paint |
+| Futures chunk gzip | 192 KB | 166 KB | −26 KB |
+| Emotion CSSOM rules | 407 | 270 | −34% |
+| `insertRule`s | 423 | 274 | −35% |
+| CSSOM insert time | 3.6 ms | 1.3 ms | −2.3 ms |
+| Serialize / stylis / MUI system | 18 ms | 15 ms | −3 ms (`@mui/system` gone; Emotion still ~15 ms) |
+
+The download win is the first-load shell: MUI used to ride along with the header. App code grew ~23 KB raw for the replacement widgets and Heroicons, which is why the all-JS gzip drop is smaller than the MUI library it replaced.
+
+Paint / script / task times from this one localhost sample moved around (FCP 184 → 224 ms) and are not a reliable MUI delta. Heap was 23.9 MB → 21.6 MB.
+
+Emotion is still injecting ~270 rules at runtime. That remaining ~15 ms of serialize/stylis is the yak delta.
+
 ## After yak
 
 ```bash
 pnpm measure:baseline -- --build --out yak-after
 ```
 
-Compare `emotionRuleCount`, `insertRule.count`, `cpu.cssCompileMs`, and `totals.cssKbGzip` against `vite8-react19.json` (not against `emotion-before.json`, or you mix toolchain and CSS-in-JS).
+Compare `emotionRuleCount`, `insertRule.count`, `cpu.cssCompileMs`, and `totals.cssKbGzip` against `no-mui.json` (not against `vite8-react19.json`, or you mix dropping MUI with compiling CSS).

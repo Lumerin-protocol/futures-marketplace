@@ -1,4 +1,4 @@
-import useMediaQuery from "@mui/material/useMediaQuery";
+import { useMediaQuery } from "../../../../hooks/useMediaQuery";
 
 // Breakpoint for the mobile-only compound trading layout (order book beside the
 // place-order form). Above this width the standard desktop/tablet grid is used,
@@ -8,7 +8,7 @@ export const MOBILE_TRADING_QUERY = "(max-width: 768px)";
 // Single source of truth for "is this the mobile trading layout?" so the mobile
 // branch is greppable across the page and its widgets.
 export const useIsMobileTradingLayout = (): boolean =>
-  useMediaQuery(MOBILE_TRADING_QUERY, { noSsr: true });
+  useMediaQuery(MOBILE_TRADING_QUERY);
 
 // Shared metrics for the small segmented toggles that sit side by side in the
 // mobile layout: the order book's Order Book / Trades switcher and the

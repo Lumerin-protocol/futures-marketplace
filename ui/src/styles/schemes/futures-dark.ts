@@ -87,6 +87,7 @@ export const futuresDark = {
     shortHighlightBg: "rgba(239, 68, 68, 0.2)",
     longHighlightGlow: "rgba(16, 185, 129, 0.3)",
     shortHighlightGlow: "rgba(239, 68, 68, 0.3)",
+    warningRowBg: "rgba(245, 158, 11, 0.08)",
     infoHighlightBg: "rgba(99, 102, 241, 0.2)",
     infoHighlightGlow: "rgba(99, 102, 241, 0.4)",
     infoBorder: "rgba(99, 102, 241, 0.5)",
@@ -121,6 +122,10 @@ export const futuresDark = {
     white05: "rgba(255, 255, 255, 0.05)",
     white08: "rgba(255, 255, 255, 0.08)",
     white10: "rgba(255, 255, 255, 0.1)",
+    /** MUI dark `action.focus`. */
+    white12: "rgba(255, 255, 255, 0.12)",
+    /** MUI dark outlined-input resting border. */
+    white23: "rgba(255, 255, 255, 0.23)",
     white14: "rgba(255, 255, 255, 0.14)",
     white15: "rgba(255, 255, 255, 0.15)",
     white16: "rgba(255, 255, 255, 0.16)",
@@ -159,9 +164,16 @@ export const futuresDark = {
     text: "#FFFFFF",
     iconMuted: "#64748B",
   },
+  /** What the dropped MUI theme called `palette.primary`. */
   neutralButton: {
     bg: "#1E40AF",
     hover: "#1D4ED8",
+    /** `alpha(primary.main, action.selectedOpacity)` — selected menu row. */
+    selected: "rgba(30, 64, 175, 0.16)",
+    /** `selectedOpacity + hoverOpacity` — selected menu row under the pointer. */
+    selectedHover: "rgba(30, 64, 175, 0.24)",
+    /** `selectedOpacity + focusOpacity` — selected menu row with keyboard focus. */
+    selectedFocus: "rgba(30, 64, 175, 0.28)",
   },
   circularProgress: {
     default: "#00B894",
@@ -222,6 +234,32 @@ export const futuresDark = {
     level2: "0 4px 12px rgba(0,0,0,0.12)",
     level3: "0 8px 24px rgba(0,0,0,0.16)",
     level4: "0 16px 48px rgba(0,0,0,0.20)",
+    /**
+     * Material's elevation ramp, verbatim from `mui-material/src/styles/shadows.js`.
+     * Three umbra/penumbra/ambient layers per step, which is what makes a menu
+     * or a dialog read as lifted rather than as a panel with a drop shadow.
+     */
+    elevation2:
+      "0px 3px 1px -2px rgba(0,0,0,0.2), 0px 2px 2px 0px rgba(0,0,0,0.14), 0px 1px 5px 0px rgba(0,0,0,0.12)",
+    elevation8:
+      "0px 5px 5px -3px rgba(0,0,0,0.2), 0px 8px 10px 1px rgba(0,0,0,0.14), 0px 3px 14px 2px rgba(0,0,0,0.12)",
+    elevation24:
+      "0px 11px 15px -7px rgba(0,0,0,0.2), 0px 24px 38px 3px rgba(0,0,0,0.14), 0px 9px 46px 8px rgba(0,0,0,0.12)",
+  },
+  /** `alpha(grey[700], 0.92)` in MUI; our slate at Material's opacity. */
+  tooltip: {
+    bg: "rgba(46, 51, 72, 0.92)",
+  },
+  /** `alpha(text.primary, 0.13)`, the dark-mode value MUI's Skeleton derives. */
+  skeleton: {
+    bg: "rgba(226, 232, 240, 0.13)",
+  },
+  /** Material's `transitions.easing`, so ported chrome eases the way it did. */
+  motion: {
+    easeInOut: "cubic-bezier(0.4, 0, 0.2, 1)",
+    easeOut: "cubic-bezier(0, 0, 0.2, 1)",
+    easeIn: "cubic-bezier(0.4, 0, 1, 1)",
+    sharp: "cubic-bezier(0.4, 0, 0.6, 1)",
   },
   radius: {
     none: "0px",

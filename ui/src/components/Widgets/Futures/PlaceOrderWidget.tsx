@@ -1,9 +1,9 @@
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import { css } from "@emotion/react";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { type ComponentProps, type CSSProperties, useState, useEffect, useId, useMemo, useRef } from "react";
-import { SliderMark } from "@mui/material/Slider";
-import Tooltip from "@mui/material/Tooltip";
+import { SliderMark } from "../../Slider";
+import { Tooltip } from "../../Tooltip";
 import { tokens } from "../../../styles/tokens";
 import { useAccount } from "wagmi";
 import { useAppKit } from "@reown/appkit/react";

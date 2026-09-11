@@ -1,5 +1,5 @@
 import { tokens } from "../../../styles/tokens";
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import type { HistoricalOrder } from "../../../hooks/data/useHistoricalOrders";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";

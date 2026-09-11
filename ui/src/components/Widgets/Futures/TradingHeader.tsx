@@ -1,7 +1,6 @@
 import { tokens } from "../../../styles/tokens";
-import styled from "@mui/material/styles/styled";
-import Tooltip from "@mui/material/Tooltip";
-import EastIcon from "@mui/icons-material/East";
+import styled from "@emotion/styled";
+import { Tooltip } from "../../Tooltip";
 import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
 import { DetailedSpecsModal } from "./DetailedSpecsModal";
@@ -16,6 +15,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { ContractMode } from "../../../types/types";
+import { EastIcon } from "../../icons";
 
 interface TradingHeaderProps {
   contractMode: ContractMode;

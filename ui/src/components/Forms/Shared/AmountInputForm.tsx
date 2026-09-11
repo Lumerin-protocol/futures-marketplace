@@ -1,8 +1,8 @@
 import type { FC } from "react";
-import TextField from "@mui/material/TextField";
 import { type Control, useController } from "react-hook-form";
 import { InputWrapper } from "./Forms.styled";
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
+import { TextField } from "../../TextField";
 import { tokens } from "../../../styles/tokens";
 
 interface Props {
@@ -14,9 +14,7 @@ interface Props {
 }
 
 /**
- * The element that actually received the input. `currentTarget` is unusable here
- * because MUI's TextField forwards `onBeforeInput` to its root `div`, so only
- * `target` is guaranteed to be the underlying input.
+ * The element that actually received the input.
  */
 const getInputTarget = (e: React.InputEvent<HTMLElement>) => e.target as HTMLInputElement | HTMLTextAreaElement;
 
@@ -154,23 +152,12 @@ export const AmountInputForm: FC<Props> = ({
           inputMode={"numeric"}
           autoComplete="off"
           fullWidth
-          variant="outlined"
           error={!!amountController.fieldState.error}
           helperText={amountController.fieldState.error?.message}
           onBeforeInput={handleNumericDecimalInput}
           inputProps={{
             min: 0.01,
             step: "0.01",
-          }}
-          sx={{
-            flex: 1,
-            // Safari can render the outlined fieldset over the shrunk label.
-            // A matching background keeps the notch visually clear.
-            "& .MuiInputLabel-shrink": {
-              backgroundColor: tokens.surface.inputIsland,
-              paddingInline: "4px",
-              zIndex: 1,
-            },
           }}
         />
         {showMaxButton && onMaxClick && (

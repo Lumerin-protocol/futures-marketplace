@@ -1,6 +1,6 @@
 import { tokens } from "../../../styles/tokens";
-import styled from "@mui/material/styles/styled";
-import Tooltip from "@mui/material/Tooltip";
+import styled from "@emotion/styled";
+import { Tooltip } from "../../Tooltip";
 import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPositions";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { useSettlePositions } from "../../../hooks/data/useSettlePositions";

@@ -1,18 +1,13 @@
-import useMediaQuery from "@mui/material/useMediaQuery";
-import ButtonGroup from "@mui/material/ButtonGroup";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { AccountButton, ChainButton, ConnectorButton } from "./Widgets/ConnectWidget";
 import { AddressLength } from "../types/types";
-import { css } from "@mui/material/styles";
+import styled from "@emotion/styled";
 
 export const HeaderConnect = () => {
   const isMobile = useMediaQuery("(max-width: 768px)");
 
   return (
-    <ButtonGroup
-      css={css`
-        gap: 1rem;
-      `}
-    >
+    <ConnectGroup>
       <AccountButton addressLength={isMobile ? AddressLength.SHORT : AddressLength.MEDIUM} />
       {!isMobile && (
         <>
@@ -20,6 +15,11 @@ export const HeaderConnect = () => {
           <ConnectorButton />
         </>
       )}
-    </ButtonGroup>
+    </ConnectGroup>
   );
 };
+
+const ConnectGroup = styled("div")`
+  display: flex;
+  gap: 1rem;
+`;

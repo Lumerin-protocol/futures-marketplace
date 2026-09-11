@@ -1,6 +1,6 @@
 import { tokens } from "../../../styles/tokens";
 import { useState, useCallback } from "react";
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import { ModalItem } from "../../Modal";
 import { PrimaryButton } from "../../Forms/FormButtons/Buttons.styled";
 

@@ -68,28 +68,12 @@ export default defineConfig(({ mode }) => {
           );
         },
       },
-      react({
-        jsxImportSource: "@emotion/react",
-      }),
+      react(),
       // plugin-react 6 no longer hosts Babel. Emotion's label plugin runs
       // through Rolldown so `styled` still gets `css-…-PositionCard` class
-      // names in dev. Keep the MUI importMap so MUI `styled` is labelled too.
+      // names in dev.
       babel({
-        plugins: [
-          [
-            "@emotion/babel-plugin",
-            {
-              importMap: {
-                "@mui/material/styles/styled": {
-                  default: {
-                    canonicalImport: ["@emotion/styled", "default"],
-                    styledBaseImport: ["@mui/material/styles/styled", "default"],
-                  },
-                },
-              },
-            },
-          ],
-        ],
+        plugins: ["@emotion/babel-plugin"],
       }),
       imagetools({
         defaultDirectives: (_url) => {

@@ -1,8 +1,6 @@
-import FormControl from "@mui/material/FormControl";
-import MenuItem from "@mui/material/MenuItem";
-import Select from "@mui/material/Select";
-import styled from "@mui/material/styles/styled";
-import useMediaQuery from "@mui/material/useMediaQuery";
+import styled from "@emotion/styled";
+import { MenuItem, Select } from "./Select";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { tokens } from "../styles/tokens";
 
 type Props<T> = {
@@ -21,47 +19,34 @@ export const TabSwitch = <T extends string>(props: Props<T>) => {
   const { values, value, setValue } = props;
   const numTabs = values.length;
   const activeIndex = values.findIndex((v) => v.value === value);
-  const isMobile = useMediaQuery("(max-width: 768px)", { noSsr: true });
+  const isMobile = useMediaQuery("(max-width: 768px)");
 
   if (isMobile) {
     return (
-      <MobileTabSelectWrap fullWidth size="small">
-        <MobileTabSelect
-          value={value}
-          onChange={(e) => setValue(e.target.value as T)}
-          displayEmpty
-          renderValue={(selected) => {
-            const v = values.find((x) => x.value === selected);
-            if (!v) return null;
-            return (
-              <MobileTabSelectValue>
-                <span>{v.text}</span>
-                <MobileCountBadge>{v.count}</MobileCountBadge>
-              </MobileTabSelectValue>
-            );
-          }}
-          MenuProps={{
-            PaperProps: {
-              sx: {
-                bgcolor: tokens.surface.card,
-                color: tokens.text.onDark,
-                border: `1px solid ${tokens.border.default}`,
-                borderRadius: tokens.radius.md,
-                maxHeight: 320,
-              },
-            },
-          }}
-        >
-          {values.map((val) => (
-            <MenuItem value={val.value} key={val.value} sx={{ fontSize: "0.875rem" }}>
-              <MobileMenuItemInner>
-                <span>{val.text}</span>
-                <MobileCountBadge>{val.count}</MobileCountBadge>
-              </MobileMenuItemInner>
-            </MenuItem>
-          ))}
-        </MobileTabSelect>
-      </MobileTabSelectWrap>
+      <MobileTabSelect
+        fullWidth
+        value={value}
+        onChange={(e) => setValue(e.target.value as T)}
+        renderValue={(selected) => {
+          const v = values.find((x) => x.value === selected);
+          if (!v) return null;
+          return (
+            <MobileTabSelectValue>
+              <span>{v.text}</span>
+              <MobileCountBadge>{v.count}</MobileCountBadge>
+            </MobileTabSelectValue>
+          );
+        }}
+      >
+        {values.map((val) => (
+          <MenuItem value={val.value} key={val.value}>
+            <MobileMenuItemInner>
+              <span>{val.text}</span>
+              <MobileCountBadge>{val.count}</MobileCountBadge>
+            </MobileMenuItemInner>
+          </MenuItem>
+        ))}
+      </MobileTabSelect>
     );
   }
 
@@ -85,43 +70,21 @@ export const TabSwitch = <T extends string>(props: Props<T>) => {
   );
 };
 
-const MobileTabSelectWrap = styled(FormControl)`
+const MobileTabSelect = styled(Select)`
   width: 100%;
   min-width: 0;
-`;
 
-const MobileTabSelect = styled(Select)`
-  border-radius: ${tokens.radius.md};
-
-  & .MuiOutlinedInput-root {
+  .select-trigger {
     border-radius: ${tokens.radius.md};
     background-color: ${tokens.surface.mobileTabBgAlpha};
-  }
-
-  & .MuiOutlinedInput-notchedOutline {
     border-color: ${tokens.border.default};
-  }
-
-  &:hover .MuiOutlinedInput-notchedOutline {
-    border-color: ${tokens.brand.blue};
-  }
-
-  &.Mui-focused .MuiOutlinedInput-notchedOutline {
-    border-color: ${tokens.brand.blue};
-    border-width: 2px;
-  }
-
-  & .MuiSelect-select {
-    display: flex;
-    align-items: center;
     padding-top: 0.65rem;
     padding-bottom: 0.65rem;
-    color: ${tokens.text.onDark};
     font-weight: 500;
-  }
 
-  & .MuiSvgIcon-root {
-    color: ${tokens.text.onDarkMuted};
+    &:hover:not(:disabled) {
+      border-color: ${tokens.brand.blue};
+    }
   }
 `;
 

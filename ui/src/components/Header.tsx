@@ -1,12 +1,9 @@
 import { Suspense } from "react";
-import styled from "@mui/material/styles/styled";
+import styled from "@emotion/styled";
 import { Link, useLocation, useNavigate } from "react-router";
 import { tokens } from "../styles/tokens";
-import Toolbar from "@mui/material/Toolbar";
-import Typography from "@mui/material/Typography";
-import Skeleton from "@mui/material/Skeleton";
-import EmojiEventsOutlinedIcon from "@mui/icons-material/EmojiEventsOutlined";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { Skeleton } from "./Skeleton";
+import { ArrowBackIcon, EmojiEventsOutlinedIcon } from "./icons";
 import { safeLazy } from "../utils/safeLazy";
 import { PathName } from "../types/types";
 import HpdxLogomark from "../images/icons/hpdx-logomark.svg?react";
@@ -78,7 +75,7 @@ export const Header = () => {
 
 const ConnectSlotSkeleton = () => (
   <ConnectSlotSkeletonWrapper>
-    <Skeleton variant="rounded" width={140} height={48} sx={{ borderRadius: tokens.radius.md }} />
+    <Skeleton width={140} height={48} />
   </ConnectSlotSkeletonWrapper>
 );
 
@@ -87,11 +84,13 @@ const ConnectSlotSkeletonWrapper = styled("div")`
   align-items: center;
 `;
 
-const StyledToolbar = styled(Toolbar)`
+const StyledToolbar = styled("div")`
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 1.5rem;
-  padding: 0 !important;
+  padding: 0;
+  min-height: 64px;
 `;
 
 const Nav = styled("nav")`
@@ -186,7 +185,7 @@ const Logo = styled(HpdxLogomark)`
   }
 `;
 
-const BrandName = styled(Typography)`
+const BrandName = styled("span")`
   color: ${tokens.text.onDark};
   font-weight: 700;
   font-family: "Inter", sans-serif;
