@@ -1,4 +1,4 @@
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import type { FC } from "react";
 import { useSyncExternalStore } from "react";
 import { tokens } from "../styles/tokens";
@@ -75,12 +75,12 @@ const AlertCard = styled(ModalCard)`
   }
 `;
 
-const AlertTitle = styled("h2")<{ $variant: AlertVariant }>`
+const AlertTitle = styled.h2<{ $variant: AlertVariant }>`
   margin: 0;
   color: ${({ $variant }) => TITLE_COLORS[$variant]};
 `;
 
-const AlertMessage = styled("p")`
+const AlertMessage = styled.p`
   margin: 0;
   font-size: 0.9375rem;
   line-height: 1.6;

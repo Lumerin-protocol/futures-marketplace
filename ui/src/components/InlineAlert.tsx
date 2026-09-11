@@ -1,4 +1,4 @@
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import type { ReactNode } from "react";
 import { tokens } from "../styles/tokens";
 
@@ -14,7 +14,7 @@ export const InlineAlert = ({ children, severity = "info", className }: InlineAl
   </Banner>
 );
 
-const Banner = styled("div")<{ $severity: NonNullable<InlineAlertProps["severity"]> }>`
+const Banner = styled.div<{ $severity: NonNullable<InlineAlertProps["severity"]> }>`
   margin: 0 0 1em;
   padding: 0.75rem 1rem;
   border-radius: ${tokens.radius.sm};

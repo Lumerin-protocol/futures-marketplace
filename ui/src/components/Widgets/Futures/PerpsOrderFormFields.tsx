@@ -1,5 +1,5 @@
 import { type ReactNode, useId, useState } from "react";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { tokens } from "../../../styles/tokens";
 import {
   handleNumericDecimalInput6Decimals,
@@ -357,7 +357,7 @@ export const PerpsModalCard = styled(ModalCard)`
   }
 `;
 
-export const PositionInfoSection = styled("div")`
+export const PositionInfoSection = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
@@ -368,24 +368,24 @@ export const PositionInfoSection = styled("div")`
   margin-bottom: 1.25rem;
 `;
 
-export const InfoRow = styled("div")`
+export const InfoRow = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
 `;
 
-export const InfoLabel = styled("span")`
+export const InfoLabel = styled.span`
   color: ${tokens.text.secondary};
   font-size: 0.875rem;
 `;
 
-export const InfoValue = styled("span")`
+export const InfoValue = styled.span`
   color: ${tokens.text.onDark};
   font-size: 0.875rem;
   font-weight: 600;
 `;
 
-export const TypeBadge = styled("span")<{ $type: string }>`
+export const TypeBadge = styled.span<{ $type: string }>`
   display: inline-block;
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
@@ -396,12 +396,12 @@ export const TypeBadge = styled("span")<{ $type: string }>`
   color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
-export const PnLText = styled("span")<{ $isPositive: boolean }>`
+export const PnLText = styled.span<{ $isPositive: boolean }>`
   color: ${(props) => (props.$isPositive ? tokens.trading.long : tokens.trading.short)};
   font-weight: 600;
 `;
 
-export const InputsSection = styled("div")`
+export const InputsSection = styled.div`
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -439,7 +439,7 @@ export const InputsSection = styled("div")`
   }
 `;
 
-export const OrderSummary = styled("div")`
+export const OrderSummary = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -450,42 +450,42 @@ export const OrderSummary = styled("div")`
   margin-bottom: 1.25rem;
 `;
 
-export const SummaryRow = styled("div")`
+export const SummaryRow = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
 `;
 
-export const SummaryLabel = styled("span")`
+export const SummaryLabel = styled.span`
   color: ${tokens.text.secondary};
   font-size: 0.8rem;
 `;
 
-export const SummaryValue = styled("span")`
+export const SummaryValue = styled.span`
   color: ${tokens.text.onDark};
   font-size: 0.8rem;
   font-weight: 500;
 `;
 
-export const SummaryPnLValue = styled("span")<{ $isPositive: boolean }>`
+export const SummaryPnLValue = styled.span<{ $isPositive: boolean }>`
   font-size: 0.8rem;
   font-weight: 600;
   color: ${(props) => (props.$isPositive ? tokens.trading.long : tokens.trading.short)};
 `;
 
-export const ErrorText = styled("p")`
+export const ErrorText = styled.p`
   color: ${tokens.trading.short};
   font-size: 0.8125rem;
   margin: 0 0 1rem 0;
 `;
 
-export const ModalActions = styled("div")`
+export const ModalActions = styled.div`
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
 `;
 
-export const ModalCancelButton = styled("button")`
+export const ModalCancelButton = styled.button`
   padding: 0.5rem 1rem;
   background: transparent;
   color: ${tokens.text.onDark};

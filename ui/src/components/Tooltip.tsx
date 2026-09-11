@@ -1,4 +1,4 @@
-import styled from "@emotion/styled";
+import { css, styled } from "next-yak";
 import {
   type ReactElement,
   type ReactNode,
@@ -125,12 +125,12 @@ export const Tooltip = ({
   );
 };
 
-const Wrap = styled("span")`
+const Wrap = styled.span`
   display: inline-flex;
   max-width: 100%;
 `;
 
-const Bubble = styled("div")<{ $placement: Placement; $arrow: boolean }>`
+const Bubble = styled.div<{ $placement: Placement; $arrow: boolean }>`
   position: fixed;
   z-index: 1600;
   max-width: 280px;
@@ -145,22 +145,59 @@ const Bubble = styled("div")<{ $placement: Placement; $arrow: boolean }>`
 
   ${(p) =>
     p.$arrow &&
-    `
-    &::after {
-      content: "";
-      position: absolute;
-      width: 0;
-      height: 0;
-      border: 5px solid transparent;
-      ${
-        p.$placement === "top"
-          ? `top: 100%; left: 50%; transform: translateX(-50%); border-top-color: ${tokens.overlay.black90};`
-          : p.$placement === "bottom"
-            ? `bottom: 100%; left: 50%; transform: translateX(-50%); border-bottom-color: ${tokens.overlay.black90};`
-            : p.$placement === "left"
-              ? `left: 100%; top: 50%; transform: translateY(-50%); border-left-color: ${tokens.overlay.black90};`
-              : `right: 100%; top: 50%; transform: translateY(-50%); border-right-color: ${tokens.overlay.black90};`
-      }
-    }
-  `}
+    (p.$placement === "top"
+      ? css`
+          &::after {
+            content: "";
+            position: absolute;
+            width: 0;
+            height: 0;
+            border: 5px solid transparent;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border-top-color: ${tokens.overlay.black90};
+          }
+        `
+      : p.$placement === "bottom"
+        ? css`
+            &::after {
+              content: "";
+              position: absolute;
+              width: 0;
+              height: 0;
+              border: 5px solid transparent;
+              bottom: 100%;
+              left: 50%;
+              transform: translateX(-50%);
+              border-bottom-color: ${tokens.overlay.black90};
+            }
+          `
+        : p.$placement === "left"
+          ? css`
+              &::after {
+                content: "";
+                position: absolute;
+                width: 0;
+                height: 0;
+                border: 5px solid transparent;
+                left: 100%;
+                top: 50%;
+                transform: translateY(-50%);
+                border-left-color: ${tokens.overlay.black90};
+              }
+            `
+          : css`
+              &::after {
+                content: "";
+                position: absolute;
+                width: 0;
+                height: 0;
+                border: 5px solid transparent;
+                right: 100%;
+                top: 50%;
+                transform: translateY(-50%);
+                border-right-color: ${tokens.overlay.black90};
+              }
+            `)}
 `;

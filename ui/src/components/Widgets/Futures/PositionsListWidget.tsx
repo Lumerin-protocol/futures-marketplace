@@ -1,5 +1,5 @@
 import { tokens } from "../../../styles/tokens";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { Tooltip } from "../../Tooltip";
 import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPositions";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
@@ -367,7 +367,7 @@ export const PositionsListWidget = ({
 
 // Flat section rather than a card: the tab widget already draws the border and
 // pads its content, so a SmallWidget here would nest a second card inside it.
-const PositionsContainer = styled("div")`
+const PositionsContainer = styled.div`
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -381,7 +381,7 @@ const PositionsContainer = styled("div")`
   }
 `;
 
-const TableContainer = styled("div")`
+const TableContainer = styled.div`
   width: 100%;
   overflow-x: auto;
   
@@ -400,7 +400,7 @@ const TableContainer = styled("div")`
   }
 `;
 
-const Table = styled("table")`
+const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
   min-width: 600px;
@@ -433,7 +433,7 @@ const Table = styled("table")`
   }
 `;
 
-const TableRow = styled("tr")`
+const TableRow = styled.tr`
   &:hover {
     background-color: ${tokens.overlay.white02};
   }
@@ -443,7 +443,7 @@ const TableRow = styled("tr")`
   }
 `;
 
-const TypeBadge = styled("span")<{ $type: string }>`
+const TypeBadge = styled.span<{ $type: string }>`
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
@@ -453,7 +453,7 @@ const TypeBadge = styled("span")<{ $type: string }>`
   color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
-const StatusBadge = styled("span")<{ $color: string }>`
+const StatusBadge = styled.span<{ $color: string }>`
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
@@ -463,19 +463,19 @@ const StatusBadge = styled("span")<{ $color: string }>`
   color: ${(props) => props.$color};
 `;
 
-const PnLCell = styled("span")<{ $isPositive: boolean }>`
+const PnLCell = styled.span<{ $isPositive: boolean }>`
   color: ${(props) => (props.$isPositive ? tokens.trading.long : tokens.trading.short)};
   font-weight: 600;
 `;
 
 
-const ActionButtons = styled("div")`
+const ActionButtons = styled.div`
   display: flex;
   gap: 0.5rem;
   align-items: center;
 `;
 
-const CloseButton = styled("button")`
+const CloseButton = styled.button`
   padding: 0.5rem 0.875rem;
   background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};
@@ -502,7 +502,7 @@ const CloseButton = styled("button")`
   }
 `;
 
-const ClaimButton = styled("button")`
+const ClaimButton = styled.button`
   display: inline-flex;
   align-items: center;
   padding: 0.5rem 0.875rem;
@@ -531,7 +531,7 @@ const ClaimButton = styled("button")`
   }
 `;
 
-const ClaimHintIcon = styled("span")`
+const ClaimHintIcon = styled.span`
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -547,13 +547,13 @@ const ClaimHintIcon = styled("span")`
   opacity: 0.75;
 `;
 
-const ClaimErrorText = styled("span")`
+const ClaimErrorText = styled.span`
   color: ${tokens.trading.short};
   font-size: 0.75rem;
   max-width: 180px;
 `;
 
-const TradesButton = styled("button")`
+const TradesButton = styled.button`
   padding: 0.5rem 0.875rem;
   background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};
@@ -580,7 +580,7 @@ const TradesButton = styled("button")`
   }
 `;
 
-const EmptyState = styled("div")`
+const EmptyState = styled.div`
   text-align: center;
   padding: 2rem;
   color: ${tokens.text.muted};

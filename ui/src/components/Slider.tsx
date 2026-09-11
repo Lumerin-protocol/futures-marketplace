@@ -1,4 +1,4 @@
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import {
   type CSSProperties,
   type ComponentType,
@@ -166,7 +166,7 @@ export const Slider = ({
   );
 };
 
-const Root = styled("div")<{ $disabled: boolean }>`
+const Root = styled.div<{ $disabled: boolean }>`
   position: relative;
   height: 6px;
   margin: 13px 0 22px;
@@ -181,14 +181,14 @@ const Root = styled("div")<{ $disabled: boolean }>`
   }
 `;
 
-const Rail = styled("span")`
+const Rail = styled.span`
   position: absolute;
   inset: 0;
   border-radius: ${tokens.radius.full};
   background: ${tokens.surface.inputIsland};
 `;
 
-const Track = styled("span")`
+const Track = styled.span`
   position: absolute;
   top: 0;
   left: 0;
@@ -198,7 +198,7 @@ const Track = styled("span")`
   pointer-events: none;
 `;
 
-const DefaultMark = styled("span")`
+const DefaultMark = styled.span`
   position: absolute;
   top: 50%;
   width: 2px;
@@ -208,7 +208,7 @@ const DefaultMark = styled("span")`
   pointer-events: none;
 `;
 
-const MarkLabel = styled("span")<{ $align: "start" | "center" | "end" }>`
+const MarkLabel = styled.span<{ $align: "start" | "center" | "end" }>`
   position: absolute;
   top: 26px;
   color: ${tokens.text.secondary};
@@ -223,7 +223,7 @@ const MarkLabel = styled("span")<{ $align: "start" | "center" | "end" }>`
   }
 `;
 
-const Thumb = styled("span")<{ $active: boolean }>`
+const Thumb = styled.span<{ $active: boolean }>`
   position: absolute;
   top: 50%;
   width: 18px;
@@ -246,7 +246,7 @@ const Thumb = styled("span")<{ $active: boolean }>`
   }
 `;
 
-const ValueLabel = styled("span")`
+const ValueLabel = styled.span`
   position: absolute;
   bottom: calc(100% + 8px);
   left: 50%;

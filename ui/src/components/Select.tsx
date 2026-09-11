@@ -1,4 +1,4 @@
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import {
   Children,
   type ReactNode,
@@ -153,13 +153,13 @@ export const Select = ({
   );
 };
 
-const Root = styled("div")<{ $fullWidth: boolean }>`
+const Root = styled.div<{ $fullWidth: boolean }>`
   display: inline-flex;
   min-width: 0;
   width: ${(p) => (p.$fullWidth ? "100%" : "auto")};
 `;
 
-const Trigger = styled("button")`
+const Trigger = styled.button`
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -185,21 +185,21 @@ const Trigger = styled("button")`
   }
 `;
 
-const TriggerValue = styled("span")`
+const TriggerValue = styled.span`
   display: flex;
   align-items: center;
   min-width: 0;
   flex: 1;
 `;
 
-const Chevron = styled("svg")`
+const Chevron = styled.svg`
   width: 1.25rem;
   height: 1.25rem;
   flex-shrink: 0;
   color: ${tokens.text.onDark};
 `;
 
-const Menu = styled("ul")`
+const Menu = styled.ul`
   position: fixed;
   z-index: 1400;
   margin: 0;
@@ -214,7 +214,7 @@ const Menu = styled("ul")`
   box-shadow: ${tokens.shadow.level3};
 `;
 
-const Option = styled("li")<{ $selected: boolean }>`
+const Option = styled.li<{ $selected: boolean }>`
   display: flex;
   align-items: center;
   padding: 0.5rem 0.85rem;

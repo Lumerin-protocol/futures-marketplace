@@ -1,5 +1,5 @@
 import { tokens } from "../../../styles/tokens";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import type { HistoricalOrder } from "../../../hooks/data/useHistoricalOrders";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
@@ -149,7 +149,7 @@ export const HistoricalOrdersListWidget = ({
 
 // Flat section rather than a card: the tab widget already draws the border and
 // pads its content, so a SmallWidget here would nest a second card inside it.
-const OrdersContainer = styled("div")`
+const OrdersContainer = styled.div`
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -163,7 +163,7 @@ const OrdersContainer = styled("div")`
   }
 `;
 
-const TableContainer = styled("div")`
+const TableContainer = styled.div`
   width: 100%;
   overflow-x: auto;
   
@@ -182,7 +182,7 @@ const TableContainer = styled("div")`
   }
 `;
 
-const Table = styled("table")`
+const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
   min-width: 300px;
@@ -215,7 +215,7 @@ const Table = styled("table")`
   }
 `;
 
-const TableRow = styled("tr")`
+const TableRow = styled.tr`
   &:hover {
     background-color: ${tokens.overlay.white02};
   }
@@ -225,7 +225,7 @@ const TableRow = styled("tr")`
   }
 `;
 
-const TypeBadge = styled("span")<{ $type: string }>`
+const TypeBadge = styled.span<{ $type: string }>`
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
@@ -235,7 +235,7 @@ const TypeBadge = styled("span")<{ $type: string }>`
   color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
-const StatusBadge = styled("span")<{ $status: string; $color: string }>`
+const StatusBadge = styled.span<{ $status: string; $color: string }>`
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
@@ -245,7 +245,7 @@ const StatusBadge = styled("span")<{ $status: string; $color: string }>`
   color: ${(props) => props.$color};
 `;
 
-const EmptyState = styled("div")`
+const EmptyState = styled.div`
   text-align: center;
   padding: 2rem;
   color: ${tokens.text.muted};

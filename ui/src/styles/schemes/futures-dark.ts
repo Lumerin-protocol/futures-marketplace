@@ -241,6 +241,8 @@ export const futuresDark = {
     700: "#404040",
     800: "#262626",
     900: "#171717",
+    paper: "#F5F5F5",
+    wash: "#E5E5E5",
   },
 } as const;
 

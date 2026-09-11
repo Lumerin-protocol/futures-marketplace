@@ -1,6 +1,6 @@
 import { type FC, type ReactNode, useEffect } from "react";
 import { createPortal } from "react-dom";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { tokens } from "../styles/tokens";
 import { ModalCard, ModalCloseButton, ModalCloseIcon } from "./Modal.styled";
 
@@ -86,7 +86,7 @@ export const ModalItem: FC<ModalItemProps> = ({ open, setOpen, content, children
   );
 };
 
-const Overlay = styled("div")<{ $zIndex: number }>`
+const Overlay = styled.div<{ $zIndex: number }>`
   position: fixed;
   inset: 0;
   z-index: ${(p) => p.$zIndex};

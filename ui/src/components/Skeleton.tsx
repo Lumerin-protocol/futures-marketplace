@@ -1,4 +1,4 @@
-import styled from "@emotion/styled";
+import { keyframes, styled } from "next-yak";
 import { tokens } from "../styles/tokens";
 
 interface SkeletonProps {
@@ -17,19 +17,19 @@ export const Skeleton = ({ width = "100%", height = "1em", className }: Skeleton
   />
 );
 
-const Pulse = styled("span")`
+const skeletonPulse = keyframes`
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+`;
+
+const Pulse = styled.span`
   display: block;
   border-radius: ${tokens.radius.md};
   background: ${tokens.overlay.white10};
-  animation: skeleton-pulse 1.4s ease-in-out infinite;
-
-  @keyframes skeleton-pulse {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.45;
-    }
-  }
+  animation: ${skeletonPulse} 1.4s ease-in-out infinite;
 `;

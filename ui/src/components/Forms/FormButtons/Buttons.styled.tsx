@@ -1,15 +1,15 @@
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { Tooltip } from "../../Tooltip";
 import { tokens } from "../../../styles/tokens";
 import type { ComponentProps } from "react";
 
-export const FormButtonsWrapper = styled("div")`
+export const FormButtonsWrapper = styled.div`
   display: flex;
   flex-direction: row;
   gap: 0.5rem;
 `;
 
-export const Button = styled("button")`
+export const Button = styled.button`
   border-radius: ${tokens.radius.sm};
   padding: 0.5rem 1rem;
   outline: none;
@@ -71,11 +71,11 @@ export const DangerButton = styled(Button)`
 
 export const GhostButton = styled(Button)`
   color: ${tokens.brand.dark};
-  background: ${tokens.neutral[100]};
+  background: ${tokens.neutral.paper};
   border: none;
   cursor: pointer;
   &:hover {
-    background: ${tokens.neutral[200]};
+    background: ${tokens.neutral.wash};
   }
 `;
 
@@ -98,9 +98,7 @@ export const PrimaryButton = ({ disabledText, disabled, tooltipText, ...props }:
   return button;
 };
 
-const PrimaryButtonComponent = styled(Button, {
-  shouldForwardProp: (prop) => typeof prop === "string" && !prop.startsWith("$"),
-})<{ $hoverText?: string }>`
+const PrimaryButtonComponent = styled(Button)<{ $hoverText?: string }>`
   color: #FFFFFF;
   background-color: ${tokens.neutralButton.bg};
   position: relative;
@@ -117,15 +115,8 @@ const PrimaryButtonComponent = styled(Button, {
     opacity: 0.5;
   }
 
-  ${({ $hoverText }) =>
-    $hoverText &&
-    `
-      &:hover:after {
-        content: "${$hoverText}";
-      }
-    `}
-
   &:after {
+    content: ${({ $hoverText }) => ($hoverText ? `"${$hoverText}"` : '""')};
     position: absolute;
     bottom: calc(100% + 0.5em);
     width: max-content;

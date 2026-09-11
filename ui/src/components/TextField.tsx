@@ -1,4 +1,4 @@
-import styled from "@emotion/styled";
+import { css, styled } from "next-yak";
 import { type InputHTMLAttributes, forwardRef } from "react";
 import { tokens } from "../styles/tokens";
 
@@ -26,22 +26,26 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
 
 TextField.displayName = "TextField";
 
-const Field = styled("div")<{ $fullWidth: boolean }>`
+const Field = styled.div<{ $fullWidth: boolean }>`
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
   min-width: 0;
   width: ${(p) => (p.$fullWidth ? "100%" : "auto")};
-  flex: ${(p) => (p.$fullWidth ? 1 : undefined)};
+  ${(p) =>
+    p.$fullWidth &&
+    css`
+      flex: 1;
+    `};
 `;
 
-const Label = styled("label")`
+const Label = styled.label`
   font-size: 0.875rem;
   font-weight: 500;
   color: ${tokens.text.secondary};
 `;
 
-const Input = styled("input")<{ $error: boolean }>`
+const Input = styled.input<{ $error: boolean }>`
   box-sizing: border-box;
   height: 56px;
   width: 100%;
@@ -71,7 +75,7 @@ const Input = styled("input")<{ $error: boolean }>`
   }
 `;
 
-const Helper = styled("p")<{ $error: boolean }>`
+const Helper = styled.p<{ $error: boolean }>`
   margin: 0;
   min-height: 1.25rem;
   font-size: 0.75rem;

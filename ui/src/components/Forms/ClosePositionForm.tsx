@@ -1,5 +1,5 @@
 import { type FC, useEffect, useState } from "react";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import type { Participant } from "../../hooks/data/getUserFuturesOrders";
 import type { PerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
 import { useSimulateFuturesOrder } from "../../hooks/data/useSimulateFuturesOrder";
@@ -278,7 +278,7 @@ export const ClosePositionForm: FC<ClosePositionFormProps> = ({
 };
 
 /* Two titled sections, then buttons: one rhythm. */
-const Edit = styled("div")`
+const Edit = styled.div`
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -298,7 +298,7 @@ const OrderCard = styled(CostCard)`
   gap: 1rem;
 `;
 
-const Actions = styled("div")`
+const Actions = styled.div`
   && > div {
     margin-top: 1.5rem;
   }

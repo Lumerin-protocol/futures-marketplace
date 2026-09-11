@@ -1,5 +1,5 @@
 import type { FC } from "react";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { tokens } from "../../../styles/tokens";
 
 interface GenericConfirmContentProps {
@@ -19,7 +19,7 @@ export const GenericConfirmContent: FC<GenericConfirmContentProps> = ({ data }) 
   );
 };
 
-const ReviewItems = styled("div")`
+const ReviewItems = styled.div`
   div {
     display: flex;
     justify-content: space-between;

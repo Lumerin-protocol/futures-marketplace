@@ -1,6 +1,6 @@
 import { tokens } from "../../../styles/tokens";
 import { useState, useMemo, useCallback } from "react";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { Modal } from "../../Modal";
 import { ModalCard, ModalCloseButton, ModalCloseIcon } from "../../Modal.styled";
 import { ModalActions, ModalCancelButton, ModalConfirmButton } from "./PerpsOrderFormFields";
@@ -201,13 +201,13 @@ const CloseAllModalCard = styled(ModalCard)`
   }
 `;
 
-const Description = styled("p")`
+const Description = styled.p`
   color: ${tokens.text.secondary};
   font-size: 0.875rem;
   margin: 0 0 1.25rem 0;
 `;
 
-const Summary = styled("div")`
+const Summary = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -217,31 +217,31 @@ const Summary = styled("div")`
   margin-bottom: 1.25rem;
 `;
 
-const SummaryRow = styled("div")`
+const SummaryRow = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
 `;
 
-const SummaryLabel = styled("span")`
+const SummaryLabel = styled.span`
   color: ${tokens.text.secondary};
   font-size: 0.875rem;
 `;
 
-const SummaryValue = styled("span")`
+const SummaryValue = styled.span`
   color: ${tokens.text.onDark};
   font-size: 0.875rem;
   font-weight: 600;
 `;
 
-const ErrorText = styled("p")`
+const ErrorText = styled.p`
   color: ${tokens.trading.short};
   font-size: 0.8125rem;
   margin: 0 0 1rem 0;
 `;
 
 
-const SimResultsContainer = styled("div")`
+const SimResultsContainer = styled.div`
   width: 100%;
   overflow-x: auto;
   margin-top: 0.5rem;
@@ -261,7 +261,7 @@ const SimResultsContainer = styled("div")`
   }
 `;
 
-const Table = styled("table")`
+const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
 
@@ -283,7 +283,7 @@ const Table = styled("table")`
   }
 `;
 
-const ResultRow = styled("tr")`
+const ResultRow = styled.tr`
   &:hover {
     background-color: ${tokens.overlay.white02};
   }
@@ -293,7 +293,7 @@ const ResultRow = styled("tr")`
   }
 `;
 
-const TypeBadge = styled("span")<{ $type: string }>`
+const TypeBadge = styled.span<{ $type: string }>`
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
