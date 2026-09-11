@@ -10,12 +10,12 @@ export const waitForOrderBookBlockNumber = async (
   blockNumber: bigint,
   qc: QueryClient,
   contractMode: ContractMode,
-  deliveryDate?: number,
+  expirationAt?: number,
 ) => {
   if (contractMode === "perpetual") {
     await waitForPerpsBlockNumber(blockNumber, qc);
   } else {
-    await waitForAggregateBlockNumber(blockNumber, qc, deliveryDate);
+    await waitForAggregateBlockNumber(blockNumber, qc, expirationAt);
   }
 };
 

@@ -4,12 +4,18 @@ import styled from "@mui/material/styles/styled";
 import { ModalItem } from "../../Modal";
 import { PrimaryButton } from "../../Forms/FormButtons/Buttons.styled";
 
+// Legacy futures close flow: informational warning + Place Order prefill + Bid/Ask
+// highlight. Replaced by Forms/ClosePositionForm (order-creation modal shared
+// with Perps). Restore by wiring `useClosePositionModal` in Futures.tsx and passing
+// `onClosePosition` through OrdersPositionsTabWidget → PositionsListWidget.
+
 const CLOSE_POSITION_MODAL_KEY = "futures_close_position_modal_dismissed";
 
 interface ClosePositionData {
   price: string;
   amount: number;
   isBuy: boolean;
+  expirationAt?: number;
 }
 
 interface ClosePositionModalProps {
@@ -22,22 +28,24 @@ interface ClosePositionModalProps {
 }
 
 // Hook to manage close position modal state and localStorage
-export const useClosePositionModal = (onProceedWithClose: (price: string, amount: number, isBuy: boolean) => void) => {
+export const useClosePositionModal = (
+  onProceedWithClose: (price: string, amount: number, isBuy: boolean, expirationAt?: number) => void,
+) => {
   const [showModal, setShowModal] = useState(false);
   const [doNotShowAgain, setDoNotShowAgain] = useState(false);
   const [pendingClosePosition, setPendingClosePosition] = useState<ClosePositionData | null>(null);
 
   const handleClosePosition = useCallback(
-    (price: string, amount: number, isBuy: boolean) => {
+    (price: string, amount: number, isBuy: boolean, expirationAt?: number) => {
       // Check if user has dismissed the modal before
       const isDismissed = localStorage.getItem(CLOSE_POSITION_MODAL_KEY) === "true";
 
       if (isDismissed) {
         // Skip modal, proceed directly with highlighting
-        onProceedWithClose(price, amount, isBuy);
+        onProceedWithClose(price, amount, isBuy, expirationAt);
       } else {
         // Store pending data and show modal
-        setPendingClosePosition({ price, amount, isBuy });
+        setPendingClosePosition({ price, amount, isBuy, expirationAt });
         setShowModal(true);
       }
     },
@@ -55,7 +63,12 @@ export const useClosePositionModal = (onProceedWithClose: (price: string, amount
 
     // Proceed with highlighting if we have pending data
     if (pendingClosePosition) {
-      onProceedWithClose(pendingClosePosition.price, pendingClosePosition.amount, pendingClosePosition.isBuy);
+      onProceedWithClose(
+        pendingClosePosition.price,
+        pendingClosePosition.amount,
+        pendingClosePosition.isBuy,
+        pendingClosePosition.expirationAt,
+      );
       setPendingClosePosition(null);
     }
 
@@ -193,7 +206,7 @@ const ModalButtons = styled("div")`
   margin-top: 0.5rem;
 `;
 
-const CancelButton = styled("button")`
+const _CancelButton = styled("button")`
   padding: 0.75rem 1.25rem;
   background: ${tokens.overlay.white10};
   color: ${tokens.text.onDark};

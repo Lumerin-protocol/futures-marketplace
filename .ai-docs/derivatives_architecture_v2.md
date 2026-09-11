@@ -20,7 +20,7 @@ This document outlines the architectural considerations for evolving the Futures
 | Order Execution | Direct on-chain transactions | Gas costs, 12-15s finality |
 | Real-time Updates | None (polling only) | No WebSocket/push capability |
 | Order Book | On-chain only | Cannot support limit order books |
-| Backend Jobs | Lambda (margin calls, market maker) | Scheduled, not event-driven |
+| Backend Jobs | Lambda (market maker) | Scheduled, not event-driven |
 
 ### Current Tech Stack
 

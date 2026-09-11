@@ -28,8 +28,6 @@ const fetchPerpsCollectionAsync = async () => {
     takerFeeBps: data.takerFeeBps,
     minimumMarginPerOrder: parseInt(data.minimumMarginPerOrder),
     minimumPriceIncrement: parseInt(data.minimumPriceIncrement),
-    marginPercent: data.marginPercent,
-    maintenanceMarginPercent: data.maintenanceMarginPercent,
     totalVolume: data.totalVolume,
   };
 
@@ -43,8 +41,6 @@ export type PerpsCollection = {
   takerFeeBps: number;
   minimumMarginPerOrder: number;
   minimumPriceIncrement: number;
-  marginPercent: number;
-  maintenanceMarginPercent: number;
   totalVolume: string;
 };
 
@@ -54,8 +50,6 @@ type PerpsCollectionResponse = {
     takerFeeBps: number;
     minimumMarginPerOrder: string;
     minimumPriceIncrement: string;
-    marginPercent: number;
-    maintenanceMarginPercent: number;
     totalVolume: string;
   }[];
 };

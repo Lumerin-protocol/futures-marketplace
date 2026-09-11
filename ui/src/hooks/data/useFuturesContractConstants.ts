@@ -1,10 +1,21 @@
 import { useReadContracts } from "wagmi";
-import { FuturesABI } from "../../abi/Futures";
-import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
+import { HashPowerFuturesAbi } from "futures-marketplace-abi/HashPowerFutures.ts";
+import { withErrors } from "../../lib/withErrors";
+
+const FUTURES_PER_DELIVERY_ORDER_LIMIT_ABI = [
+  {
+    type: "function",
+    name: "MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint8" }],
+  },
+] as const;
 
 /**
  * Hook to get additional futures contract constants
- * Fetches: futureDeliveryDatesCount, deliveryIntervalDays, MAX_ORDERS_PER_PARTICIPANT, orderFee
+ * Fetches: futureExpirationDatesCount, expirationIntervalDays,
+ *          MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION, makerFeeBps, takerFeeBps
  */
 export function useFuturesContractConstants() {
   const futuresAddress = process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`;
@@ -13,23 +24,28 @@ export function useFuturesContractConstants() {
     contracts: [
       {
         address: futuresAddress,
-        abi: FuturesABI,
-        functionName: "futureDeliveryDatesCount",
+        abi: withErrors(HashPowerFuturesAbi),
+        functionName: "futureExpirationDatesCount",
       },
       {
         address: futuresAddress,
-        abi: FuturesABI,
-        functionName: "deliveryIntervalDays",
+        abi: withErrors(HashPowerFuturesAbi),
+        functionName: "expirationIntervalDays",
       },
       {
         address: futuresAddress,
-        abi: FuturesABI,
-        functionName: "MAX_ORDERS_PER_PARTICIPANT",
+        abi: withErrors(FUTURES_PER_DELIVERY_ORDER_LIMIT_ABI),
+        functionName: "MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION",
       },
       {
         address: futuresAddress,
-        abi: FuturesABI,
-        functionName: "orderFee",
+        abi: withErrors(HashPowerFuturesAbi),
+        functionName: "makerFeeBps",
+      },
+      {
+        address: futuresAddress,
+        abi: withErrors(HashPowerFuturesAbi),
+        functionName: "takerFeeBps",
       },
     ],
     query: {
@@ -40,17 +56,21 @@ export function useFuturesContractConstants() {
     },
   });
 
-  const futureDeliveryDatesCount = result.data?.[0]?.result as number | undefined;
-  const deliveryIntervalDays = result.data?.[1]?.result as number | undefined;
+  const futureExpirationDatesCount = result.data?.[0]?.result as number | undefined;
+  const expirationIntervalDays = result.data?.[1]?.result as number | undefined;
   const maxOrdersPerParticipant = result.data?.[2]?.result as number | undefined;
-  const orderFee = result.data?.[3]?.result as bigint | undefined;
+  const makerFeeBps = result.data?.[3]?.result as number | undefined;
+  const takerFeeBps = result.data?.[4]?.result as number | undefined;
 
   return {
     ...result,
-    futureDeliveryDatesCount,
-    deliveryIntervalDays,
+    futureExpirationDatesCount,
+    expirationIntervalDays,
     maxOrdersPerParticipant,
-    orderFee,
-    orderFeeFormatted: orderFee ? Number(orderFee) / PAYMENT_TOKEN_SCALE_NUM : null,
+    makerFeeBps,
+    takerFeeBps,
+    // Signed basis points of the filled notional; negative is a maker rebate.
+    makerFeePercent: makerFeeBps !== undefined ? makerFeeBps / 100 : null,
+    takerFeePercent: takerFeeBps !== undefined ? takerFeeBps / 100 : null,
   };
 }

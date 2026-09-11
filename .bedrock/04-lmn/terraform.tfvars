@@ -26,17 +26,6 @@ market_maker = {
   min_usdc_balance            = "10000000"            # 10 USDC (10n * 10n ** 6n)
 }
 
-margin_call_lambda = {
-  create                             = true
-  log_level                          = "info"
-  job_interval                       = "15"
-  timeout                            = 300
-  memory_size                        = 1024
-  margin_utilization_warning_percent = "80"
-  daily_schedule_hour                = "0"           # UTC hour (0-23). Examples: 0=midnight UTC, 14=09:00 EST/10:00 EDT, 21=16:00 EST/17:00 EDT
-  daily_schedule_minute              = "0"           # UTC minute (0-59)
-}
-
 notifications_service = {
   create                     = true
   protect                    = false
@@ -70,6 +59,15 @@ clone_factory_address   = "0x6b690383c0391b0cf7d20b9eb7a783030b1f3f96"
 hashrate_oracle_address = "0x6599ef8e2b4a548a86eb82e2dfbc6ceadfceacbd"
 futures_address         = "0x8464dc5ab80e76e497fad318fe6d444408e5ccda" 
 multicall_address       = "0xcA11bde05977b3631167028862bE2a173976CA11"
+
+########################################
+# Goldsky Subgraph Endpoints (public)
+########################################
+gs_subgraphs = {
+  futures = "FINDME"
+  oracles = "FINDME"
+}
+
 
 ########################################
 # Monitoring Configuration

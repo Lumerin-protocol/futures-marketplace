@@ -53,7 +53,7 @@ resource "aws_iam_role_policy" "market_maker_secrets_policy" {
           "secretsmanager:GetSecretValue"
         ]
         Resource = [
-          aws_secretsmanager_secret.market_maker.arn
+          aws_secretsmanager_secret.market_maker[0].arn
         ]
       }
     ]
@@ -157,17 +157,17 @@ resource "aws_lambda_function" "market_maker" {
       RISK_AVERSION               = tostring(var.market_maker.risk_aversion)
       MAX_POSITION                = tostring(var.market_maker.max_position)
       LOG_LEVEL                   = tostring(var.market_maker.log_level)
-      
+
       # Contract Configuration
       FUTURES_ADDRESS = var.futures_address
       CHAIN_ID        = tostring(var.market_maker.chain_id)
-      
+
       # Balance Thresholds (for graceful exit when funds are low)
       MIN_ETH_BALANCE  = tostring(var.market_maker.min_eth_balance)
       MIN_USDC_BALANCE = tostring(var.market_maker.min_usdc_balance)
-      
+
       # Secrets are fetched at runtime via AWS SDK
-      SECRETS_ARN = aws_secretsmanager_secret.market_maker.arn
+      SECRETS_ARN = aws_secretsmanager_secret.market_maker[0].arn
     }
   }
 

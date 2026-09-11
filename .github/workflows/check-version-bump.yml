@@ -1,14 +1,14 @@
-name: Check Futures Version Bump
+name: Check HashPowerFutures Version Bump
 
 on:
   pull_request:
     paths:
-      - "contracts/contracts/Futures.sol"
+      - "contracts/contracts/HashPowerFutures.sol"
       - ".github/workflows/check-version-bump.yml"
 
 jobs:
   check-version-bump:
-    name: Require Futures VERSION bump
+    name: Require HashPowerFutures VERSION bump
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -16,31 +16,40 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify VERSION updated when Futures.sol changes
+      - name: Verify VERSION updated when HashPowerFutures.sol changes
         shell: bash
         run: |
           set -euo pipefail
 
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
           HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          CONTRACT_PATH="contracts/contracts/HashPowerFutures.sol"
 
-          if ! git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- contracts/contracts/Futures.sol | grep -q .; then
-            echo "Futures.sol not changed; skipping version check."
+          if ! git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- "$CONTRACT_PATH" | grep -q .; then
+            echo "HashPowerFutures.sol not changed; skipping version check."
             exit 0
           fi
 
-          base_version=$(git show "$BASE_SHA:contracts/contracts/Futures.sol" | sed -n 's/.*VERSION = "\(.*\)";/\1/p' | head -n1)
-          head_version=$(git show "$HEAD_SHA:contracts/contracts/Futures.sol" | sed -n 's/.*VERSION = "\(.*\)";/\1/p' | head -n1)
+          base_contract_path=$(git diff --name-status --find-renames "$BASE_SHA" "$HEAD_SHA" -- contracts/contracts |
+            awk -v target="$CONTRACT_PATH" '$1 ~ /^R/ && $3 == target { print $2; exit }')
+          base_contract_path=${base_contract_path:-$CONTRACT_PATH}
+
+          base_version=$(git show "$BASE_SHA:$base_contract_path" | sed -n 's/.*VERSION = "\(.*\)";/\1/p' | head -n1)
+          head_version=$(git show "$HEAD_SHA:$CONTRACT_PATH" | sed -n 's/.*VERSION = "\(.*\)";/\1/p' | head -n1)
 
           if [ -z "$base_version" ] || [ -z "$head_version" ]; then
-            echo "Unable to determine VERSION from Futures.sol."
+            echo "Unable to determine VERSION from HashPowerFutures.sol."
             echo "Base VERSION: ${base_version:-<missing>}"
             echo "Head VERSION: ${head_version:-<missing>}"
             exit 1
           fi
 
           if [ "$base_version" = "$head_version" ]; then
-            echo "VERSION was not bumped in Futures.sol."
+            if [ "$base_contract_path" != "$CONTRACT_PATH" ]; then
+              echo "Contract artifact renamed to HashPowerFutures.sol; VERSION remains $head_version."
+              exit 0
+            fi
+            echo "VERSION was not bumped in HashPowerFutures.sol."
             echo "Base VERSION: $base_version"
             echo "Head VERSION: $head_version"
             exit 1

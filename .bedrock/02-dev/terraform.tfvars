@@ -8,34 +8,23 @@ ecs_cluster = {
 
 # Configure Market Maker Lambda
 market_maker = {
-  create                      = true
+  create                      = false
   # Lambda Configuration
   timeout                     = 60          # 60 seconds (enough for blockchain tx)
   memory_size                 = 1024        # 1GB RAM
-  schedule_rate               = 5           # Run every 5 minutes Graph for Sep-ARB is 2-5 minutes (mainnet is <60 seconds)
+  schedule_rate               = 1           # Run every 2 minutes (Graph for Sep-ARB is 2-5 minutes (mainnet is <60 seconds)
   # Trading Parameters
   float_amount                = 800000000   # 800 USDC (800n * 10n ** 6n)
   spread_amount               = 10000       # 0.01 USDC (1n * 10n ** 4n)
   grid_levels                 = 5
   active_quoting_amount_ratio = 0.4
-  risk_aversion               = 3000000     # Risk aversion parameter (higher = more conservative)
+  risk_aversion               = 15000 #3000000     # Risk aversion parameter (higher = more conservative)
   max_position                = 10
   log_level                   = "info"
   chain_id                    = 84532       # Base Sepolia
   # Balance Thresholds (graceful exit when funds low)
   min_eth_balance             = "100000000000000"     # 0.0001 ETH in wei (~1.4 txns - stops before failing)
   min_usdc_balance            = "10000000"            # 10 USDC (10n * 10n ** 6n)
-}
-
-margin_call_lambda = {
-  create                             = true
-  log_level                          = "debug"
-  job_interval                       = "15"
-  timeout                            = 300
-  memory_size                        = 512
-  margin_utilization_warning_percent = "80"
-  daily_schedule_hour                = "0"           # UTC hour (0-23). Examples: 0=midnight UTC, 14=09:00 EST/10:00 EDT, 21=16:00 EST/17:00 EDT
-  daily_schedule_minute              = "0"           # UTC minute (0-59)
 }
 
 notifications_service = {

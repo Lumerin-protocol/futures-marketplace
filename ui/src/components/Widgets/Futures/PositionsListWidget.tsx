@@ -1,21 +1,22 @@
 import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import Tooltip from "@mui/material/Tooltip";
-import { SmallWidget } from "../../Cards/Cards.styled";
-import type { PositionBookPosition } from "../../../hooks/data/usePositionBook";
-import { useCreateOrder } from "../../../hooks/data/useCreateOrder";
-import { useCreatePerpsOrder } from "../../../hooks/data/perps/useCreatePerpsOrder";
+import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPositions";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
-import { ServerStackIcon, CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
-import { useModal } from "../../../hooks/useModal";
-import { ModalItem } from "../../Modal";
-import { DepositDeliveryPaymentForm } from "../../Forms/DepositDeliveryPaymentForm";
+import { useSettlePositions } from "../../../hooks/data/useSettlePositions";
 import { useState } from "react";
-import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
-import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
+import { useOrderMargin } from "../../../hooks/data/useOrderMargin";
 import type { ContractMode } from "../../../types/types";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { FuturesTradesModal, type FuturesTradesModalSelection } from "./FuturesTradesModal";
+import type { ClosablePosition } from "../../Forms/ClosePositionForm";
+import { LiquidationChip, formatLiquidatedQty } from "../../../lib/liquidation";
+
+const MARGIN_HINT =
+  "Initial margin this delivery date accounts for — how much the account's requirement " +
+  "would fall without it. Collateral is pooled across every expiry and the perps venue, " +
+  "so these do not add up to Margin Used, and a hedging leg accounts for none of it.";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -28,7 +29,7 @@ interface PositionsListWidgetProps {
   positions: PositionBookPosition[];
   isLoading?: boolean;
   participantAddress?: `0x${string}`;
-  onClosePosition?: (price: string, amount: number, isBuy: boolean) => void;
+  onClosePosition?: (position: ClosablePosition) => void;
   contractMode?: ContractMode;
   balanceQuery: BalanceQueryResult;
 }
@@ -39,42 +40,47 @@ export const PositionsListWidget = ({
   participantAddress,
   onClosePosition,
   contractMode = "futures",
-  balanceQuery,
 }: PositionsListWidgetProps) => {
-  // Conditionally use futures or perps create order hook
-  const futuresCreateOrder = useCreateOrder();
-  const perpsCreateOrder = useCreatePerpsOrder();
-  const { createOrderAsync, isPending } = contractMode === "perpetual" ? perpsCreateOrder : futuresCreateOrder;
   const { data: marketPrice } = useGetMarketPrice();
-  const contractSpecsQuery = useFuturesContractSpecs();
-  const depositModal = useModal();
-  const [selectedDeliveryDate, setSelectedDeliveryDate] = useState<bigint | null>(null);
-  const [selectedPricePerDay, setSelectedPricePerDay] = useState<bigint | null>(null);
-  const [selectedTotalContracts, setSelectedTotalContracts] = useState<number | null>(null);
-  const [selectedPositions, setSelectedPositions] = useState<PositionBookPosition[]>([]);
+  const orderMargin = useOrderMargin();
+  const [tradesSelection, setTradesSelection] = useState<FuturesTradesModalSelection | null>(null);
+  const { settlePositionsAsync, isPending: isSettling } = useSettlePositions();
+  // expirationAt currently being claimed, plus any per-expiration claim error message.
+  const [claimingExpirationAt, setClaimingExpirationAt] = useState<string | null>(null);
+  const [claimError, setClaimError] = useState<{ expirationAt: string; message: string } | null>(null);
 
-  const getStatusColor = (isActive: boolean, closedAt: string | null) => {
-    if (closedAt) {
-      return tokens.text.muted; // Closed
-    }
-    return isActive ? tokens.trading.long : tokens.trading.short; // Active or Cancelled
-  };
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const isMatured = (expirationAt: string) =>
+    contractMode === "futures" && Number(expirationAt) > 0 && Number(expirationAt) < nowSeconds;
 
-  const getStatusText = (isActive: boolean, closedAt: string | null) => {
-    if (closedAt) {
-      return "Closed";
+  const handleClaim = async (expirationAt: string) => {
+    setClaimError(null);
+    setClaimingExpirationAt(expirationAt);
+    try {
+      await settlePositionsAsync({
+        expirationAt: BigInt(expirationAt),
+        participant: participantAddress,
+      });
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err);
+      // Surface the common, recoverable cases in plain language.
+      let message = "Failed to settle. Please try again.";
+      if (/OracleStale/i.test(raw)) {
+        message = "Price feed is stale — settlement will be possible once the oracle refreshes.";
+      } else if (/No open positions/i.test(raw)) {
+        message = "Already settled.";
+      } else if (/User rejected|denied/i.test(raw)) {
+        message = "Transaction rejected.";
+      }
+      setClaimError({ expirationAt, message });
+    } finally {
+      setClaimingExpirationAt(null);
     }
-    return isActive ? "Open" : "Cancelled";
   };
 
   const getPositionType = (position: PositionBookPosition) => {
     if (!participantAddress) return "Unknown";
     return position.buyer.address.toLowerCase() === participantAddress.toLowerCase() ? "Long" : "Short";
-  };
-
-  const getTypeColor = (position: PositionBookPosition) => {
-    const type = getPositionType(position);
-    return type === "Long" ? tokens.trading.long : tokens.trading.short;
   };
 
   const getPriceForPosition = (position: PositionBookPosition) => {
@@ -88,18 +94,23 @@ export const PositionsListWidget = ({
 
 
   // Get latest price from market price hook
-  const latestPrice = marketPrice ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
   const latestPriceBigInt = marketPrice ?? null;
 
-  // Get contract specs
-  const marginPercent = contractSpecsQuery.data?.data?.liquidationMarginPercent ?? 20;
-  const deliveryDurationDays = contractSpecsQuery.data?.data?.deliveryDurationDays ?? 7;
-
-  // Calculate margin for a position
-  const calculateMargin = (pricePerDay: bigint, amount: number, positionType: string): bigint | null => {
-    if (!latestPriceBigInt) return null;
-    const qty = positionType === "Long" ? amount : -amount;
-    return getMinMarginForPositionManual(pricePerDay, qty, latestPriceBigInt, marginPercent, deliveryDurationDays);
+  /**
+   * Initial margin this expiry accounts for: what the account's portfolio
+   * requirement would fall by without it. Quoted per `expirationAt` because that
+   * is the granularity the venue aggregates, so two rows that differ only by
+   * fill price share one figure — the same way this table's Quantity column
+   * already reports the session-level net quantity.
+   *
+   * Clamped, because the engine nets every expiry into one delta: an expiry
+   * hedging the rest of the book accounts for none of the requirement, and
+   * removing it can even raise it.
+   */
+  const calculateMargin = (expirationAt: string): bigint | null => {
+    const quote = orderMargin.quote({ closeFutures: [BigInt(expirationAt)] });
+    if (!quote) return null;
+    return quote.imIncrease < 0n ? -quote.imIncrease : 0n;
   };
 
   const formatMargin = (margin: bigint | null): string => {
@@ -107,24 +118,31 @@ export const PositionsListWidget = ({
     return `${(Number(margin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} USDC`;
   };
 
-  // Calculate PnL for a position
+  // PnL = (mark - entry) * signedQty, mirroring the venue's own settlement math.
+  // Signed `netQuantity` encodes side
+  // (long > 0, short < 0), so the sign of the result falls out naturally. The
+  // percentage is taken against entry notional (fixed at fill time) so it
+  // doesn't drift with the market price the way a mark-notional denominator does.
   const calculatePnL = (
     entryPrice: bigint,
-    positionType: string,
-    amount: number,
+    netQuantity: number,
+    // When the expiration's settlement price is pinned, PnL is frozen at that price
+    // instead of drifting with the live mark.
+    markOverride?: bigint | null,
   ): { pnl: number | null; percentage: number | null } => {
-    if (!latestPrice) return { pnl: null, percentage: null };
+    const mark = markOverride ?? latestPriceBigInt;
+    if (!mark) return { pnl: null, percentage: null };
+    if (netQuantity === 0) return { pnl: 0, percentage: 0 };
 
-    const entryPriceNum = Number(entryPrice) / PAYMENT_TOKEN_SCALE_NUM;
-    const priceDiff = latestPrice - entryPriceNum;
+    const signedQty = BigInt(netQuantity);
+    const absQty = signedQty < 0n ? -signedQty : signedQty;
 
-    // Long: profit when price goes up (current > entry)
-    // Short: profit when price goes down (entry > current)
-    // Multiply by deliveryDurationDays to get total PnL for the contract period
-    const pnl = (positionType === "Long" ? priceDiff * amount : -priceDiff * amount) * deliveryDurationDays;
-    // Calculate percentage based on PnL and initial investment (entry value)
-    const entryValue = latestPrice * amount * deliveryDurationDays;
-    const percentage = entryValue !== 0 ? (pnl / entryValue) * 100 : 0;
+    const pnlScaled = (mark - entryPrice) * signedQty;
+    const entryNotionalScaled = entryPrice * absQty;
+
+    const pnl = Number(pnlScaled) / PAYMENT_TOKEN_SCALE_NUM;
+    const percentage =
+      entryNotionalScaled === 0n ? 0 : (Number(pnlScaled) / Number(entryNotionalScaled)) * 100;
 
     return { pnl, percentage };
   };
@@ -134,92 +152,48 @@ export const PositionsListWidget = ({
     return `${pnl.toFixed(2)} (${percentage.toFixed(2)}%)`;
   };
 
-  const handleClosePosition = async (groupedPosition: {
+  const handleClosePosition = (groupedPosition: {
     pricePerDay: bigint;
-    deliveryAt: string;
+    expirationAt: string;
     positionType: string;
-    amount: number;
-    positions: PositionBookPosition[];
+    netQuantity: number;
   }) => {
-    // Determine order type to close the position
-    // If it's a Long position, create a Sell order (negative quantity)
-    // If it's a Short position, create a Buy order (positive quantity)
-    // Quantity sign: positive = Buy, negative = Sell
-    const quantity =
-      groupedPosition.positionType === "Short"
-        ? groupedPosition.amount // Buy order (positive)
-        : -groupedPosition.amount; // Sell order (negative)
-
-    // Use market price instead of position price for closing
-    const priceString = latestPrice ? latestPrice.toFixed(2) : formatPrice(groupedPosition.pricePerDay);
-
-    // Determine isBuy for callback compatibility
-    const isBuy = quantity > 0;
-
-    // If callback provided, use it to populate place order widget
-    if (onClosePosition) {
-      onClosePosition(priceString, Math.abs(quantity), isBuy);
-      return;
-    }
-
-    // Otherwise, create order directly (fallback behavior)
-    try {
-      // Use deliveryAt directly (it's already a timestamp)
-      const deliveryDate = BigInt(groupedPosition.deliveryAt);
-
-      // Use market price for the order
-      const closePrice = latestPriceBigInt ?? groupedPosition.pricePerDay;
-
-      if (contractMode === "perpetual") {
-        // Perps only needs price and quantity
-        await createOrderAsync({
-          price: closePrice,
-          quantity: quantity,
-        });
-      } else {
-        // Futures needs price, deliveryDate, quantity, and destUrl
-        await createOrderAsync({
-          price: closePrice,
-          deliveryDate: deliveryDate,
-          quantity: quantity,
-          destUrl: "",
-        });
-      }
-
-      console.log(
-        `Created ${isBuy ? "buy" : "sell"} order to close ${Math.abs(quantity)} ${groupedPosition.positionType} positions at market price`,
-      );
-    } catch (err) {
-      console.error("Failed to close position:", err);
-    }
+    // The row's badge is the source of truth for direction; the session-level
+    // net quantity is signed the same way but is read here only for its size.
+    const size = BigInt(Math.abs(Math.round(groupedPosition.netQuantity)));
+    onClosePosition?.({
+      netQuantity: groupedPosition.positionType === "Long" ? size : -size,
+      entryPrice: groupedPosition.pricePerDay,
+      expirationAt: BigInt(groupedPosition.expirationAt),
+    });
   };
 
-  // Group positions by price (based on position type), deliveryAt, and position type
+  // Group positions by price (based on position type), expirationAt, and position type
   const groupedPositions = positions.reduce(
     (acc, position) => {
       const positionType = getPositionType(position);
       const pricePerDay = getPriceForPosition(position);
-      const key = `${pricePerDay}-${position.deliveryAt}-${positionType}`;
+      const key = `${pricePerDay}-${position.expirationAt}-${positionType}`;
 
       if (!acc[key]) {
         acc[key] = {
           pricePerDay: pricePerDay,
-          deliveryAt: position.deliveryAt,
+          expirationAt: position.expirationAt,
           positionType: positionType,
-          destURL: position.destURL,
-          amount: 0,
-          paidCount: 0,
+          // Sessions are per (user, expirationAt), so every position rolling up
+          // into this group shares the same session-level net qty. Take it
+          // from the first one we see; subsequent ones would just duplicate it.
+          netQuantity: position.netQuantity,
+          liquidatedQuantity: position.liquidatedQuantity,
           isActive: position.isActive,
           closedAt: position.closedAt,
           timestamp: position.timestamp,
+          settlementPrice: position.settlementPrice,
+          settledAt: position.settledAt,
           positions: [] as PositionBookPosition[],
         };
       }
 
-      acc[key].amount += 1;
-      if (position.isPaid) {
-        acc[key].paidCount += 1;
-      }
       acc[key].positions.push(position);
 
       return acc;
@@ -228,14 +202,15 @@ export const PositionsListWidget = ({
       string,
       {
         pricePerDay: bigint;
-        deliveryAt: string;
+        expirationAt: string;
         positionType: string;
-        destURL: string;
-        amount: number;
-        paidCount: number;
+        netQuantity: number;
+        liquidatedQuantity: number;
         isActive: boolean;
         closedAt: string | null;
         timestamp: string;
+        settlementPrice: bigint | null;
+        settledAt: string | null;
         positions: PositionBookPosition[];
       }
     >,
@@ -264,12 +239,11 @@ export const PositionsListWidget = ({
             <tr>
               <th>Contract Expiration</th>
               <th>Side</th>
+              <th>Status</th>
               <th>Price (USDC)</th>
               <th>Quantity</th>
-              <th>Margin</th>
+              <th title={MARGIN_HINT}>Margin</th>
               <th>Unrealized PnL (USDC)</th>
-              <th>Destination</th>
-              <th>Payment</th>
               <th>Time</th>
               <th>Action</th>
             </tr>
@@ -277,86 +251,96 @@ export const PositionsListWidget = ({
           <tbody>
             {groupedPositionsArray.map((groupedPosition, index) => (
               <TableRow
-                key={`${groupedPosition.pricePerDay}-${groupedPosition.deliveryAt}-${groupedPosition.positionType}-${index}`}
+                key={`${groupedPosition.pricePerDay}-${groupedPosition.expirationAt}-${groupedPosition.positionType}-${index}`}
               >
-                <td><DateTimeCell timestamp={groupedPosition.deliveryAt} /></td>
-                <td>
-                  <TypeBadge $type={groupedPosition.positionType}>{groupedPosition.positionType}</TypeBadge>
-                </td>
-                <td>{formatPrice(groupedPosition.pricePerDay)}</td>
-                <td>{groupedPosition.amount}</td>
-                <td>
-                  {formatMargin(
-                    calculateMargin(groupedPosition.pricePerDay, groupedPosition.amount, groupedPosition.positionType),
-                  )}
-                </td>
-                <td>
-                  {(() => {
-                    const { pnl, percentage } = calculatePnL(
-                      groupedPosition.pricePerDay,
-                      groupedPosition.positionType,
-                      groupedPosition.amount,
-                    );
-                    return <PnLCell $isPositive={pnl !== null && pnl >= 0}>{formatPnL(pnl, percentage)}</PnLCell>;
-                  })()}
-                </td>
-                <td>
-                  {groupedPosition.destURL ? (
-                    <Tooltip title={groupedPosition.destURL}>
-                      <DestURLCell>
-                        <ServerStackIcon width={20} height={20} />
-                      </DestURLCell>
-                    </Tooltip>
-                  ) : (
-                    <span>---</span>
-                  )}
-                </td>
-                <td>
-                  {groupedPosition.destURL ? (
-                    <PaymentStatusCell>
-                      {groupedPosition.paidCount === groupedPosition.amount ? (
-                        <CheckCircleIcon width={20} height={20} color={tokens.trading.long} />
-                      ) : (
-                        <XCircleIcon width={20} height={20} color={tokens.trading.short} />
-                      )}
-                      <PaymentText>
-                        {groupedPosition.paidCount}/{groupedPosition.amount}
-                      </PaymentText>
-                    </PaymentStatusCell>
-                  ) : (
-                    <span>---</span>
-                  )}
-                </td>
-                <td><DateTimeCell timestamp={groupedPosition.timestamp} /></td>
-                <td>
-                  <ActionButtons>
-                    {groupedPosition.destURL &&
-                      groupedPosition.positionType !== "Short" &&
-                      groupedPosition.paidCount < groupedPosition.amount && (
-                        <DepositButton
-                          onClick={() => {
-                            setSelectedDeliveryDate(BigInt(groupedPosition.deliveryAt));
-                            setSelectedPricePerDay(groupedPosition.pricePerDay);
-                            setSelectedTotalContracts(groupedPosition.amount);
-                            setSelectedPositions(groupedPosition.positions);
-                            depositModal.open();
-                          }}
-                          title="Deposit delivery payment"
-                        >
-                          Deposit
-                        </DepositButton>
-                      )}
-                    {groupedPosition.isActive && !groupedPosition.closedAt && (
-                      <CloseButton
-                        onClick={() => handleClosePosition(groupedPosition)}
-                        disabled={isPending}
-                        title="By creating opposite order"
-                      >
-                        Close
-                      </CloseButton>
-                    )}
-                  </ActionButtons>
-                </td>
+                {(() => {
+                  const matured = isMatured(groupedPosition.expirationAt);
+                  const settlementPrice = groupedPosition.settlementPrice;
+                  const pricePinned = settlementPrice !== null;
+                  // PnL freezes at the pinned settlement price the moment it's recorded.
+                  const { pnl, percentage } = calculatePnL(
+                    groupedPosition.pricePerDay,
+                    groupedPosition.netQuantity,
+                    pricePinned ? settlementPrice : null,
+                  );
+                  const rowClaimError =
+                    claimError?.expirationAt === groupedPosition.expirationAt ? claimError.message : null;
+                  const isRowClaiming = claimingExpirationAt === groupedPosition.expirationAt;
+                  return (
+                    <>
+                      <td style={matured ? { color: "#EF4444" } : undefined}><DateTimeCell timestamp={groupedPosition.expirationAt} /></td>
+                      <td>
+                        <TypeBadge $type={groupedPosition.positionType}>{groupedPosition.positionType}</TypeBadge>
+                      </td>
+                      <td>
+                        {groupedPosition.liquidatedQuantity > 0 ? (
+                          <LiquidationChip
+                            title={formatLiquidatedQty(
+                              groupedPosition.liquidatedQuantity,
+                              groupedPosition.netQuantity,
+                            )}
+                          >
+                            {formatLiquidatedQty(
+                              groupedPosition.liquidatedQuantity,
+                              groupedPosition.netQuantity,
+                            )}
+                          </LiquidationChip>
+                        ) : (
+                          <StatusBadge $color={tokens.trading.long}>Open</StatusBadge>
+                        )}
+                      </td>
+                      <td>{formatPrice(groupedPosition.pricePerDay)}</td>
+                      <td>{Math.abs(groupedPosition.netQuantity)}</td>
+                      <td title={MARGIN_HINT}>
+                        {formatMargin(calculateMargin(groupedPosition.expirationAt))}
+                      </td>
+                      <td>
+                        <PnLCell $isPositive={pnl !== null && pnl >= 0}>{formatPnL(pnl, percentage)}</PnLCell>
+                      </td>
+                      <td><DateTimeCell timestamp={groupedPosition.timestamp} /></td>
+                      <td>
+                        <ActionButtons>
+                          <TradesButton
+                            onClick={() =>
+                              setTradesSelection({
+                                pricePerDay: groupedPosition.pricePerDay,
+                                expirationAt: groupedPosition.expirationAt,
+                                positionType: groupedPosition.positionType as "Long" | "Short",
+                              })
+                            }
+                            title="View matching trades from the last 30 days"
+                          >
+                            Trades
+                          </TradesButton>
+                          {groupedPosition.isActive && !groupedPosition.closedAt && !matured && (
+                            <CloseButton
+                              onClick={() => handleClosePosition(groupedPosition)}
+                              title="By creating opposite order"
+                            >
+                              Close
+                            </CloseButton>
+                          )}
+                          {groupedPosition.isActive && !groupedPosition.closedAt && matured && (
+                            <Tooltip
+                              title="Cash-settle this matured position now (normally the keeper does this automatically)"
+                              arrow
+                            >
+                              <span style={{ display: "inline-flex" }}>
+                                <ClaimButton
+                                  onClick={() => handleClaim(groupedPosition.expirationAt)}
+                                  disabled={isSettling && isRowClaiming}
+                                >
+                                  {isRowClaiming ? "Claiming…" : <><span>Claim</span><ClaimHintIcon>?</ClaimHintIcon></>}
+                                </ClaimButton>
+                              </span>
+                            </Tooltip>
+                          )}
+                          {rowClaimError && <ClaimErrorText>{rowClaimError}</ClaimErrorText>}
+                        </ActionButtons>
+                      </td>
+                    </>
+                  );
+                })()}
               </TableRow>
             ))}
           </tbody>
@@ -369,34 +353,22 @@ export const PositionsListWidget = ({
         </EmptyState>
       )}
 
-      <ModalItem open={depositModal.isOpen} setOpen={depositModal.setOpen}>
-        {selectedDeliveryDate !== null &&
-          selectedPricePerDay !== null &&
-          selectedTotalContracts !== null &&
-          selectedPositions.length > 0 && (
-            <DepositDeliveryPaymentForm
-              closeForm={() => {
-                depositModal.close();
-                setSelectedDeliveryDate(null);
-                setSelectedPricePerDay(null);
-                setSelectedTotalContracts(null);
-                setSelectedPositions([]);
-              }}
-              deliveryDate={selectedDeliveryDate}
-              pricePerDay={selectedPricePerDay}
-              totalContracts={selectedTotalContracts}
-              positions={selectedPositions}
-              balanceQuery={balanceQuery}
-            />
-          )}
-      </ModalItem>
+      <FuturesTradesModal
+        open={tradesSelection !== null}
+        onClose={() => setTradesSelection(null)}
+        selection={tradesSelection}
+        participantAddress={participantAddress}
+        activePositions={positions}
+        contractMode={contractMode}
+      />
     </PositionsContainer>
   );
 };
 
-const PositionsContainer = styled(SmallWidget)`
+// Flat section rather than a card: the tab widget already draws the border and
+// pads its content, so a SmallWidget here would nest a second card inside it.
+const PositionsContainer = styled("div")`
   width: 100%;
-  padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -442,7 +414,7 @@ const Table = styled("table")`
     border-bottom: 1px solid ${tokens.overlay.white10};
     white-space: nowrap;
     
-    &:first-child {
+    &:first-of-type {
       width: 130px;
       min-width: 130px;
     }
@@ -454,7 +426,7 @@ const Table = styled("table")`
     color: ${tokens.text.onDark};
     border-bottom: 1px solid ${tokens.overlay.white05};
     
-    &:first-child {
+    &:first-of-type {
       width: 130px;
       min-width: 130px;
     }
@@ -481,77 +453,26 @@ const TypeBadge = styled("span")<{ $type: string }>`
   color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
-const PnLCell = styled("span")<{ $isPositive: boolean }>`
-  color: ${(props) => (props.$isPositive ? tokens.trading.long : tokens.trading.short)};
-  font-weight: 600;
-`;
-
-const DestURLCell = styled("span")`
-  display: inline-block;
-  max-width: 200px;
-  overflow: hidden;
-  cursor: pointer;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: ${tokens.text.secondary};
-  font-size: 0.875rem;
-`;
-
-const PaymentStatusCell = styled("span")`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-`;
-
-const PaymentText = styled("span")`
-  font-size: 0.875rem;
-  color: ${tokens.text.onDark};
-`;
-
-const StatusBadge = styled("span")<{ $status: string }>`
+const StatusBadge = styled("span")<{ $color: string }>`
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   font-size: 0.75rem;
   font-weight: 600;
-  background-color: ${(props) => {
-    switch (props.$status) {
-      case "Open":
-        return tokens.trading.longRowBg;
-      case "Closed":
-        return tokens.trading.neutralRowBg;
-      default:
-        return tokens.trading.neutralRowBg;
-    }
-  }};
-  color: ${(props) => getStatusColor(props.$status)};
+  background-color: ${(props) => `${props.$color}33`};
+  color: ${(props) => props.$color};
 `;
+
+const PnLCell = styled("span")<{ $isPositive: boolean }>`
+  color: ${(props) => (props.$isPositive ? tokens.trading.long : tokens.trading.short)};
+  font-weight: 600;
+`;
+
 
 const ActionButtons = styled("div")`
   display: flex;
   gap: 0.5rem;
   align-items: center;
-`;
-
-const DepositButton = styled("button")`
-  padding: 0.5rem 0.875rem;
-  background: ${tokens.neutralButton.bg};
-  color: ${tokens.text.onDark};
-  border: none;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.1s ease;
-  
-  &:hover {
-    background: ${tokens.neutralButton.hover};
-    transform: translateY(-1px);
-  }
-  
-  &:active {
-    transform: translateY(0);
-  }
 `;
 
 const CloseButton = styled("button")`
@@ -581,6 +502,84 @@ const CloseButton = styled("button")`
   }
 `;
 
+const ClaimButton = styled("button")`
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 0.875rem;
+  background: ${tokens.neutralButton.bg};
+  color: ${tokens.text.onDark};
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+
+  &:hover:not(:disabled) {
+    background: ${tokens.neutralButton.hover};
+    transform: translateY(-1px);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    background: ${tokens.text.muted};
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+`;
+
+const ClaimHintIcon = styled("span")`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 5px;
+  vertical-align: middle;
+  opacity: 0.75;
+`;
+
+const ClaimErrorText = styled("span")`
+  color: ${tokens.trading.short};
+  font-size: 0.75rem;
+  max-width: 180px;
+`;
+
+const TradesButton = styled("button")`
+  padding: 0.5rem 0.875rem;
+  background: ${tokens.neutralButton.bg};
+  color: ${tokens.text.onDark};
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+
+  &:hover:not(:disabled) {
+    background: ${tokens.neutralButton.hover};
+    transform: translateY(-1px);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    background: ${tokens.text.muted};
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+`;
+
 const EmptyState = styled("div")`
   text-align: center;
   padding: 2rem;
@@ -592,14 +591,3 @@ const EmptyState = styled("div")`
   }
 `;
 
-// Helper function for status color
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case "Open":
-      return tokens.trading.long;
-    case "Closed":
-      return tokens.text.muted;
-    default:
-      return tokens.text.muted;
-  }
-};

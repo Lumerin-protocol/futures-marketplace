@@ -1,8 +1,20 @@
-import { useState } from "react";
-import Slider from "@mui/material/Slider";
+import { type ReactNode, useId, useState } from "react";
 import styled from "@mui/material/styles/styled";
 import { tokens } from "../../../styles/tokens";
-import { handleNumericDecimalInput6Decimals } from "../../Forms/Shared/AmountInputForm";
+import {
+  handleNumericDecimalInput6Decimals,
+  handleNumericIntegerInput,
+} from "../../Forms/Shared/AmountInputForm";
+import {
+  AmountInputWrapper,
+  AmountModeDropdown,
+  InputGroup,
+  PriceButton,
+  PriceInputContainer,
+  SliderContainer,
+} from "../../Forms/Shared/OrderFields";
+import { percentSliderProps, StyledSlider } from "../../Forms/Shared/StyledSlider";
+import { percentForQuantity, quantityAtPercent } from "../../../lib/sliderSnap";
 import { ModalCard } from "../../Modal.styled";
 
 export type AmountMode = "size" | "quantity";
@@ -12,32 +24,58 @@ export type AmountMode = "size" | "quantity";
 export function usePerpsOrderForm({
   maxQuantity,
   priceStep = 0.01,
+  quantityDecimals = 6,
+  initialAmountMode = "size",
+  allowAboveMax = false,
 }: {
   maxQuantity: number;
   priceStep?: number;
+  /** Zero for futures, whose contracts are whole units. */
+  quantityDecimals?: number;
+  initialAmountMode?: AmountMode;
+  /**
+   * Let a typed amount exceed `maxQuantity`. Modify raises an order by
+   * cancel-and-replace and checks margin for the new size itself, so it opts in.
+   * Close must stay capped at the position size, and that cap lives here.
+   */
+  allowAboveMax?: boolean;
 }) {
   const [price, setPrice] = useState("0.00");
-  const [amountMode, setAmountMode] = useState<AmountMode>("size");
+  const [amountMode, setAmountMode] = useState<AmountMode>(initialAmountMode);
   const [amount, setAmount] = useState("0");
   const [sliderValue, setSliderValue] = useState(100);
+  /**
+   * Whether `amount` was last written by the slider. Only then may 100% stand in
+   * for the exact `maxQuantity`; otherwise a typed value would be silently
+   * replaced by the max, which is what used to make a raised amount look ignored.
+   */
+  const [amountFromSlider, setAmountFromSlider] = useState(true);
 
   const currentPrice = parseFloat(price) || 0;
   const maxSize = maxQuantity * currentPrice;
 
+  const roundQuantity = (value: number) =>
+    quantityDecimals === 0 ? Math.round(value) : value;
+
   const getCurrentQuantity = (): number => {
-    if (sliderValue === 100) return maxQuantity;
+    if (amountFromSlider && sliderValue === 100) return maxQuantity;
     const parsed = parseFloat(amount);
-    if (isNaN(parsed) || parsed <= 0) return 0;
-    if (amountMode === "size") return currentPrice > 0 ? parsed / currentPrice : 0;
-    return parsed;
+    if (Number.isNaN(parsed) || parsed <= 0) return 0;
+    const quantity =
+      amountMode === "size"
+        ? currentPrice > 0
+          ? roundQuantity(parsed / currentPrice)
+          : 0
+        : roundQuantity(parsed);
+    return allowAboveMax ? quantity : Math.min(quantity, maxQuantity);
   };
 
   const getCurrentSize = (): number => {
-    if (sliderValue === 100) return maxQuantity * currentPrice;
+    if (amountFromSlider && sliderValue === 100) return maxQuantity * currentPrice;
     const parsed = parseFloat(amount);
-    if (isNaN(parsed) || parsed <= 0) return 0;
-    if (amountMode === "quantity") return parsed * currentPrice;
-    return parsed;
+    if (Number.isNaN(parsed) || parsed <= 0) return 0;
+    const size = amountMode === "quantity" ? parsed * currentPrice : parsed;
+    return allowAboveMax ? size : Math.min(size, maxSize);
   };
 
   const handlePriceChange = (newPrice: string) => {
@@ -51,34 +89,40 @@ export function usePerpsOrderForm({
 
   const handleAmountChange = (newAmount: string) => {
     setAmount(newAmount);
+    setAmountFromSlider(false);
     const parsed = parseFloat(newAmount);
-    if (!isNaN(parsed) && parsed >= 0) {
+    if (!Number.isNaN(parsed) && parsed >= 0) {
       const maxVal = amountMode === "size" ? maxSize : maxQuantity;
       if (maxVal > 0) {
+        // The slider only tracks the field for display, so it stays clamped to
+        // its own 0–100 range even when the typed amount runs past the max.
         const pct = Math.min(100, Math.max(0, (parsed / maxVal) * 100));
         setSliderValue(Math.round(pct));
       }
     }
   };
 
+  // Same snapping as the order widget's slider (see lib/sliderSnap).
   const handleSliderChange = (_: Event, value: number | number[]) => {
     const pct = Array.isArray(value) ? value[0] : value;
     setSliderValue(pct);
+    setAmountFromSlider(true);
+    const qty = pct === 100 ? maxQuantity : quantityAtPercent(pct, maxQuantity, quantityDecimals);
     if (amountMode === "size") {
-      if (pct === 100) {
-        setAmount(maxSize > 0 ? maxSize.toFixed(2) : "0");
-      } else {
-        const newSize = (maxSize * pct) / 100;
-        setAmount(newSize > 0 ? newSize.toFixed(2) : "0");
-      }
+      const size = qty * currentPrice;
+      setAmount(size > 0 ? size.toFixed(2) : "0");
     } else {
-      if (pct === 100) {
-        setAmount(maxQuantity > 0 ? maxQuantity.toFixed(6) : "0");
-      } else {
-        const newQty = (maxQuantity * pct) / 100;
-        setAmount(newQty > 0 ? newQty.toFixed(6) : "0");
-      }
+      setAmount(qty > 0 ? qty.toFixed(quantityDecimals) : "0");
     }
+  };
+
+  /**
+   * On release, for whole-contract quantities: park the thumb exactly where the
+   * quantity in the amount field sits, so the handle and the number agree.
+   */
+  const handleSliderCommitted = () => {
+    if (quantityDecimals !== 0 || maxQuantity <= 0) return;
+    setSliderValue(percentForQuantity(getCurrentQuantity(), maxQuantity));
   };
 
   const handleAmountModeChange = (mode: AmountMode) => {
@@ -89,7 +133,7 @@ export function usePerpsOrderForm({
     if (mode === "size") {
       setAmount(currentSz.toFixed(2));
     } else {
-      setAmount(currentQty.toFixed(6));
+      setAmount(currentQty.toFixed(quantityDecimals));
     }
   };
 
@@ -104,6 +148,7 @@ export function usePerpsOrderForm({
   const reset = (initialPriceStr: string, initialSlider = 100) => {
     setPrice(initialPriceStr);
     setSliderValue(initialSlider);
+    setAmountFromSlider(true);
     const initPriceNum = parseFloat(initialPriceStr) || 0;
     if (amountMode === "size") {
       if (initialSlider === 100) {
@@ -115,10 +160,10 @@ export function usePerpsOrderForm({
       }
     } else {
       if (initialSlider === 100) {
-        setAmount(maxQuantity > 0 ? maxQuantity.toFixed(6) : "0");
+        setAmount(maxQuantity > 0 ? maxQuantity.toFixed(quantityDecimals) : "0");
       } else {
         const initQty = (maxQuantity * initialSlider) / 100;
-        setAmount(initQty > 0 ? initQty.toFixed(6) : "0");
+        setAmount(initQty > 0 ? initQty.toFixed(quantityDecimals) : "0");
       }
     }
   };
@@ -135,6 +180,7 @@ export function usePerpsOrderForm({
     handlePriceChange,
     handleAmountChange,
     handleSliderChange,
+    handleSliderCommitted,
     handleAmountModeChange,
     incrementPrice,
     decrementPrice,
@@ -150,21 +196,38 @@ interface PerpsOrderFormFieldsProps {
   amountMode: AmountMode;
   sliderValue: number;
   disabled?: boolean;
+  /** Market orders have no price to edit; the group is left out, as in the sidebar. */
   hidePriceInput?: boolean;
   priceLabel?: string;
   quantityLabel?: string;
   sizeLabel?: string;
+  /** Zero for futures, whose contracts are whole units. */
+  quantityDecimals?: number;
   currentQuantity: number;
   currentSize: number;
   realizedPnl?: number | null;
+  /**
+   * Tighter variant: 0.8rem labels, 40px fields, 6px label-to-input, and no
+   * trailing margin — the caller spaces it.
+   */
+  compact?: boolean;
+  /** Replaces the summary card; `null` renders nothing there. */
+  summary?: ReactNode;
   onPriceChange: (price: string) => void;
   onAmountChange: (amount: string) => void;
   onAmountModeChange: (mode: AmountMode) => void;
   onSliderChange: (_: Event, value: number | number[]) => void;
+  /** Release: lets the form park the thumb on the snapped quantity. */
+  onSliderCommitted?: () => void;
   onIncrementPrice: () => void;
   onDecrementPrice: () => void;
 }
 
+/**
+ * The sidebar's fields, in a modal: price with steppers, amount with the
+ * Size/Quantity dropdown inside it, the percent slider. Built from the same
+ * primitives as the sidebar (Forms/Shared/OrderFields) so the two feel alike.
+ */
 export const PerpsOrderFormFields = ({
   price,
   amount,
@@ -175,107 +238,111 @@ export const PerpsOrderFormFields = ({
   priceLabel = "Price (USDC)",
   quantityLabel = "Quantity",
   sizeLabel = "Size (USDC)",
+  quantityDecimals = 6,
   currentQuantity,
   currentSize,
   realizedPnl,
+  compact = false,
+  summary,
   onPriceChange,
   onAmountChange,
   onAmountModeChange,
   onSliderChange,
+  onSliderCommitted,
   onIncrementPrice,
   onDecrementPrice,
-}: PerpsOrderFormFieldsProps) => (
-  <>
-    <InputsSection>
-      {!hidePriceInput && (
+}: PerpsOrderFormFieldsProps) => {
+  const fieldId = useId();
+  return (
+    <>
+      <InputsSection className={compact ? "compact" : undefined}>
+        {!hidePriceInput && (
+          <InputGroup>
+            <label htmlFor={`${fieldId}-price`}>{priceLabel}</label>
+            <PriceInputContainer className="field">
+              <PriceButton onClick={onDecrementPrice} disabled={disabled}>
+                −
+              </PriceButton>
+              <input
+                id={`${fieldId}-price`}
+                type="text"
+                value={price}
+                onChange={(e) => onPriceChange(e.target.value)}
+                onBeforeInput={handleNumericDecimalInput6Decimals}
+                inputMode="decimal"
+                placeholder="0.00"
+                disabled={disabled}
+              />
+              <PriceButton onClick={onIncrementPrice} disabled={disabled}>
+                +
+              </PriceButton>
+            </PriceInputContainer>
+          </InputGroup>
+        )}
+
         <InputGroup>
-          <InputLabel>{priceLabel}</InputLabel>
-          <PriceInputContainer>
-            <PriceStepButton onClick={onDecrementPrice} disabled={disabled}>−</PriceStepButton>
-            <PriceInput
+          <label htmlFor={`${fieldId}-amount`}>{amountMode === "size" ? sizeLabel : quantityLabel}</label>
+          <AmountInputWrapper className="field">
+            <input
+              id={`${fieldId}-amount`}
               type="text"
-              value={price}
-              onChange={(e) => onPriceChange(e.target.value)}
-              onBeforeInput={handleNumericDecimalInput6Decimals}
+              value={amount}
+              onChange={(e) => onAmountChange(e.target.value.replace("-", ""))}
+              onBeforeInput={
+                quantityDecimals === 0 && amountMode === "quantity"
+                  ? handleNumericIntegerInput
+                  : handleNumericDecimalInput6Decimals
+              }
               inputMode="decimal"
               placeholder="0.00"
               disabled={disabled}
             />
-            <PriceStepButton onClick={onIncrementPrice} disabled={disabled}>+</PriceStepButton>
-          </PriceInputContainer>
+            <AmountModeDropdown
+              value={amountMode}
+              onChange={(e) => onAmountModeChange(e.target.value as AmountMode)}
+              disabled={disabled}
+            >
+              <option value="size">Size</option>
+              <option value="quantity">Quantity</option>
+            </AmountModeDropdown>
+          </AmountInputWrapper>
+          <SliderContainer>
+            <StyledSlider
+              value={sliderValue}
+              onChange={onSliderChange}
+              onChangeCommitted={onSliderCommitted}
+              disabled={disabled}
+              {...percentSliderProps}
+            />
+          </SliderContainer>
         </InputGroup>
-      )}
+      </InputsSection>
 
-      <InputGroup>
-        <AmountLabelRow>
-          <InputLabel>Amount</InputLabel>
-          <ModeToggle>
-            <ModeButton
-              $active={amountMode === "size"}
-              onClick={() => onAmountModeChange("size")}
-              disabled={disabled}
-            >
-              Size (USDC)
-            </ModeButton>
-            <ModeButton
-              $active={amountMode === "quantity"}
-              onClick={() => onAmountModeChange("quantity")}
-              disabled={disabled}
-            >
-              Quantity
-            </ModeButton>
-          </ModeToggle>
-        </AmountLabelRow>
-        <AmountInput
-          type="text"
-          value={amount}
-          onChange={(e) => onAmountChange(e.target.value.replace("-", ""))}
-          onBeforeInput={handleNumericDecimalInput6Decimals}
-          inputMode="decimal"
-          placeholder="0.00"
-          disabled={disabled}
-        />
-        <SliderContainer>
-          <StyledSlider
-            value={sliderValue}
-            onChange={onSliderChange}
-            disabled={disabled}
-            min={0}
-            max={100}
-            marks={[
-              { value: 0, label: "0%" },
-              { value: 25, label: "25%" },
-              { value: 50, label: "50%" },
-              { value: 75, label: "75%" },
-              { value: 100, label: "100%" },
-            ]}
-            valueLabelDisplay="auto"
-            valueLabelFormat={(v) => `${v}%`}
-          />
-        </SliderContainer>
-      </InputGroup>
-    </InputsSection>
-
-    <OrderSummary>
-      <SummaryRow>
-        <SummaryLabel>{quantityLabel}</SummaryLabel>
-        <SummaryValue>{currentQuantity.toFixed(6)}</SummaryValue>
-      </SummaryRow>
-      <SummaryRow>
-        <SummaryLabel>{sizeLabel}</SummaryLabel>
-        <SummaryValue>{currentSize.toFixed(2)}</SummaryValue>
-      </SummaryRow>
-      {realizedPnl != null && (
-        <SummaryRow>
-          <SummaryLabel>Expected Realized PnL</SummaryLabel>
-          <SummaryPnLValue $isPositive={realizedPnl >= 0}>
-            {realizedPnl >= 0 ? "+" : ""}{realizedPnl.toFixed(2)} USDC
-          </SummaryPnLValue>
-        </SummaryRow>
+      {summary !== undefined ? (
+        summary
+      ) : (
+        <OrderSummary>
+          <SummaryRow>
+            <SummaryLabel>{quantityLabel}</SummaryLabel>
+            <SummaryValue>{currentQuantity.toFixed(quantityDecimals)}</SummaryValue>
+          </SummaryRow>
+          <SummaryRow>
+            <SummaryLabel>{sizeLabel}</SummaryLabel>
+            <SummaryValue>{currentSize.toFixed(2)}</SummaryValue>
+          </SummaryRow>
+          {realizedPnl != null && (
+            <SummaryRow>
+              <SummaryLabel>Expected Realized PnL</SummaryLabel>
+              <SummaryPnLValue $isPositive={realizedPnl >= 0}>
+                {realizedPnl >= 0 ? "+" : ""}{realizedPnl.toFixed(2)} USDC
+              </SummaryPnLValue>
+            </SummaryRow>
+          )}
+        </OrderSummary>
       )}
-    </OrderSummary>
-  </>
-);
+    </>
+  );
+};
 
 // ── Shared styled components ──────────────────────────────────────────────────
 
@@ -339,207 +406,35 @@ export const InputsSection = styled("div")`
   flex-direction: column;
   gap: 1rem;
   margin-bottom: 1.25rem;
-`;
 
-export const InputGroup = styled("div")`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-`;
+  /* Compact variant (see PerpsOrderFormFields.compact): smaller labels, 40px
+     fields, tight label-to-input, and the caller owns the outer spacing. */
+  &.compact {
+    margin-bottom: 0;
 
-export const InputLabel = styled("label")`
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: ${tokens.text.secondary};
-`;
-
-export const AmountLabelRow = styled("div")`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-`;
-
-export const ModeToggle = styled("div")`
-  display: flex;
-  border: 1px solid ${tokens.overlay.white15};
-  border-radius: 6px;
-  overflow: hidden;
-`;
-
-export const ModeButton = styled("button")<{ $active: boolean }>`
-  padding: 0.25rem 0.625rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  border: none;
-  transition: background 0.15s ease, color 0.15s ease;
-  background: ${(props) => (props.$active ? tokens.surface.tabActive : "transparent")};
-  color: ${(props) => (props.$active ? "#FFFFFF" : tokens.text.secondary)};
-
-  &:hover:not(:disabled) {
-    background: ${(props) => (props.$active ? tokens.surface.tabHover : tokens.overlay.white08)};
-    color: #FFFFFF;
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
-`;
-
-export const PriceInputContainer = styled("div")`
-  display: flex;
-  align-items: center;
-  gap: 0;
-`;
-
-export const PriceStepButton = styled("button")`
-  padding: 0.75rem 1rem;
-  color: ${tokens.text.onDark};
-  border: 1px solid ${tokens.overlay.white20};
-  background: ${tokens.surface.inputIsland};
-  font-size: 1.2rem;
-  font-weight: 600;
-  cursor: pointer;
-  min-width: 44px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.2s ease;
-
-  &:first-of-type {
-    border-radius: 6px 0 0 6px;
-  }
-
-  &:last-of-type {
-    border-radius: 0 6px 6px 0;
-  }
-
-  &:hover:not(:disabled) {
-    background: ${tokens.surface.inputIslandHover};
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-`;
-
-const sharedInputStyles = `
-  padding: 0.75rem;
-  border: 1px solid ${tokens.overlay.white20};
-  border-radius: 0;
-  color: ${tokens.text.onDark};
-  font-size: 1rem;
-  width: 100%;
-  flex: 1;
-  background: ${tokens.surface.inputIsland};
-  transition: border-color 0.2s ease;
-
-  &:focus {
-    outline: none;
-    border-color: ${tokens.accent.main};
-    background: ${tokens.surface.inputIsland};
-  }
-
-  &::placeholder {
-    color: ${tokens.text.muted};
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-`;
-
-export const PriceInput = styled("input")`
-  ${sharedInputStyles}
-`;
-
-export const AmountInput = styled("input")`
-  ${sharedInputStyles}
-  border-radius: 6px;
-`;
-
-export const SliderContainer = styled("div")`
-  padding: 0 1rem;
-  margin-top: 0.5rem;
-`;
-
-export const StyledSlider = styled(Slider)`
-  color: ${tokens.text.primary};
-  height: 6px;
-  padding: 13px 0;
-
-  & .MuiSlider-thumb {
-    width: 18px;
-    height: 18px;
-    background-color: ${tokens.neutralButton.bg};
-    transition: all 0.2s ease;
-
-    &:hover,
-    &.Mui-focusVisible {
-      box-shadow: 0 0 0 8px ${tokens.overlay.white16};
-      background-color: ${tokens.neutralButton.hover};
+    & > * {
+      gap: 0.375rem;
     }
 
-    &.Mui-active {
-      box-shadow: 0 0 0 14px ${tokens.overlay.white16};
-    }
-  }
-
-  & .MuiSlider-track {
-    height: 6px;
-    border: none;
-    background-color: ${tokens.neutralButton.bg};
-  }
-
-  & .MuiSlider-rail {
-    height: 6px;
-    background-color: ${tokens.surface.inputIsland};
-    opacity: 1;
-  }
-
-  & .MuiSlider-mark {
-    width: 2px;
-    height: 6px;
-    background-color: ${tokens.overlay.white50};
-    opacity: 1;
-  }
-
-  & .MuiSlider-markActive {
-    background-color: ${tokens.overlay.black30};
-  }
-
-  & .MuiSlider-markLabel {
-    color: ${tokens.text.secondary};
-    font-size: 0.75rem;
-    top: 26px;
-  }
-
-  & .MuiSlider-valueLabel {
-    background-color: ${tokens.surface.inputIsland};
-    color: #FFFFFF;
-    border-radius: 4px;
-    padding: 4px 8px;
-    font-size: 0.75rem;
-  }
-
-  &.Mui-disabled {
-    color: ${tokens.text.muted};
-
-    & .MuiSlider-thumb {
-      background-color: ${tokens.surface.tabMuted};
+    label {
+      font-size: 0.8rem;
     }
 
-    & .MuiSlider-track {
-      background-color: ${tokens.surface.tabMuted};
+    .field {
+      height: 40px;
     }
 
-    & .MuiSlider-mark {
-      background-color: ${tokens.slider.thumbMuted};
+    input {
+      font-size: 0.9375rem;
+    }
+
+    select {
+      font-size: 0.8rem;
+    }
+
+    /* MUI reserves 20px under a marked slider for its labels; they need 12. */
+    .MuiSlider-marked {
+      margin-bottom: 12px;
     }
   }
 `;

@@ -1,6 +1,6 @@
 services:
   graph-node:
-    image: graphprotocol/graph-node:v0.41.1
+    image: ghcr.io/shev-titan/graph-node:v0.41.1-arm64
     ports:
       - "8000:8000"
       - "8001:8001"

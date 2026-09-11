@@ -1,11 +1,15 @@
 import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { getContract } from "viem";
-import { PerpsABI } from "../../../abi/Perps";
+import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
 import { QUANTITY_SCALE_NUM } from "../../../lib/units";
+import { TimeInForce, type TimeInForceValue } from "../../../types/timeInForce";
+import { withErrors } from "../../../lib/withErrors";
 
 interface CreatePerpsOrderProps {
   price: bigint;
   quantity: number; // Positive for Buy, Negative for Sell
+  /** Defaults to GTC. */
+  timeInForce?: TimeInForceValue;
 }
 
 export function useCreatePerpsOrder() {
@@ -18,7 +22,7 @@ export function useCreatePerpsOrder() {
 
     const perpsContract = getContract({
       address: process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`,
-      abi: PerpsABI,
+      abi: withErrors(HashPowerPerpsDEXAbi),
       client: publicClient,
     });
 
@@ -26,12 +30,12 @@ export function useCreatePerpsOrder() {
     // Contract expects: positive = Buy, negative = Sell
     // Multiply by QUANTITY_SCALE_NUM to convert decimal to integer (QUANTITY_DECIMALS precision)
     const quantityWithDecimals = Math.round(props.quantity * QUANTITY_SCALE_NUM);
-    console.log("🚀 ~ createOrderAsync ~ quantityWithDecimals:", quantityWithDecimals)
     const quantityBigInt = BigInt(quantityWithDecimals);
-    console.log("🚀 ~ createOrderAsync ~ quantityBigInt:", quantityBigInt)
+
+    const tif = props.timeInForce ?? TimeInForce.GTC;
 
     const req = await perpsContract.simulate.createOrder(
-      [props.price, quantityBigInt],
+      [props.price, quantityBigInt, tif],
       { account: walletClient.account.address },
     );
 

@@ -14,20 +14,28 @@ type Value = {
 
 const suffixes = ["", "K", "M", "B", "T"];
 
+// digits in the value itself: a leading "-" is a sign, not a digit, so counting
+// it would cost negative numbers a significant digit their positive twins keep
+// (PnL of -185.99 would round to -185.90).
+function digitCount(n: bigint): number {
+  return (n < 0n ? -n : n).toString().length;
+}
+
 // formats bigint decimal value to a string with a suffix, considering the number of chars to display
 export function formatUnits(input: bigint, decimals: number, opts: RoundingOpts): Value {
   if (opts.maxChars < 3) {
     throw new Error("maxChars must be at least 3");
   }
+  const digits = digitCount(input);
   const [exp, suffix] = getExpSuffixDisplay(input, decimals, opts.maxChars);
-  let integerDigits = input.toString().length - decimals - exp;
+  let integerDigits = digits - decimals - exp;
 
   // adjustment for numbers less than 1
   if (integerDigits <= 0) {
     integerDigits = Math.abs(integerDigits) + 1;
   }
 
-  let expToRound = Math.min(decimals, input.toString().length) + exp - (opts.maxChars - integerDigits);
+  let expToRound = Math.min(decimals, digits) + exp - (opts.maxChars - integerDigits);
   if (expToRound < 0) {
     expToRound = 0;
   }
@@ -46,8 +54,7 @@ function getExpSuffixDisplay(n: bigint, decimals: number, maxChars: number): [ex
   if (n === 0n) {
     return [0, ""];
   }
-  const numChars = n.toString().length;
-  const exp = numChars - decimals - 1;
+  const exp = digitCount(n) - decimals - 1;
   if (exp > maxChars - 1) {
     return getExpSuffix(exp);
   }

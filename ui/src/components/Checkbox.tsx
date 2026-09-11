@@ -19,7 +19,7 @@ export const Checkbox: React.FC<CheckboxProps> = ({ legend, label, description, 
             id="custom-checkbox"
             name="custom-checkbox"
             type="checkbox"
-            value={checked as any}
+            checked={checked}
             onChange={() => {
               setChecked(!checked);
               onChange(!checked);

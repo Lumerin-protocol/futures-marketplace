@@ -81,12 +81,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "yarn"
-          cache-dependency-path: indexer/yarn.lock
+          node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: |
+            indexer/pnpm-lock.yaml
+            contracts/pnpm-lock.yaml
 
       - name: Set environment outputs
         id: env
@@ -120,13 +127,13 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./indexer
-        run: yarn install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build contracts and generate ABIs
         working-directory: ./contracts
         run: |
-          yarn install --frozen-lockfile
-          yarn hardhat compile
+          pnpm install --frozen-lockfile
+          pnpm hardhat compile
           echo "✅ Contracts compiled and ABIs generated"
 
       - name: Prepare subgraph configuration
@@ -140,14 +147,14 @@ jobs:
           echo "   Network: ${NETWORK}"
           echo "   Futures Address: ${FUTURES_ADDRESS}"
           echo "   Start Block:    ${START_BLOCK_FUTURES}"
-          yarn prepare:env
+          pnpm prepare:env
           echo "✅ Configuration ready"
 
       - name: Generate code and build
         working-directory: ./indexer
         run: |
-          yarn codegen
-          yarn build
+          pnpm codegen
+          pnpm build
           echo "✅ Build complete"
 
       - name: Upload build artifacts

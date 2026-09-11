@@ -1,31 +1,26 @@
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback } from "react";
 import Modal from "@mui/material/Modal";
 import CloseIcon from "@mui/icons-material/Close";
 import IconButton from "@mui/material/IconButton";
 import type { PerpsOrder } from "../../../hooks/data/perps/useUserPerpsOrders";
-import { useCreatePerpsOrder } from "../../../hooks/data/perps/useCreatePerpsOrder";
-import { useCancelPerpsOrder } from "../../../hooks/data/perps/useCancelPerpsOrder";
+import { useUpdatePerpsOrders } from "../../../hooks/data/perps/useUpdatePerpsOrders";
 import { useQueryClient } from "@tanstack/react-query";
 import { USER_PERPS_ORDERS_QK } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { USER_POSITION_SESSIONS_QK } from "../../../hooks/data/perps/useUserPositionSessions";
-import { USER_PERPS_TRADES_QK } from "../../../hooks/data/perps/useUserPerpsTrades";
+import { PERPS_ORDER_HISTORY_QK } from "../../../hooks/data/perps/usePerpsOrderHistory";
+import { PERPS_POSITION_HISTORY_QK } from "../../../hooks/data/perps/usePerpsPositionHistory";
+import { USER_TRADES_QK } from "../../../hooks/data/perps/useUserTrades";
+import { invalidatePortfolioPnl } from "../../../hooks/data/pnl/invalidate";
 import { getOrderBookQueryKey, waitForOrderBookBlockNumber } from "../../../hooks/data/orderBookHelpers";
-import { usePublicClient } from "wagmi";
+import type { TransactionReceipt } from "viem";
+import { TransactionFormV2 as TransactionForm } from "../../Forms/Shared/MultistepForm";
+import { showAlert } from "../../AlertModal";
 import {
   usePerpsOrderForm,
   PerpsOrderFormFields,
   PerpsModalCard,
-  PositionInfoSection,
-  InfoRow,
-  InfoLabel,
-  InfoValue,
-  TypeBadge,
-  ErrorText,
-  ModalActions,
-  ModalCancelButton,
-  ModalConfirmButton,
 } from "./PerpsOrderFormFields";
-import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE_NUM } from "../../../lib/units";
 
 interface ModifyPerpsOrderModalProps {
   open: boolean;
@@ -41,90 +36,126 @@ export const ModifyPerpsOrderModal = ({
   open,
   onClose,
   order,
-  marketPrice,
   participantAddress,
   priceStep = 0.01,
   onConfirmed,
 }: ModifyPerpsOrderModalProps) => {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-
-  const { createOrderAsync } = useCreatePerpsOrder();
-  const { cancelOrderAsync } = useCancelPerpsOrder();
+  const { updateOrdersAsync } = useUpdatePerpsOrders();
   const queryClient = useQueryClient();
-  const publicClient = usePublicClient();
 
-  // Remaining (unfilled) quantity: works for both ACTIVE (filled=0) and PARTIAL.
-  const remainingQtyBig = order
-    ? order.originalQuantity - order.filledQuantity
-    : 0n;
-  const maxQuantity = Number(remainingQtyBig) / PAYMENT_TOKEN_SCALE_NUM;
+  // Still-resting quantity, straight off the indexer. Deriving it as
+  // `originalQuantity - filledQuantity` would be wrong once the order has been
+  // reduced, and the reduce path below needs the exact figure the contract
+  // compares against.
+  const remainingQtyBig = order?.quantity ?? 0n;
+  const maxQuantity = Number(remainingQtyBig) / QUANTITY_SCALE_NUM;
 
-  const form = usePerpsOrderForm({ maxQuantity, priceStep });
+  // `allowAboveMax`: raising the size is a cancel-and-replace, so the resting
+  // quantity is a default rather than a ceiling. There is no local margin
+  // preview here the way futures has one — an unaffordable size surfaces as a
+  // decoded revert from the `updateOrders` simulation.
+  const form = usePerpsOrderForm({ maxQuantity, priceStep, allowAboveMax: true });
 
+  // Seed the form once per open/order; `form.reset` is recreated every render, so
+  // listing it would re-reset the form continuously and discard user input.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   useEffect(() => {
     if (!open || !order) return;
     const initPrice = (Number(order.price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
     form.reset(initPrice, 100);
-    setSubmitError(null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, order]);
 
   const handleClose = useCallback(() => {
-    setSubmitError(null);
-    setIsSubmitting(false);
     onClose();
   }, [onClose]);
 
-  const handleConfirm = useCallback(async () => {
-    if (!order) return;
+  const newQtyDisplay = form.getCurrentQuantity();
+  const newSizeDisplay = form.getCurrentSize();
+  const oldPrice = order ? Number(order.price) / PAYMENT_TOKEN_SCALE_NUM : 0;
+  const oldQty = maxQuantity;
+  const oldSize = oldPrice * oldQty;
+  const hasChanges =
+    !!order &&
+    (form.currentPrice.toFixed(2) !== oldPrice.toFixed(2) ||
+      newQtyDisplay.toFixed(6) !== oldQty.toFixed(6));
+
+  /**
+   * Same price, strictly less quantity — the contract can shrink the order in
+   * place, keeping its id and its place in the price queue. The scaled
+   * comparison is what the contract itself checks, so a quantity that rounds
+   * back onto the resting size falls through to the cancel-and-replace path
+   * rather than reverting.
+   */
+  const isReduceOnly = (priceUsd: number, quantity: number): boolean => {
+    if (!order) return false;
+    const scaledQty = BigInt(Math.round(quantity * QUANTITY_SCALE_NUM));
+    return (
+      BigInt(Math.round(priceUsd * PAYMENT_TOKEN_SCALE_NUM)) === order.price &&
+      scaledQty > 0n &&
+      scaledQty < remainingQtyBig
+    );
+  };
+
+  const isReducing = isReduceOnly(form.currentPrice, newQtyDisplay);
+  const title = isReducing ? "Reduce Order" : "Modify Order";
+
+  const validateInput = async (): Promise<boolean> => {
+    if (!order) return false;
     const newQty = form.getCurrentQuantity();
-    if (newQty <= 0 || form.currentPrice <= 0) return;
-
-    setIsSubmitting(true);
-    setSubmitError(null);
-
-    try {
-      // 1. Cancel the existing order
-      const cancelHash = await cancelOrderAsync({ orderId: order.id as `0x${string}` });
-      if (cancelHash && publicClient) {
-        const cancelReceipt = await publicClient.waitForTransactionReceipt({ hash: cancelHash });
-        await waitForOrderBookBlockNumber(cancelReceipt.blockNumber, queryClient, "perpetual");
-      }
-
-      // 2. Place a new order with the updated price & quantity (same side)
-      const newPriceBig = BigInt(Math.round(form.currentPrice * PAYMENT_TOKEN_SCALE_NUM));
-      // Positive quantity = Buy (Long), negative = Sell (Short)
-      const signedQty = order.isBuy ? newQty : -newQty;
-      const createHash = await createOrderAsync({ price: newPriceBig, quantity: signedQty });
-      if (createHash && publicClient) {
-        const createReceipt = await publicClient.waitForTransactionReceipt({ hash: createHash });
-        await waitForOrderBookBlockNumber(createReceipt.blockNumber, queryClient, "perpetual");
-      }
-
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: [getOrderBookQueryKey("perpetual")] }),
-        queryClient.invalidateQueries({ queryKey: [USER_PERPS_ORDERS_QK, participantAddress] }),
-        queryClient.invalidateQueries({ queryKey: [USER_POSITION_SESSIONS_QK, participantAddress] }),
-        queryClient.invalidateQueries({ queryKey: [USER_PERPS_TRADES_QK, participantAddress] }),
-      ]);
-
-      if (onConfirmed) await onConfirmed();
-      handleClose();
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Failed to modify order");
-    } finally {
-      setIsSubmitting(false);
+    if (newQty <= 0 || form.currentPrice <= 0) {
+      await showAlert("Please enter a valid price and quantity");
+      return false;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order, form.currentPrice, form.amount, form.amountMode, createOrderAsync, cancelOrderAsync, queryClient, publicClient, participantAddress, handleClose, onConfirmed]);
+    if (!hasChanges) {
+      await showAlert("Please change order terms");
+      return false;
+    }
+    return true;
+  };
+
+  // Plain render function, not a component: MultistepForm calls it in place, so
+  // memoizing it buys nothing and would only stale-close over form state.
+  const inputForm = () => (
+    <PerpsOrderFormFields
+      price={form.price}
+      amount={form.amount}
+      amountMode={form.amountMode}
+      sliderValue={form.sliderValue}
+      priceLabel="New Price (USDC)"
+      quantityLabel="New Quantity"
+      sizeLabel="New Size (USDC)"
+      currentQuantity={form.getCurrentQuantity()}
+      currentSize={form.getCurrentSize()}
+      onPriceChange={form.handlePriceChange}
+      onAmountChange={form.handleAmountChange}
+      onAmountModeChange={form.handleAmountModeChange}
+      onSliderChange={form.handleSliderChange}
+      onSliderCommitted={form.handleSliderCommitted}
+      onIncrementPrice={form.incrementPrice}
+      onDecrementPrice={form.decrementPrice}
+    />
+  );
 
   if (!order) return null;
 
   const side = order.isBuy ? "Long" : "Short";
-  const formatPrice = (p: bigint) => (Number(p) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-  const newQtyDisplay = form.getCurrentQuantity();
-  const newSizeDisplay = form.getCurrentSize();
+
+  const renderChange = (label: string, oldValue: string, newValue: string) => (
+    <div className="flex justify-between">
+      <span className="text-gray-300">{label}:</span>
+      <span className="text-white">
+        {oldValue === newValue ? (
+          newValue
+        ) : (
+          <>
+            <span className="text-gray-400 line-through">{oldValue}</span>
+            {" → "}
+            <span>{newValue}</span>
+          </>
+        )}
+      </span>
+    </div>
+  );
 
   return (
     <Modal open={open} onClose={handleClose}>
@@ -133,69 +164,82 @@ export const ModifyPerpsOrderModal = ({
           <CloseIcon />
         </IconButton>
 
-        <h2>Modify Order</h2>
-
-        <PositionInfoSection>
-          <InfoRow>
-            <InfoLabel>Side</InfoLabel>
-            <InfoValue>
-              <TypeBadge $type={side}>{side}</TypeBadge>
-            </InfoValue>
-          </InfoRow>
-          <InfoRow>
-            <InfoLabel>Original Price</InfoLabel>
-            <InfoValue>{formatPrice(order.price)} USDC</InfoValue>
-          </InfoRow>
-          <InfoRow>
-            <InfoLabel>Filled / Original Qty</InfoLabel>
-            <InfoValue>
-              {(Number(order.filledQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6)}
-              {" / "}
-              {(Number(order.originalQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6)}
-            </InfoValue>
-          </InfoRow>
-          {marketPrice !== undefined && (
-            <InfoRow>
-              <InfoLabel>Market Price</InfoLabel>
-              <InfoValue>{formatPrice(marketPrice)} USDC</InfoValue>
-            </InfoRow>
+        <TransactionForm
+          onClose={handleClose}
+          title={title}
+          description={
+            isReducing
+              ? "Shrink your order without giving up its place in the queue"
+              : "Update the price and quantity for your order"
+          }
+          inputForm={inputForm}
+          validateInput={validateInput}
+          disableReview={!hasChanges}
+          reviewForm={() => (
+            <>
+              <div className="mb-4">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Side:</span>
+                    <span className="text-white">{side}</span>
+                  </div>
+                  {renderChange("Price", `${oldPrice.toFixed(2)} USDC`, `${form.currentPrice.toFixed(2)} USDC`)}
+                  {renderChange("Quantity", oldQty.toFixed(6), newQtyDisplay.toFixed(6))}
+                  {renderChange("Size", `${oldSize.toFixed(2)} USDC`, `${newSizeDisplay.toFixed(2)} USDC`)}
+                </div>
+              </div>
+              <p className="text-gray-400 text-sm">
+                {isReducing
+                  ? "You are about to reduce your order. It keeps its price and its place in the queue."
+                  : "You are about to modify your order."}
+              </p>
+            </>
           )}
-        </PositionInfoSection>
+          resultForm={() => (
+            <p className="w-6/6 text-left font-normal text-s mt-5">
+              Your order has been updated and will appear in the order book shortly.
+            </p>
+          )}
+          transactionSteps={[
+            {
+              label: title,
+              action: async () => {
+                const newQty = form.getCurrentQuantity();
+                const newPriceBig = BigInt(Math.round(form.currentPrice * PAYMENT_TOKEN_SCALE_NUM));
+                const orderId = order.id as `0x${string}`;
 
-        <PerpsOrderFormFields
-          price={form.price}
-          amount={form.amount}
-          amountMode={form.amountMode}
-          sliderValue={form.sliderValue}
-          disabled={isSubmitting}
-          priceLabel="New Price (USDC)"
-          quantityLabel="New Quantity"
-          sizeLabel="New Size (USDC)"
-          currentQuantity={newQtyDisplay}
-          currentSize={newSizeDisplay}
-          onPriceChange={form.handlePriceChange}
-          onAmountChange={form.handleAmountChange}
-          onAmountModeChange={form.handleAmountModeChange}
-          onSliderChange={form.handleSliderChange}
-          onIncrementPrice={form.incrementPrice}
-          onDecrementPrice={form.decrementPrice}
+                let txhash: `0x${string}` | undefined;
+                if (isReduceOnly(form.currentPrice, newQty)) {
+                  const scaledQty = BigInt(Math.round(newQty * QUANTITY_SCALE_NUM));
+                  txhash = await updateOrdersAsync({
+                    reduces: [{ orderId, newQuantity: order.isBuy ? scaledQty : -scaledQty }],
+                  });
+                } else {
+                  txhash = await updateOrdersAsync({
+                    cancelIds: [orderId],
+                    creates: [{ price: newPriceBig, quantity: order.isBuy ? newQty : -newQty }],
+                  });
+                }
+                if (!txhash) throw new Error("Wallet not ready. Please try again.");
+                return { txhash, isSkipped: false };
+              },
+              postConfirmation: async (receipt: TransactionReceipt) => {
+                await waitForOrderBookBlockNumber(receipt.blockNumber, queryClient, "perpetual");
+                await Promise.all([
+                  queryClient.invalidateQueries({ queryKey: [getOrderBookQueryKey("perpetual")] }),
+                  queryClient.invalidateQueries({ queryKey: [USER_PERPS_ORDERS_QK, participantAddress] }),
+                  queryClient.invalidateQueries({ queryKey: [USER_POSITION_SESSIONS_QK, participantAddress] }),
+                  queryClient.resetQueries({ queryKey: [PERPS_ORDER_HISTORY_QK, participantAddress] }),
+                  queryClient.resetQueries({ queryKey: [PERPS_POSITION_HISTORY_QK, participantAddress] }),
+                  queryClient.resetQueries({ queryKey: [USER_TRADES_QK, participantAddress] }),
+                  invalidatePortfolioPnl(queryClient),
+                ]);
+                if (onConfirmed) await onConfirmed();
+              },
+            },
+          ]}
         />
-
-        {submitError && <ErrorText>{submitError}</ErrorText>}
-
-        <ModalActions>
-          <ModalCancelButton onClick={handleClose} disabled={isSubmitting}>
-            Cancel
-          </ModalCancelButton>
-          <ModalConfirmButton
-            onClick={handleConfirm}
-            disabled={isSubmitting || newQtyDisplay <= 0 || form.currentPrice <= 0}
-          >
-            {isSubmitting ? "Modifying..." : "Confirm"}
-          </ModalConfirmButton>
-        </ModalActions>
       </PerpsModalCard>
     </Modal>
   );
 };
-

@@ -1,11 +1,17 @@
-import { type FC, useCallback, useState } from "react";
+import { type FC, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { useAccount } from "wagmi";
-import { useAddMargin, useApproveAddMargin } from "../../hooks/data/useAddMargin";
-import { usePerpsAddCollateral, useApprovePerpsAddCollateral } from "../../hooks/data/perps/usePerpsAddCollateral";
-import { useApproveERC20 } from "../../hooks/data/useApproveERC20";
-import type { AccountBalance, ContractMode } from "../../types/types";
+import {
+  useAddMargin,
+  useAddMarginWithPermit,
+  useApproveAddMargin,
+  usePermitAddMargin,
+} from "../../hooks/data/useAddMargin";
+import { useFuturesCollateralVault } from "../../hooks/data/useFuturesCollateralVault";
+import type { PermitSignature } from "../../hooks/data/usePermit";
+import type { AccountBalance } from "../../types/types";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
+import type { TxState } from "../../hooks/useTxForm";
 import { AmountInputForm } from "./Shared/AmountInputForm";
 import { formatValue, PAYMENT_TOKEN_SCALE_NUM, paymentToken } from "../../lib/units";
 import { parseUnits } from "viem";
@@ -13,27 +19,28 @@ import { parseUnits } from "viem";
 interface DepositFormProps {
   closeForm: () => void;
   accountBalance?: AccountBalance;
-  contractMode?: ContractMode;
 }
 
 interface InputValues {
   amount: string;
 }
 
-export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance, contractMode = "futures" }) => {
+/** What the first ("Authorize") step actually did, read back by "Deposit Collateral". */
+type AuthorizeState =
+  | { mode: "permit"; signature: PermitSignature; deadline: bigint }
+  | { mode: "approve" };
+
+export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance }) => {
   const { address } = useAccount();
-  
-  // Conditionally use futures or perps hooks based on mode
   const { addMarginAsync } = useAddMargin();
-  const { approveAsync: futuresApproveAsync } = useApproveAddMargin();
-  const { addCollateralAsync } = usePerpsAddCollateral();
-  const { approveAsync: perpsApproveAsync } = useApprovePerpsAddCollateral();
-  
-  const approveAsync = contractMode === "perpetual" ? perpsApproveAsync : futuresApproveAsync;
-  const depositAsync = contractMode === "perpetual" ? addCollateralAsync : addMarginAsync;
-  const contractAddress = contractMode === "perpetual" 
-    ? (process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`)
-    : (process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`);
+  const { approveAsync } = useApproveAddMargin();
+  const { addMarginWithPermitAsync } = useAddMarginWithPermit();
+  const { signPermit, isSupported: isPermitSupported } = usePermitAddMargin();
+
+  // Both Futures and Perps now settle against the same shared CollateralVault, so the
+  // ERC20 spender is always the vault and the deposit goes through `vault.deposit(amount)`.
+  const { data: vaultAddress } = useFuturesCollateralVault();
+  const spenderAddress = vaultAddress as `0x${string}` | undefined;
 
   const paymentTokenBalance = accountBalance ?? { data: undefined, isLoading: false };
 
@@ -47,7 +54,7 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance, c
 
   const validateBalance = useCallback(
     (value: string): string | true => {
-      if (!paymentTokenBalance.data) {
+      if (paymentTokenBalance.data === undefined) {
         return "Unable to fetch balance. Please try again.";
       }
       const amountBigInt = parseUnits(value, paymentToken.decimals);
@@ -61,9 +68,9 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance, c
   );
 
   const handleMaxClick = useCallback(() => {
-    if (paymentTokenBalance.data) {
-      const numValue = Number(paymentTokenBalance.data) / PAYMENT_TOKEN_SCALE_NUM; // Convert from wei to USDC
-      const floored = Math.floor(numValue * 100) / 100; // Round down to 2 decimals
+    if (paymentTokenBalance.data !== undefined) {
+      const numValue = Number(paymentTokenBalance.data) / PAYMENT_TOKEN_SCALE_NUM;
+      const floored = Math.floor(numValue * 100) / 100;
       const maxAmount = floored.toFixed(2);
       form.setValue("amount", maxAmount);
     }
@@ -76,7 +83,7 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance, c
         label="Deposit Amount"
         additionalValidate={validateBalance}
         onMaxClick={handleMaxClick}
-        showMaxButton={!!paymentTokenBalance.data}
+        showMaxButton={paymentTokenBalance.data !== undefined}
       />
     ),
     [form.control, validateBalance, handleMaxClick, paymentTokenBalance.data],
@@ -92,8 +99,7 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance, c
       return false;
     }
 
-    // Check if balance is available
-    if (!paymentTokenBalance.data) {
+    if (paymentTokenBalance.data === undefined) {
       form.setError("amount", {
         type: "validation",
         message: "Unable to fetch balance. Please try again.",
@@ -101,7 +107,6 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance, c
       return false;
     }
 
-    // Validate that amount doesn't exceed balance
     const amountBigInt = parseUnits(amountValue, paymentToken.decimals);
     if (amountBigInt > paymentTokenBalance.data) {
       const balanceFormatted = formatValue(paymentTokenBalance.data, paymentToken).valueRounded;
@@ -128,10 +133,10 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance, c
                   <span>Loading...</span>
                 ) : (
                   <>
-                    {paymentTokenBalance.data
+                    {paymentTokenBalance.data !== undefined
                       ? (() => {
-                          const numValue = Number(paymentTokenBalance.data) / PAYMENT_TOKEN_SCALE_NUM; // Convert from wei to USDC
-                          const floored = Math.floor(numValue * 100) / 100; // Round down to 2 decimals
+                          const numValue = Number(paymentTokenBalance.data) / PAYMENT_TOKEN_SCALE_NUM;
+                          const floored = Math.floor(numValue * 100) / 100;
                           return floored.toFixed(2);
                         })()
                       : "0"}{" "}
@@ -144,49 +149,74 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance, c
         </div>
       </>
     ),
-    [paymentTokenBalance.data],
+    [paymentTokenBalance.data, paymentTokenBalance.isLoading, inputForm],
   );
 
   const transactionSteps = [
     {
-      label: "Approve Token",
+      // Signing a permit is off-chain (no gas, no tx to wait on) and collapses
+      // the usual approve+deposit sequence into a single on-chain transaction
+      // (see CollateralVault.depositForPermit). Only falls back to a real
+      // on-chain approve for tokens that don't implement EIP-2612.
+      label: "Authorize",
       async action() {
         const amount = form.getValues("amount");
         if (!amount) throw new Error("Amount not set");
+        if (!spenderAddress) {
+          throw new Error("Collateral vault address not loaded yet. Please try again.");
+        }
         const amountBigInt = parseUnits(amount, paymentToken.decimals);
-        const result = await approveAsync({
-          spender: contractAddress,
-          amount: amountBigInt,
-        });
-        return result ? { isSkipped: false, txhash: result } : { isSkipped: true };
+
+        if (isPermitSupported) {
+          const permit = await signPermit(amountBigInt);
+          if (!permit) throw new Error("Wallet not ready. Please try again.");
+          return { isSkipped: false, state: { mode: "permit", ...permit } };
+        }
+
+        const result = await approveAsync({ spender: spenderAddress, amount: amountBigInt });
+        return result
+          ? { isSkipped: false, txhash: result, state: { mode: "approve" } }
+          : { isSkipped: true, state: { mode: "approve" } };
       },
     },
     {
-      label: contractMode === "perpetual" ? "Deposit Collateral" : "Deposit Margin",
-      async action() {
+      label: "Deposit Collateral",
+      async action(txState: Record<number, TxState>) {
         const amount = form.getValues("amount");
         if (!amount) throw new Error("Amount not set");
+        if (!address) throw new Error("Wallet not connected. Please try again.");
         const amountBigInt = parseUnits(amount, paymentToken.decimals);
-        const result = await depositAsync({ amount: amountBigInt });
+
+        const authorized = txState[0]?.customState as AuthorizeState | undefined;
+        if (authorized?.mode === "permit") {
+          const result = await addMarginWithPermitAsync({
+            amount: amountBigInt,
+            deadline: authorized.deadline,
+            signature: authorized.signature,
+            recipient: address,
+          });
+          return result ? { isSkipped: false, txhash: result } : { isSkipped: false };
+        }
+
+        // Approve fallback: pin the deposit simulation to the block the
+        // approve step confirmed in, so it doesn't race the wallet/RPC node's
+        // `latest` tag before that node has caught up to the just-mined approve.
+        const minBlockNumber = txState[0]?.blockNumber;
+        const result = await addMarginAsync({ amount: amountBigInt, minBlockNumber });
         return result ? { isSkipped: false, txhash: result } : { isSkipped: false };
       },
     },
   ];
 
-  const title = contractMode === "perpetual" ? "Deposit Collateral" : "Deposit Margin";
-  const description = contractMode === "perpetual" 
-    ? "Add collateral to your perpetual account" 
-    : "Add margin to your futures account";
-
   return (
     <TransactionForm
       onClose={closeForm}
-      title={title}
-      description={description}
+      title="Deposit Collateral"
+      description="Add collateral to your account"
       reviewForm={reviewForm}
       validateInput={validateInput}
       transactionSteps={transactionSteps}
-      resultForm={(p) => (
+      resultForm={() => (
         <div className="space-y-4">
           <div className="p-4 rounded-lg">
             <p className="text-gray-300">Your deposit has been processed successfully.</p>

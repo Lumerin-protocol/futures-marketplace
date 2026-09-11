@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "engines": {
-    "node": "22.*"
+    "node": "22.*",
+    "pnpm": "11.*"
   },
   "type": "module",
   "scripts": {
@@ -12,7 +13,7 @@
     "build": "vite build",
     "build:analyze": "vite build --mode analyze && vite-bundle-analyzer build/bundle-analyzer.html",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "serve": "serve -s build -p 3001",
     "lint": "biome lint",
     "lint:fix": "biome lint --write",
@@ -28,6 +29,7 @@
     "@fortawesome/free-brands-svg-icons": "^6.7.2",
     "@fortawesome/free-solid-svg-icons": "^6.7.2",
     "@fortawesome/react-fontawesome": "^0.2.2",
+    "@hashpower/portfolio-margin": "github:Lumerin-protocol/collateral-margin#4846d1e293561554060d690746e14161750e0cf4&path:/portfolio-margin",
     "@heroicons/react": "^2.1.1",
     "@mui/icons-material": "^6",
     "@mui/material": "^6.4.11",
@@ -35,13 +37,16 @@
     "@reown/appkit-adapter-wagmi": "^1.7.9",
     "@tanstack/react-query": "^5.75.2",
     "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.14.6",
     "buffer": "^6.0.3",
+    "collateral-margin-abi": "github:Lumerin-protocol/collateral-margin#4846d1e293561554060d690746e14161750e0cf4&path:/contracts/abi",
     "contracts-js": "https://github.com/Lumerin-protocol/contracts-js#v2.0.7",
+    "derivatives-marketplace-abi": "github:Lumerin-protocol/derivatives-marketplace#8b7ed0f&path:/contracts/abi",
     "ecies-geth": "^1.6.2",
+    "futures-marketplace-abi": "link:../contracts/abi",
     "graphql": "^16.11.0",
     "graphql-request": "^7.2.0",
-    "highcharts": "^12.4.0",
-    "highcharts-react-official": "^3.2.3",
+    "lightweight-charts": "^5.2.1",
     "pretty-ms": "^9.2.0",
     "react": "^18.3",
     "react-circular-progressbar": "^2.1.0",
@@ -98,5 +103,5 @@
       "last 1 safari version"
     ]
   },
-  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+  "packageManager": "pnpm@11.22.0"
 }

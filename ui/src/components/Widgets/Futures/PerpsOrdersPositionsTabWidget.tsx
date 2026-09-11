@@ -1,5 +1,5 @@
 import { tokens } from "../../../styles/tokens";
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import styled from "@mui/material/styles/styled";
 import Modal from "@mui/material/Modal";
 import CloseIcon from "@mui/icons-material/Close";
@@ -7,144 +7,140 @@ import IconButton from "@mui/material/IconButton";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { ModalCard } from "../../Modal.styled";
 import { TabSwitch } from "../../TabSwitch";
-import type { ParticipantOrder } from "../../../hooks/data/useParticipant";
-import type { PositionBookPosition } from "../../../hooks/data/usePositionBook";
-import { useHistoricalOrders } from "../../../hooks/data/useHistoricalOrders";
-import type { AccountBalance } from "../../../types/types";
-import { useUserPerpsOrders } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { useCancelPerpsOrder } from "../../../hooks/data/perps/useCancelPerpsOrder";
 import { useQueryClient } from "@tanstack/react-query";
 import { USER_PERPS_ORDERS_QK } from "../../../hooks/data/perps/useUserPerpsOrders";
+import { USER_POSITION_SESSIONS_QK } from "../../../hooks/data/perps/useUserPositionSessions";
+import { PERPS_ORDER_HISTORY_QK } from "../../../hooks/data/perps/usePerpsOrderHistory";
+import { PERPS_POSITION_HISTORY_QK } from "../../../hooks/data/perps/usePerpsPositionHistory";
+import { USER_TRADES_QK } from "../../../hooks/data/perps/useUserTrades";
+import { invalidatePortfolioPnl } from "../../../hooks/data/pnl/invalidate";
+import { getOrderBookQueryKey, waitForOrderBookBlockNumber } from "../../../hooks/data/orderBookHelpers";
+import type { TransactionReceipt } from "viem";
+import { TransactionFormV2 as TransactionForm } from "../../Forms/Shared/MultistepForm";
+import { PerpsModalCard } from "./PerpsOrderFormFields";
 import type { PositionSession } from "../../../hooks/data/perps/useUserPositionSessions";
 import { useUserTrades } from "../../../hooks/data/perps/useUserTrades";
 import type { UserTrade } from "../../../hooks/data/perps/useUserTrades";
-import { computeLiquidationState } from "../../../hooks/data/perps/positionHelper";
-import { ClosePerpsPositionModal } from "./ClosePerpsPositionModal";
+import { usePerpsOrderHistory } from "../../../hooks/data/perps/usePerpsOrderHistory";
+import { usePerpsPositionHistory } from "../../../hooks/data/perps/usePerpsPositionHistory";
+import { ClosePositionForm } from "../../Forms/ClosePositionForm";
 import { ModifyPerpsOrderModal } from "./ModifyPerpsOrderModal";
+import { ModalItem } from "../../Modal";
+import { CancelAllOrdersForm, type CancellableOrder } from "../../Forms/CancelAllOrdersForm";
+import { ExitAllForm, type ExitAllPosition } from "../../Forms/ExitAllForm";
+import { CancelAllButton } from "./CancelAllButton";
+import { usePerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
 import type { PerpsOrder } from "../../../hooks/data/perps/useUserPerpsOrders";
+import { useOrderMargin } from "../../../hooks/data/useOrderMargin";
 import { DateTimeCell } from "../../DateTimeCell";
-import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_DECIMALS_BIGINT, QUANTITY_SCALE } from "../../../lib/units";
+import { LoadMoreButton } from "../../LoadMoreButton";
+import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE } from "../../../lib/units";
+import { getTxUrl } from "../../../lib/indexer";
+import {
+  LiquidationChip,
+  formatLiquidatedQty,
+  LIQUIDATION_ROW_BG,
+} from "../../../lib/liquidation";
 
 type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "POSITION_HISTORY" | "ORDER_HISTORY";
 
 interface PerpsOrdersPositionsTabWidgetProps {
-  orders: ParticipantOrder[];
-  positions: PositionBookPosition[];
-  ordersLoading?: boolean;
-  positionsLoading?: boolean;
   participantAddress?: `0x${string}`;
-  onClosePosition?: (price: string, amount: number, isBuy: boolean) => void;
-  participantData?: any;
-  minMargin?: bigint | null;
-  accountBalance?: AccountBalance;
   marketPrice?: bigint;
   positionSessions: PositionSession[];
   positionSessionsLoading?: boolean;
-  perpsBalance?: bigint;
-  maintenanceMarginPercent?: bigint;
+  // Lifted from this widget into Futures.tsx so the parent can derive
+  // `hasOpenPerpsOrders` and gate polling cadence for perps orders + positions.
+  perpsOpenOrders: PerpsOrder[];
+  perpsOpenOrdersLoading?: boolean;
   onPositionClosed?: () => void | Promise<void>;
 }
 
 export const PerpsOrdersPositionsTabWidget = ({
-  orders,
-  positions,
-  ordersLoading,
-  positionsLoading,
   participantAddress,
-  onClosePosition,
-  participantData,
-  minMargin,
-  accountBalance,
   marketPrice,
   positionSessions,
   positionSessionsLoading,
-  perpsBalance,
-  maintenanceMarginPercent,
+  perpsOpenOrders,
+  perpsOpenOrdersLoading,
   onPositionClosed,
 }: PerpsOrdersPositionsTabWidgetProps) => {
   const [activeTab, setActiveTab] = useState<TabType>("OPEN_ORDERS");
   const [openOrdersVisibleCount, setOpenOrdersVisibleCount] = useState(10);
-  const [tradesVisibleCount, setTradesVisibleCount] = useState(10);
-  const [positionHistoryVisibleCount, setPositionHistoryVisibleCount] = useState(10);
-  const [orderHistoryVisibleCount, setOrderHistoryVisibleCount] = useState(10);
   const [closePositionSession, setClosePositionSession] = useState<PositionSession | null>(null);
   const [modifyOrder, setModifyOrder] = useState<PerpsOrder | null>(null);
-  const queryClient = useQueryClient();
-  const { cancelOrderAsync, isPending: isCancelling } = useCancelPerpsOrder();
+  const [cancelOrder, setCancelOrder] = useState<PerpsOrder | null>(null);
+  // Snapshot of the orders at the moment "Cancel all" was clicked, so the
+  // result screen still knows what it cancelled after the list empties.
+  const [cancelAllOrders, setCancelAllOrders] = useState<CancellableOrder[] | null>(null);
+  // Same idea for "Close all": what was open when the user clicked.
+  const [exitAll, setExitAll] = useState<{ orders: CancellableOrder[]; positions: ExitAllPosition[] } | null>(null);
+  const perpsCollection = usePerpsCollection();
+  const priceStep = BigInt(perpsCollection.data?.data.minimumPriceIncrement ?? 10_000);
 
-  // Fetch perps orders for Open Orders tab (ACTIVE + FILLED)
-  const openOrdersQuery = useUserPerpsOrders(participantAddress, {
-    statuses: ["ACTIVE", "PARTIAL"],
-  });
-  // Fetch perps orders for Order History tab (all non-ACTIVE)
-  const orderHistoryQuery = useUserPerpsOrders(participantAddress, {
-    excludeStatuses: ["ACTIVE"],
-  });
+  // Paginated ("Load More") Order History — all non-ACTIVE perps orders.
+  const orderHistoryQuery = usePerpsOrderHistory(participantAddress);
 
-  // Fetch historical orders for Orders History tab
-  const historicalOrdersQuery = useHistoricalOrders(
-    participantAddress,
-    activeTab === "ORDER_HISTORY"
-  );
+  // Paginated ("Load More") Position History — closed perps position sessions.
+  const positionHistoryQuery = usePerpsPositionHistory(participantAddress);
 
-  // Fetch trades for Trades tab (new query with detailed trade info)
+  // Paginated ("Load More") Trades tab.
   const tradesQuery = useUserTrades(
     participantAddress,
     { refetch: activeTab === "TRADES" }
   );
 
-  // Handle cancel order
-  const handleCancelOrder = async (orderId: string) => {
-    try {
-      await cancelOrderAsync({ orderId: orderId as `0x${string}` });
-      // Invalidate both open orders and history queries
-      queryClient.invalidateQueries({ queryKey: [USER_PERPS_ORDERS_QK, participantAddress] });
-    } catch (error) {
-      console.error("Failed to cancel order:", error);
-    }
+  const refreshPerpsHistory = () => {
+    orderHistoryQuery.refresh();
+    positionHistoryQuery.refresh();
+    tradesQuery.refresh();
   };
 
-  // Count perps orders (ACTIVE + FILLED, excluding fully filled)
-  const ordersCount = useMemo(() => {
-    const orders = openOrdersQuery.data?.data?.orders ?? [];
-    return orders.filter(
-      (order) =>
-        (order.status === "ACTIVE" || order.status === "PARTIAL") &&
-        order.filledQuantity !== order.originalQuantity
-    ).length;
-  }, [openOrdersQuery.data?.data?.orders]);
-  
-  // Count unique positions
-  const positionsCount = useMemo(() => {
-    // Count open positions (status === "OPEN")
-    return positionSessions.filter((session) => session.status === "OPEN").length;
-  }, [positionSessions]);
+  // Perps orders still resting on the book, excluding fully filled — the same
+  // filter the open-orders table applies, so "Cancel all" matches what is shown.
+  const restingOrders = useMemo<CancellableOrder[]>(
+    () =>
+      perpsOpenOrders
+        .filter(
+          (order) =>
+            (order.status === "ACTIVE" || order.status === "PARTIALLY_FILLED") &&
+            order.filledQuantity !== order.originalQuantity,
+        )
+        .map((order) => ({ id: order.id, isBuy: order.isBuy })),
+    [perpsOpenOrders],
+  );
+  const ordersCount = restingOrders.length;
+
+  // Open positions (status === "OPEN"); on perps there is normally one.
+  const openPositions = useMemo<ExitAllPosition[]>(
+    () =>
+      positionSessions
+        .filter((session) => session.status === "OPEN" && session.netQuantity !== 0n)
+        .map((session) => ({ netQuantity: session.netQuantity, entryPrice: session.entryPrice })),
+    [positionSessions],
+  );
+  const positionsCount = useMemo(
+    () => positionSessions.filter((session) => session.status === "OPEN").length,
+    [positionSessions],
+  );
 
   // Auto-switch to Positions tab when there are no open orders but there are open positions
   useEffect(() => {
-    if (!openOrdersQuery.isLoading && !positionSessionsLoading) {
+    if (!perpsOpenOrdersLoading && !positionSessionsLoading) {
       if (ordersCount === 0 && positionsCount > 0) {
         setActiveTab("POSITIONS");
       }
     }
-  }, [openOrdersQuery.isLoading, positionSessionsLoading, ordersCount, positionsCount]);
+  }, [perpsOpenOrdersLoading, positionSessionsLoading, ordersCount, positionsCount]);
 
-  // Count closed positions
-  const positionHistoryCount = useMemo(() => {
-    // Count closed positions (status === "CLOSED")
-    return positionSessions.filter((session) => session.status === "CLOSE").length;
-  }, [positionSessions]);
+  // Loaded-row counts for the tab badges (no totals are exposed by the
+  // subgraph, so these reflect how many rows are currently loaded).
+  const positionHistoryCount = positionHistoryQuery.data.length;
 
-  // Count trades
-  const tradesCount = useMemo(() => {
-    const trades = tradesQuery.data?.trades || [];
-    return trades.length;
-  }, [tradesQuery.data?.trades]);
+  const tradesCount = tradesQuery.data.length;
 
-  // Count historical orders (all non-ACTIVE orders)
-  const orderHistoryCount = useMemo(() => {
-    return orderHistoryQuery.data?.data?.orders.length ?? 0;
-  }, [orderHistoryQuery.data?.data?.orders]);
+  const orderHistoryCount = orderHistoryQuery.data.length;
 
   return (
     <TabContainer>
@@ -162,17 +158,32 @@ export const PerpsOrdersPositionsTabWidget = ({
             setValue={setActiveTab}
           />
         </TabSwitchWrapper>
+        {activeTab === "OPEN_ORDERS" && restingOrders.length > 0 && (
+          <CancelAllButton onClick={() => setCancelAllOrders(restingOrders)}>Cancel all</CancelAllButton>
+        )}
+        {activeTab === "POSITIONS" && openPositions.length > 0 && (
+          <CancelAllButton
+            onClick={() => setExitAll({ orders: restingOrders, positions: openPositions })}
+            disabled={marketPrice === undefined}
+            title={
+              restingOrders.length > 0
+                ? "Close every position at market and cancel all open orders"
+                : "Close every position at market"
+            }
+          >
+            Close all
+          </CancelAllButton>
+        )}
       </Header>
 
       <Content>
         {activeTab === "OPEN_ORDERS" && (
           <OrdersWrapper>
             <PerpsOpenOrdersTable
-              orders={openOrdersQuery.data?.data?.orders || []}
-              isLoading={openOrdersQuery.isLoading}
-              onCancelOrder={handleCancelOrder}
+              orders={perpsOpenOrders}
+              isLoading={perpsOpenOrdersLoading}
               onModifyOrder={setModifyOrder}
-              isCancelling={isCancelling}
+              onCancelOrder={setCancelOrder}
               visibleCount={openOrdersVisibleCount}
               onLoadMore={() => setOpenOrdersVisibleCount(c => c + 10)}
             />
@@ -184,9 +195,6 @@ export const PerpsOrdersPositionsTabWidget = ({
               positionSessions={positionSessions}
               isLoading={positionSessionsLoading}
               marketPrice={marketPrice}
-              collateral={perpsBalance}
-              totalMaintenanceMargin={minMargin ?? undefined}
-              maintenanceMarginPercent={maintenanceMarginPercent}
               onClosePosition={setClosePositionSession}
             />
           </PositionsWrapper>
@@ -194,52 +202,111 @@ export const PerpsOrdersPositionsTabWidget = ({
         {activeTab === "TRADES" && (
           <TradesWrapper>
             <PerpsTradesTable
-              trades={tradesQuery.data?.trades || []}
-              isLoading={tradesQuery.isLoading}
+              trades={tradesQuery.data}
+              isLoading={tradesQuery.loading}
               userAddress={participantAddress}
-              visibleCount={tradesVisibleCount}
-              onLoadMore={() => setTradesVisibleCount(c => c + 10)}
+              hasMore={tradesQuery.hasMore}
+              isFetchingMore={tradesQuery.isFetchingMore}
+              onLoadMore={tradesQuery.loadMore}
             />
           </TradesWrapper>
         )}
         {activeTab === "POSITION_HISTORY" && (
           <PositionsWrapper>
             <PerpsPositionHistoryTable
-              positionSessions={positionSessions}
-              isLoading={positionSessionsLoading}
-              visibleCount={positionHistoryVisibleCount}
-              onLoadMore={() => setPositionHistoryVisibleCount(c => c + 10)}
+              positionSessions={positionHistoryQuery.data}
+              isLoading={positionHistoryQuery.loading}
+              hasMore={positionHistoryQuery.hasMore}
+              isFetchingMore={positionHistoryQuery.isFetchingMore}
+              onLoadMore={positionHistoryQuery.loadMore}
             />
           </PositionsWrapper>
         )}
         {activeTab === "ORDER_HISTORY" && (
           <OrdersWrapper>
             <PerpsOrderHistoryTable
-              orders={orderHistoryQuery.data?.data?.orders || []}
-              isLoading={orderHistoryQuery.isLoading}
-              visibleCount={orderHistoryVisibleCount}
-              onLoadMore={() => setOrderHistoryVisibleCount(c => c + 10)}
+              orders={orderHistoryQuery.data}
+              isLoading={orderHistoryQuery.loading}
+              hasMore={orderHistoryQuery.hasMore}
+              isFetchingMore={orderHistoryQuery.isFetchingMore}
+              onLoadMore={orderHistoryQuery.loadMore}
             />
           </OrdersWrapper>
         )}
       </Content>
 
-      <ClosePerpsPositionModal
-        open={closePositionSession !== null}
-        onClose={() => setClosePositionSession(null)}
-        session={closePositionSession}
-        marketPrice={marketPrice}
-        participantAddress={participantAddress}
-        onConfirmed={onPositionClosed}
-      />
+      {/* Mount only when open so wagmi Hydrate doesn't push store updates into
+          idle modals during render (React "setState while rendering Hydrate"). */}
+      {closePositionSession && (
+        <ModalItem compact open setOpen={(isOpen) => !isOpen && setClosePositionSession(null)}>
+          <ClosePositionForm
+            contractMode="perpetual"
+            position={{
+              netQuantity: closePositionSession.netQuantity,
+              entryPrice: closePositionSession.entryPrice,
+            }}
+            marketPrice={marketPrice}
+            priceStep={priceStep}
+            perpsCollection={perpsCollection.data?.data}
+            closeForm={() => setClosePositionSession(null)}
+            onConfirmed={async () => {
+              // Closing a position adds history rows — reset every history table
+              // back to its newest page rather than merging in-place.
+              refreshPerpsHistory();
+              await onPositionClosed?.();
+            }}
+          />
+        </ModalItem>
+      )}
 
-      <ModifyPerpsOrderModal
-        open={modifyOrder !== null}
-        onClose={() => setModifyOrder(null)}
-        order={modifyOrder}
-        marketPrice={marketPrice}
-        participantAddress={participantAddress}
-      />
+      {exitAll && (
+        <ModalItem open setOpen={(isOpen) => !isOpen && setExitAll(null)}>
+          <ExitAllForm
+            contractMode="perpetual"
+            orders={exitAll.orders}
+            positions={exitAll.positions}
+            marketPrice={marketPrice}
+            priceStep={priceStep}
+            closeForm={() => setExitAll(null)}
+            onConfirmed={async () => {
+              refreshPerpsHistory();
+              await onPositionClosed?.();
+            }}
+          />
+        </ModalItem>
+      )}
+
+      {modifyOrder && (
+        <ModifyPerpsOrderModal
+          open
+          onClose={() => setModifyOrder(null)}
+          order={modifyOrder}
+          marketPrice={marketPrice}
+          participantAddress={participantAddress}
+          onConfirmed={refreshPerpsHistory}
+        />
+      )}
+
+      {cancelAllOrders && (
+        <ModalItem open setOpen={(isOpen) => !isOpen && setCancelAllOrders(null)}>
+          <CancelAllOrdersForm
+            orders={cancelAllOrders}
+            contractMode="perpetual"
+            closeForm={() => setCancelAllOrders(null)}
+            onConfirmed={refreshPerpsHistory}
+          />
+        </ModalItem>
+      )}
+
+      {cancelOrder && (
+        <CancelOrderConfirmModal
+          open
+          order={cancelOrder}
+          participantAddress={participantAddress}
+          onClose={() => setCancelOrder(null)}
+          onConfirmed={refreshPerpsHistory}
+        />
+      )}
     </TabContainer>
   );
 };
@@ -258,23 +325,25 @@ interface PerpsOpenOrdersTableProps {
     updatedAt: string;
   }>;
   isLoading?: boolean;
-  onCancelOrder: (orderId: string) => Promise<void>;
   onModifyOrder: (order: PerpsOrder) => void;
-  isCancelling: boolean;
+  onCancelOrder: (order: PerpsOrder) => void;
   visibleCount: number;
   onLoadMore: () => void;
 }
 
-type OpenOrder = PerpsOpenOrdersTableProps["orders"][number];
-
-const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder, isCancelling, visibleCount, onLoadMore }: PerpsOpenOrdersTableProps) => {
-  const [pendingCancelOrder, setPendingCancelOrder] = useState<OpenOrder | null>(null);
-
+const PerpsOpenOrdersTable = ({
+  orders,
+  isLoading,
+  onModifyOrder,
+  onCancelOrder,
+  visibleCount,
+  onLoadMore,
+}: PerpsOpenOrdersTableProps) => {
   const formatPrice = (price: bigint) => {
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
-  const formatQuantity = (quantity: bigint) => {
+  const _formatQuantity = (quantity: bigint) => {
     if(quantity === 0n) {
       return "0";
     }
@@ -285,8 +354,8 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
     switch (status) {
       case "ACTIVE":
         return "Active";
-      case "PARTIAL":
-        return "Partial";
+      case "PARTIALLY_FILLED":
+        return "Partially Filled";
       case "FILLED":
         return "Filled";
       case "CANCELLED":
@@ -300,7 +369,7 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
     switch (status) {
       case "ACTIVE":
         return tokens.trading.long;
-      case "PARTIAL":
+      case "PARTIALLY_FILLED":
         return tokens.trading.warning;
       case "FILLED":
         return tokens.text.muted;
@@ -312,7 +381,7 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
   };
 
   const activeOrders = [...orders]
-    .filter((order) => (order.status === "ACTIVE" || order.status === "PARTIAL") && order.filledQuantity !== order.originalQuantity)
+    .filter((order) => (order.status === "ACTIVE" || order.status === "PARTIALLY_FILLED") && order.filledQuantity !== order.originalQuantity)
     .sort((a, b) => Number(b.createdAt) - Number(a.createdAt));
 
   const displayedOrders = activeOrders.slice(0, visibleCount);
@@ -368,42 +437,15 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
               </td>
               <td>
                 <ActionButtons>
-                  <ModifyButton
-                    onClick={() => onModifyOrder(order as PerpsOrder)}
-                    disabled={isCancelling}
-                  >
-                    Modify
-                  </ModifyButton>
-                  <CancelButton 
-                    onClick={() => setPendingCancelOrder(order)}
-                    disabled={isCancelling}
-                  >
-                    Cancel
-                  </CancelButton>
+                  <ModifyButton onClick={() => onModifyOrder(order as PerpsOrder)}>Modify</ModifyButton>
+                  <CancelButton onClick={() => onCancelOrder(order as PerpsOrder)}>Cancel</CancelButton>
                 </ActionButtons>
               </td>
             </TableRow>
           ))}
         </tbody>
       </Table>
-      {visibleCount < activeOrders.length && (
-        <LoadMoreButton onClick={onLoadMore}>
-          Load next 10 items
-        </LoadMoreButton>
-      )}
-
-      {pendingCancelOrder && (
-        <CancelOrderConfirmModal
-          open={true}
-          order={pendingCancelOrder}
-          onClose={() => setPendingCancelOrder(null)}
-          onConfirm={async () => {
-            await onCancelOrder(pendingCancelOrder.id);
-            setPendingCancelOrder(null);
-          }}
-          isCancelling={isCancelling}
-        />
-      )}
+      <LoadMoreButton hasMore={visibleCount < activeOrders.length} onClick={onLoadMore} />
     </TableContainer>
   );
 };
@@ -411,59 +453,95 @@ const PerpsOpenOrdersTable = ({ orders, isLoading, onCancelOrder, onModifyOrder,
 // Cancel Order Confirmation Modal
 interface CancelOrderConfirmModalProps {
   open: boolean;
-  order: OpenOrder;
+  order: PerpsOrder;
+  participantAddress?: `0x${string}`;
   onClose: () => void;
-  onConfirm: () => Promise<void>;
-  isCancelling: boolean;
+  onConfirmed?: () => void | Promise<void>;
 }
 
-const CancelOrderConfirmModal = ({ open, order, onClose, onConfirm, isCancelling }: CancelOrderConfirmModalProps) => {
-  const formatPrice = (price: bigint) => (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+const CancelOrderConfirmModal = ({ open, order, participantAddress, onClose, onConfirmed }: CancelOrderConfirmModalProps) => {
+  const { cancelOrderAsync } = useCancelPerpsOrder();
+  const queryClient = useQueryClient();
 
-  const filledValue = ((Number(order.price) / PAYMENT_TOKEN_SCALE_NUM) * (Number(order.filledQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2);
-  const totalValue = ((Number(order.price) / PAYMENT_TOKEN_SCALE_NUM) * (Number(order.originalQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2);
+  const price = Number(order.price) / PAYMENT_TOKEN_SCALE_NUM;
+  const filledValue = (price * (Number(order.filledQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2);
+  const totalValue = (price * (Number(order.originalQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2);
+  const remainingQty = Number(order.originalQuantity - order.filledQuantity) / PAYMENT_TOKEN_SCALE_NUM;
 
   return (
     <Modal open={open} onClose={onClose}>
-      <CloseAllModalCard>
+      <PerpsModalCard>
         <IconButton className="close" sx={{ color: "white" }} onClick={onClose}>
           <CloseIcon />
         </IconButton>
 
-        <h2>Cancel Order</h2>
-
-        <CloseAllDescription>
-          Are you sure you want to cancel this order?
-        </CloseAllDescription>
-
-        <CloseAllSummary>
-          <SummaryRow>
-            <SummaryLabel>Side</SummaryLabel>
-            <SummaryValue>
-              <TypeBadge $type={order.isBuy ? "Long" : "Short"}>{order.isBuy ? "Long" : "Short"}</TypeBadge>
-            </SummaryValue>
-          </SummaryRow>
-          <SummaryRow>
-            <SummaryLabel>Price</SummaryLabel>
-            <SummaryValue>{formatPrice(order.price)} USDC</SummaryValue>
-          </SummaryRow>
-          <SummaryRow>
-            <SummaryLabel>Filled / Size (USDC)</SummaryLabel>
-            <SummaryValue>{filledValue} / {totalValue}</SummaryValue>
-          </SummaryRow>
-          <SummaryRow>
-            <SummaryLabel>Status</SummaryLabel>
-            <SummaryValue>{order.status === "PARTIAL" ? "Partial" : "Active"}</SummaryValue>
-          </SummaryRow>
-        </CloseAllSummary>
-
-        <CloseAllActions>
-          <ModalCancelButton onClick={onClose}>Go Back</ModalCancelButton>
-          <ModalConfirmButton onClick={onConfirm} disabled={isCancelling}>
-            {isCancelling ? "Cancelling..." : "Confirm"}
-          </ModalConfirmButton>
-        </CloseAllActions>
-      </CloseAllModalCard>
+        <TransactionForm
+          onClose={onClose}
+          title="Cancel Order"
+          description=""
+          reviewForm={() => (
+            <>
+              <div className="mb-4">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Side:</span>
+                    <span className="text-white">{order.isBuy ? "Long" : "Short"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Price:</span>
+                    <span className="text-white">{price.toFixed(2)} USDC</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Filled / Size:</span>
+                    <span className="text-white">
+                      {filledValue} / {totalValue} USDC
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Quantity to Cancel:</span>
+                    <span className="text-white">{remainingQty.toFixed(6)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Status:</span>
+                    <span className="text-white">
+                      {order.status === "PARTIALLY_FILLED" ? "Partially Filled" : "Active"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <p className="text-gray-400 text-sm">You are about to cancel this order.</p>
+            </>
+          )}
+          resultForm={() => (
+            <p className="w-6/6 text-left font-normal text-s mt-5">
+              Your order has been cancelled and will disappear from the order book shortly.
+            </p>
+          )}
+          transactionSteps={[
+            {
+              label: "Cancel Order",
+              action: async () => {
+                const txhash = await cancelOrderAsync({ orderId: order.id as `0x${string}` });
+                if (!txhash) throw new Error("Wallet not ready. Please try again.");
+                return { txhash, isSkipped: false };
+              },
+              postConfirmation: async (receipt: TransactionReceipt) => {
+                await waitForOrderBookBlockNumber(receipt.blockNumber, queryClient, "perpetual");
+                await Promise.all([
+                  queryClient.invalidateQueries({ queryKey: [getOrderBookQueryKey("perpetual")] }),
+                  queryClient.invalidateQueries({ queryKey: [USER_PERPS_ORDERS_QK, participantAddress] }),
+                  queryClient.invalidateQueries({ queryKey: [USER_POSITION_SESSIONS_QK, participantAddress] }),
+                  queryClient.resetQueries({ queryKey: [PERPS_ORDER_HISTORY_QK, participantAddress] }),
+                  queryClient.resetQueries({ queryKey: [PERPS_POSITION_HISTORY_QK, participantAddress] }),
+                  queryClient.resetQueries({ queryKey: [USER_TRADES_QK, participantAddress] }),
+                  invalidatePortfolioPnl(queryClient),
+                ]);
+                if (onConfirmed) await onConfirmed();
+              },
+            },
+          ]}
+        />
+      </PerpsModalCard>
     </Modal>
   );
 };
@@ -483,16 +561,17 @@ interface PerpsOrderHistoryTableProps {
     closedAt: string | null;
   }>;
   isLoading?: boolean;
-  visibleCount: number;
+  hasMore?: boolean;
+  isFetchingMore?: boolean;
   onLoadMore: () => void;
 }
 
-const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }: PerpsOrderHistoryTableProps) => {
+const PerpsOrderHistoryTable = ({ orders, isLoading, hasMore = false, isFetchingMore, onLoadMore }: PerpsOrderHistoryTableProps) => {
   const formatPrice = (price: bigint) => {
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
-  const formatQuantity = (quantity: bigint) => {
+  const _formatQuantity = (quantity: bigint) => {
     if(quantity === 0n) {
       return "0";
     }
@@ -503,12 +582,14 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }:
     switch (status) {
       case "ACTIVE":
         return "Active";
-      case "PARTIAL":
-        return "Partial";
+      case "PARTIALLY_FILLED":
+        return "Partially Filled";
       case "FILLED":
         return "Filled";
       case "CANCELLED":
         return "Cancelled";
+      case "LIQUIDATED":
+        return "Liquidated";
       default:
         return status;
     }
@@ -518,12 +599,14 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }:
     switch (status) {
       case "ACTIVE":
         return tokens.trading.long;
-      case "PARTIAL":
+      case "PARTIALLY_FILLED":
         return tokens.trading.warning;
       case "FILLED":
         return tokens.text.muted;
       case "CANCELLED":
         return tokens.trading.short;
+      case "LIQUIDATED":
+        return tokens.status.error;
       default:
         return tokens.text.muted;
     }
@@ -537,7 +620,7 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }:
     Number(b.createdAt) - Number(a.createdAt)
   );
 
-  const displayedOrders = sortedOrders.slice(0, visibleCount);
+  const displayedOrders = sortedOrders;
 
   if (isLoading) {
     return (
@@ -593,11 +676,7 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, visibleCount, onLoadMore }:
           ))}
         </tbody>
       </Table>
-      {visibleCount < sortedOrders.length && (
-        <LoadMoreButton onClick={onLoadMore}>
-          Load next 10 items
-        </LoadMoreButton>
-      )}
+      <LoadMoreButton hasMore={hasMore} isLoading={isFetchingMore} onClick={onLoadMore} />
     </TableContainer>
   );
 };
@@ -607,20 +686,18 @@ interface PerpsPositionsTableProps {
   positionSessions: PositionSession[];
   isLoading?: boolean;
   marketPrice?: bigint;
-  collateral?: bigint;
-  totalMaintenanceMargin?: bigint;
-  maintenanceMarginPercent?: bigint;
   onClosePosition?: (session: PositionSession) => void;
 }
 
-const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collateral, totalMaintenanceMargin, maintenanceMarginPercent, onClosePosition }: PerpsPositionsTableProps) => {
+const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClosePosition }: PerpsPositionsTableProps) => {
   const [selectedSession, setSelectedSession] = useState<PositionSession | null>(null);
+  const orderMargin = useOrderMargin();
 
   const formatPrice = (price: bigint) => {
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
-  const formatQuantity = (quantity: bigint) => {
+  const _formatQuantity = (quantity: bigint) => {
     if(quantity === 0n) {
       return "0";
     }
@@ -641,20 +718,20 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
     return priceDiff * netQuantity / QUANTITY_SCALE; // Adjust for precision
   };
 
-  const calculateLiquidationPrice = (entryPrice: bigint, netQuantity: bigint): bigint | null => {
-    if (!marketPrice || !collateral || netQuantity === 0n || maintenanceMarginPercent === undefined) return null;
-
-    const { liquidationPrice } = computeLiquidationState(
-      netQuantity,
-      entryPrice,
-      collateral,
-      totalMaintenanceMargin ?? 0n,
-      marketPrice,
-      maintenanceMarginPercent,
-      QUANTITY_DECIMALS_BIGINT,
-    );
-    return liquidationPrice;
-  };
+  // The venue nets every fill into one position, so the account has a single
+  // open session and its margin is the whole perps leg's contribution to
+  // portfolio IM: what the requirement drops by once the leg is flat. Clamped,
+  // because a leg hedging the futures book can make closing out cost margin
+  // rather than free it, and a negative figure in a Margin column reads as a bug.
+  const positionMargin = orderMargin.quote({ closePerps: true })?.imIncrease;
+  const positionMarginLabel =
+    positionMargin === undefined
+      ? "—"
+      : `${(Number(positionMargin < 0n ? -positionMargin : 0n) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} USDC`;
+  const marginTooltip =
+    "Initial margin this position accounts for — how much the account's requirement " +
+    "would fall if it were closed. Collateral is pooled across futures and perps, so a " +
+    "leg that hedges the rest of the book can account for none of it.";
 
   const openPositions = [...positionSessions]
     .filter((session) => session.status === "OPEN")
@@ -684,25 +761,23 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
             <tr>
               <th>Opened At</th>
               <th>Side</th>
+              <th>Status</th>
               <th>Entry Price</th>
               <th>Size / Max Size</th>
-              <th>Net Quantity</th>
+              <th title={marginTooltip}>Margin</th>
               <th>Fees (F/T)</th>
               <th>Unrealized PnL</th>
               <th>Realized PnL</th>
-              <th>Liquidation Price</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {openPositions.map((session) => {
-              // For status OPEN, use netQuantity from user object
-              const displayQuantity = session.user.netQuantity;
+              const displayQuantity = session.netQuantity;
               const isLong = displayQuantity > 0n || (displayQuantity === 0n && session.maxQuantity > 0n);
               const realizedPnlValue = Number(session.realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
               const unrealizedPnl = calculateUnrealizedPnL(session.entryPrice, displayQuantity);
               const unrealizedPnlValue = Number(unrealizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
-              const liquidationPrice = calculateLiquidationPrice(session.entryPrice, displayQuantity);
 
               return (
                 <TableRow key={session.id}>
@@ -712,13 +787,32 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
                       {isLong ? "Long" : "Short"}
                     </TypeBadge>
                   </td>
+                  <td>
+                    {session.liquidatedQuantity > 0n ? (
+                      <LiquidationChip
+                        title={formatLiquidatedQty(session.liquidatedQuantity, displayQuantity, {
+                          scale: PAYMENT_TOKEN_SCALE_NUM,
+                          fractionDigits: 2,
+                        })}
+                      >
+                        {formatLiquidatedQty(session.liquidatedQuantity, displayQuantity, {
+                          scale: PAYMENT_TOKEN_SCALE_NUM,
+                          fractionDigits: 2,
+                        })}
+                      </LiquidationChip>
+                    ) : (
+                      <StatusBadge $status="OPEN" $color={tokens.trading.long}>
+                        Open
+                      </StatusBadge>
+                    )}
+                  </td>
                   <td>{formatPrice(session.entryPrice)}</td>
                   <td>
                     {((Number(session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(displayQuantity < 0n ? -displayQuantity : displayQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}
                     {" / "}
                     {((Number(session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(session.maxQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}
                   </td>
-                  <td>{(Number(displayQuantity < 0n ? -displayQuantity : displayQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6)}</td>
+                  <td title={marginTooltip}>{positionMarginLabel}</td>
                   <td>{formatFees(session.fundingFees, session.tradingFees)}</td>
                   <td>
                     <PnLText $isPositive={unrealizedPnlValue >= 0}>
@@ -731,17 +825,12 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
                     </PnLText>
                   </td>
                   <td>
-                    {liquidationPrice !== null && liquidationPrice > 0n
-                      ? formatPrice(liquidationPrice)
-                      : "N/A"}
-                  </td>
-                  <td>
                     <ActionButtons>
-                      <DetailsButton onClick={() => onClosePosition?.(session)}>
-                        Close
-                      </DetailsButton>
                       <DetailsButton onClick={() => setSelectedSession(session)}>
                         Trades
+                      </DetailsButton>
+                      <DetailsButton onClick={() => onClosePosition?.(session)}>
+                        Close
                       </DetailsButton>
                     </ActionButtons>
                   </td>
@@ -767,18 +856,19 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, collate
 interface PerpsPositionHistoryTableProps {
   positionSessions: PositionSession[];
   isLoading?: boolean;
-  visibleCount: number;
+  hasMore?: boolean;
+  isFetchingMore?: boolean;
   onLoadMore: () => void;
 }
 
-const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, onLoadMore }: PerpsPositionHistoryTableProps) => {
+const PerpsPositionHistoryTable = ({ positionSessions, isLoading, hasMore = false, isFetchingMore, onLoadMore }: PerpsPositionHistoryTableProps) => {
   const [selectedSession, setSelectedSession] = useState<PositionSession | null>(null);
 
   const formatPrice = (price: bigint) => {
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
-  const formatQuantity = (quantity: bigint) => {
+  const _formatQuantity = (quantity: bigint) => {
     if(quantity === 0n) {
       return "0";
     }
@@ -810,7 +900,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, 
   const closedPositions = [...positionSessions]
     .filter((session) => session.status === "CLOSE")
     .sort((a, b) => Number(b.openedAt) - Number(a.openedAt));
-  const displayedPositions = closedPositions.slice(0, visibleCount);
+  const displayedPositions = closedPositions;
 
   if (isLoading) {
     return (
@@ -835,7 +925,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, 
           <thead>
             <tr>
               <th>Opened At</th>
-              {/* <th>Status</th> */}
+              <th>Status</th>
               <th>Side</th>
               <th>Entry Price (USDC)</th>
               <th>Close Price (USDC)</th>
@@ -849,15 +939,35 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, 
             {displayedPositions.map((session) => {
               const isLong = session.maxQuantity > 0n;
               const realizedPnlValue = Number(session.realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
+              const wasLiquidated = session.liquidatedQuantity > 0n;
 
               return (
-                <TableRow key={session.id}>
+                <TableRow
+                  key={session.id}
+                  style={wasLiquidated ? { backgroundColor: LIQUIDATION_ROW_BG } : undefined}
+                >
                   <td><DateTimeCell timestamp={session.openedAt} /></td>
-                  {/* <td>
-                    <StatusBadge $status={session.status} $color={getStatusColor(session.status)}>
-                      {formatStatus(session.status)}
-                    </StatusBadge>
-                  </td> */}
+                  <td>
+                    {wasLiquidated ? (
+                      <LiquidationChip
+                        title={formatLiquidatedQty(
+                          session.liquidatedQuantity,
+                          session.maxQuantity - session.liquidatedQuantity,
+                          { scale: PAYMENT_TOKEN_SCALE_NUM, fractionDigits: 2 },
+                        )}
+                      >
+                        {formatLiquidatedQty(
+                          session.liquidatedQuantity,
+                          session.maxQuantity - session.liquidatedQuantity,
+                          { scale: PAYMENT_TOKEN_SCALE_NUM, fractionDigits: 2 },
+                        )}
+                      </LiquidationChip>
+                    ) : (
+                      <StatusBadge $status={session.status} $color={getStatusColor(session.status)}>
+                        {formatStatus(session.status)}
+                      </StatusBadge>
+                    )}
+                  </td>
                   <td>
                     <TypeBadge $type={isLong ? "Long" : "Short"}>
                       {isLong ? "Long" : "Short"}
@@ -884,11 +994,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, visibleCount, 
             })}
           </tbody>
         </Table>
-        {visibleCount < closedPositions.length && (
-          <LoadMoreButton onClick={onLoadMore}>
-          Load next 10 items
-        </LoadMoreButton>
-      )}
+        <LoadMoreButton hasMore={hasMore} isLoading={isFetchingMore} onClick={onLoadMore} />
       </TableContainer>
 
       {/* Details Modal */}
@@ -907,16 +1013,17 @@ interface PerpsTradesTableProps {
   trades: UserTrade[];
   isLoading?: boolean;
   userAddress?: `0x${string}`;
-  visibleCount: number;
+  hasMore?: boolean;
+  isFetchingMore?: boolean;
   onLoadMore: () => void;
 }
 
-const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoadMore }: PerpsTradesTableProps) => {
+const PerpsTradesTable = ({ trades, isLoading, hasMore = false, isFetchingMore, onLoadMore }: PerpsTradesTableProps) => {
   const formatPrice = (price: bigint) => {
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
-  const formatQuantity = (quantity: bigint) => {
+  const _formatQuantity = (quantity: bigint) => {
     if(quantity === 0n) {
       return "0";
     }
@@ -933,7 +1040,7 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoad
     Number(b.timestamp) - Number(a.timestamp)
   );
 
-  const displayedTrades = sortedTrades.slice(0, visibleCount);
+  const displayedTrades = sortedTrades;
 
   if (isLoading) {
     return (
@@ -956,7 +1063,7 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoad
       <Table>
         <thead>
           <tr>
-            <th>Timestamp</th>
+            <th>Time</th>
             <th>Side</th>
             <th>Trade Price</th>
             <th>Size (USDC)</th>
@@ -968,25 +1075,34 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoad
         </thead>
         <tbody>
           {displayedTrades.map((trade) => (
-            <TableRow key={trade.id}>
-              <td><DateTimeCell timestamp={trade.timestamp} showSeconds /></td>
+            <TableRow
+              key={trade.id}
+              style={trade.isLiquidation ? { backgroundColor: LIQUIDATION_ROW_BG } : undefined}
+            >
+              <td><DateTimeCell timestamp={trade.timestamp} /></td>
               <td>
-                <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
-                  {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
-                </TypeBadge>
+                <SideCell>
+                  <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
+                    {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
+                  </TypeBadge>
+                  {trade.isLiquidation && <LiquidationChip>Liquidation</LiquidationChip>}
+                </SideCell>
               </td>
               <td>{formatPrice(trade.tradePrice)}</td>
               <td>{((Number(trade.tradePrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(trade.tradeQuantity < 0n ? -trade.tradeQuantity : trade.tradeQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}</td>
               <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
               <td>{formatPrice(trade.tradingFee)}</td>
               <td>
-                <PnLText $isPositive={Number(trade.realizedPnl) >= 0}>
+                <PnLText
+                  $isPositive={Number(trade.realizedPnl) >= 0}
+                  $isZero={Number(trade.realizedPnl) === 0}
+                >
                   {formatPnL(trade.realizedPnl)}
                 </PnLText>
               </td>
               <td>
                 <TxLink 
-                  href={`https://etherscan.io/tx/${trade.transactionHash}`} 
+                  href={getTxUrl(trade.transactionHash as `0x${string}`)} 
                   target="_blank" 
                   rel="noopener noreferrer"
                 >
@@ -997,11 +1113,7 @@ const PerpsTradesTable = ({ trades, isLoading, userAddress, visibleCount, onLoad
           ))}
         </tbody>
       </Table>
-      {visibleCount < sortedTrades.length && (
-        <LoadMoreButton onClick={onLoadMore}>
-          Load next 10 items
-        </LoadMoreButton>
-      )}
+      <LoadMoreButton hasMore={hasMore} isLoading={isFetchingMore} onClick={onLoadMore} />
     </TableContainer>
   );
 };
@@ -1018,7 +1130,7 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
     return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
-  const formatQuantity = (quantity: bigint) => {
+  const _formatQuantity = (quantity: bigint) => {
     if(quantity === 0n) {
       return "0";
     }
@@ -1034,6 +1146,11 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
   const sortedTrades = [...session.trades].sort((a, b) => 
     Number(b.timestamp) - Number(a.timestamp)
   );
+
+  // Client-side "Load More" paging (the session's trades are already in memory).
+  const PAGE_SIZE = 10;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const displayedTrades = sortedTrades.slice(0, visibleCount);
 
   return (
     <Modal
@@ -1055,7 +1172,7 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
           <TradesTable>
             <thead>
               <tr>
-                <th>Timestamp</th>
+                <th>Time</th>
                 <th>Side</th>
                 <th>Trade Price</th>
                 <th>Size (USDC)</th>
@@ -1066,9 +1183,9 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
               </tr>
             </thead>
             <tbody>
-              {sortedTrades.map((trade) => (
+              {displayedTrades.map((trade) => (
                 <TableRow key={trade.id}>
-                  <td><DateTimeCell timestamp={trade.timestamp} showSeconds /></td>
+                  <td><DateTimeCell timestamp={trade.timestamp} /></td>
                   <td>
                     <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
                       {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
@@ -1079,13 +1196,16 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
                   <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
                   <td>{formatPrice(trade.tradingFee)}</td>
                   <td>
-                    <PnLText $isPositive={Number(trade.realizedPnl) >= 0}>
+                    <PnLText
+                      $isPositive={Number(trade.realizedPnl) >= 0}
+                      $isZero={Number(trade.realizedPnl) === 0}
+                    >
                       {formatPnL(trade.realizedPnl)}
                     </PnLText>
                   </td>
                   <td>
                     <TxLink 
-                      href={`https://etherscan.io/tx/${trade.transactionHash}`} 
+                      href={getTxUrl(trade.transactionHash as `0x${string}`)} 
                       target="_blank" 
                       rel="noopener noreferrer"
                     >
@@ -1097,6 +1217,11 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
             </tbody>
           </TradesTable>
         </TradesTableContainer>
+
+        <LoadMoreButton
+          hasMore={visibleCount < sortedTrades.length}
+          onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+        />
       </TradesModalCard>
     </Modal>
   );
@@ -1124,6 +1249,7 @@ const Header = styled("div")`
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
   width: 100%;
 `;
 
@@ -1164,7 +1290,7 @@ const TradesWrapper = styled("div")`
   width: 100%;
 `;
 
-const PlaceholderText = styled("div")`
+const _PlaceholderText = styled("div")`
   padding: 2rem;
   text-align: center;
   color: ${tokens.overlay.white50};
@@ -1231,6 +1357,13 @@ const TypeBadge = styled("span")<{ $type: string }>`
   font-weight: 600;
   background-color: ${(props) => (props.$type === "Long" ? tokens.trading.longRowBg : tokens.trading.shortRowBg)};
   color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
+`;
+
+const SideCell = styled("div")`
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
 `;
 
 const StatusBadge = styled("span")<{ $status: string; $color: string }>`
@@ -1314,8 +1447,13 @@ const EmptyState = styled("div")`
   }
 `;
 
-const PnLText = styled("span")<{ $isPositive: boolean }>`
-  color: ${(props) => (props.$isPositive ? tokens.trading.long : tokens.trading.short)};
+const PnLText = styled("span")<{ $isPositive: boolean; $isZero?: boolean }>`
+  color: ${(props) =>
+    props.$isZero
+      ? tokens.text.primary
+      : props.$isPositive
+        ? tokens.trading.long
+        : tokens.trading.short};
   font-weight: 600;
 `;
 
@@ -1392,24 +1530,6 @@ const TradesTableContainer = styled("div")`
   }
 `;
 
-const LoadMoreButton = styled("button")`
-  display: block;
-  width: 100%;
-  padding: 0.75rem;
-  margin-top: 0.5rem;
-  background: transparent;
-  color: ${tokens.text.secondary};
-  border: none;
-  font-size: 0.875rem;
-  cursor: pointer;
-  text-align: center;
-  transition: color 0.2s ease;
-
-  &:hover {
-    color: ${tokens.text.onDark};
-  }
-`;
-
 const TradesTable = styled("table")`
   width: 100%;
   border-collapse: collapse;
@@ -1441,110 +1561,20 @@ const TradesTable = styled("table")`
   }
 `;
 
-const CloseAllModalCard = styled(ModalCard)`
-  max-width: 700px;
-
-  h2 {
-    font-size: 1.5rem;
-    font-weight: 500;
-    padding-bottom: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-`;
-
-const CloseAllDescription = styled("p")`
-  color: ${tokens.text.secondary};
-  font-size: 0.875rem;
-  margin: 0 0 1.25rem 0;
-`;
-
-const CloseAllSummary = styled("div")`
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem;
-  background: ${tokens.overlay.white05};
-  border-radius: 8px;
-  margin-bottom: 1.25rem;
-`;
-
-const SummaryRow = styled("div")`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-`;
-
-const SummaryLabel = styled("span")`
-  color: ${tokens.text.secondary};
-  font-size: 0.875rem;
-`;
-
-const SummaryValue = styled("span")`
-  color: ${tokens.text.onDark};
-  font-size: 0.875rem;
-  font-weight: 600;
-`;
-
-const ErrorText = styled("p")`
+const _ErrorText = styled("p")`
   color: ${tokens.trading.short};
   font-size: 0.8125rem;
   margin: 0 0 1rem 0;
 `;
 
-const CloseAllActions = styled("div")`
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  margin-top: 1.25rem;
-`;
-
-const ModalCancelButton = styled("button")`
-  padding: 0.5rem 1rem;
-  background: transparent;
-  color: ${tokens.text.onDark};
-  border: 1px solid ${tokens.border.default};
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease;
-
-  &:hover {
-    background: ${tokens.overlay.white08};
-    border-color: ${tokens.text.secondary};
-  }
-`;
-
-const ModalConfirmButton = styled("button")`
-  padding: 0.5rem 1rem;
-  background: ${tokens.trading.short};
-  color: ${tokens.text.onDark};
-  border: none;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-
-  &:hover:not(:disabled) {
-    background: ${tokens.trading.shortHover};
-  }
-
-  &:disabled {
-    background: ${tokens.text.muted};
-    cursor: not-allowed;
-    opacity: 0.6;
-  }
-`;
-
-const SimulatingText = styled("p")`
+const _SimulatingText = styled("p")`
   color: ${tokens.text.secondary};
   font-size: 0.875rem;
   margin: 0;
   text-align: center;
 `;
 
-const SimResultsContainer = styled("div")`
+const _SimResultsContainer = styled("div")`
   width: 100%;
   overflow-x: auto;
   margin-top: 0.5rem;

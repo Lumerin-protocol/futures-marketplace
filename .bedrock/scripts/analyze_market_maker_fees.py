@@ -54,7 +54,7 @@ DEFAULT_CONFIG = {
 USDC_DECIMALS = 6
 
 # Event topic signatures (keccak256 hash of event signature)
-# From Futures.sol contract
+# From HashPowerFutures.sol contract
 EVENT_TOPICS = {
     # Transfer(address indexed from, address indexed to, uint256 value)
     "Transfer": "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",

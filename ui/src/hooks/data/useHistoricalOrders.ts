@@ -1,105 +1,87 @@
-import { useQuery } from "@tanstack/react-query";
-import { graphqlRequest } from "./graphql";
 import { HistoricalOrdersQuery } from "./graphql-queries";
+import { usePaginatedHistory, type PaginatedHistoryResult } from "./usePaginatedHistory";
 
 export const HISTORICAL_ORDERS_QK = "HistoricalOrders";
-
-const PAGE_SIZE = 100;
-const THIRTY_DAYS_IN_SECONDS = 30 * 24 * 60 * 60;
 
 export type HistoricalOrder = {
   id: string;
   timestamp: string;
-  deliveryAt: bigint;
+  expirationAt: bigint;
   pricePerDay: bigint;
   isBuy: boolean;
   isActive: boolean;
+  status: string;
   closedAt: string | null;
+  originalQuantity: number;
+  filledQuantity: number;
+  cancelledQuantity: number;
+  /// True when a keeper force-cancelled the order (status LIQUIDATED).
+  wasLiquidated: boolean;
+  /// Contracts that left the book on the force-cancel.
+  liquidatedQuantity: number;
   participant: {
     address: `0x${string}`;
   };
 };
 
-type HistoricalOrdersResponse = {
-  _meta: {
-    block: {
-      number: number;
-      timestamp: string;
-    };
-  };
-  orders: {
+type RawOrder = {
+  user: {
     id: string;
-    timestamp: string;
-    deliveryAt: string;
-    pricePerDay: string;
-    isBuy: boolean;
-    isActive: boolean;
-    closedAt: string | null;
-    participant: {
-      address: `0x${string}`;
-    };
-  }[];
-};
-
-const fetchAllHistoricalOrders = async (
-  address: `0x${string}`,
-): Promise<{
-  data: HistoricalOrder[];
-  blockNumber: number;
-}> => {
-  const now = Math.floor(Date.now() / 1000);
-  const thirtyDaysAgo = now - THIRTY_DAYS_IN_SECONDS;
-
-  let allOrders: HistoricalOrder[] = [];
-  let skip = 0;
-  let hasMore = true;
-  let blockNumber = 0;
-
-  while (hasMore) {
-    const variables = {
-      participantAddress: address,
-      thirtyDaysAgo: thirtyDaysAgo,
-      first: PAGE_SIZE,
-      skip: skip,
-    };
-
-    const response = await graphqlRequest<HistoricalOrdersResponse>(HistoricalOrdersQuery, variables);
-
-    blockNumber = response._meta.block.number;
-
-    const orders = response.orders.map((order) => ({
-      id: order.id,
-      timestamp: order.timestamp,
-      deliveryAt: BigInt(order.deliveryAt),
-      pricePerDay: BigInt(order.pricePerDay),
-      isBuy: order.isBuy,
-      isActive: order.isActive,
-      closedAt: order.closedAt,
-      participant: {
-        address: order.participant.address,
-      },
-    }));
-
-    allOrders = [...allOrders, ...orders];
-
-    if (response.orders.length < PAGE_SIZE) {
-      hasMore = false;
-    } else {
-      skip += PAGE_SIZE;
-    }
-  }
-
-  return {
-    data: allOrders,
-    blockNumber,
   };
+  blockNumber: string;
+  cancelledQuantity: string;
+  closedAt: string | null;
+  expirationAt: string;
+  createdAt: string;
+  filledQuantity: string;
+  id: string;
+  isBuy: boolean;
+  originalQuantity: string;
+  quantity: string;
+  price: string;
+  status: string;
+  transactionHash: `0x${string}`;
+  updatedAt: string;
+  liquidator: string | null;
+  liquidationFee: string | null;
 };
 
-export const useHistoricalOrders = (address: `0x${string}` | undefined, enabled: boolean = false) => {
-  return useQuery({
+type HistoricalOrdersResponse = {
+  orders: RawOrder[];
+};
+
+const mapOrder = (order: RawOrder): HistoricalOrder => ({
+  id: order.id,
+  timestamp: order.createdAt,
+  expirationAt: BigInt(order.expirationAt),
+  pricePerDay: BigInt(order.price),
+  isBuy: order.isBuy,
+  // Anything coming back from this query is in a terminal state (FILLED,
+  // CANCELLED, LIQUIDATED, or EXPIRED) — never active.
+  isActive: false,
+  status: order.status,
+  closedAt: order.closedAt,
+  originalQuantity: Number(order.originalQuantity),
+  filledQuantity: Number(order.filledQuantity),
+  cancelledQuantity: Number(order.cancelledQuantity),
+  wasLiquidated: order.status === "LIQUIDATED",
+  liquidatedQuantity: order.status === "LIQUIDATED" ? Number(order.cancelledQuantity) : 0,
+  participant: {
+    address: order.user.id as `0x${string}`,
+  },
+});
+
+export const useHistoricalOrders = (
+  address: `0x${string}` | undefined,
+  enabled: boolean = false,
+): PaginatedHistoryResult<HistoricalOrder> => {
+  return usePaginatedHistory<HistoricalOrdersResponse, HistoricalOrder>({
     queryKey: [HISTORICAL_ORDERS_QK, address],
-    queryFn: () => fetchAllHistoricalOrders(address!),
+    query: HistoricalOrdersQuery,
+    variables: { address: address?.toLowerCase() },
+    selectRows: (response) => response.orders,
+    mapRow: mapOrder,
+    getId: (order) => order.id,
     enabled: !!address && enabled,
-    staleTime: 60 * 1000, // 1 minute
   });
 };

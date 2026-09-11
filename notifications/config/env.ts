@@ -7,7 +7,7 @@ import { default as addFormats } from "ajv-formats";
 const schema = Type.Object({
   // FUTURES_ADDRESS: TypeEthAddress(),
   // ETH_NODE_URL: Type.String({ format: "url" }),
-  // HASHRATE_ORACLE_ADDRESS: TypeEthAddress(),
+  // HASHPRICE_USD_ADDRESS: TypeEthAddress(),
   LOG_LEVEL: Type.Union(
     [
       Type.Literal("trace"),

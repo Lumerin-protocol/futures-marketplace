@@ -1,259 +1,242 @@
-import { expect } from "chai";
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { deployFuturesFixture } from "./fixtures";
-import { catchError } from "../lib/lib";
-import { refreshHashprice } from "./utils";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { network } from "hardhat";
+import { deployFuturesFixture } from "./fixtures.ts";
+import { refreshHashprice } from "./utils.ts";
+import { TimeInForce } from "./timeInForce.ts";
 
-describe("Delivery Date Management", function () {
-  it("should return correct delivery dates array", async function () {
-    const { contracts, config } = await loadFixture(deployFuturesFixture);
+const { viem, networkHelpers } = await network.getOrCreate();
+
+describe("Delivery Date Management", () => {
+  it("should return correct expiration dates array", async () => {
+    const { contracts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
 
-    const deliveryDates = await futures.read.getDeliveryDates();
-    expect(deliveryDates.length).to.equal(config.futureDeliveryDatesCount);
+    const deliveryDates = await futures.read.getExpirationDates();
+    assert.equal(deliveryDates.length, config.futureExpirationDatesCount);
 
-    // Check that dates are in ascending order
     for (let i = 1; i < deliveryDates.length; i++) {
-      expect(deliveryDates[i] > deliveryDates[i - 1]).to.be.true;
+      assert.ok(deliveryDates[i] > deliveryDates[i - 1]);
     }
   });
 
-  it("should calculate delivery dates correctly based on interval", async function () {
-    const { contracts } = await loadFixture(deployFuturesFixture);
+  it("should calculate expiration dates correctly based on interval", async () => {
+    const { contracts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
 
-    const deliveryDates = await futures.read.getDeliveryDates();
-    const firstFutureDeliveryDate = await futures.read.firstFutureDeliveryDate();
-    const deliveryIntervalDays = await futures.read.deliveryIntervalDays();
+    const deliveryDates = await futures.read.getExpirationDates();
+    const firstFutureExpirationDate = await futures.read.firstFutureExpirationDate();
+    const expirationIntervalDays = await futures.read.expirationIntervalDays();
 
-    // Check first date
-    expect(deliveryDates[0]).to.equal(firstFutureDeliveryDate);
+    assert.equal(deliveryDates[0], firstFutureExpirationDate);
 
-    // Check subsequent dates are spaced correctly
     for (let i = 1; i < deliveryDates.length; i++) {
-      const expectedInterval = BigInt(deliveryIntervalDays) * 86400n; // Convert days to seconds
+      const expectedInterval = BigInt(expirationIntervalDays) * 86400n;
       const actualInterval = deliveryDates[i] - deliveryDates[i - 1];
-      expect(actualInterval).to.equal(expectedInterval);
+      assert.equal(actualInterval, expectedInterval);
     }
   });
 
-  it("should allow owner to update future delivery dates count", async function () {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
+  it("should allow owner to update future expiration dates count", async () => {
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { owner, pc } = accounts;
 
-    const initialDeliveryDates = await futures.read.getDeliveryDates();
-    expect(initialDeliveryDates.length).to.equal(config.futureDeliveryDatesCount);
+    const initialDeliveryDates = await futures.read.getExpirationDates();
+    assert.equal(initialDeliveryDates.length, config.futureExpirationDatesCount);
 
-    // Update to 5 delivery dates
-    const newCount = config.futureDeliveryDatesCount + 1;
-    const txHash = await futures.write.setFutureDeliveryDatesCount([newCount], {
+    const newCount = config.futureExpirationDatesCount + 1;
+    const txHash = await futures.write.setFutureExpirationDatesCount([newCount], {
       account: owner.account,
     });
 
     const receipt = await pc.waitForTransactionReceipt({ hash: txHash });
-    expect(receipt.status).to.equal("success");
+    assert.equal(receipt.status, "success");
 
-    // Verify new count
-    const updatedCount = await futures.read.futureDeliveryDatesCount();
-    expect(updatedCount).to.equal(newCount);
+    const updatedCount = await futures.read.futureExpirationDatesCount();
+    assert.equal(updatedCount, newCount);
 
-    // Verify new delivery dates array
-    const updatedDeliveryDates = await futures.read.getDeliveryDates();
-    expect(updatedDeliveryDates.length).to.equal(newCount);
+    const updatedDeliveryDates = await futures.read.getExpirationDates();
+    assert.equal(updatedDeliveryDates.length, newCount);
 
-    // Verify existing dates remain the same
     for (let i = 0; i < initialDeliveryDates.length; i++) {
-      expect(updatedDeliveryDates[i]).to.equal(initialDeliveryDates[i]);
+      assert.equal(updatedDeliveryDates[i], initialDeliveryDates[i]);
     }
   });
 
-  it("should reject updating future delivery dates count to zero", async function () {
-    const { contracts, accounts } = await loadFixture(deployFuturesFixture);
+  it("should reject updating future expiration dates count to zero", async () => {
+    const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { owner } = accounts;
 
-    await catchError(futures.abi, "ValueOutOfRange", async () => {
-      await futures.write.setFutureDeliveryDatesCount([0], {
-        account: owner.account,
-      });
-    });
+    await viem.assertions.revertWithCustomError(
+      futures.write.setFutureExpirationDatesCount([0], { account: owner.account }),
+      futures,
+      "ValueOutOfRange",
+    );
   });
 
-  it("should reject non-owner from updating future delivery dates count", async function () {
-    const { contracts, accounts } = await loadFixture(deployFuturesFixture);
+  it("should reject non-owner from updating future expiration dates count", async () => {
+    const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { seller } = accounts;
 
-    await catchError(futures.abi, "OwnableUnauthorizedAccount", async () => {
-      await futures.write.setFutureDeliveryDatesCount([5], {
-        account: seller.account,
-      });
-    });
+    await viem.assertions.revertWithCustomError(
+      futures.write.setFutureExpirationDatesCount([5], { account: seller.account }),
+      futures,
+      "OwnableUnauthorizedAccount",
+    );
   });
 
-  it("should correctly read firstFutureDeliveryDate", async function () {
-    const { contracts, config } = await loadFixture(deployFuturesFixture);
+  it("should correctly read firstFutureExpirationDate", async () => {
+    const { contracts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
 
-    const firstFutureDeliveryDate = await futures.read.firstFutureDeliveryDate();
-    const deliveryDates = await futures.read.getDeliveryDates();
-
-    // First delivery date should match the first date in the array
-    expect(firstFutureDeliveryDate).to.equal(config.firstFutureDeliveryDate);
+    assert.equal(await futures.read.firstFutureExpirationDate(), config.firstFutureExpirationDate);
   });
 
-  it("should correctly read delivery interval days", async function () {
-    const { contracts, config } = await loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
-
-    const deliveryIntervalDays = await futures.read.deliveryIntervalDays();
-    // From fixture, deliveryIntervalDays is set to deliveryIntervalDays
-    expect(deliveryIntervalDays).to.equal(config.deliveryIntervalDays);
+  it("should correctly read expiration interval days", async () => {
+    const { contracts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
+    assert.equal(
+      await contracts.futures.read.expirationIntervalDays(),
+      config.expirationIntervalDays,
+    );
   });
 
-  it("should correctly read delivery duration days", async function () {
-    const { contracts, config } = await loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
-
-    const deliveryDurationDays = await futures.read.deliveryDurationDays();
-    expect(deliveryDurationDays).to.equal(config.deliveryDurationDays);
-  });
-
-  it("should update delivery dates when count is increased", async function () {
-    const { contracts, accounts } = await loadFixture(deployFuturesFixture);
+  it("should update expiration dates when count is increased", async () => {
+    const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { owner } = accounts;
 
-    const initialDeliveryDates = await futures.read.getDeliveryDates();
-    const initialCount = initialDeliveryDates.length;
+    const initialDeliveryDates = await futures.read.getExpirationDates();
+    const newCount = initialDeliveryDates.length + 2;
+    await futures.write.setFutureExpirationDatesCount([newCount], { account: owner.account });
 
-    // Increase count
-    const newCount = initialCount + 2;
-    await futures.write.setFutureDeliveryDatesCount([newCount], {
-      account: owner.account,
-    });
+    const updatedDeliveryDates = await futures.read.getExpirationDates();
+    assert.equal(updatedDeliveryDates.length, newCount);
 
-    const updatedDeliveryDates = await futures.read.getDeliveryDates();
-    expect(updatedDeliveryDates.length).to.equal(newCount);
-
-    // Verify new dates are correctly calculated
-    const firstFutureDeliveryDate = await futures.read.firstFutureDeliveryDate();
-    const deliveryIntervalDays = await futures.read.deliveryIntervalDays();
-    const deliveryIntervalSeconds = BigInt(deliveryIntervalDays) * 86400n;
+    const firstFutureExpirationDate = await futures.read.firstFutureExpirationDate();
+    const expirationIntervalDays = await futures.read.expirationIntervalDays();
+    const expirationIntervalSeconds = BigInt(expirationIntervalDays) * 86400n;
 
     for (let i = 0; i < updatedDeliveryDates.length; i++) {
-      const expectedDate = firstFutureDeliveryDate + deliveryIntervalSeconds * BigInt(i);
-      expect(updatedDeliveryDates[i]).to.equal(expectedDate);
+      const expectedDate = firstFutureExpirationDate + expirationIntervalSeconds * BigInt(i);
+      assert.equal(updatedDeliveryDates[i], expectedDate);
     }
   });
 
-  it("should update delivery dates when count is decreased", async function () {
-    const { contracts, accounts } = await loadFixture(deployFuturesFixture);
+  it("should update expiration dates when count is decreased", async () => {
+    const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { owner } = accounts;
 
-    // First increase count
-    await futures.write.setFutureDeliveryDatesCount([5], {
-      account: owner.account,
-    });
+    await futures.write.setFutureExpirationDatesCount([5], { account: owner.account });
 
-    // Then decrease count
     const newCount = 2;
-    await futures.write.setFutureDeliveryDatesCount([newCount], {
-      account: owner.account,
-    });
+    await futures.write.setFutureExpirationDatesCount([newCount], { account: owner.account });
 
-    const updatedDeliveryDates = await futures.read.getDeliveryDates();
-    expect(updatedDeliveryDates.length).to.equal(newCount);
+    const updatedDeliveryDates = await futures.read.getExpirationDates();
+    assert.equal(updatedDeliveryDates.length, newCount);
 
-    // Verify dates are still correctly calculated
-    const firstFutureDeliveryDate = await futures.read.firstFutureDeliveryDate();
-    const deliveryIntervalDays = await futures.read.deliveryIntervalDays();
-    const deliveryIntervalSeconds = BigInt(deliveryIntervalDays) * 86400n;
+    const firstFutureExpirationDate = await futures.read.firstFutureExpirationDate();
+    const expirationIntervalDays = await futures.read.expirationIntervalDays();
+    const expirationIntervalSeconds = BigInt(expirationIntervalDays) * 86400n;
 
     for (let i = 0; i < updatedDeliveryDates.length; i++) {
-      const expectedDate = firstFutureDeliveryDate + deliveryIntervalSeconds * BigInt(i);
-      expect(updatedDeliveryDates[i]).to.equal(expectedDate);
+      const expectedDate = firstFutureExpirationDate + expirationIntervalSeconds * BigInt(i);
+      assert.equal(updatedDeliveryDates[i], expectedDate);
     }
   });
 
-  it("should return correct delivery dates array when time has passed", async function () {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
+  it("should return correct expiration dates array when time has passed", async () => {
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
-    const { tc, pc } = accounts;
+    const { tc } = accounts;
 
-    await tc.setNextBlockTimestamp({ timestamp: config.firstFutureDeliveryDate + 1n });
+    await tc.setNextBlockTimestamp({ timestamp: config.firstFutureExpirationDate + 1n });
     await tc.mine({ blocks: 1 });
 
-    const deliveryDates = await futures.read.getDeliveryDates();
-    expect(deliveryDates.length).to.equal(config.futureDeliveryDatesCount);
+    const deliveryDates = await futures.read.getExpirationDates();
+    assert.equal(deliveryDates.length, config.futureExpirationDatesCount);
 
     for (let i = 0; i < deliveryDates.length; i++) {
       const expectedDate =
-        config.firstFutureDeliveryDate + BigInt(config.deliveryDurationSeconds * (i + 1));
-      expect(deliveryDates[i]).to.equal(expectedDate);
+        config.firstFutureExpirationDate + BigInt(config.expirationIntervalSeconds * (i + 1));
+      assert.equal(deliveryDates[i], expectedDate);
     }
   });
 
-  it("should validate delivery date correctly", async function () {
-    const { contracts, accounts, config } = await loadFixture(deployFuturesFixture);
-    const { futures } = contracts;
+  it("should validate expiration date correctly", async () => {
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures, collateralVault } = contracts;
     const { tc, seller } = accounts;
 
     const price = await futures.read.getMarketPrice();
-    await futures.write.addMargin([price * 100n], { account: seller.account });
+    await collateralVault.write.deposit([price * 100n], { account: seller.account });
 
-    await tc.setNextBlockTimestamp({ timestamp: config.firstFutureDeliveryDate + 1n });
+    await tc.setNextBlockTimestamp({ timestamp: config.firstFutureExpirationDate + 1n });
     await tc.mine({ blocks: 1 });
-    await refreshHashprice(contracts.hashrateOracle);
+    await refreshHashprice(contracts.hashpriceUsd);
 
     // in the past
-    await catchError(futures.abi, "DeliveryDateShouldBeInTheFuture", async () => {
-      await futures.write.createOrder([price, config.firstFutureDeliveryDate, "", 1], {
+    await viem.assertions.revertWithCustomError(
+      futures.write.createOrder([price, config.firstFutureExpirationDate, 1n, TimeInForce.GTC], {
         account: seller.account,
-      });
-    });
+      }),
+      futures,
+      "ExpirationDateShouldBeInTheFuture",
+    );
 
     // in the past and not aligned with interval
-    await catchError(futures.abi, "DeliveryDateShouldBeInTheFuture", async () => {
-      await futures.write.createOrder([price, config.firstFutureDeliveryDate + 1n, "", 1], {
-        account: seller.account,
-      });
-    });
+    await viem.assertions.revertWithCustomError(
+      futures.write.createOrder(
+        [price, config.firstFutureExpirationDate + 1n, 1n, TimeInForce.GTC],
+        {
+          account: seller.account,
+        },
+      ),
+      futures,
+      "ExpirationDateShouldBeInTheFuture",
+    );
 
     // within available range but not aligned with interval
     const dateWithinRangeNotAligned =
-      config.firstFutureDeliveryDate + BigInt(config.deliveryDurationSeconds) + 1n;
-    await catchError(futures.abi, "DeliveryDateNotAvailable", async () => {
-      await futures.write.createOrder([price, dateWithinRangeNotAligned, "", 1], {
+      config.firstFutureExpirationDate + BigInt(config.expirationIntervalSeconds) + 1n;
+    await viem.assertions.revertWithCustomError(
+      futures.write.createOrder([price, dateWithinRangeNotAligned, 1n, TimeInForce.GTC], {
         account: seller.account,
-      });
-    });
+      }),
+      futures,
+      "ExpirationDateNotAvailable",
+    );
 
     // out of available range
     const dateOutOfRange =
-      config.firstFutureDeliveryDate +
-      BigInt(config.deliveryDurationSeconds) * BigInt(config.futureDeliveryDatesCount + 1);
-    await catchError(futures.abi, "DeliveryDateNotAvailable", async () => {
-      await futures.write.createOrder([price, dateOutOfRange, "", 1], {
+      config.firstFutureExpirationDate +
+      BigInt(config.expirationIntervalSeconds) * BigInt(config.futureExpirationDatesCount + 1);
+    await viem.assertions.revertWithCustomError(
+      futures.write.createOrder([price, dateOutOfRange, 1n, TimeInForce.GTC], {
         account: seller.account,
-      });
-    });
+      }),
+      futures,
+      "ExpirationDateNotAvailable",
+    );
 
     // out of available range and not aligned with interval
     const dateOutOfRangeNotAligned = dateOutOfRange + 1n;
-    await catchError(futures.abi, "DeliveryDateNotAvailable", async () => {
-      await futures.write.createOrder([price, dateOutOfRangeNotAligned, "", 1], {
+    await viem.assertions.revertWithCustomError(
+      futures.write.createOrder([price, dateOutOfRangeNotAligned, 1n, TimeInForce.GTC], {
         account: seller.account,
-      });
-    });
+      }),
+      futures,
+      "ExpirationDateNotAvailable",
+    );
 
     // all valid dates
-    for (let i = 0; i < config.futureDeliveryDatesCount; i++) {
+    for (let i = 0; i < config.futureExpirationDatesCount; i++) {
       const date =
-        config.firstFutureDeliveryDate + BigInt(config.deliveryDurationSeconds) * BigInt(i + 1);
-      await futures.write.createOrder([price, date, "", 1], {
+        config.firstFutureExpirationDate + BigInt(config.expirationIntervalSeconds) * BigInt(i + 1);
+      await futures.write.createOrder([price, date, 1n, TimeInForce.GTC], {
         account: seller.account,
       });
     }

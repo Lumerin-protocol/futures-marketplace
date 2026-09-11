@@ -1,12 +1,17 @@
 import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
-import { useState, useEffect, useRef, useMemo } from "react";
-import { useGetDeliveryDates } from "../../../hooks/data/useGetDeliveryDates";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useAggregateOrderBook } from "../../../hooks/data/useAggregateOrderBook";
 import { usePerpsOrderBook } from "../../../hooks/data/perps/usePerpsOrderBook";
+import { usePerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
-import { createFinalOrderBookData } from "./orderBookHelpers";
+import { createFinalOrderBookData, createPerpsOrderBookData } from "./orderBookHelpers";
+import { MOBILE_TOGGLE_METRICS } from "./mobile/mobileTradingLayout";
+import { ClassicOrderBook } from "./ClassicOrderBook";
+import { VolumeOrderBook } from "./VolumeOrderBook";
+import { PerpsVolumeOrderBook } from "./PerpsVolumeOrderBook";
+import { TradesList } from "./TradesList";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
@@ -15,20 +20,31 @@ import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE_NUM } from "../../../lib/units"
 
 interface OrderBookTableProps {
   onRowClick?: (price: string, amount: number | null) => void;
-  onDeliveryDateChange?: (deliveryDate: number | undefined) => void;
   contractSpecsQuery: UseQueryResult<GetResponse<FuturesContractSpecs>, Error>;
   previousOrderBookStateRef: React.MutableRefObject<Map<number, { bidUnits: number | null; askUnits: number | null }>>;
   contractMode?: ContractMode;
+  // Futures market to show, unix seconds. Picked in the header's market selector
+  // — each expiration has its own book. Undefined in perps mode, and in futures
+  // mode until the expiration list has loaded.
+  selectedExpirationAt?: number;
 }
+
+const normalizePrice = (price: number, minimumPriceIncrement: number | null): number => {
+  if (minimumPriceIncrement !== null) {
+    return Math.round(price / minimumPriceIncrement) * minimumPriceIncrement;
+  }
+  return Math.round(price * 100) / 100;
+};
 
 export const OrderBookTable = ({
   onRowClick,
-  onDeliveryDateChange,
   contractSpecsQuery,
   previousOrderBookStateRef,
   contractMode = "futures",
+  selectedExpirationAt,
 }: OrderBookTableProps) => {
-  const [selectedDateIndex, setSelectedDateIndex] = useState(0);
+  // Order book display mode: Classic / Volume ladders, or the all-users Trades feed.
+  const [viewMode, setViewMode] = useState<"classic" | "volume" | "trades">("volume");
   const tableContainerRef = useRef<HTMLDivElement>(null);
   // Track previous basePrice to detect changes
   const previousBasePriceRef = useRef<number | null>(null);
@@ -36,105 +52,91 @@ export const OrderBookTable = ({
     new Map(),
   );
 
-  const { data: deliveryDatesRaw, isLoading, isError } = useGetDeliveryDates();
   const { data: marketPrice } = useGetMarketPrice();
+  const perpsCollectionQuery = usePerpsCollection();
 
-  // Transform delivery dates from bigint[] to [{ deliveryDate: number }]
-  // Filter out dates that are earlier than now
-  const deliveryDates = useMemo(() => {
-    if (!deliveryDatesRaw) return [];
-    const now = Math.floor(Date.now() / 1000); // Current time in Unix timestamp (seconds)
-    return deliveryDatesRaw
-      .map((date) => ({
-        deliveryDate: Number(date),
-      }))
-      .filter(({ deliveryDate }) => deliveryDate >= now)
-      .sort((a, b) => a.deliveryDate - b.deliveryDate); // Sort by date ascending
-  }, [deliveryDatesRaw]);
-
-  // Reset selected date index if it's out of bounds after filtering
-  useEffect(() => {
-    if (deliveryDates.length > 0 && selectedDateIndex >= deliveryDates.length) {
-      setSelectedDateIndex(0);
-    }
-  }, [deliveryDates.length, selectedDateIndex]);
-
-  // Get selected delivery date
-  const selectedDeliveryDate = deliveryDates[selectedDateIndex]?.deliveryDate;
-
-  // Notify parent component when delivery date changes
-  useEffect(() => {
-    if (selectedDeliveryDate) {
-      onDeliveryDateChange?.(selectedDeliveryDate);
-    } else {
-      onDeliveryDateChange?.(undefined);
-    }
-  }, [selectedDeliveryDate]);
+  // The contiguous ladder needs the exact tick size for the active market.
+  // Futures specs are passed in as a prop, but perps carry their own increment
+  // on the collection, so resolve it per mode.
+  const minimumPriceIncrement = useMemo(() => {
+    const rawIncrement =
+      contractMode === "perpetual"
+        ? perpsCollectionQuery.data?.data?.minimumPriceIncrement
+        : contractSpecsQuery.data?.data?.minimumPriceIncrement;
+    if (rawIncrement == null) return null;
+    return Number(rawIncrement) / PAYMENT_TOKEN_SCALE_NUM;
+  }, [contractMode, perpsCollectionQuery.data?.data?.minimumPriceIncrement, contractSpecsQuery.data?.data?.minimumPriceIncrement]);
 
   // Fetch order book based on contract mode
   const futuresOrderBookQuery = useAggregateOrderBook(
-    contractMode === "futures" ? selectedDeliveryDate : undefined,
+    contractMode === "futures" ? selectedExpirationAt : undefined,
     { refetch: true, interval: 15000 }
   );
   const perpsOrderBookQuery = usePerpsOrderBook(
     contractMode === "perpetual" ? { refetch: true, interval: 15000 } : undefined
   );
-  
-  const orderBookQuery = contractMode === "perpetual" ? perpsOrderBookQuery : futuresOrderBookQuery;
-  
-  // Transform perps data to match futures structure
-  const orderBookData = useMemo(() => {
-    if (contractMode === "perpetual" && perpsOrderBookQuery.data?.data?.priceLevels) {
-      // Convert perps price levels to aggregate order format
-      const priceLevelMap = new Map<string, { buyOrdersCount: number; sellOrdersCount: number; price: bigint }>();
-      
-      for (const level of perpsOrderBookQuery.data.data.priceLevels) {
-        const key = level.price.toString();
-        const existing = priceLevelMap.get(key) || { buyOrdersCount: 0, sellOrdersCount: 0, price: level.price };
-        
-        // Divide by QUANTITY_SCALE_NUM to get actual quantity with QUANTITY_DECIMALS
-        const quantity = Number(level.totalQuantity) / QUANTITY_SCALE_NUM;
-        
-        if (level.isBid) {
-          existing.buyOrdersCount = quantity;
-        } else {
-          existing.sellOrdersCount = quantity;
-        }
-        
-        priceLevelMap.set(key, existing);
-      }
-      
-      return Array.from(priceLevelMap.values()).map((item, index) => ({
-        id: `perps-${index}`,
-        price: item.price,
-        deliveryDate: 0n, // Not used in perpetual
-        buyOrdersCount: item.buyOrdersCount,
-        sellOrdersCount: item.sellOrdersCount,
-      }));
-    }
-    
-    return futuresOrderBookQuery.data?.data?.orders || [];
-  }, [contractMode, perpsOrderBookQuery.data?.data?.priceLevels, futuresOrderBookQuery.data?.data?.orders]);
 
+  const orderBookQuery = contractMode === "perpetual" ? perpsOrderBookQuery : futuresOrderBookQuery;
+
+  // Both subgraphs expose the same `priceLevels` collection (one row per
+  // {price, isBid} pair, plus `expirationAt` on futures). Reduce either source
+  // to the per-price shape the renderer expects.
+  //
+  // The only schema difference is how `totalQuantity` is denominated:
+  //   - perps: scaled BigInt (divide by QUANTITY_SCALE_NUM to get units)
+  //   - futures: raw integer contract count (quantityDecimals is 0)
+  const orderBookData = useMemo(() => {
+    const futuresPriceLevels = futuresOrderBookQuery.data?.data?.priceLevels;
+    const perpsPriceLevels = perpsOrderBookQuery.data?.data?.priceLevels;
+
+    const priceLevels =
+      contractMode === "perpetual" ? perpsPriceLevels : futuresPriceLevels;
+
+    if (!priceLevels) return [];
+
+    const quantityScale = contractMode === "perpetual" ? QUANTITY_SCALE_NUM : 1;
+
+    const priceLevelMap = new Map<
+      string,
+      { buyOrdersCount: number; sellOrdersCount: number; price: bigint }
+    >();
+
+    for (const level of priceLevels) {
+      const key = level.price.toString();
+      const existing =
+        priceLevelMap.get(key) ?? { buyOrdersCount: 0, sellOrdersCount: 0, price: level.price };
+
+      const quantity = Number(level.totalQuantity) / quantityScale;
+
+      if (level.isBid) {
+        existing.buyOrdersCount = quantity;
+      } else {
+        existing.sellOrdersCount = quantity;
+      }
+
+      priceLevelMap.set(key, existing);
+    }
+
+    return Array.from(priceLevelMap.values());
+  }, [
+    contractMode,
+    perpsOrderBookQuery.data?.data?.priceLevels,
+    futuresOrderBookQuery.data?.data?.priceLevels,
+  ]);
+
+  // Drop the highlight baseline and refetch when the selector moves to another
+  // market. `selectedExpirationAt` is the trigger rather than a value read here,
+  // and `orderBookQuery` swaps between the futures and perps query objects, so
+  // listing its `refetch` would fire an extra request on every mode flip.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   useEffect(() => {
     previousOrderBookStateRef.current = new Map();
     orderBookQuery.refetch();
-  }, [selectedDateIndex]);
-
-  // Helper function to normalize price
-  const normalizePrice = (price: number, minimumPriceIncrement: number | null): number => {
-    if (minimumPriceIncrement !== null) {
-      return Math.round(price / minimumPriceIncrement) * minimumPriceIncrement;
-    }
-    return Math.round(price * 100) / 100;
-  };
+  }, [selectedExpirationAt]);
 
   // Get current order book state from pre-aggregated data
   const currentOrderBookState = useMemo(() => {
     const state = new Map<number, { bidUnits: number; askUnits: number }>();
-    const minimumPriceIncrement = contractSpecsQuery.data?.data?.minimumPriceIncrement
-      ? Number(contractSpecsQuery.data.data.minimumPriceIncrement) / PAYMENT_TOKEN_SCALE_NUM
-      : null;
 
     if (!orderBookData || orderBookData.length <= 0) {
       return state;
@@ -151,10 +153,21 @@ export const OrderBookTable = ({
     }
 
     return state;
-  }, [orderBookData]);
+  }, [orderBookData, minimumPriceIncrement]);
 
-  // Create final order book data
-  const finalOrderBookData = createFinalOrderBookData(orderBookData, marketPrice, contractSpecsQuery.data?.data);
+  // Create final order book data.
+  // - Futures: a contiguous tick ladder (empty + live rows) spanning +/-50% of
+  //   the market price.
+  // - Perpetuals: the pre-#209 compact book (live levels + a small static
+  //   window), with no empty gaps between real price levels.
+  // Memoized because the futures ladder can produce thousands of rows.
+  const finalOrderBookData = useMemo(
+    () =>
+      contractMode === "perpetual"
+        ? createPerpsOrderBookData(orderBookData, marketPrice, minimumPriceIncrement)
+        : createFinalOrderBookData(orderBookData, marketPrice, minimumPriceIncrement),
+    [contractMode, orderBookData, marketPrice, minimumPriceIncrement],
+  );
 
   // Add highlighting to final order book data based on price changes
   const finalOrderBookDataWithHighlights = useMemo(() => {
@@ -185,6 +198,32 @@ export const OrderBookTable = ({
 
   const currentBasePrice = finalOrderBookDataWithHighlights.find((o) => o.isLastHashprice);
 
+  // Market price (in token units) for the Binance-style center row. Falls back
+  // to the ladder's base/hashprice row when the raw market price is unavailable.
+  const marketPriceNumber =
+    marketPrice != null ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : currentBasePrice?.price ?? null;
+
+  // Only closes over a ref, so it stays stable and can be listed as an effect
+  // dependency without retriggering anything. Declared above the effects that
+  // use it because dependency arrays are evaluated during render.
+  const scrollToOrder = useCallback((orderIndex: number) => {
+    setTimeout(() => {
+      if (orderIndex !== -1 && tableContainerRef.current) {
+        const rowHeight = 26; // Fixed row height from styles
+
+        // Calculate scroll position to center the row in the viewport
+        // (row index * row height) - (container height / 2) + (row height / 2)
+        const scrollPosition = orderIndex * rowHeight - 9 * rowHeight;
+
+        // Smooth scroll to center the row
+        tableContainerRef.current.scrollTo({
+          top: Math.max(0, scrollPosition),
+          behavior: "smooth",
+        });
+      }
+    }, 100);
+  }, []);
+
   // Auto-scroll to last hashprice row when basePrice (hashprice) updates
   useEffect(() => {
     if (!tableContainerRef.current) {
@@ -204,9 +243,13 @@ export const OrderBookTable = ({
       const lastHashpriceIndex = finalOrderBookDataWithHighlights.findIndex((row) => row.isLastHashprice);
       scrollToOrder(lastHashpriceIndex);
     }, 100);
-  }, [currentBasePrice, finalOrderBookDataWithHighlights]);
+  }, [currentBasePrice, finalOrderBookDataWithHighlights, finalOrderBookData.length, scrollToOrder]);
 
-  // Track order book changes and highlight changed prices
+  // Track order book changes and highlight changed prices.
+  // `finalOrderBookDataWithHighlights` must stay out of the dependency list: this
+  // effect calls `setPriceHighlights`, which is what that value is derived from,
+  // so listing it would loop forever.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
   useEffect(() => {
     const previousState = previousOrderBookStateRef.current;
 
@@ -222,7 +265,7 @@ export const OrderBookTable = ({
     for (const [price, current] of currentOrderBookState.entries()) {
       const previous = previousState.get(price);
 
-      if (previous && previous.askUnits == current.askUnits && previous.bidUnits == current.bidUnits) {
+      if (previous && previous.askUnits === current.askUnits && previous.bidUnits === current.bidUnits) {
         continue;
       }
 
@@ -240,7 +283,7 @@ export const OrderBookTable = ({
       setPriceHighlights(newHighlights);
 
       const firstItemToHightlight = finalOrderBookDataWithHighlights.findIndex(
-        (row) => row.price == newHighlights.keys().next().value,
+        (row) => row.price === newHighlights.keys().next().value,
       );
       scrollToOrder(firstItemToHightlight);
 
@@ -253,158 +296,79 @@ export const OrderBookTable = ({
     previousOrderBookStateRef.current = new Map(currentOrderBookState);
   }, [orderBookData, currentOrderBookState]);
 
-  // Navigation functions
-  const goToPreviousDate = () => {
-    if (selectedDateIndex > 0) {
-      setSelectedDateIndex(selectedDateIndex - 1);
+  // The ladder tracks this book's own query, and futures additionally wait on the
+  // page resolving which expiration is being traded because that query stays
+  // disabled until then. Perps wait on nothing expiry-related any more: these
+  // states used to read the futures expiration list, which perps have no use for.
+  //
+  // Only the ladder is gated. The trades feed has its own source and is not
+  // scoped to an expiration, and keeping the view tabs mounted means switching
+  // markets no longer blanks the whole widget while the new book loads.
+  const renderLadder = () => {
+    if (orderBookQuery.isError) {
+      return <StatusMessage $error>Failed to load order book data</StatusMessage>;
     }
-  };
-
-  const goToNextDate = () => {
-    if (selectedDateIndex < deliveryDates.length - 1) {
-      setSelectedDateIndex(selectedDateIndex + 1);
+    if (orderBookQuery.isLoading || (contractMode === "futures" && selectedExpirationAt === undefined)) {
+      return <StatusMessage>Loading order book data...</StatusMessage>;
     }
-  };
-
-  const scrollToOrder = (orderIndex: number) => {
-    setTimeout(() => {
-      if (orderIndex !== -1 && tableContainerRef.current) {
-        const rowHeight = 26; // Fixed row height from styles
-
-        // Calculate scroll position to center the row in the viewport
-        // (row index * row height) - (container height / 2) + (row height / 2)
-        const scrollPosition = orderIndex * rowHeight - 9 * rowHeight;
-
-        // Smooth scroll to center the row
-        tableContainerRef.current.scrollTo({
-          top: Math.max(0, scrollPosition),
-          behavior: "smooth",
-        });
-      }
-    }, 100);
-  };
-
-  // Format delivery date for display
-  const formatDeliveryDate = (timestamp: number) => {
-    const date = new Date(timestamp * 1000);
-    return date.toLocaleDateString("en-US", {
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    });
-  };
-
-  const selectedDateDisplay = selectedDeliveryDate
-    ? formatDeliveryDate(selectedDeliveryDate)
-    : isLoading
-      ? "Loading..."
-      : "No dates available";
-
-  // Show error state
-  if (isError) {
-    return (
-      <OrderBookWidget>
-        <Header>
-          <button className="nav-arrow" disabled>
-            ←
-          </button>
-          <h3>Error</h3>
-          <button className="nav-arrow" disabled>
-            →
-          </button>
-        </Header>
-        <TableContainer>
-          <div style={{ textAlign: "center", padding: "2rem", color: tokens.trading.short }}>Failed to load order book data</div>
-        </TableContainer>
-      </OrderBookWidget>
+    return viewMode === "volume" ? (
+      contractMode === "perpetual" ? (
+        <PerpsVolumeOrderBook
+          rows={finalOrderBookDataWithHighlights}
+          contractMode={contractMode}
+          onRowClick={onRowClick}
+          marketPrice={marketPriceNumber}
+          minimumPriceIncrement={minimumPriceIncrement}
+        />
+      ) : (
+        <VolumeOrderBook
+          rows={finalOrderBookDataWithHighlights}
+          contractMode={contractMode}
+          onRowClick={onRowClick}
+          marketPrice={marketPriceNumber}
+        />
+      )
+    ) : (
+      <ClassicOrderBook
+        rows={finalOrderBookDataWithHighlights}
+        maxBidAmount={maxBidAmount}
+        maxAskAmount={maxAskAmount}
+        contractMode={contractMode}
+        onRowClick={onRowClick}
+      />
     );
-  }
-
-  // Show loading state
-  if (isLoading) {
-    return (
-      <OrderBookWidget>
-        <Header>
-          <button className="nav-arrow" disabled>
-            ←
-          </button>
-          <h3>Loading...</h3>
-          <button className="nav-arrow" disabled>
-            →
-          </button>
-        </Header>
-        <TableContainer>
-          <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.secondary }}>Loading order book data...</div>
-        </TableContainer>
-      </OrderBookWidget>
-    );
-  }
+  };
 
   return (
     <OrderBookWidget>
-      <OrderBookTitle>Order Book{contractMode === "perpetual" ? " — PERP" : ""}</OrderBookTitle>
-      {contractMode === "futures" && (
-        <Header>
-          <button onClick={goToPreviousDate} className="nav-arrow" disabled={selectedDateIndex === 0 || isLoading}>
-            ←
-          </button>
-          <h3>{selectedDateDisplay}</h3>
-          <button
-            onClick={goToNextDate}
-            className="nav-arrow"
-            disabled={selectedDateIndex === deliveryDates.length - 1 || isLoading}
+      <TopBar>
+        <ViewToggle>
+          {/* <ToggleButton
+            type="button"
+            $active={viewMode === "classic"}
+            onClick={() => setViewMode("classic")}
           >
-            →
-          </button>
-        </Header>
-      )}
+            Classic
+          </ToggleButton> */}
+          <ToggleButton
+            type="button"
+            $active={viewMode === "volume"}
+            onClick={() => setViewMode("volume")}
+          >
+            Order Book
+          </ToggleButton>
+          <ToggleButton
+            type="button"
+            $active={viewMode === "trades"}
+            onClick={() => setViewMode("trades")}
+          >
+            Trades
+          </ToggleButton>
+        </ViewToggle>
+      </TopBar>
 
       <TableContainer ref={tableContainerRef}>
-        <Table>
-          <thead>
-            <tr>
-              <th>Bid</th>
-              <th>Price</th>
-              <th>Ask</th>
-            </tr>
-          </thead>
-          <tbody>
-            {finalOrderBookDataWithHighlights.map((row, index) => {
-              // Calculate fill percentages for bid and ask
-              const bidFillPercent = row.bidUnits && maxBidAmount > 0 ? (row.bidUnits / maxBidAmount) * 100 : 0;
-              const askFillPercent = row.askUnits && maxAskAmount > 0 ? (row.askUnits / maxAskAmount) * 100 : 0;
-
-              return (
-                <TableRow
-                  key={index}
-                  $bidFillPercent={bidFillPercent}
-                  $askFillPercent={askFillPercent}
-                  onClick={() => {
-                    // Use askUnits if available, otherwise bidUnits, otherwise null
-                    const amount = row.askUnits || row.bidUnits || null;
-                    onRowClick?.(row.price.toFixed(2), amount);
-                  }}
-                >
-                  <BidCell $isHighlighted={row.highlightBid}>
-                    {row.bidUnits
-                      ? contractMode === "perpetual"
-                        ? (row.bidUnits * row.price).toFixed(2)
-                        : `${row.bidUnits} (${(row.bidUnits * row.price).toFixed(2)})`
-                      : ""}
-                  </BidCell>
-                  <PriceCell $isLastHashprice={row.isLastHashprice}>{row.price.toFixed(2)}</PriceCell>
-                  <AskCell $isHighlighted={row.highlightAsk}>
-                    {row.askUnits
-                      ? contractMode === "perpetual"
-                        ? (row.askUnits * row.price).toFixed(2)
-                        : `${row.askUnits} (${(row.askUnits * row.price).toFixed(2)})`
-                      : ""}
-                  </AskCell>
-                </TableRow>
-              );
-            })}
-          </tbody>
-        </Table>
+        {viewMode === "trades" ? <TradesList contractMode={contractMode} /> : renderLadder()}
       </TableContainer>
     </OrderBookWidget>
   );
@@ -418,44 +382,39 @@ const OrderBookWidget = styled(SmallWidget)`
   border: 1px solid ${tokens.border.muted04};
 `;
 
-const Header = styled("div")`
+/* Holds the Order Book / Trades tabs. The expiration switcher that used to share
+   this row — and the wrapping rules the pair needed at narrow widths — moved to
+   the header's market selector. */
+const TopBar = styled("div")`
   display: flex;
-  justify-content: space-between;
+  width: 100%;
   align-items: center;
   margin-bottom: 0.4rem;
+`;
 
-  h3 {
-    margin: 0;
-    font-size: 0.85rem;
-    font-weight: 600;
-  }
-
-  .nav-arrow {
-    background: none;
-    border: none;
-    color: ${tokens.text.onDark};
-    font-size: 0.9rem;
-    cursor: pointer;
-    padding: 0.2rem 0.4rem;
-    border-radius: 4px;
-    transition: all 0.2s ease;
-
-    &:hover:not(:disabled) {
-      background-color: ${tokens.overlay.white10};
-    }
-
-    &:disabled {
-      color: ${tokens.text.orderBookMuted};
-      cursor: not-allowed;
-      opacity: 0.5;
-    }
-  }
+const StatusMessage = styled("div")<{ $error?: boolean }>`
+  text-align: center;
+  padding: 2rem;
+  color: ${(props) => (props.$error ? tokens.trading.short : tokens.text.secondary)};
 `;
 
 const TableContainer = styled("div")`
+  position: relative;
   overflow-y: auto;
   width: 100%;
-  max-height: 510px; /* ~20 rows * 26px per row */
+  /* Always reserve the scrollbar gutter so the inner content width stays fixed
+     whether or not the view overflows (avoids a horizontal jump between the
+     order book and trades tabs, and between perps and futures). */
+  scrollbar-gutter: stable;
+  /* Fill the widget (sized by OrderBookArea: chart-height, clamped 437-540px)
+     and scroll internally. min-height 0 lets this flex child shrink so it never
+     overflows its parent and spawns a second scrollbar. The shared height lives
+     on OrderBookArea, so perps/futures and the order book/trades tabs all match
+     and don't resize on tab or data changes. */
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 540px;
+  background-color: ${tokens.surface.panel};
 
   &::-webkit-scrollbar {
     width: 4px;
@@ -476,160 +435,37 @@ const TableContainer = styled("div")`
   }
 `;
 
-const Table = styled("table")`
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-
-  th {
-    text-align: center;
-    padding: 0.3rem 0.4rem;
-    font-size: 0.65rem;
-    font-weight: 600;
-    color: ${tokens.text.secondary};
-    border-bottom: 1px solid ${tokens.overlay.white10};
-    position: sticky;
-    top: 0;
-    background-color: ${tokens.surface.panel};
-    z-index: 1;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-    width: 33.33%;
-  }
-
-  td {
-    text-align: center;
-    padding: 0.15rem 0.4rem;
-    font-size: 0.75rem;
-    color: ${tokens.text.onDark};
-    height: 20px;
-    line-height: 20px;
-    width: 33.33%;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
+const ViewToggle = styled("div")`
+  display: inline-flex;
+  border: 1px solid ${tokens.overlay.white15};
+  border-radius: 6px;
+  overflow: hidden;
 `;
 
-const TableRow = styled("tr")<{
-  $bidFillPercent?: number;
-  $askFillPercent?: number;
-}>`
-  position: relative;
+const ToggleButton = styled("button")<{ $active?: boolean }>`
+  border: none;
   cursor: pointer;
-  border-bottom: 1px solid ${tokens.overlay.white05};
-  
-  /* Background fills for order book depth visualization */
-  background: ${(props) => {
-    const bidFill = props.$bidFillPercent || 0;
-    const askFill = props.$askFillPercent || 0;
-
-    // Both bid and ask fills - split gradient
-    if (bidFill > 0 && askFill > 0) {
-      // Bid fills from center-left to left, Ask fills from center-right to right
-      // Using 33% as bid column width, 33% center, 33% ask column width
-      const bidStart = 33 - bidFill * 0.33;
-      const askEnd = 67 + askFill * 0.33;
-      return `linear-gradient(
-        to right,
-        transparent 0%,
-        transparent ${bidStart}%,
-        ${tokens.trading.longRowBgAlt} ${bidStart}%,
-        ${tokens.trading.longRowBgAlt} 33%,
-        transparent 33%,
-        transparent 67%,
-        ${tokens.trading.shortRowBgAlt} 67%,
-        ${tokens.trading.shortRowBgAlt} ${askEnd}%,
-        transparent ${askEnd}%,
-        transparent 100%
-      )`;
-    }
-
-    // Only bid fill - green from right edge of bid column
-    if (bidFill > 0) {
-      const bidStart = 33 - bidFill * 0.33;
-      return `linear-gradient(
-        to right,
-        transparent 0%,
-        transparent ${bidStart}%,
-        ${tokens.trading.longRowBgAlt} ${bidStart}%,
-        ${tokens.trading.longRowBgAlt} 33%,
-        transparent 33%,
-        transparent 100%
-      )`;
-    }
-
-    // Only ask fill - red from left edge of ask column
-    if (askFill > 0) {
-      const askEnd = 67 + askFill * 0.33;
-      return `linear-gradient(
-        to right,
-        transparent 0%,
-        transparent 67%,
-        ${tokens.trading.shortRowBgAlt} 67%,
-        ${tokens.trading.shortRowBgAlt} ${askEnd}%,
-        transparent ${askEnd}%,
-        transparent 100%
-      )`;
-    }
-
-    return "transparent";
-  }};
-  
-  &:hover {
-    background: ${tokens.overlay.white10} !important;
-  }
-  
-  &:last-child {
-    border-bottom: none;
-  }
-`;
-
-const BidCell = styled("td")<{ $isHighlighted?: boolean }>`
-  border-right: 1px solid ${tokens.overlay.white05};
-  background-color: ${(props) => (props.$isHighlighted ? tokens.trading.longHighlightBg : "transparent")};
-  ${(props) =>
-    props.$isHighlighted &&
-    `
-    box-shadow: inset 0 0 8px ${tokens.trading.longHighlightGlow};
-  `}
-`;
-
-const AskCell = styled("td")<{ $isHighlighted?: boolean }>`
-  border-left: 1px solid ${tokens.overlay.white05};
-  background-color: ${(props) => (props.$isHighlighted ? tokens.trading.shortHighlightBg : "transparent")};
-  ${(props) =>
-    props.$isHighlighted &&
-    `
-    box-shadow: inset 0 0 8px ${tokens.trading.shortHighlightGlow};
-  `}
-`;
-
-const PriceCell = styled("td")<{ $isLastHashprice?: boolean }>`
-  background-color: ${(props) => (props.$isLastHashprice ? tokens.trading.infoHighlightBg : "transparent")};
-  font-weight: ${(props) => (props.$isLastHashprice ? "700" : "normal")};
-  font-family: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
-  position: relative;
-  
-  ${(props) =>
-    props.$isLastHashprice &&
-    `
-    box-shadow: 0 0 8px ${tokens.trading.infoHighlightGlow};
-    outline: 1px solid ${tokens.trading.infoBorder};
-    outline-offset: -1px;
-  `}
-`;
-
-const OrderBookTitle = styled("div")`
+  padding: 0.2rem 0.6rem;
   font-size: 0.7rem;
-  font-weight: 500;
-  color: ${tokens.text.secondary};
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  margin-bottom: 0.3rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: background 0.15s ease, color 0.15s ease;
+  background: ${(props) => (props.$active ? tokens.surface.tabActive : "transparent")};
+  color: ${(props) => (props.$active ? "#FFFFFF" : tokens.text.secondary)};
+
+  &:hover {
+    background: ${(props) => (props.$active ? tokens.surface.tabHover : tokens.overlay.white08)};
+    color: #FFFFFF;
+  }
+
+  /* MOBILE-ONLY: keep both tabs on one line inside the half-width column, using
+     the metrics the place-order toggles also follow so the two columns align. */
+  @media (max-width: 768px) {
+    ${MOBILE_TOGGLE_METRICS}
+  }
 `;
 
-const PerpsInfoHeader = styled("div")`
+const _PerpsInfoHeader = styled("div")`
   display: flex;
   justify-content: space-around;
   align-items: center;
@@ -639,7 +475,7 @@ const PerpsInfoHeader = styled("div")`
   gap: 1rem;
 `;
 
-const InfoLabel = styled("div")`
+const _InfoLabel = styled("div")`
   display: flex;
   flex-direction: column;
   align-items: center;

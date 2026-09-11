@@ -7,6 +7,7 @@ import { newAjv } from "./validator";
 import mkcert from "vite-plugin-mkcert";
 // import { analyzer } from "vite-bundle-analyzer";
 import { imagetools } from "vite-imagetools";
+import { seedMetaPlugin } from "./vite-plugin-seed-meta";
 
 declare global {
   namespace NodeJS {
@@ -70,11 +71,30 @@ export default defineConfig(({ mode }) => {
         jsxImportSource: "@emotion/react",
         // jsxImportSource: "@welldone-software/why-did-you-render",
         babel: {
-          plugins: ["@emotion/babel-plugin"],
+          plugins: [
+            [
+              "@emotion/babel-plugin",
+              {
+                // The plugin only labels `styled` it recognises as Emotion's.
+                // Every component here goes through MUI's wrapper, so tell it
+                // that is Emotion too — dev class names then carry the
+                // variable name (`css-1abc2de-PositionCard`) — while keeping
+                // the call on MUI's `styled` for theme, `sx` and prop filtering.
+                importMap: {
+                  "@mui/material/styles/styled": {
+                    default: {
+                      canonicalImport: ["@emotion/styled", "default"],
+                      styledBaseImport: ["@mui/material/styles/styled", "default"],
+                    },
+                  },
+                },
+              },
+            ],
+          ],
         },
       }),
       imagetools({
-        defaultDirectives: (url) => {
+        defaultDirectives: (_url) => {
           return new URLSearchParams({
             format: "webp",
             quality: "80",
@@ -84,6 +104,7 @@ export default defineConfig(({ mode }) => {
         },
       }),
       svgr(),
+      seedMetaPlugin(),
       env.DEV_SERVER_HTTPS ? mkcert() : null,
 
       // analyzer({

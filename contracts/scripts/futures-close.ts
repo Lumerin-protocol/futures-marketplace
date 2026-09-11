@@ -1,61 +1,53 @@
-import { requireEnvsSet } from "../lib/env";
-import { viem } from "hardhat";
+import hre from "hardhat";
+import { getAddress, type Address } from "viem";
+import { requireAddress, requireEnvsSet } from "../lib/env.ts";
+import { addrUrl, txUrl } from "../lib/explorer.ts";
+import { logInfo, logStep, logSuccess, logTitle } from "../lib/log.ts";
 
 async function main() {
-  console.log("Futures contract close delivery script");
-  console.log();
+  logTitle("HashPowerFutures Settle Position (3.0)");
 
-  const env = <
-    {
-      FUTURES_ADDRESS: `0x${string}`;
-      POSITION_ID: `0x${string}`;
-    }
-  >requireEnvsSet("FUTURES_ADDRESS", "POSITION_ID");
+  const { viem } = await hre.network.getOrCreate();
 
-  // BLAME_SELLER is optional, defaults to true
-  const blameSeller = process.env.BLAME_SELLER !== "false";
+  const futuresAddress = requireAddress("FUTURES_ADDRESS");
+  const env = requireEnvsSet("USER_ADDRESS", "DELIVERY_AT");
+  const user = getAddress(env.USER_ADDRESS) as Address;
+  const expirationAt = BigInt(env.DELIVERY_AT);
 
-  const [owner, seller, buyer, validator] = await viem.getWalletClients();
+  // Cash settlement is permissionless — any funded signer can call settlePosition.
+  const [keeper] = await viem.getWalletClients();
   const pc = await viem.getPublicClient();
-  const tc = await viem.getTestClient();
 
-  console.log("Futures address:", env.FUTURES_ADDRESS);
-  console.log("Position ID:", env.POSITION_ID);
-  console.log("Blame seller:", blameSeller);
-  console.log("Validator account:", validator.account.address);
-  console.log();
+  logInfo("inputs", {
+    HashPowerFutures: addrUrl(pc, futuresAddress),
+    User: user,
+    ExpirationAt: new Date(Number(expirationAt) * 1000).toISOString(),
+    Caller: keeper.account.address,
+  });
 
-  const futures = await viem.getContractAt("Futures", env.FUTURES_ADDRESS);
+  const futures = await viem.getContractAt("HashPowerFutures", futuresAddress);
 
-  // Get position info before closing
-  const position = await futures.read.getPositionById([env.POSITION_ID]);
+  const position = await futures.read.getUserPosition([user, expirationAt]);
+  logInfo("position", {
+    NetQuantity: position.netQuantity.toString(),
+    NetEntryValue: position.netEntryValue.toString(),
+  });
 
-  console.log("Position details:");
-  console.log("  Seller:", position.seller);
-  console.log("  Buyer:", position.buyer);
-  console.log("  Delivery at:", new Date(Number(position.deliveryAt) * 1000).toISOString());
-  console.log("  Sell price per day:", position.sellPricePerDay.toString());
-  console.log("  Buy price per day:", position.buyPricePerDay.toString());
-  console.log("  Paid:", position.paid);
-  console.log();
+  if (position.netQuantity === 0n) {
+    throw new Error(`User ${user} has no position at expirationAt ${expirationAt}`);
+  }
 
-  console.log("Closing delivery...");
-  await tc.setNextBlockTimestamp({ timestamp: BigInt(Math.floor(Date.now() / 1000)) });
-  const tx = await futures.write.closeDelivery([env.POSITION_ID, blameSeller], {
-    account: validator.account,
+  const tx = await futures.write.settlePosition([user, expirationAt], {
+    account: keeper.account,
   });
 
   const receipt = await pc.waitForTransactionReceipt({ hash: tx });
-  console.log("Transaction hash:", tx);
-  console.log("Gas used:", receipt.gasUsed.toString());
-  console.log();
-  console.log("---");
-  console.log("SUCCESS: Position closed!");
+  logStep("Settled", txUrl(pc, receipt.transactionHash));
+  logStep("Gas used", receipt.gasUsed.toString());
+  logSuccess(`Settled ${user} @ ${expirationAt}`);
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

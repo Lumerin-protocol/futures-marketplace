@@ -1,5 +1,4 @@
 import { backgroundRefetchOpts } from "./config";
-import { gql } from "graphql-request";
 import { graphqlRequest } from "./graphql";
 import { useQuery } from "@tanstack/react-query";
 import type { GetResponse } from "../../gateway/interfaces";
@@ -20,14 +19,10 @@ export const useFuturesContractSpecs = (props?: { refetch?: boolean }) => {
 const fetchContractSpecsAsync = async (): Promise<GetResponse<FuturesContractSpecs>> => {
   const response = await graphqlRequest<ContractSpecsResponse>(ContractSpecsQuery);
   const data: FuturesContractSpecs = {
-    deliveryDurationDays: response.futures.deliveryDurationDays,
-    deliveryDurationSeconds: response.futures.deliveryDurationDays * 24 * 60 * 60,
-    hashrateOracleAddress: response.futures.hashrateOracleAddress,
+    priceOracle: response.futures.priceOracle,
     minimumPriceIncrement: BigInt(response.futures.minimumPriceIncrement),
-    liquidationMarginPercent: response.futures.liquidationMarginPercent,
-    speedHps: BigInt(+response.futures.speedHps),
-    tokenAddress: response.futures.tokenAddress,
-    validatorAddress: response.futures.validatorAddress,
+    contractSizeHpsDay: BigInt(+response.futures.contractSizeHpsDay),
+    tokenAddress: response.futures.contractAddress,
   };
   return {
     data,
@@ -36,14 +31,10 @@ const fetchContractSpecsAsync = async (): Promise<GetResponse<FuturesContractSpe
 };
 
 export type FuturesContractSpecs = {
-  deliveryDurationDays: number;
-  deliveryDurationSeconds: number;
-  hashrateOracleAddress: `0x${string}`;
+  priceOracle: `0x${string}`;
   minimumPriceIncrement: bigint;
-  liquidationMarginPercent: number;
-  speedHps: bigint;
+  contractSizeHpsDay: bigint;
   tokenAddress: `0x${string}`;
-  validatorAddress: `0x${string}`;
 };
 
 type ContractSpecsResponse = {
@@ -54,12 +45,9 @@ type ContractSpecsResponse = {
     };
   };
   futures: {
-    liquidationMarginPercent: number;
-    deliveryDurationDays: number;
-    hashrateOracleAddress: `0x${string}`;
+    priceOracle: `0x${string}`;
     minimumPriceIncrement: string;
-    speedHps: string;
-    tokenAddress: `0x${string}`;
-    validatorAddress: `0x${string}`;
+    contractSizeHpsDay: string;
+    contractAddress: `0x${string}`;
   };
 };

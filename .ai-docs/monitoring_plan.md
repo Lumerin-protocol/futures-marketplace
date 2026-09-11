@@ -10,7 +10,6 @@ The Futures Marketplace provides a DeFi hashrate trading platform. This guide ex
 |-----------|---------|-----------|
 | **Futures UI** | Static React app for trading interface | Yes - users can't trade without it |
 | **Market Maker** | Automated trading bot for liquidity | Yes - market liquidity depends on it |
-| **Margin Call Lambda** | Monitors positions and triggers margin calls | Yes - position health depends on it |
 | **Notifications Service** | Telegram/HTTP notifications for users | No - graceful degradation acceptable |
 | **Notifications RDS** | PostgreSQL database for notification state | No - supports non-critical service |
 
@@ -81,14 +80,14 @@ We use a **two-tier alarm system** to prevent alert flooding:
 │                      COMPOSITE ALARMS (Alert Layer)                          │
 │                  ↓ Only these send SNS notifications ↓                       │
 │                                                                              │
-│    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
-│    │futures-ui    │  │market-maker  │  │margin-call   │  │notifications │   │
-│    │              │  │              │  │              │  │              │   │
-│    └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘   │
-│           │                 │                 │                 │            │
-└───────────┼─────────────────┼─────────────────┼─────────────────┼────────────┘
-            │                 │                 │                 │
-            ▼                 ▼                 ▼                 ▼
+│    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                    │
+│    │futures-ui    │  │market-maker  │  │notifications │                    │
+│    │              │  │              │  │              │                    │
+│    └──────┬───────┘  └──────┬───────┘  └──────┬───────┘                    │
+│           │                 │                 │                             │
+└───────────┼─────────────────┼─────────────────┼─────────────────────────────┘
+            │                 │                 │
+            ▼                 ▼                 ▼
 ┌───────────────────────────────────────────────────────────────────────────────┐
 │                     COMPONENT ALARMS (State Layer)                            │
 │                 ↓ NO notifications - state tracking only ↓                    │
@@ -149,23 +148,6 @@ We use a **two-tier alarm system** to prevent alert flooding:
 2. If no tasks: Check for deployment failures, resource limits
 3. If CPU/Memory high: Check for trading loops, memory leaks
 4. Review logs: CloudWatch → `/ecs/market-maker-{env}`
-
----
-
-### margin-call-{env}
-**Triggers when:** Margin Call Lambda is failing
-
-| Component Alarm | Condition | Severity |
-|-----------------|-----------|----------|
-| `margin-call-errors` | Lambda errors > threshold | Critical |
-| `margin-call-duration` | Execution time too long | Warning |
-| `margin-call-throttles` | Lambda throttled | Warning |
-
-**Response:**
-1. Check Lambda logs: CloudWatch → `/aws/lambda/margin-call-v2-{env}`
-2. If errors: Check contract interactions, RPC endpoint
-3. If duration high: Check chain congestion, contract complexity
-4. If throttled: Check Lambda concurrency limits
 
 ---
 
@@ -358,18 +340,6 @@ Different metric sources have different native reporting periods:
 4. **Check logs:**
    - CloudWatch → Log groups → `/ecs/market-maker-{env}`
 
-### Alert: "margin-call-{env}"
-
-1. **Check Lambda invocations:**
-   - Lambda Console → Functions → margin-call-v2-{env} → Monitor
-2. **If errors:**
-   - Check logs for error details
-   - Verify RPC endpoint is responsive
-   - Check wallet has gas for transactions
-3. **If duration high:**
-   - Chain may be congested
-   - Contract queries may be timing out
-
 ### Alert: "notifications-{env}" or "notificationsrds-{env}"
 
 1. **Check ECS service health:**
@@ -463,7 +433,6 @@ alarm_thresholds = {
 |-----------|---------|-------|
 | `/ecs/market-maker-{env}` | Market Maker ECS | Trading bot logs |
 | `/ecs/futures-notifications-{env}` | Notifications ECS | Telegram/HTTP logs |
-| `/aws/lambda/margin-call-v2-{env}` | Margin Call Lambda | Position checks |
 | `bedrock-futures-marketplace-ecs-cluster-{env}` | ECS Cluster | Cluster-level logs |
 
 ---

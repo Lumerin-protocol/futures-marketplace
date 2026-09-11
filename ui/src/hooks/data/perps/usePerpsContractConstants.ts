@@ -1,6 +1,6 @@
 import { useReadContracts } from "wagmi";
-import { PerpsABI } from "../../../abi/Perps";
-import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
+import { withErrors } from "../../../lib/withErrors";
 
 export function usePerpsContractConstants() {
   const perpsAddress = process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`;
@@ -9,32 +9,32 @@ export function usePerpsContractConstants() {
     contracts: [
       {
         address: perpsAddress,
-        abi: PerpsABI,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "fundingPeriod",
       },
       {
         address: perpsAddress,
-        abi: PerpsABI,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "fundingRateMaxBps",
       },
       {
         address: perpsAddress,
-        abi: PerpsABI,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "MAX_ORDERS_PER_PARTICIPANT",
       },
       {
         address: perpsAddress,
-        abi: PerpsABI,
-        functionName: "liquidationFee",
+        abi: withErrors(HashPowerPerpsDEXAbi),
+        functionName: "liquidationFeeBps",
       },
       {
         address: perpsAddress,
-        abi: PerpsABI,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "MAX_PRICE_LEVELS_PER_SIDE",
       },
       {
         address: perpsAddress,
-        abi: PerpsABI,
+        abi: withErrors(HashPowerPerpsDEXAbi),
         functionName: "lastFundingUpdateTime",
       },
     ],
@@ -49,7 +49,7 @@ export function usePerpsContractConstants() {
   const fundingPeriod = result.data?.[0]?.result as bigint | undefined;
   const fundingRateMaxBps = result.data?.[1]?.result as bigint | undefined;
   const maxOrdersPerParticipant = result.data?.[2]?.result as number | undefined;
-  const liquidationFee = result.data?.[3]?.result as bigint | undefined;
+  const liquidationFeeBps = result.data?.[3]?.result as number | undefined;
   const maxPriceLevelsPerSide = result.data?.[4]?.result as bigint | undefined;
   const lastFundingUpdateTime = result.data?.[5]?.result as bigint | undefined;
 
@@ -60,8 +60,9 @@ export function usePerpsContractConstants() {
     fundingRateMaxBps,
     fundingRateMaxBpsFormatted: fundingRateMaxBps ? Number(fundingRateMaxBps) : null,
     maxOrdersPerParticipant,
-    liquidationFee,
-    liquidationFeeFormatted: liquidationFee ? Number(liquidationFee) / PAYMENT_TOKEN_SCALE_NUM : null,
+    liquidationFeeBps,
+    // Basis points of the liquidated notional, not a flat charge.
+    liquidationFeePercent: liquidationFeeBps !== undefined ? liquidationFeeBps / 100 : null,
     maxPriceLevelsPerSide: maxPriceLevelsPerSide ? Number(maxPriceLevelsPerSide) : null,
     lastFundingUpdateTime: lastFundingUpdateTime ? Number(lastFundingUpdateTime) : null,
   };

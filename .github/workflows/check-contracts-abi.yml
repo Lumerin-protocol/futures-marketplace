@@ -34,23 +34,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "yarn"
-          cache-dependency-path: contracts/yarn.lock
+          node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: contracts/pnpm-lock.yaml
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Compile contracts and generate ABIs
-        run: yarn compile
+        run: pnpm compile
 
       - name: Check for ABI differences
         run: |
           if [ -n "$(git diff --name-only -- abi/)" ]; then
-            echo "::error::Generated ABIs do not match committed ABIs. Please run 'yarn compile' in contracts/ and commit the updated ABI files."
+            echo "::error::Generated ABIs do not match committed ABIs. Please run 'pnpm compile' in contracts/ and commit the updated ABI files."
             echo ""
             echo "Changed files:"
             git diff --name-only -- abi/
@@ -61,7 +66,7 @@ jobs:
           fi
 
           if [ -n "$(git ls-files --others --exclude-standard -- abi/)" ]; then
-            echo "::error::New ABI files were generated but not committed. Please run 'yarn compile' in contracts/ and commit the new ABI files."
+            echo "::error::New ABI files were generated but not committed. Please run 'pnpm compile' in contracts/ and commit the new ABI files."
             echo ""
             echo "Untracked files:"
             git ls-files --others --exclude-standard -- abi/
@@ -79,7 +84,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**To fix:** Run the following locally and commit the changes:" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "cd contracts && yarn compile" >> $GITHUB_STEP_SUMMARY
+          echo "cd contracts && pnpm compile" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Summary (success)

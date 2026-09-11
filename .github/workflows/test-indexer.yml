@@ -1,0 +1,95 @@
+name: Test Indexer
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - stg
+      - main
+    paths:
+      - "indexer/**"
+      - "contracts/**"
+      - ".github/workflows/test-indexer.yml"
+  push:
+    branches:
+      - dev
+      - stg
+      - main
+    paths:
+      - "indexer/**"
+      - "contracts/**"
+      - ".github/workflows/test-indexer.yml"
+
+concurrency:
+  group: test-indexer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: 🧪 Indexer Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+          # Hash both lockfiles — integration tests pull in `futures-contracts`
+          # (which has its own pnpm-lock.yaml) for the deployment fixture.
+          cache-dependency-path: |
+            indexer/pnpm-lock.yaml
+            contracts/pnpm-lock.yaml
+
+      - name: Install indexer dependencies
+        working-directory: ./indexer
+        run: pnpm install --frozen-lockfile
+
+      - name: Install contracts dependencies
+        working-directory: ./contracts
+        run: pnpm install --frozen-lockfile
+
+      # Integration tests deploy the real Futures stack via
+      # `deployFuturesFixture` from `futures-contracts/test-api`, which reads
+      # JSON artifacts from `contracts/artifacts/`. Compile both contracts
+      # workspaces (futures + transitive collateral-margin) so the fixture can
+      # load their bytecode.
+      - name: Compile contracts
+        working-directory: ./contracts
+        run: pnpm compile
+
+      - name: Render subgraph manifest
+        working-directory: ./indexer
+        env:
+          NETWORK: arbitrum-sepolia
+          FUTURES_ADDRESS: "0x0000000000000000000000000000000000000000"
+          START_BLOCK_FUTURES: "0"
+        run: pnpm prepare:env
+
+      - name: Generate types
+        working-directory: ./indexer
+        run: pnpm codegen
+
+      - name: Lint
+        working-directory: ./indexer
+        run: pnpm lint
+
+      - name: Typecheck
+        working-directory: ./indexer
+        run: pnpm typecheck
+
+      - name: Run unit tests
+        working-directory: ./indexer
+        run: pnpm test:unit
+
+      - name: Run integration tests
+        working-directory: ./indexer
+        run: pnpm test:integration

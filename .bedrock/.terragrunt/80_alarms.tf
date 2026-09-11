@@ -77,10 +77,10 @@ resource "aws_cloudwatch_metric_alarm" "futures_ui_4xx" {
 # This works correctly for low-traffic sites (dev/stg) where no user traffic is normal
 resource "aws_cloudwatch_metric_alarm" "futures_ui_unreachable" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.create_core ? 1 : 0
-  provider            = aws.use1  # Route53 metrics are only in us-east-1
+  provider            = aws.use1 # Route53 metrics are only in us-east-1
   alarm_name          = "futures-ui-unreachable-${local.env_suffix}"
   comparison_operator = "LessThanThreshold"
-  evaluation_periods  = local.route53_alarm_evaluation_periods  # unhealthy_alarm_period (1 min periods)
+  evaluation_periods  = local.route53_alarm_evaluation_periods # unhealthy_alarm_period (1 min periods)
   metric_name         = "HealthCheckStatus"
   namespace           = "AWS/Route53"
   period              = 60
@@ -209,7 +209,7 @@ resource "aws_cloudwatch_metric_alarm" "mm_insufficient_funds" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.market_maker.create ? 1 : 0
   alarm_name          = "market-maker-insufficient-funds-${local.env_suffix}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1  # Alert immediately on first occurrence
+  evaluation_periods  = 1 # Alert immediately on first occurrence
   metric_name         = "InsufficientBalance"
   namespace           = local.monitoring_namespace
   period              = 300
@@ -385,104 +385,6 @@ resource "aws_cloudwatch_metric_alarm" "notifications_ecs_running_tasks" {
 }
 
 ################################################################################
-# MARGIN CALL LAMBDA ALARMS (3)
-# Note: Consolidated from 07_margin_call_lambda.tf
-################################################################################
-
-# Margin Call Errors
-resource "aws_cloudwatch_metric_alarm" "margin_call_errors" {
-  count               = var.monitoring.create && var.monitoring.create_alarms && var.margin_call_lambda.create ? 1 : 0
-  alarm_name          = "margin-call-errors-${local.env_suffix}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = local.standard_alarm_evaluation_periods
-  metric_name         = "Errors"
-  namespace           = "AWS/Lambda"
-  period              = 300
-  statistic           = "Sum"
-  threshold           = var.alarm_thresholds.lambda_error_threshold
-  alarm_description   = "Margin Call errors for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
-  treat_missing_data  = "notBreaching"
-
-  dimensions = {
-    FunctionName = local.margin_call_function_name
-  }
-
-  alarm_actions = local.component_alarm_actions
-  ok_actions    = local.component_alarm_actions
-
-  tags = merge(
-    var.default_tags,
-    var.foundation_tags,
-    {
-      Name       = "Margin Call Errors Alarm",
-      Capability = "Monitoring",
-    },
-  )
-}
-
-# Margin Call Duration
-resource "aws_cloudwatch_metric_alarm" "margin_call_duration" {
-  count               = var.monitoring.create && var.monitoring.create_alarms && var.margin_call_lambda.create ? 1 : 0
-  alarm_name          = "margin-call-duration-${local.env_suffix}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = local.standard_alarm_evaluation_periods
-  metric_name         = "Duration"
-  namespace           = "AWS/Lambda"
-  period              = 300
-  statistic           = "Average"
-  threshold           = var.alarm_thresholds.lambda_duration_threshold
-  alarm_description   = "Margin Call duration high for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
-  treat_missing_data  = "notBreaching"
-
-  dimensions = {
-    FunctionName = local.margin_call_function_name
-  }
-
-  alarm_actions = local.component_alarm_actions
-  ok_actions    = local.component_alarm_actions
-
-  tags = merge(
-    var.default_tags,
-    var.foundation_tags,
-    {
-      Name       = "Margin Call Duration Alarm",
-      Capability = "Monitoring",
-    },
-  )
-}
-
-# Margin Call Throttles
-resource "aws_cloudwatch_metric_alarm" "margin_call_throttles" {
-  count               = var.monitoring.create && var.monitoring.create_alarms && var.margin_call_lambda.create ? 1 : 0
-  alarm_name          = "margin-call-throttles-${local.env_suffix}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = local.standard_alarm_evaluation_periods
-  metric_name         = "Throttles"
-  namespace           = "AWS/Lambda"
-  period              = 300
-  statistic           = "Sum"
-  threshold           = var.alarm_thresholds.lambda_throttle_threshold
-  alarm_description   = "Margin Call throttled for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
-  treat_missing_data  = "notBreaching"
-
-  dimensions = {
-    FunctionName = local.margin_call_function_name
-  }
-
-  alarm_actions = local.component_alarm_actions
-  ok_actions    = local.component_alarm_actions
-
-  tags = merge(
-    var.default_tags,
-    var.foundation_tags,
-    {
-      Name       = "Margin Call Throttles Alarm",
-      Capability = "Monitoring",
-    },
-  )
-}
-
-################################################################################
 # NOTIFICATIONS RDS ALARMS (3)
 ################################################################################
 
@@ -527,7 +429,7 @@ resource "aws_cloudwatch_metric_alarm" "notifications_rds_storage" {
   namespace           = "AWS/RDS"
   period              = 300
   statistic           = "Average"
-  threshold           = var.alarm_thresholds.rds_storage_threshold * 1024 * 1024 * 1024  # Convert GB to bytes
+  threshold           = var.alarm_thresholds.rds_storage_threshold * 1024 * 1024 * 1024 # Convert GB to bytes
   alarm_description   = "Notifications RDS storage low for ${var.monitoring_schedule.unhealthy_alarm_period_minutes} min"
   treat_missing_data  = "notBreaching"
 
@@ -619,7 +521,7 @@ resource "aws_cloudwatch_metric_alarm" "notifications_alb_unhealthy" {
   count               = var.monitoring.create && var.monitoring.create_alarms && var.notifications_service.create ? 1 : 0
   alarm_name          = "notifications-alb-unhealthy-${local.env_suffix}"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = local.route53_alarm_evaluation_periods  # period = 60 sec
+  evaluation_periods  = local.route53_alarm_evaluation_periods # period = 60 sec
   metric_name         = "UnHealthyHostCount"
   namespace           = "AWS/ApplicationELB"
   period              = 60
