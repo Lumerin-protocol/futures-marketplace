@@ -55,7 +55,8 @@ const EQUITY_HINT = "Balance plus unrealized PnL across all venues.";
 const MARGIN_USED_HINT = "Initial margin held for open positions and resting orders.";
 const AVAILABLE_HINT =
   "Withdrawable and usable for new positions. Unrealized gains are not available until realized.";
-const MARGIN_RATIO_HINT = "Maintenance margin ÷ balance. Positions are liquidated at 100%.";
+const MARGIN_RATIO_HINT =
+  "Maintenance stress ÷ equity, with unrealized losses counted and gains ignored as the margin engine does. Amber begins where balance meets initial margin; positions are liquidated at 100%.";
 
 const pnlColor = (pnl: bigint | null) => {
   if (pnl === null || pnl === 0n) return tokens.text.onDark;
@@ -88,10 +89,11 @@ const tierColor = (tier: MarginTier) => {
   }
 };
 
-/// Semicircle of radius 42 centred at (50, 48), drawn left to right. Sweep is
-/// easiest to judge on a constant-curvature arc, and the dial can afford the
-/// height now that it sits beside the reading rather than around it.
-const GAUGE_PATH = "M 8 48 A 42 42 0 0 1 92 48";
+/// A 155° arc of radius 42.5 centred at (50, 51), drawn left to right: chord
+/// 83 wide, 33 high, inside a stroke of 17, so the whole mark is 100×50 units —
+/// a 2:1 box that is scaled to the height of the digits beside it (~11×22px).
+/// Constant curvature keeps the sweep easy to judge.
+const GAUGE_PATH = "M 8.5 41.8 A 42.5 42.5 0 0 1 91.5 41.8";
 
 /// Authored length for the dash maths. Declaring it frees the sweep from the
 /// ellipse's real perimeter, which has no closed form and would otherwise have
@@ -126,7 +128,7 @@ const MarginRatioGauge = ({
   return (
     <GaugeBlock>
       <GaugeSvg
-        viewBox="0 0 100 52"
+        viewBox="0 0 100 50"
         role="img"
         aria-label={`Margin ratio ${formatMarginRatio(ratioPercent)} of 100%`}
       >
@@ -287,16 +289,20 @@ export const FuturesBalanceWidget = ({
               <ActionButton onClick={withdrawalModal.open}>Withdraw</ActionButton>
             </ActionButtons>
 
-            {/* Restricted is a capability block rather than a risk level, so it
-                stacks above the tier line instead of replacing it. */}
-            {belowIM && !isError && <RestrictedNote>{RESTRICTED_STATUS_COPY}</RestrictedNote>}
-
-            {!isError && statusCopy && tier === "caution" && (
-              <CautionNote>{statusCopy}</CautionNote>
-            )}
-            {!isError && statusCopy && tier !== "caution" && (
+            {/* One note at a time. Caution begins exactly where balance drops
+                below IM, so the two amber notes would always appear together;
+                the Restricted copy wins because it says what the user can no
+                longer do, while the ratio is already on the gauge. The plain
+                Caution line only survives the rounding edge where the tier and
+                the flag disagree. Danger replaces both: at that point the
+                capability block is the least of the news. */}
+            {!isError && statusCopy && (tier === "danger" || tier === "liquidatable") ? (
               <DangerBanner $pulsing={tier === "liquidatable"}>⚠️ {statusCopy}</DangerBanner>
-            )}
+            ) : !isError && belowIM ? (
+              <RestrictedNote>{RESTRICTED_STATUS_COPY}</RestrictedNote>
+            ) : !isError && statusCopy && tier === "caution" ? (
+              <CautionNote>{statusCopy}</CautionNote>
+            ) : null}
           </>
         )}
       </PanelSection>
@@ -392,8 +398,11 @@ const MetricLabel = styled("span")`
   cursor: help;
 `;
 
+/** The metric values' type size, in rem; the gauge is measured against it. */
+const VALUE_FONT_SIZE_REM = 0.95;
+
 const MetricValue = styled("span")`
-  font-size: 0.95rem;
+  font-size: ${VALUE_FONT_SIZE_REM}rem;
   font-weight: 600;
   color: ${tokens.text.onDark};
   line-height: 1.2;
@@ -419,29 +428,32 @@ const GaugeCell = styled(MetricCell)`
   margin-top: auto;
 `;
 
+// Baseline-aligned so the dial's bottom sits on the digits' baseline and its
+// top, at their cap height, lines up with the top of the number.
 const GaugeBlock = styled("div")`
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 0.4rem;
 `;
 
-// Sized so the arc is exactly as tall as the reading beside it (0.95rem over a
-// 1.2 line box is 18px, and the viewBox is 100x52), which keeps the row the
-// same height as every other metric value on the panel.
+// Exactly the height of the reading's lining digits, stated in rem from the
+// same constants rather than in em, so nothing depends on what the svg
+// inherits. The 2:1 viewBox makes it twice as wide (~11×22px). The row still
+// sits inside the 18px line box, so it matches the other cells.
 const GaugeSvg = styled("svg")`
   display: block;
-  width: 35px;
-  height: auto;
+  height: 0.8rem;
+  width: auto;
   flex-shrink: 0;
   overflow: visible;
 `;
 
 // In viewBox units, so it scales with the dial rather than needing a rewrite
-// each time the arc is resized. At 35px wide this lands just under 3px.
+// each time the arc is resized. At digit height this lands just under 4px.
 const GaugeArc = styled("path")<{ $color: string }>`
   fill: none;
   stroke: ${({ $color }) => $color};
-  stroke-width: 8;
+  stroke-width: 17;
   stroke-linecap: round;
   transition: stroke-dashoffset 0.3s ease;
 `;
@@ -449,7 +461,7 @@ const GaugeArc = styled("path")<{ $color: string }>`
 // Typography copied from MetricValue: the ratio is a metric like any other, and
 // the tier colour is enough to set it apart.
 const GaugeValue = styled("span")<{ $color: string }>`
-  font-size: 0.95rem;
+  font-size: ${VALUE_FONT_SIZE_REM}rem;
   font-weight: 600;
   line-height: 1.2;
   white-space: nowrap;

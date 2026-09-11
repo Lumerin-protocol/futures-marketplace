@@ -1,25 +1,150 @@
 import { describe, expect, test } from "vitest";
 import {
+  DEFAULT_MARGIN_RATIO_THRESHOLDS,
   deriveMarginFigures,
   formatMarginRatio,
   marginStatusCopy,
-  nextTier,
+  marginRatioPercent,
+  type MarginShocks,
+  marginTier,
+  thresholdsFromShocks,
   type MarginRatioThresholds,
-  type MarginTier,
 } from "./marginRisk";
+
+/** WAD-scaled fraction, as the engine stores its shocks. */
+const wad = (fraction: number) => BigInt(Math.round(fraction * 1e18));
+
+/** The shocks the engine ships with: IM 10%, MM 5%. */
+const shipped: MarginShocks = { imSpotShock: wad(0.1), mmSpotShock: wad(0.05) };
 
 /** Whole USDC at the payment token's 6 decimals. */
 const usdc = (amount: number) => BigInt(Math.round(amount * 1e6));
 
+/** Deliberately not the shipped values, so the tests prove the argument is honoured. */
 const thresholds: MarginRatioThresholds = { caution: 60, danger: 80 };
 
-/** Walks a ratio series through the ladder the way successive polls would. */
-const walk = (ratios: (number | null)[], from: MarginTier = "healthy"): MarginTier =>
-  ratios.reduce<MarginTier>((tier, ratio) => nextTier(tier, ratio, thresholds), from);
+describe("marginRatioPercent", () => {
+  // A 2,000 notional at the shipped shocks stresses to 200 (IM) and 100 (MM).
+  // Every state below adds the same loss L to both requirements, as the engine
+  // does, and checks the ratio at the boundaries the engine actually enforces.
+  const withLoss = (L: number) => ({ im: usdc(200 + L), mm: usdc(100 + L) });
+
+  test("loss-free it is plain MM / balance", () => {
+    const { im, mm } = withLoss(0);
+    expect(marginRatioPercent(usdc(400), im, mm, shipped)).toBeCloseTo(25, 6);
+    expect(marginRatioPercent(usdc(200), im, mm, shipped)).toBeCloseTo(50, 6);
+    expect(marginRatioPercent(usdc(100), im, mm, shipped)).toBeCloseTo(100, 6);
+  });
+
+  test("reads 50% exactly where balance meets IM, whatever the loss", () => {
+    for (const L of [0, 24.02, 100, 1_000]) {
+      const { im, mm } = withLoss(L);
+      expect(marginRatioPercent(im, im, mm, shipped)).toBeCloseTo(50, 6);
+    }
+  });
+
+  test("reads 100% exactly where balance meets MM, whatever the loss", () => {
+    for (const L of [0, 24.02, 100, 1_000]) {
+      const { im, mm } = withLoss(L);
+      expect(marginRatioPercent(mm, im, mm, shipped)).toBeCloseTo(100, 6);
+    }
+  });
+
+  test("reads the danger point exactly half-way from IM to MM, whatever the loss", () => {
+    const { danger } = thresholdsFromShocks(shipped);
+    for (const L of [0, 24.02, 100, 1_000]) {
+      const { im, mm } = withLoss(L);
+      const ratio = marginRatioPercent((im + mm) / 2n, im, mm, shipped);
+      expect(ratio).toBeCloseTo(66.67, 1);
+      expect(Math.round(ratio ?? 0)).toBe(danger);
+    }
+  });
+
+  test("the raw MM / balance would have missed the IM boundary once losses exist", () => {
+    // The reason for the stress-over-equity form: with a 100 loss on the book,
+    // MM / balance sits at 67% when balance meets IM, not 50%.
+    const { im, mm } = withLoss(100);
+    expect((Number(mm) / Number(im)) * 100).toBeCloseTo(66.67, 1);
+    expect(marginRatioPercent(im, im, mm, shipped)).toBeCloseTo(50, 6);
+  });
+
+  test("follows other shocks: the IM boundary lands on s / S", () => {
+    const shocks: MarginShocks = { imSpotShock: wad(0.15), mmSpotShock: wad(0.05) };
+    // Stress 300 / 100 plus a 50 loss.
+    const im = usdc(350);
+    const mm = usdc(150);
+    expect(marginRatioPercent(im, im, mm, shocks)).toBeCloseTo(33.33, 1);
+    expect(marginRatioPercent(mm, im, mm, shocks)).toBeCloseTo(100, 6);
+  });
+
+  test("no exposure reads 0%, an empty account has no ratio", () => {
+    expect(marginRatioPercent(usdc(200), 0n, 0n, shipped)).toBe(0);
+    expect(marginRatioPercent(0n, 0n, 0n, shipped)).toBeNull();
+  });
+
+  test("caps once equity is gone rather than dividing by zero or going negative", () => {
+    const { im, mm } = withLoss(100);
+    // Balance below the shared loss term: equity ≤ 0, far past liquidation.
+    expect(marginRatioPercent(usdc(50), im, mm, shipped)).toBe(999);
+    expect(marginRatioPercent(0n, im, mm, shipped)).toBe(999);
+  });
+
+  test("a mid-flight read with MM above IM counts as no stress", () => {
+    expect(marginRatioPercent(usdc(200), usdc(50), usdc(60), shipped)).toBe(0);
+  });
+});
+
+describe("thresholdsFromShocks", () => {
+  test("at the shipped shocks, caution is the IM boundary and danger half the cushion", () => {
+    expect(thresholdsFromShocks(shipped)).toEqual({ caution: 50, danger: 67 });
+  });
+
+  test("the shipped default is that same answer", () => {
+    expect(DEFAULT_MARGIN_RATIO_THRESHOLDS).toEqual(thresholdsFromShocks(shipped));
+  });
+
+  test("follows the shocks when they change", () => {
+    // IM 15%, MM 5%: IM at 33%, half-cushion at 2·5/20 = 50%.
+    expect(thresholdsFromShocks({ imSpotShock: wad(0.15), mmSpotShock: wad(0.05) })).toEqual({
+      caution: 33,
+      danger: 50,
+    });
+    // IM 8%, MM 6%: a thin IM-to-MM band — 75% and 2·6/14 = 86%.
+    expect(thresholdsFromShocks({ imSpotShock: wad(0.08), mmSpotShock: wad(0.06) })).toEqual({
+      caution: 75,
+      danger: 86,
+    });
+  });
+
+  test("danger always sits between caution and liquidation", () => {
+    for (const [S, s] of [
+      [0.1, 0.05],
+      [0.2, 0.05],
+      [0.12, 0.1],
+      [0.5, 0.01],
+    ]) {
+      const t = thresholdsFromShocks({ imSpotShock: wad(S), mmSpotShock: wad(s) });
+      expect(t.caution).toBeLessThan(t.danger);
+      expect(t.danger).toBeLessThan(100);
+    }
+  });
+
+  test("falls back to the default on a degenerate read", () => {
+    expect(thresholdsFromShocks({ imSpotShock: 0n, mmSpotShock: wad(0.05) })).toEqual(
+      DEFAULT_MARGIN_RATIO_THRESHOLDS,
+    );
+    expect(thresholdsFromShocks({ imSpotShock: wad(0.05), mmSpotShock: wad(0.05) })).toEqual(
+      DEFAULT_MARGIN_RATIO_THRESHOLDS,
+    );
+    expect(thresholdsFromShocks({ imSpotShock: wad(0.05), mmSpotShock: wad(0.1) })).toEqual(
+      DEFAULT_MARGIN_RATIO_THRESHOLDS,
+    );
+  });
+});
 
 describe("deriveMarginFigures", () => {
   // The screenshot that prompted the redesign: IM exceeds balance while the
-  // account sits at a 61% margin ratio, nowhere near liquidation.
+  // account sits at a 56% margin ratio, nowhere near liquidation.
   test("the worked example adds up", () => {
     const figures = deriveMarginFigures({
       balance: usdc(200),
@@ -27,12 +152,15 @@ describe("deriveMarginFigures", () => {
       mm: usdc(121.88),
       netUnrealizedPnl: usdc(-24.02),
       unrealizedLossTerm: usdc(24.02),
+      shocks: shipped,
     });
 
     expect(figures.equity).toBe(usdc(175.98));
     expect(figures.marginUsed).toBe(usdc(195.71));
     expect(figures.available).toBe(0n);
-    expect(figures.ratioPercent).toBeCloseTo(60.94, 2);
+    // Stress 219.73 − 121.88 = 97.85 over equity 200 − 24.03 = 175.97: just past
+    // the 50% IM boundary, consistent with belowIM.
+    expect(figures.ratioPercent).toBeCloseTo(55.61, 2);
     expect(figures.belowIM).toBe(true);
   });
 
@@ -43,6 +171,7 @@ describe("deriveMarginFigures", () => {
       mm: 0n,
       netUnrealizedPnl: 0n,
       unrealizedLossTerm: 0n,
+      shocks: shipped,
     });
 
     expect(figures.equity).toBe(usdc(200));
@@ -61,6 +190,7 @@ describe("deriveMarginFigures", () => {
       mm: 0n,
       netUnrealizedPnl: 0n,
       unrealizedLossTerm: 0n,
+      shocks: shipped,
     });
 
     expect(figures.ratioPercent).toBeNull();
@@ -76,6 +206,7 @@ describe("deriveMarginFigures", () => {
       mm: usdc(25),
       netUnrealizedPnl: usdc(30),
       unrealizedLossTerm: 0n,
+      shocks: shipped,
     });
 
     expect(figures.equity).toBe(usdc(230));
@@ -93,6 +224,7 @@ describe("deriveMarginFigures", () => {
       mm: usdc(60),
       netUnrealizedPnl: usdc(-20),
       unrealizedLossTerm: usdc(30),
+      shocks: shipped,
     });
 
     expect(figures.equity).toBe(usdc(180));
@@ -109,57 +241,44 @@ describe("deriveMarginFigures", () => {
       mm: usdc(5),
       netUnrealizedPnl: usdc(-15),
       unrealizedLossTerm: usdc(15),
+      shocks: shipped,
     });
 
     expect(figures.marginUsed).toBe(0n);
   });
 });
 
-describe("nextTier", () => {
-  test("a healthy account stays healthy below the caution threshold", () => {
-    expect(nextTier("healthy", 59.9, thresholds)).toBe("healthy");
+describe("marginTier", () => {
+  test("healthy below the caution threshold", () => {
+    expect(marginTier(0, thresholds)).toBe("healthy");
+    expect(marginTier(59.9, thresholds)).toBe("healthy");
   });
 
-  test("tiers are entered at their thresholds", () => {
-    expect(nextTier("healthy", 60, thresholds)).toBe("caution");
-    expect(nextTier("healthy", 80, thresholds)).toBe("danger");
-    expect(nextTier("healthy", 100, thresholds)).toBe("liquidatable");
+  test("tiers begin at their thresholds", () => {
+    expect(marginTier(60, thresholds)).toBe("caution");
+    expect(marginTier(79.9, thresholds)).toBe("caution");
+    expect(marginTier(80, thresholds)).toBe("danger");
+    expect(marginTier(99.9, thresholds)).toBe("danger");
+    expect(marginTier(100, thresholds)).toBe("liquidatable");
+    expect(marginTier(999, thresholds)).toBe("liquidatable");
   });
 
-  // A gap between polls can skip tiers entirely; throttling the escalation
-  // would leave the user reading "caution" while the keeper is already able to
-  // close them out.
-  test("escalation is immediate even across several tiers", () => {
-    expect(nextTier("healthy", 120, thresholds)).toBe("liquidatable");
+  // Each boundary is an engine fact, so the tier has no memory: it clears the
+  // moment the ratio is back under the line.
+  test("has no hysteresis", () => {
+    expect(marginTier(59.9, thresholds)).toBe("healthy");
+    expect(marginTier(79.9, thresholds)).toBe("caution");
+    expect(marginTier(99.9, thresholds)).toBe("danger");
   });
 
-  test("a tier holds until the ratio clears its exit threshold", () => {
-    expect(nextTier("caution", 58, thresholds)).toBe("caution");
-    expect(nextTier("caution", 54.9, thresholds)).toBe("healthy");
-    expect(nextTier("danger", 78, thresholds)).toBe("danger");
-    expect(nextTier("danger", 74.9, thresholds)).toBe("caution");
-  });
-
-  // Being liquidatable is an on-chain fact rather than a warning level, so the
-  // 100% boundary gets no hysteresis.
-  test("liquidatable clears as soon as the ratio drops below 100", () => {
-    expect(nextTier("liquidatable", 99.9, thresholds)).toBe("danger");
-  });
-
-  test("de-escalation walks the whole ladder down in one step", () => {
-    expect(nextTier("liquidatable", 10, thresholds)).toBe("healthy");
-  });
-
-  test("a ratio oscillating inside the hysteresis band does not flap", () => {
-    expect(walk([61, 58, 61, 57, 59])).toBe("caution");
-  });
-
-  test("an account that recovers ends up healthy again", () => {
-    expect(walk([85, 76, 70, 56, 40])).toBe("healthy");
+  test("uses the shipped thresholds by default", () => {
+    expect(marginTier(49.9)).toBe("healthy");
+    expect(marginTier(50)).toBe("caution");
+    expect(marginTier(67)).toBe("danger");
   });
 
   test("an account without a ratio has no tier", () => {
-    expect(nextTier("danger", null, thresholds)).toBe("healthy");
+    expect(marginTier(null, thresholds)).toBe("healthy");
   });
 });
 

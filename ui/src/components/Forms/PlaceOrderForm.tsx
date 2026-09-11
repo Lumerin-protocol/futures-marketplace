@@ -32,10 +32,12 @@ import { type OrderLeg, type OrderMarginQuote, snapshotWithChanges } from "../..
 import { positionBefore, snapshotWithFill } from "../../lib/orderPreview";
 import { imRequired, mmRequired, type AccountSnapshot } from "@hashpower/portfolio-margin";
 import {
+  DEFAULT_MARGIN_RATIO_THRESHOLDS,
   formatMarginRatio,
-  MARGIN_RATIO_THRESHOLDS,
+  marginRatioPercent,
+  marginTier,
   type MarginTier,
-  tierAtEntry,
+  thresholdsFromShocks,
 } from "../../lib/marginRisk";
 import {
   pickLiquidationLevel,
@@ -140,7 +142,7 @@ interface RiskFigures {
   available: bigint;
   liq: LiquidationLevel | undefined;
   underwater: boolean;
-  /** `MM / balance × 100`, the header's margin ratio; `null` with no balance. */
+  /** `marginRatioPercent`, the header's margin ratio; `null` with no balance. */
   ratio: number | null;
 }
 
@@ -336,12 +338,14 @@ export const PlaceOrderForm: FC<Props> = ({
     const filled = snapshotWithFill(snapshot, params, leg, expiry);
     // The fee is held back from placement on, so it is in every state but "before".
     const figures = (snap: AccountSnapshot, fee: bigint): RiskFigures => {
-      const thresholds = solveLiquidationThresholds(snap, params, mark);
+      const liqThresholds = solveLiquidationThresholds(snap, params, mark);
+      const im = imRequired(snap, params, mark);
+      const mm = mmRequired(snap, params, mark);
       return {
-        available: snap.balance - imRequired(snap, params, mark) - fee,
-        liq: pickLiquidationLevel(snap, params, thresholds, mark),
-        underwater: thresholds.alreadyUnderwater,
-        ratio: snap.balance === 0n ? null : (Number(mmRequired(snap, params, mark)) / Number(snap.balance)) * 100,
+        available: snap.balance - im - fee,
+        liq: pickLiquidationLevel(snap, params, liqThresholds, mark),
+        underwater: liqThresholds.alreadyUnderwater,
+        ratio: marginRatioPercent(snap.balance, im, mm, params),
       };
     };
     return {
@@ -383,8 +387,8 @@ export const PlaceOrderForm: FC<Props> = ({
     if (!level) return "None";
     return `${level.direction === "down" ? "↓" : "↑"} ${usdc(level.price)}`;
   };
-  const ratioTone = (ratio: number | null): Tone =>
-    ratio === null ? "neutral" : toneOf(tierAtEntry(ratio, MARGIN_RATIO_THRESHOLDS));
+  const ratioThresholds = riskParams ? thresholdsFromShocks(riskParams) : DEFAULT_MARGIN_RATIO_THRESHOLDS;
+  const ratioTone = (ratio: number | null): Tone => toneOf(marginTier(ratio, ratioThresholds));
   // Opening from flat is obvious from the badge; the row earns its place when
   // it reduces, closes or flips something the user already holds.
   const showPosition = fillPreview !== undefined && fillPreview.positionBefore !== 0n;
@@ -457,7 +461,7 @@ export const PlaceOrderForm: FC<Props> = ({
           <CostRow
             muted
             label="Margin ratio"
-            tooltip={`Maintenance margin ÷ balance — the same figure as the balance panel. The margin engine counts a resting order as if it had already filled, so an order that adds exposure moves this the moment it is placed, and one that reduces exposure only once it fills. Amber from ${MARGIN_RATIO_THRESHOLDS.caution}%, red from ${MARGIN_RATIO_THRESHOLDS.danger}%; the account can be liquidated at 100%.`}
+            tooltip={`Maintenance stress ÷ equity — the same figure as the balance panel. The margin engine counts a resting order as if it had already filled, so an order that adds exposure moves this the moment it is placed, and one that reduces exposure only once it fills. Amber from ${ratioThresholds.caution}%, where balance meets initial margin; red from ${ratioThresholds.danger}%, where half the cushion to liquidation is gone; the account can be liquidated at 100%.`}
             value={
               <Delta
                 before={formatMarginRatio(from.ratio)}
