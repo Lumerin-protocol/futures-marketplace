@@ -24,7 +24,7 @@ import { useUserTrades } from "../../../hooks/data/perps/useUserTrades";
 import type { UserTrade } from "../../../hooks/data/perps/useUserTrades";
 import { usePerpsOrderHistory } from "../../../hooks/data/perps/usePerpsOrderHistory";
 import { usePerpsPositionHistory } from "../../../hooks/data/perps/usePerpsPositionHistory";
-import { ClosePerpsPositionModal } from "./ClosePerpsPositionModal";
+import { ClosePositionForm } from "../../Forms/ClosePositionForm";
 import { ModifyPerpsOrderModal } from "./ModifyPerpsOrderModal";
 import { ModalItem } from "../../Modal";
 import { CancelAllOrdersForm, type CancellableOrder } from "../../Forms/CancelAllOrdersForm";
@@ -238,21 +238,25 @@ export const PerpsOrdersPositionsTabWidget = ({
       {/* Mount only when open so wagmi Hydrate doesn't push store updates into
           idle modals during render (React "setState while rendering Hydrate"). */}
       {closePositionSession && (
-        <ClosePerpsPositionModal
-          open
-          onClose={() => setClosePositionSession(null)}
-          session={closePositionSession}
-          marketPrice={marketPrice}
-          participantAddress={participantAddress}
-          onConfirmed={async () => {
-            // Closing a position adds history rows — reset every history table
-            // back to its newest page rather than merging in-place.
-            orderHistoryQuery.refresh();
-            positionHistoryQuery.refresh();
-            tradesQuery.refresh();
-            await onPositionClosed?.();
-          }}
-        />
+        <ModalItem compact open setOpen={(isOpen) => !isOpen && setClosePositionSession(null)}>
+          <ClosePositionForm
+            contractMode="perpetual"
+            position={{
+              netQuantity: closePositionSession.netQuantity,
+              entryPrice: closePositionSession.entryPrice,
+            }}
+            marketPrice={marketPrice}
+            priceStep={priceStep}
+            perpsCollection={perpsCollection.data?.data}
+            closeForm={() => setClosePositionSession(null)}
+            onConfirmed={async () => {
+              // Closing a position adds history rows — reset every history table
+              // back to its newest page rather than merging in-place.
+              refreshPerpsHistory();
+              await onPositionClosed?.();
+            }}
+          />
+        </ModalItem>
       )}
 
       {exitAll && (

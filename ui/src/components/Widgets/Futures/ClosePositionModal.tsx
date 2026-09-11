@@ -5,8 +5,8 @@ import { ModalItem } from "../../Modal";
 import { PrimaryButton } from "../../Forms/FormButtons/Buttons.styled";
 
 // Legacy futures close flow: informational warning + Place Order prefill + Bid/Ask
-// highlight. Replaced by CloseFuturesPositionModal (order-creation modal, same as
-// Perps). Restore by wiring `useClosePositionModal` in Futures.tsx and passing
+// highlight. Replaced by Forms/ClosePositionForm (order-creation modal shared
+// with Perps). Restore by wiring `useClosePositionModal` in Futures.tsx and passing
 // `onClosePosition` through OrdersPositionsTabWidget → PositionsListWidget.
 
 const CLOSE_POSITION_MODAL_KEY = "futures_close_position_modal_dismissed";

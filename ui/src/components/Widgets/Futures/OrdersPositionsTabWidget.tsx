@@ -17,7 +17,7 @@ import { LoadMoreButton } from "../../LoadMoreButton";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { getTxUrl } from "../../../lib/indexer";
 import { LiquidationChip, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
-import { CloseFuturesPositionModal, type CloseableFuturesPosition } from "./CloseFuturesPositionModal";
+import { ClosePositionForm, type ClosablePosition } from "../../Forms/ClosePositionForm";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { ModalItem } from "../../Modal";
 import { CancelAllOrdersForm, type CancellableOrder } from "../../Forms/CancelAllOrdersForm";
@@ -62,7 +62,7 @@ export const OrdersPositionsTabWidget = ({
   balanceQuery,
 }: OrdersPositionsTabWidgetProps) => {
   const [activeTab, setActiveTab] = useState<TabType>("OPEN_ORDERS");
-  const [closePosition, setClosePosition] = useState<CloseableFuturesPosition | null>(null);
+  const [closePosition, setClosePosition] = useState<ClosablePosition | null>(null);
   // Snapshot of the orders at the moment "Cancel all" was clicked. Held in
   // state rather than derived, so the result screen still knows what it
   // cancelled after the list has emptied underneath it.
@@ -266,14 +266,17 @@ export const OrdersPositionsTabWidget = ({
       )}
 
       {closePosition && (
-        <CloseFuturesPositionModal
-          open
-          onClose={() => setClosePosition(null)}
-          position={closePosition}
-          marketPrice={marketPrice}
-          participantAddress={participantAddress}
-          onConfirmed={onPositionClosed}
-        />
+        <ModalItem compact open setOpen={(isOpen) => !isOpen && setClosePosition(null)}>
+          <ClosePositionForm
+            contractMode={contractMode}
+            position={closePosition}
+            marketPrice={marketPrice}
+            priceStep={priceStep}
+            participantData={participantData}
+            closeForm={() => setClosePosition(null)}
+            onConfirmed={onPositionClosed}
+          />
+        </ModalItem>
       )}
     </TabContainer>
   );

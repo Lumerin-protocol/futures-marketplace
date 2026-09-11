@@ -2,7 +2,7 @@ import styled from "@mui/material/styles/styled";
 import { keyframes, css } from "@emotion/react";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { type ComponentProps, type CSSProperties, useState, useEffect, useId, useMemo, useRef } from "react";
-import Slider, { SliderMark } from "@mui/material/Slider";
+import { SliderMark } from "@mui/material/Slider";
 import Tooltip from "@mui/material/Tooltip";
 import { tokens } from "../../../styles/tokens";
 
@@ -30,6 +30,8 @@ import { ModalItem } from "../../Modal";
 import { showAlert } from "../../AlertModal";
 import { PrimaryButton, SecondaryButton } from "../../Forms/FormButtons/Buttons.styled";
 import { PlaceOrderForm, type OrderOffsetPlan } from "../../Forms/PlaceOrderForm";
+import { PERCENT_MARKS, StyledSlider } from "../../Forms/Shared/StyledSlider";
+import { percentForQuantity, quantityAtPercent, snapQuantityDown } from "../../../lib/sliderSnap";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
@@ -495,11 +497,7 @@ export const PlaceOrderWidget = ({
    * on to the other side's max. Hovering the dot says which side and how much.
    */
   const sliderMarks = (): { marks: { value: number; label?: string }[]; cap: CapMarkInfo | undefined } => {
-    // Only the middle label carries the unit; the rest read as plain numbers.
-    const quarters = [0, 25, 50, 75, 100].map((value) => ({
-      value,
-      label: value === 50 ? `${value}%` : `${value}`,
-    }));
+    const quarters = PERCENT_MARKS;
     const max = calculateMaxQuantity();
     const buyCap = sideCapacity(true);
     const sellCap = sideCapacity(false);
@@ -590,8 +588,8 @@ export const PlaceOrderWidget = ({
    * futures, six decimals for perps. Down, never nearest — a ceiling rounded up
    * by a millionth is a ceiling the gate rejects.
    */
-  const snapQty = (qty: number): number =>
-    contractMode === "perpetual" ? Math.floor(qty * 1e6 + 1e-6) / 1e6 : Math.floor(qty);
+  const qtyDecimals = contractMode === "perpetual" ? 6 : 0;
+  const snapQty = (qty: number): number => snapQuantityDown(qty, qtyDecimals);
 
   /** The amount field's value for `qty`, in the field's current unit. */
   const amountFromQty = (qty: number): number | string => {
@@ -609,8 +607,7 @@ export const PlaceOrderWidget = ({
   };
 
   /** Where `qty` sits on the 0–100 track, for a given ceiling. */
-  const sliderPercentFor = (qty: number, maxQty: number): number =>
-    maxQty > 0 ? Math.round(Math.min(100, Math.max(0, (qty / maxQty) * 100))) : 0;
+  const sliderPercentFor = percentForQuantity;
 
   // Highlight price/amount inputs when the user clicks the order book
   // (`highlightMode === "inputs"`). `highlightMode === "buttons"` pulses Bid/Ask
@@ -927,14 +924,7 @@ export const PlaceOrderWidget = ({
   const DOT_SNAP_POINTS = 3;
 
   /** The quantity a slider position stands for, snapped to what the venue can place. */
-  const qtyAtSliderValue = (value: number, maxQty: number): number => {
-    // Interior positions round to the nearest placeable quantity so the thumb
-    // feels balanced; only the ceiling is floored, since that is a real limit.
-    const raw = (maxQty * value) / 100;
-    const nearest =
-      contractMode === "perpetual" ? Math.round(raw * 1e6) / 1e6 : Math.round(raw);
-    return Math.min(nearest, snapQty(maxQty));
-  };
+  const qtyAtSliderValue = (value: number, maxQty: number): number => quantityAtPercent(value, maxQty, qtyDecimals);
 
   /**
    * Thumb moving: pull it onto the dot when near, otherwise convert the position
@@ -2204,131 +2194,6 @@ const CapMark = styled("span")<{ $color: string }>`
     height: 6px;
     transform: translate(-50%, -50%);
     background-color: ${(p) => p.$color};
-  }
-`;
-
-/**
- * `$lastMarkIndex` is the index of the final mark: its label is pinned to the
- * right edge (and the first mark's to the left) so the labels stay inside the
- * bar's width instead of hanging off either end.
- */
-const StyledSlider = styled(Slider, {
-  shouldForwardProp: (prop) => prop !== "$lastMarkIndex",
-})<{ $lastMarkIndex?: number }>`
-  color: ${tokens.text.primary};
-  height: 6px;
-  padding: 13px 0;
-
-  & .MuiSlider-markLabel[data-index="0"] {
-    transform: translateX(0);
-  }
-
-  ${(p) =>
-    p.$lastMarkIndex !== undefined &&
-    `
-  & .MuiSlider-markLabel[data-index="${p.$lastMarkIndex}"] {
-    transform: translateX(-100%);
-  }
-  `}
-  
-  /* Halo sized so thumb + halo at 0% / 100% (9px + 7px) stays within the
-     card's 1rem side padding instead of reaching the page edge. */
-  & .MuiSlider-thumb {
-    width: 18px;
-    height: 18px;
-    background-color: ${tokens.neutralButton.bg};
-    transition: all 0.2s ease;
-
-    &:hover,
-    &.Mui-focusVisible {
-      box-shadow: 0 0 0 5px ${tokens.overlay.white16};
-      background-color: ${tokens.neutralButton.hover};
-    }
-    
-    &.Mui-active {
-      box-shadow: 0 0 0 7px ${tokens.overlay.white16};
-    }
-  }
-  
-  & .MuiSlider-track {
-    height: 6px;
-    border: none;
-    background-color: ${tokens.neutralButton.bg};
-  }
-
-  & .MuiSlider-rail {
-    height: 6px;
-    background-color: ${tokens.surface.inputIsland};
-    opacity: 1;
-  }
-  
-  & .MuiSlider-mark {
-    width: 2px;
-    height: 6px;
-    background-color: ${tokens.overlay.white50};
-    opacity: 1;
-  }
-  
-  & .MuiSlider-markActive {
-    background-color: ${tokens.overlay.black30};
-  }
-  
-  & .MuiSlider-markLabel {
-    color: ${tokens.text.secondary};
-    font-size: 0.75rem;
-    top: 26px;
-  }
-  
-  & .MuiSlider-valueLabel {
-    background-color: ${tokens.surface.inputIsland};
-    color: #FFFFFF;
-    border-radius: 4px;
-    padding: 4px 8px;
-    font-size: 0.75rem;
-  }
-
-  /* "auto" also pops the value on hover; only show it while the thumb is
-     actually being dragged, when the amount field is not yet settled. */
-  & .MuiSlider-thumb:not(.Mui-active) .MuiSlider-valueLabel {
-    display: none;
-  }
-  
-  /* MOBILE-ONLY (see MOBILE_TRADING_QUERY): the form only gets half the screen,
-     so the thumb and its tick labels shrink to stay proportionate. */
-  @media (max-width: 768px) {
-    & .MuiSlider-thumb {
-      width: 12px;
-      height: 12px;
-
-      &:hover,
-      &.Mui-focusVisible {
-        box-shadow: 0 0 0 4px ${tokens.overlay.white16};
-      }
-
-      &.Mui-active {
-        box-shadow: 0 0 0 6px ${tokens.overlay.white16};
-      }
-    }
-
-    & .MuiSlider-markLabel {
-      font-size: 0.6rem;
-    }
-  }
-
-  &.Mui-disabled {
-    color: ${tokens.text.muted};
-    
-    & .MuiSlider-thumb {
-      background-color: ${tokens.surface.tabMuted};
-    }
-    
-    & .MuiSlider-track {
-      background-color: ${tokens.surface.tabMuted};
-    }
-    
-    & .MuiSlider-mark {
-      background-color: ${tokens.slider.thumbMuted};
-    }
   }
 `;
 

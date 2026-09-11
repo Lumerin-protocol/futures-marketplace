@@ -43,8 +43,6 @@ import {
   solveLiquidationThresholds,
   type LiquidationLevel,
 } from "../../lib/portfolioMargin";
-import Tooltip from "@mui/material/Tooltip";
-import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import { useMakerTakerFees } from "../../hooks/data/useMakerTakerFees";
 import { usePointsHookWeights } from "../../hooks/data/usePointsHookWeights";
 import type { PerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
@@ -57,6 +55,29 @@ import { quoteOrderFees } from "../../lib/orderFees";
 import { type OrderExecution, summarizeOrderExecution } from "../../lib/orderExecution";
 import { TimeInForce, type TimeInForceValue } from "../../types/timeInForce";
 import { tokens } from "../../styles/tokens";
+import {
+  Bright,
+  CostCard,
+  CostDivider,
+  CostRow,
+  Delta,
+  GroupDivider,
+  Headline,
+  HeadlineAt,
+  HeadlineDelivery,
+  HeadlineDetail,
+  HeadlineMeta,
+  HeadlineStat,
+  HeadlineStats,
+  HeadlineTitle,
+  HeadlineTop,
+  HelpTip,
+  Review,
+  Section,
+  SectionTitle,
+  SideBadge,
+  type Tone,
+} from "./Shared/ReviewPrimitives";
 
 const TIF_LABELS: Record<TimeInForceValue, string> = {
   [TimeInForce.GTC]: "GTC",
@@ -97,10 +118,13 @@ interface Props {
   /** Fraction (0.05 = 5%) by which the widget slipped the mark to price a market order. */
   marketSlippage?: number;
   timeInForce?: TimeInForceValue;
+  /** Modal title; defaults to "Place Bid/Ask Order". Set when this order is the means to some other end, e.g. closing a position. */
+  title?: string;
+  /** Label of the confirm button; defaults to the title. */
+  executeLabel?: string;
+  /** Where "Back" on the review step goes. Without it the modal closes. */
+  onBack?: () => void;
 }
-
-/** Colour a figure by how much risk it carries: none, worth a look, or acting on. */
-type Tone = "neutral" | "caution" | "danger";
 
 const toneOf = (tier: MarginTier): Tone =>
   tier === "healthy" ? "neutral" : tier === "caution" ? "caution" : "danger";
@@ -119,6 +143,9 @@ export const PlaceOrderForm: FC<Props> = ({
   isMarketOrder = false,
   marketSlippage,
   timeInForce = TimeInForce.GTC,
+  title,
+  executeLabel,
+  onBack,
 }) => {
   // Conditionally use futures or perps create order hook
   const futuresCreateOrder = useCreateOrder();
@@ -521,12 +548,16 @@ export const PlaceOrderForm: FC<Props> = ({
     };
   })();
 
+  const defaultTitle = offsetPlan ? "Offset Order" : isBuy ? "Place Bid Order" : "Place Ask Order";
+  const modalTitle = title ?? defaultTitle;
+
   return (
     <TransactionForm
       onClose={closeForm}
-      title={offsetPlan ? "Offset Order" : isBuy ? "Place Bid Order" : "Place Ask Order"}
+      onBack={onBack}
+      title={modalTitle}
       description={""}
-      executeLabel={offsetPlan ? "Offset Order" : `Place ${isBuy ? "Bid" : "Ask"} Order`}
+      executeLabel={executeLabel ?? modalTitle}
       reviewForm={(_props) => (
         <Review>
           {/* What the order is — the terms the user just entered, in one glance. */}
@@ -846,7 +877,7 @@ export const PlaceOrderForm: FC<Props> = ({
       }
       transactionSteps={[
         {
-          label: offsetPlan ? "Offset Order" : `Place ${isBuy ? "Bid" : "Ask"} Order`,
+          label: executeLabel ?? modalTitle,
           action: async () => {
             // Check for conflicting order before proceeding. The offset path is
             // the deliberate resolution of that conflict, so it never applies.
@@ -989,158 +1020,6 @@ export const PlaceOrderForm: FC<Props> = ({
   );
 };
 
-const HelpTip = ({ title }: { title: string }) => (
-  <Tooltip title={title} arrow placement="top">
-    <HelpOutlineIcon sx={{ fontSize: 14, cursor: "help", color: tokens.text.muted }} />
-  </Tooltip>
-);
-
-/** One line of the cost card: label on the left, USDC on the right, optional hint under it. */
-const CostRow = ({
-  label,
-  tooltip,
-  value,
-  hint,
-  emphasis = false,
-  muted = false,
-}: {
-  label: string;
-  tooltip?: string;
-  value: ReactNode;
-  hint?: ReactNode;
-  emphasis?: boolean;
-  muted?: boolean;
-}) => (
-  <CostRowRoot>
-    <CostRowMain>
-      <CostLabel $emphasis={emphasis} $muted={muted}>
-        {label}
-        {tooltip && <HelpTip title={tooltip} />}
-      </CostLabel>
-      <CostValue $emphasis={emphasis} $muted={muted}>
-        {value}
-      </CostValue>
-    </CostRowMain>
-    {hint && <CostHint>{hint}</CostHint>}
-  </CostRowRoot>
-);
-
-/** `before → after`, with the after value carrying the emphasis and the risk colour. */
-const Delta = ({
-  before,
-  after,
-  tone = "neutral",
-}: {
-  before: string;
-  after: string;
-  tone?: Tone;
-}) => (
-  <>
-    <Muted>{before}</Muted>
-    <Arrow>→</Arrow>
-    <Balance $tone={tone}>{after}</Balance>
-  </>
-);
-
-const Review = styled("div")`
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-`;
-
-const Headline = styled("div")`
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  padding: 0.875rem 1rem;
-  background: ${tokens.surface.inputIsland};
-  border: 1px solid ${tokens.border.default};
-  border-radius: ${tokens.radius.md};
-`;
-
-const HeadlineTop = styled("div")`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-`;
-
-const SideBadge = styled("span")<{ $isBuy: boolean }>`
-  display: inline-block;
-  padding: 0.15rem 0.5rem;
-  border-radius: ${tokens.radius.sm};
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  background: ${(p) => (p.$isBuy ? tokens.trading.longHighlightBg : tokens.trading.shortHighlightBg)};
-  color: ${(p) => (p.$isBuy ? tokens.trading.long : tokens.trading.short)};
-`;
-
-const HeadlineMeta = styled("span")`
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: ${tokens.text.secondary};
-`;
-
-const HeadlineDelivery = styled("span")`
-  margin-left: auto;
-  font-size: 0.75rem;
-  color: ${tokens.text.secondary};
-  white-space: nowrap;
-
-  span {
-    color: ${tokens.text.muted};
-  }
-`;
-
-const HeadlineTitle = styled("div")`
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: ${tokens.text.onDark};
-  line-height: 1.3;
-  font-variant-numeric: tabular-nums;
-`;
-
-const HeadlineAt = styled("span")`
-  font-weight: 500;
-  color: ${tokens.text.secondary};
-`;
-
-const HeadlineDetail = styled("div")`
-  font-size: 0.8125rem;
-  color: ${tokens.text.secondary};
-`;
-
-/** Sits directly under the title as its sub-line: notional on the left, points on the right. */
-const HeadlineStats = styled("div")`
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0.25rem 1rem;
-`;
-
-const HeadlineStat = styled("div")`
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.4rem;
-  font-size: 0.875rem;
-  font-variant-numeric: tabular-nums;
-
-  span {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    color: ${tokens.text.secondary};
-  }
-
-  strong {
-    color: ${tokens.text.onDark};
-    font-weight: 600;
-  }
-`;
-
 const OffsetNote = styled("p")`
   margin: 0;
   padding: 0.75rem 1rem;
@@ -1155,127 +1034,4 @@ const OffsetNote = styled("p")`
     color: ${tokens.text.onDark};
     font-weight: 600;
   }
-`;
-
-const Section = styled("section")`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-`;
-
-const SectionTitle = styled("h3")`
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  margin: 0;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: ${tokens.text.secondary};
-`;
-
-const CostCard = styled("div")`
-  display: flex;
-  flex-direction: column;
-  gap: 0.625rem;
-  padding: 0.875rem 1rem;
-  border: 1px solid ${tokens.border.default};
-  border-radius: ${tokens.radius.md};
-`;
-
-const CostRowRoot = styled("div")`
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-`;
-
-const CostRowMain = styled("div")`
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 1rem;
-`;
-
-const CostLabel = styled("span")<{ $emphasis: boolean; $muted: boolean }>`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: ${(p) => (p.$emphasis ? "0.9375rem" : p.$muted ? "0.8125rem" : "0.875rem")};
-  font-weight: ${(p) => (p.$emphasis ? 600 : 400)};
-  color: ${(p) => (p.$emphasis ? tokens.text.onDark : p.$muted ? tokens.text.muted : tokens.text.secondary)};
-`;
-
-const CostValue = styled("span")<{ $emphasis: boolean; $muted: boolean }>`
-  display: inline-flex;
-  align-items: baseline;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  font-size: ${(p) => (p.$emphasis ? "1.125rem" : p.$muted ? "0.8125rem" : "0.9375rem")};
-  font-weight: ${(p) => (p.$emphasis ? 700 : 500)};
-  color: ${(p) => (p.$muted ? tokens.text.secondary : tokens.text.onDark)};
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-`;
-
-/** Full-white for the one figure that is a reward rather than a cost. */
-const Bright = styled("span")`
-  color: #fff;
-  font-weight: 600;
-`;
-
-const Muted = styled("span")`
-  color: ${tokens.text.muted};
-  font-weight: 400;
-`;
-
-const Arrow = styled("span")`
-  color: ${tokens.text.muted};
-  font-weight: 400;
-`;
-
-const Balance = styled("span")<{ $tone: Tone }>`
-  color: ${(p) =>
-    p.$tone === "danger"
-      ? tokens.trading.short
-      : p.$tone === "caution"
-        ? tokens.trading.highlight
-        : tokens.text.onDark};
-`;
-
-const CostHint = styled("div")`
-  font-size: 0.75rem;
-  line-height: 1.4;
-  color: ${tokens.text.muted};
-  font-variant-numeric: tabular-nums;
-`;
-
-/** A rule with its label sitting on the line: `IF FILLED ────────`. */
-const GroupDivider = styled("div")`
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  margin: 0.125rem 0;
-
-  span {
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: ${tokens.text.muted};
-    white-space: nowrap;
-  }
-
-  &::after {
-    content: "";
-    flex: 1;
-    border-top: 1px solid ${tokens.border.default};
-  }
-`;
-
-const CostDivider = styled("hr")`
-  margin: 0.125rem 0;
-  border: none;
-  border-top: 1px solid ${tokens.border.default};
 `;

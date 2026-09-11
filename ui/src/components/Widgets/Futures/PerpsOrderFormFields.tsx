@@ -1,11 +1,12 @@
 import { useState } from "react";
-import Slider from "@mui/material/Slider";
 import styled from "@mui/material/styles/styled";
 import { tokens } from "../../../styles/tokens";
 import {
   handleNumericDecimalInput6Decimals,
   handleNumericIntegerInput,
 } from "../../Forms/Shared/AmountInputForm";
+import { percentSliderProps, StyledSlider } from "../../Forms/Shared/StyledSlider";
+import { percentForQuantity, quantityAtPercent } from "../../../lib/sliderSnap";
 import { ModalCard } from "../../Modal.styled";
 
 export type AmountMode = "size" | "quantity";
@@ -93,25 +94,27 @@ export function usePerpsOrderForm({
     }
   };
 
+  // Same snapping as the order widget's slider (see lib/sliderSnap).
   const handleSliderChange = (_: Event, value: number | number[]) => {
     const pct = Array.isArray(value) ? value[0] : value;
     setSliderValue(pct);
     setAmountFromSlider(true);
+    const qty = pct === 100 ? maxQuantity : quantityAtPercent(pct, maxQuantity, quantityDecimals);
     if (amountMode === "size") {
-      if (pct === 100) {
-        setAmount(maxSize > 0 ? maxSize.toFixed(2) : "0");
-      } else {
-        const newSize = (maxSize * pct) / 100;
-        setAmount(newSize > 0 ? newSize.toFixed(2) : "0");
-      }
+      const size = qty * currentPrice;
+      setAmount(size > 0 ? size.toFixed(2) : "0");
     } else {
-      if (pct === 100) {
-        setAmount(maxQuantity > 0 ? maxQuantity.toFixed(quantityDecimals) : "0");
-      } else {
-        const newQty = (maxQuantity * pct) / 100;
-        setAmount(newQty > 0 ? newQty.toFixed(quantityDecimals) : "0");
-      }
+      setAmount(qty > 0 ? qty.toFixed(quantityDecimals) : "0");
     }
+  };
+
+  /**
+   * On release, for whole-contract quantities: park the thumb exactly where the
+   * quantity in the amount field sits, so the handle and the number agree.
+   */
+  const handleSliderCommitted = () => {
+    if (quantityDecimals !== 0 || maxQuantity <= 0) return;
+    setSliderValue(percentForQuantity(getCurrentQuantity(), maxQuantity));
   };
 
   const handleAmountModeChange = (mode: AmountMode) => {
@@ -169,6 +172,7 @@ export function usePerpsOrderForm({
     handlePriceChange,
     handleAmountChange,
     handleSliderChange,
+    handleSliderCommitted,
     handleAmountModeChange,
     incrementPrice,
     decrementPrice,
@@ -193,10 +197,17 @@ interface PerpsOrderFormFieldsProps {
   currentQuantity: number;
   currentSize: number;
   realizedPnl?: number | null;
+  /**
+   * Summarise only what the user did not type: the size when the amount is a
+   * quantity, the quantity when it is a size. Otherwise both rows are shown.
+   */
+  summaryCounterpartOnly?: boolean;
   onPriceChange: (price: string) => void;
   onAmountChange: (amount: string) => void;
   onAmountModeChange: (mode: AmountMode) => void;
   onSliderChange: (_: Event, value: number | number[]) => void;
+  /** Release: lets the form park the thumb on the snapped quantity. */
+  onSliderCommitted?: () => void;
   onIncrementPrice: () => void;
   onDecrementPrice: () => void;
 }
@@ -215,10 +226,12 @@ export const PerpsOrderFormFields = ({
   currentQuantity,
   currentSize,
   realizedPnl,
+  summaryCounterpartOnly = false,
   onPriceChange,
   onAmountChange,
   onAmountModeChange,
   onSliderChange,
+  onSliderCommitted,
   onIncrementPrice,
   onDecrementPrice,
 }: PerpsOrderFormFieldsProps) => (
@@ -280,32 +293,27 @@ export const PerpsOrderFormFields = ({
           <StyledSlider
             value={sliderValue}
             onChange={onSliderChange}
+            onChangeCommitted={onSliderCommitted}
             disabled={disabled}
-            min={0}
-            max={100}
-            marks={[
-              { value: 0, label: "0%" },
-              { value: 25, label: "25%" },
-              { value: 50, label: "50%" },
-              { value: 75, label: "75%" },
-              { value: 100, label: "100%" },
-            ]}
-            valueLabelDisplay="auto"
-            valueLabelFormat={(v) => `${v}%`}
+            {...percentSliderProps}
           />
         </SliderContainer>
       </InputGroup>
     </InputsSection>
 
     <OrderSummary>
-      <SummaryRow>
-        <SummaryLabel>{quantityLabel}</SummaryLabel>
-        <SummaryValue>{currentQuantity.toFixed(quantityDecimals)}</SummaryValue>
-      </SummaryRow>
-      <SummaryRow>
-        <SummaryLabel>{sizeLabel}</SummaryLabel>
-        <SummaryValue>{currentSize.toFixed(2)}</SummaryValue>
-      </SummaryRow>
+      {!(summaryCounterpartOnly && amountMode === "quantity") && (
+        <SummaryRow>
+          <SummaryLabel>{quantityLabel}</SummaryLabel>
+          <SummaryValue>{currentQuantity.toFixed(quantityDecimals)}</SummaryValue>
+        </SummaryRow>
+      )}
+      {!(summaryCounterpartOnly && amountMode === "size") && (
+        <SummaryRow>
+          <SummaryLabel>{sizeLabel}</SummaryLabel>
+          <SummaryValue>{currentSize.toFixed(2)}</SummaryValue>
+        </SummaryRow>
+      )}
       {realizedPnl != null && (
         <SummaryRow>
           <SummaryLabel>Expected Realized PnL</SummaryLabel>
@@ -506,85 +514,10 @@ export const AmountInput = styled("input")`
   border-radius: 6px;
 `;
 
+/* Full width like the order widget's: the bar spans the input above it and the
+   first/last labels sit flush with its edges. */
 export const SliderContainer = styled("div")`
-  padding: 0 1rem;
   margin-top: 0.5rem;
-`;
-
-export const StyledSlider = styled(Slider)`
-  color: ${tokens.text.primary};
-  height: 6px;
-  padding: 13px 0;
-
-  & .MuiSlider-thumb {
-    width: 18px;
-    height: 18px;
-    background-color: ${tokens.neutralButton.bg};
-    transition: all 0.2s ease;
-
-    &:hover,
-    &.Mui-focusVisible {
-      box-shadow: 0 0 0 8px ${tokens.overlay.white16};
-      background-color: ${tokens.neutralButton.hover};
-    }
-
-    &.Mui-active {
-      box-shadow: 0 0 0 14px ${tokens.overlay.white16};
-    }
-  }
-
-  & .MuiSlider-track {
-    height: 6px;
-    border: none;
-    background-color: ${tokens.neutralButton.bg};
-  }
-
-  & .MuiSlider-rail {
-    height: 6px;
-    background-color: ${tokens.surface.inputIsland};
-    opacity: 1;
-  }
-
-  & .MuiSlider-mark {
-    width: 2px;
-    height: 6px;
-    background-color: ${tokens.overlay.white50};
-    opacity: 1;
-  }
-
-  & .MuiSlider-markActive {
-    background-color: ${tokens.overlay.black30};
-  }
-
-  & .MuiSlider-markLabel {
-    color: ${tokens.text.secondary};
-    font-size: 0.75rem;
-    top: 26px;
-  }
-
-  & .MuiSlider-valueLabel {
-    background-color: ${tokens.surface.inputIsland};
-    color: #FFFFFF;
-    border-radius: 4px;
-    padding: 4px 8px;
-    font-size: 0.75rem;
-  }
-
-  &.Mui-disabled {
-    color: ${tokens.text.muted};
-
-    & .MuiSlider-thumb {
-      background-color: ${tokens.surface.tabMuted};
-    }
-
-    & .MuiSlider-track {
-      background-color: ${tokens.surface.tabMuted};
-    }
-
-    & .MuiSlider-mark {
-      background-color: ${tokens.slider.thumbMuted};
-    }
-  }
 `;
 
 export const OrderSummary = styled("div")`

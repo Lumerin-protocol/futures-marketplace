@@ -256,6 +256,7 @@ export const ModifyFuturesOrderModal = ({
       onAmountChange={form.handleAmountChange}
       onAmountModeChange={form.handleAmountModeChange}
       onSliderChange={form.handleSliderChange}
+      onSliderCommitted={form.handleSliderCommitted}
       onIncrementPrice={form.incrementPrice}
       onDecrementPrice={form.decrementPrice}
     />

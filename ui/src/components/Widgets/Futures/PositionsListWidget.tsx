@@ -10,7 +10,7 @@ import type { ContractMode } from "../../../types/types";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { FuturesTradesModal, type FuturesTradesModalSelection } from "./FuturesTradesModal";
-import type { CloseableFuturesPosition } from "./CloseFuturesPositionModal";
+import type { ClosablePosition } from "../../Forms/ClosePositionForm";
 import { LiquidationChip, formatLiquidatedQty } from "../../../lib/liquidation";
 
 const MARGIN_HINT =
@@ -29,7 +29,7 @@ interface PositionsListWidgetProps {
   positions: PositionBookPosition[];
   isLoading?: boolean;
   participantAddress?: `0x${string}`;
-  onClosePosition?: (position: CloseableFuturesPosition) => void;
+  onClosePosition?: (position: ClosablePosition) => void;
   contractMode?: ContractMode;
   balanceQuery: BalanceQueryResult;
 }
@@ -158,11 +158,13 @@ export const PositionsListWidget = ({
     positionType: string;
     netQuantity: number;
   }) => {
+    // The row's badge is the source of truth for direction; the session-level
+    // net quantity is signed the same way but is read here only for its size.
+    const size = BigInt(Math.abs(Math.round(groupedPosition.netQuantity)));
     onClosePosition?.({
-      pricePerDay: groupedPosition.pricePerDay,
-      expirationAt: groupedPosition.expirationAt,
-      positionType: groupedPosition.positionType,
-      netQuantity: groupedPosition.netQuantity,
+      netQuantity: groupedPosition.positionType === "Long" ? size : -size,
+      entryPrice: groupedPosition.pricePerDay,
+      expirationAt: BigInt(groupedPosition.expirationAt),
     });
   };
 
