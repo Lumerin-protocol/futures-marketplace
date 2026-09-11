@@ -1,9 +1,10 @@
 import styled from "@emotion/styled";
+import { css } from "@emotion/react";
 import { tokens } from "../styles/tokens";
 import { CloseIcon } from "./icons";
 import type { ComponentProps } from "react";
 
-export const ModalBox = styled("div")`
+export const ModalBox = styled.div`
   padding: 40px;
   max-width: 450px;
   text-align: left;
@@ -27,7 +28,12 @@ export const NetworkBox = styled(ModalBox)`
   }
 `;
 
-export const ModalCard = styled("div")<{ $compact?: boolean }>`
+const COMPACT_MAX_WIDTH = "460px";
+const COMPACT_PADDING = "2rem";
+const COMPACT_CLOSE_INSET = "1.25rem";
+
+/** Dialog's Paper: elevation 24, which is the top of Material's ramp. */
+export const ModalCard = styled.div<{ $compact?: boolean }>`
   background: ${tokens.modal.bg};
   border: 1px solid ${tokens.border.default};
   color: ${tokens.text.onDark};
@@ -35,24 +41,26 @@ export const ModalCard = styled("div")<{ $compact?: boolean }>`
   display: flex;
   flex-direction: column;
   margin: 3rem auto;
-  max-width: ${(p) => (p.$compact ? "460px" : "600px")};
-  padding: ${(p) => (p.$compact ? "2rem" : "2rem 4rem 4rem")};
-  box-shadow: ${tokens.shadow.level3};
+  max-width: 600px;
+  padding: 2rem 4rem 4rem;
+  box-shadow: ${tokens.shadow.elevation24};
 
   /* Compact cards pin the close button to the corner so it does not push the
      title down and the content starts at the same offset on every side. */
   ${(p) =>
     p.$compact &&
-    `
-    position: relative;
+    css`
+      max-width: ${COMPACT_MAX_WIDTH};
+      padding: ${COMPACT_PADDING};
+      position: relative;
 
-    .close {
-      position: absolute;
-      top: 1.25rem;
-      right: 1.25rem;
-      margin-left: 0;
-    }
-  `}
+      .close {
+        position: absolute;
+        top: ${COMPACT_CLOSE_INSET};
+        right: ${COMPACT_CLOSE_INSET};
+        margin-left: 0;
+      }
+    `}
 
   @media (max-width: 600px) {
     padding: 1rem 2rem 2rem;
@@ -85,21 +93,54 @@ export const ModalCard = styled("div")<{ $compact?: boolean }>`
   }
 `;
 
-const CloseButtonBase = styled("button")`
+/**
+ * IconButton, medium: a 24px glyph in 8px of padding, so the circle lands on
+ * Material's 40px target. The hover and focus washes are `action.hover` and
+ * `action.focus` at their dark-mode opacities.
+ */
+const CloseButtonBase = styled.button`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: none;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  position: relative;
+  margin: 0;
+  padding: 8px;
+  border: 0;
   border-radius: 50%;
-  background: transparent;
+  outline: 0;
+  background-color: transparent;
   color: #ffffff;
+  font-size: 1.5rem;
+  text-align: center;
+  text-decoration: none;
   cursor: pointer;
+  user-select: none;
+  vertical-align: middle;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 150ms ${tokens.motion.easeInOut} 0ms;
+
+  &::-moz-focus-inner {
+    border-style: none;
+  }
 
   &:hover {
-    background: ${tokens.overlay.white08};
+    background-color: ${tokens.overlay.white08};
+
+    @media (hover: none) {
+      background-color: transparent;
+    }
+  }
+
+  &:focus-visible {
+    background-color: ${tokens.overlay.white12};
+  }
+
+  &:disabled {
+    pointer-events: none;
+    color: ${tokens.text.disabled};
   }
 `;
 
@@ -109,7 +150,7 @@ export const ModalCloseButton = (props: ComponentProps<typeof CloseButtonBase>) 
 
 export const ModalCloseIcon = CloseIcon;
 
-export const ContractLink = styled("a")`
+export const ContractLink = styled.a`
   font-size: 0.8rem;
   margin-bottom: 1rem;
   color: ${tokens.brand.blue};
