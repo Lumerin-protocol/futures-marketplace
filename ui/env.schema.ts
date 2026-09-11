@@ -17,18 +17,6 @@ export const EnvSchema = Type.Object({
   REACT_APP_FUTURES_HIGH_PRICE_PERCENTAGE: Type.Integer({ minimum: 0, maximum: 300, default: 50 }),
   REACT_APP_FUTURES_TOKEN_ADDRESS: TypeEthAddress(),
   REACT_APP_GITBOOK_URL: Type.String({ format: "uri" }),
-  // Margin ratio (maintenance margin / balance) at which the portfolio panel
-  // starts warning. Liquidation happens at 100%, so both stay below it.
-  REACT_APP_MARGIN_RATIO_CAUTION_PERCENT: Type.Integer({
-    minimum: 0,
-    maximum: 100,
-    default: 60,
-  }),
-  REACT_APP_MARGIN_RATIO_DANGER_PERCENT: Type.Integer({
-    minimum: 0,
-    maximum: 100,
-    default: 80,
-  }),
   REACT_APP_MARKET_MAKER_ADDRESS: Type.Optional(TypeEthAddress()),
   REACT_APP_MULTICALL_ADDRESS: Type.Optional(TypeEthAddress()),
   REACT_APP_PAYMENT_SLIPPAGE_PERCENT: Type.Integer({ minimum: 0, maximum: 100, default: 1 }),

@@ -30,6 +30,14 @@ export interface MarginInputs {
    * pays for both legs' losses without either gain offsetting them.
    */
   unrealizedLossTerm: bigint;
+  /** The engine's spot shocks, needed to split the requirements into stress and loss. */
+  shocks: MarginShocks;
+}
+
+/** WAD-scaled spot shocks the engine stresses with; `imSpotShock > mmSpotShock`. */
+export interface MarginShocks {
+  imSpotShock: bigint;
+  mmSpotShock: bigint;
 }
 
 export interface MarginFigures {
@@ -39,7 +47,7 @@ export interface MarginFigures {
   marginUsed: bigint;
   /** Withdrawable and usable for new positions. */
   available: bigint;
-  /** `MM / balance * 100`, or `null` when there is no balance to divide by. */
+  /** `marginRatioPercent`, or `null` when there is nothing to divide by. */
   ratioPercent: number | null;
   /**
    * Capability flag rather than a risk level: the vault blocks withdrawals and
@@ -54,6 +62,7 @@ export function deriveMarginFigures({
   mm,
   netUnrealizedPnl,
   unrealizedLossTerm,
+  shocks,
 }: MarginInputs): MarginFigures {
   // The loss term is a component of IM, so this cannot go negative on a
   // consistent pair of reads. The two polls run on different cadences, though,
@@ -65,9 +74,48 @@ export function deriveMarginFigures({
     equity: balance + netUnrealizedPnl,
     marginUsed,
     available: balance > im ? balance - im : 0n,
-    ratioPercent: balance === 0n ? null : (Number(mm) / Number(balance)) * 100,
+    ratioPercent: marginRatioPercent(balance, im, mm, shocks),
     belowIM: balance < im,
   };
+}
+
+/**
+ * The margin ratio: maintenance stress ÷ equity, in percent.
+ *
+ * The engine's two checks are `balance ≥ IM` and `balance ≥ MM`, where each
+ * requirement is `stress(shock) + shared` and the shared part — fill loss,
+ * unrealized loss, funding owed — is the same in both (mirrors `_computeMargin`).
+ * A linear book's stress scales with the shock, so the checks are really
+ * `balance − shared ≥ stress_S` and `≥ stress_s`: equity, with losses counted
+ * and gains ignored exactly as the engine does, against a pure stress figure.
+ *
+ * This is the second check as a fraction. The stress is recovered from the two
+ * reads as `(IM − MM) · s / (S − s)` and the shared part as `MM − stress_s`, so
+ * no extra read is needed. Compared with the raw `MM / balance`, both ends are
+ * pinned regardless of the account's losses: 100% exactly at liquidation
+ * (`balance = MM`) and `s / S` exactly where balance meets IM. That makes the
+ * tier boundaries constants of the deployment (`thresholdsFromShocks`) rather
+ * than of the account.
+ *
+ * `null` with nothing to divide by (an empty account); `DISPLAY_RATIO_CAP` once
+ * equity is at or below zero, which is well past liquidation.
+ */
+export function marginRatioPercent(
+  balance: bigint,
+  im: bigint,
+  mm: bigint,
+  { imSpotShock, mmSpotShock }: MarginShocks,
+): number | null {
+  const S = Number(imSpotShock);
+  const s = Number(mmSpotShock);
+  // Degenerate shocks cannot come from a live engine; treat the gap as the
+  // stress itself rather than divide by zero.
+  const scale = S > s && s > 0 ? s / (S - s) : 1;
+  // IM ≥ MM on a consistent pair of reads; a mid-flight skew reads as no stress.
+  const stress = im > mm ? Number(im - mm) * scale : 0;
+  const equity = Number(balance - mm) + stress;
+  if (equity <= 0) return stress > 0 ? DISPLAY_RATIO_CAP : null;
+  return (stress / equity) * 100;
 }
 
 export type MarginTier = "healthy" | "caution" | "danger" | "liquidatable";
@@ -77,76 +125,56 @@ export interface MarginRatioThresholds {
   danger: number;
 }
 
-/**
- * How far the ratio has to fall back below a tier's entry point before the tier
- * clears. Without it a ratio sitting on a boundary would toggle the border and
- * the banner on every poll.
- */
-export const HYSTERESIS_POINTS = 5;
-
 /** The ratio at which the keeper can liquidate: `MM > balance`. */
 export const LIQUIDATABLE_PERCENT = 100;
 
 /** Past this the exact figure stops carrying information. */
 export const DISPLAY_RATIO_CAP = 999;
 
-export const MARGIN_RATIO_THRESHOLDS: MarginRatioThresholds = {
-  caution: Number(process.env.REACT_APP_MARGIN_RATIO_CAUTION_PERCENT || 60),
-  danger: Number(process.env.REACT_APP_MARGIN_RATIO_DANGER_PERCENT || 80),
-};
-
-const TIER_ORDER = ["healthy", "caution", "danger", "liquidatable"] as const;
-
-const rank = (tier: MarginTier): number => TIER_ORDER.indexOf(tier);
-
-/** The tier the ratio reaches on its own, ignoring where the account came from. */
-export function tierAtEntry(ratioPercent: number, thresholds: MarginRatioThresholds): MarginTier {
-  if (ratioPercent >= LIQUIDATABLE_PERCENT) return "liquidatable";
-  if (ratioPercent >= thresholds.danger) return "danger";
-  if (ratioPercent >= thresholds.caution) return "caution";
-  return "healthy";
+/**
+ * Where the tiers begin, as points of `marginRatioPercent`.
+ *
+ * The tiers are defined against the engine's own requirements: Caution once
+ * balance is below IM (the vault is already refusing withdrawals and new
+ * positions there), Danger once half of the cushion from IM down to MM is
+ * spent. Because the ratio is stress-over-equity, both land on constants of
+ * the shocks `S` (IM) and `s` (MM), whatever the account's losses:
+ *
+ *   balance = IM              ⇔  r = s / S
+ *   balance = (IM + MM) / 2   ⇔  r = 2s / (S + s)
+ *
+ * Rounded to whole points, which is how the ratio is shown.
+ */
+export function thresholdsFromShocks({ imSpotShock, mmSpotShock }: MarginShocks): MarginRatioThresholds {
+  const S = Number(imSpotShock);
+  const s = Number(mmSpotShock);
+  if (!(S > 0) || !(s > 0) || s >= S) return DEFAULT_MARGIN_RATIO_THRESHOLDS;
+  return {
+    caution: Math.round((s / S) * 100),
+    danger: Math.round(((2 * s) / (S + s)) * 100),
+  };
 }
 
-function exitPercent(tier: MarginTier, thresholds: MarginRatioThresholds): number {
-  switch (tier) {
-    // Being liquidatable is an on-chain fact, not a warning level. Holding the
-    // banner past the boundary would tell the user their positions can be
-    // closed at any moment when they no longer can.
-    case "liquidatable":
-      return LIQUIDATABLE_PERCENT;
-    case "danger":
-      return thresholds.danger - HYSTERESIS_POINTS;
-    case "caution":
-      return thresholds.caution - HYSTERESIS_POINTS;
-    default:
-      return Number.NEGATIVE_INFINITY;
-  }
-}
+/** `thresholdsFromShocks` at the shocks the engine ships with (IM 10%, MM 5%); used until they are read. */
+export const DEFAULT_MARGIN_RATIO_THRESHOLDS: MarginRatioThresholds = { caution: 50, danger: 67 };
 
 /**
- * The tier to show next, given the one currently on screen.
- *
- * Escalation is immediate — a jump straight from healthy to danger must not be
- * throttled — while de-escalation walks down one tier at a time and only once
- * the ratio has cleared each tier's exit threshold.
+ * The tier for a ratio. A pure function of the current reading, with no memory
+ * of the previous tier: each boundary is an engine fact (below IM, half-way to
+ * MM, liquidatable), so the colour should say exactly where the account is now
+ * and clear the moment it is no longer true.
  */
-export function nextTier(
-  previous: MarginTier,
+export function marginTier(
   ratioPercent: number | null,
-  thresholds: MarginRatioThresholds = MARGIN_RATIO_THRESHOLDS,
+  thresholds: MarginRatioThresholds = DEFAULT_MARGIN_RATIO_THRESHOLDS,
 ): MarginTier {
   // No balance to divide by, or no usable margin read: there is no ratio, so
   // there is no tier to be in.
   if (ratioPercent === null) return "healthy";
-
-  const reached = tierAtEntry(ratioPercent, thresholds);
-  if (rank(reached) >= rank(previous)) return reached;
-
-  let tier = previous;
-  while (rank(tier) > rank(reached) && ratioPercent < exitPercent(tier, thresholds)) {
-    tier = TIER_ORDER[rank(tier) - 1];
-  }
-  return tier;
+  if (ratioPercent >= LIQUIDATABLE_PERCENT) return "liquidatable";
+  if (ratioPercent >= thresholds.danger) return "danger";
+  if (ratioPercent >= thresholds.caution) return "caution";
+  return "healthy";
 }
 
 export const RESTRICTED_STATUS_COPY =

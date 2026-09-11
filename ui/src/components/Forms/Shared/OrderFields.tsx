@@ -261,12 +261,17 @@ export const SliderContainer = styled("div")`
   margin-top: 0.5rem;
 `;
 
-/** The row of segmented toggles above the fields: Limit/Market, time in force, leverage. */
+/**
+ * The row of segmented toggles above the fields: Limit/Market, time in force,
+ * leverage. One line on desktop: futures show GTC/IOC/FOK as buttons, perps
+ * fold them into `TifDropdown` so the row still fits beside the leverage
+ * toggle; wrapping is allowed only in the mobile half-width column.
+ */
 export const OrderTypeRow = styled("div")`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.5rem;
   padding-top: 0.25rem;
 
@@ -274,11 +279,61 @@ export const OrderTypeRow = styled("div")`
      leverage toggles take the same metrics as the order book's view switcher
      next to them, so both columns start at the same height. */
   @media (max-width: 768px) {
+    flex-wrap: wrap;
     gap: 0.3rem;
 
-    button {
+    button,
+    select {
       ${MOBILE_TOGGLE_METRICS}
     }
+  }
+`;
+
+/**
+ * A native select drawn as a single active segment of `ModeToggle`, for the
+ * time-in-force choice on perps, where the row also carries the leverage
+ * toggle and three separate GTC/IOC/FOK buttons would not fit on one line.
+ */
+export const TifDropdown = styled("select")`
+  appearance: none;
+  box-sizing: border-box;
+  padding: 0.25rem 1.375rem 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: normal;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid ${tokens.overlay.white15};
+  border-radius: 6px;
+  background-color: ${tokens.surface.tabActive};
+  color: #ffffff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23ffffff'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  background-size: 8px 5px;
+  transition: background-color 0.15s ease;
+
+  &:hover:not(:disabled) {
+    background-color: ${tokens.surface.tabHover};
+  }
+
+  &:focus {
+    outline: none;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  option {
+    background: ${tokens.surface.inputIsland};
+    color: ${tokens.text.onDark};
+  }
+
+  @media (max-width: 768px) {
+    padding-right: 1.1rem;
+    background-position: right 0.35rem center;
   }
 `;
 
@@ -293,6 +348,7 @@ export const ModeButton = styled("button")<{ $active: boolean }>`
   padding: 0.25rem 0.625rem;
   font-size: 0.75rem;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
   border: none;
   transition: background 0.15s ease, color 0.15s ease;

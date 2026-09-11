@@ -44,6 +44,7 @@ import {
   PriceInputContainer,
   pulseHighlight,
   SliderContainer,
+  TifDropdown,
 } from "../../Forms/Shared/OrderFields";
 import { useSimulatePerpsOrder } from "../../../hooks/data/perps/useSimulatePerpsOrder";
 import { useSimulateFuturesOrder } from "../../../hooks/data/useSimulateFuturesOrder";
@@ -60,6 +61,12 @@ const TIF_TOOLTIPS = {
   IOC: "Immediate or Cancel — fill what you can right now; cancel anything left. Reverts if nothing fills.",
   FOK: "Fill or Kill — fill the entire size immediately, or cancel the whole order. No partial fills.",
 } as const;
+
+const TIF_TOOLTIP_BY_VALUE: Record<TimeInForceValue, string> = {
+  [TimeInForce.GTC]: TIF_TOOLTIPS.GTC,
+  [TimeInForce.IOC]: TIF_TOOLTIPS.IOC,
+  [TimeInForce.FOK]: TIF_TOOLTIPS.FOK,
+};
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -1256,43 +1263,60 @@ export const PlaceOrderWidget = ({
                 </ModeButton>
               </ModeToggle>
 
-              <ModeToggle>
-                {orderType === "limit" && (
-                  <Tooltip title={TIF_TOOLTIPS.GTC} arrow>
+              {contractMode === "perpetual" ? (
+                // Perps also carry the leverage toggle on this row, so the
+                // three TIF buttons collapse into one dropdown to stay on a line.
+                <Tooltip title={TIF_TOOLTIP_BY_VALUE[timeInForce]} arrow>
+                  <TifDropdown
+                    aria-label="Time in force"
+                    value={timeInForce}
+                    onChange={(e) => setTimeInForce(Number(e.target.value) as TimeInForceValue)}
+                    disabled={showOrderForm}
+                  >
+                    {orderType === "limit" && <option value={TimeInForce.GTC}>GTC</option>}
+                    <option value={TimeInForce.IOC}>IOC</option>
+                    <option value={TimeInForce.FOK}>FOK</option>
+                  </TifDropdown>
+                </Tooltip>
+              ) : (
+                <ModeToggle>
+                  {orderType === "limit" && (
+                    <Tooltip title={TIF_TOOLTIPS.GTC} arrow>
+                      <span style={{ display: "inline-flex" }}>
+                        <ModeButton
+                          $active={timeInForce === TimeInForce.GTC}
+                          onClick={() => setTimeInForce(TimeInForce.GTC)}
+                          disabled={showOrderForm}
+                        >
+                          GTC
+                        </ModeButton>
+                      </span>
+                    </Tooltip>
+                  )}
+                  <Tooltip title={TIF_TOOLTIPS.IOC} arrow>
                     <span style={{ display: "inline-flex" }}>
                       <ModeButton
-                        $active={timeInForce === TimeInForce.GTC}
-                        onClick={() => setTimeInForce(TimeInForce.GTC)}
+                        $active={timeInForce === TimeInForce.IOC}
+                        onClick={() => setTimeInForce(TimeInForce.IOC)}
                         disabled={showOrderForm}
                       >
-                        GTC
+                        IOC
                       </ModeButton>
                     </span>
                   </Tooltip>
-                )}
-                <Tooltip title={TIF_TOOLTIPS.IOC} arrow>
-                  <span style={{ display: "inline-flex" }}>
-                    <ModeButton
-                      $active={timeInForce === TimeInForce.IOC}
-                      onClick={() => setTimeInForce(TimeInForce.IOC)}
-                      disabled={showOrderForm}
-                    >
-                      IOC
-                    </ModeButton>
-                  </span>
-                </Tooltip>
-                <Tooltip title={TIF_TOOLTIPS.FOK} arrow>
-                  <span style={{ display: "inline-flex" }}>
-                    <ModeButton
-                      $active={timeInForce === TimeInForce.FOK}
-                      onClick={() => setTimeInForce(TimeInForce.FOK)}
-                      disabled={showOrderForm}
-                    >
-                      FOK
-                    </ModeButton>
-                  </span>
-                </Tooltip>
-              </ModeToggle>
+                  <Tooltip title={TIF_TOOLTIPS.FOK} arrow>
+                    <span style={{ display: "inline-flex" }}>
+                      <ModeButton
+                        $active={timeInForce === TimeInForce.FOK}
+                        onClick={() => setTimeInForce(TimeInForce.FOK)}
+                        disabled={showOrderForm}
+                      >
+                        FOK
+                      </ModeButton>
+                    </span>
+                  </Tooltip>
+                </ModeToggle>
+              )}
 
               {contractMode === "perpetual" && (
                 <ModeToggle>

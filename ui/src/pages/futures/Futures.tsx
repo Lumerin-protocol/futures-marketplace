@@ -506,23 +506,31 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   );
 };
 
-// 3-column grid: Chart (65%) | Order Book (35%) | Right Panel (fixed 300px)
+// 3-column grid: Chart (65%) | Order Book (35%) | Right Panel (fixed 340px)
+//
+// The right panel's width is the floor the Place Order toggles need to sit on
+// one line: Limit/Market · GTC/IOC/FOK · leverage plus the widget's 1rem side
+// padding come to ~325px at the toggles' 12px type. It no longer narrows at
+// the 1400/1100px breakpoints, because at 300px or less that row wrapped.
+//
+// The market row (chart + order book) is a definite track, not `auto`. The
+// right panel spans rows 2–3, and when a spanning item is taller than the rows
+// it spans, the grid hands the excess to its spanned `auto` tracks equally — so
+// every line the Place Order form gained or lost (a summary row appearing) used
+// to move the chart and the book by half that amount. A definite track takes
+// no share; all of it goes to the tables row beneath. The height follows the
+// viewport within the bounds the two widgets were designed for, and the chart
+// canvas fills whatever it gets.
 const FuturesContainer = styled("div")`
+  --market-row: clamp(350px, 58vh, 540px);
+
   display: grid;
   grid-template-columns: minmax(0, 13fr) minmax(0, 7fr) 300px;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto var(--market-row) auto;
   gap: 1rem;
   width: 100%;
   margin-top: 10px;
   align-items: start;
-
-  @media (max-width: 1400px) {
-    grid-template-columns: minmax(0, 13fr) minmax(0, 7fr) 280px;
-  }
-
-  @media (max-width: 1100px) {
-    grid-template-columns: minmax(0, 13fr) minmax(0, 7fr) 260px;
-  }
 
   /* Tablet: collapse to single column */
   @media (max-width: 1024px) {
@@ -537,12 +545,11 @@ const TradingHeaderArea = styled("div")`
   grid-row: 1;
 `;
 
-// Row 2, Col 1: Chart — sets the row height
+// Row 2, Col 1: Chart — fills the market row (see FuturesContainer)
 const ChartArea = styled("div")`
   grid-column: 1;
   grid-row: 2;
   min-width: 0;
-  min-height: 380px;
   height: 100%;
 
   > * {
@@ -553,29 +560,25 @@ const ChartArea = styled("div")`
   @media (max-width: 1024px) {
     grid-column: 1;
     grid-row: auto;
-    min-height: 300px;
   }
 `;
 
 // Row 2, Col 2: Order Book
-// Stretches to match the chart column's height so the two blocks line up, but
-// is clamped between a 437px floor (so it never collapses to a few records) and
-// a 540px cap (so a very tall chart doesn't drag it oversized).
+// Stretches to the market row so the two blocks line up. The floor and cap
+// bracket the row's own bounds on desktop and only bite on the tablet stack,
+// where the row is content-sized: a 437px floor so the book never collapses
+// to a few records, and no cap.
 //
 // The child is absolutely positioned to fill this area so its own content never
-// contributes to the (content-sized `auto`) grid row. Without this the tall
-// Trades list would inflate the row to the 540px cap while the internally
-// scrolled order book left it at the chart's height — giving two different
-// heights per tab. With it, only the chart drives the row and the order book
-// fills that height identically across tabs, modes, and data density.
+// contributes to grid sizing. Without this the tall Trades list and the
+// internally scrolled order book would ask for different heights per tab; with
+// it the book fills the row identically across tabs, modes, and data density.
 const OrderBookArea = styled("div")`
   grid-column: 2;
   grid-row: 2;
   min-width: 0;
   position: relative;
   align-self: stretch;
-  min-height: 437px;
-  max-height: 540px;
 
   > * {
     position: absolute;

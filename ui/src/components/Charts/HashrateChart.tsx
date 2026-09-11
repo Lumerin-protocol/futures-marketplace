@@ -143,14 +143,23 @@ const LegendCheckbox = styled("span")<{ $color: string; $checked: boolean }>`
   line-height: 1;
 `;
 
+/* Takes whatever height the widget has left after the title and controls. In a
+   content-sized parent (tablet, mobile) that is the canvas's own basis below. */
 const ChartArea = styled("div")`
   position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
 `;
 
+/* Grows and shrinks with the space above (the chart is `autoSize`d, so it
+   follows); ${CHART_HEIGHT}px is what it asks for when nothing constrains it. */
 const ChartCanvas = styled("div")`
   width: 100%;
-  height: ${CHART_HEIGHT}px;
+  flex: 1 1 ${CHART_HEIGHT}px;
+  min-height: 0;
 `;
 
 const TooltipBox = styled("div")`
