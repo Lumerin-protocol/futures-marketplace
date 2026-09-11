@@ -1,5 +1,5 @@
 import type { FC } from "react";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { tokens } from "../styles/tokens";
 
 interface DateTimeCellProps {
@@ -56,7 +56,7 @@ export const DateTimeCell: FC<DateTimeCellProps> = ({
   );
 };
 
-const Wrapper = styled("div")`
+const Wrapper = styled.div`
   display: flex;
   flex-direction: column;
   line-height: 1.3;

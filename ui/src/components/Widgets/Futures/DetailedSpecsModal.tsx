@@ -1,5 +1,5 @@
 import { tokens } from "../../../styles/tokens";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { Tooltip } from "../../Tooltip";
 import { useMemo, useState, type ReactNode } from "react";
 import { formatHashratePHPS, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
@@ -459,14 +459,14 @@ const SpecsShell = ({ children }: { children: ReactNode }) => (
   </ModalContainer>
 );
 
-const ModalContainer = styled("div")`
+const ModalContainer = styled.div`
   max-height: 70vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 `;
 
-const ModalHeader = styled("div")`
+const ModalHeader = styled.div`
   flex-shrink: 0;
   padding: 0 1rem;
 
@@ -478,19 +478,19 @@ const ModalHeader = styled("div")`
   }
 `;
 
-const ScrollBody = styled("div")`
+const ScrollBody = styled.div`
   flex: 1;
   overflow-y: auto;
   /* Extra right padding so content doesn't sit under the scrollbar when it appears. */
   padding: 0 1.75rem 0 1rem;
 `;
 
-const LoadingText = styled("div")`
+const LoadingText = styled.div`
   color: ${tokens.text.secondary};
   font-size: 0.875rem;
 `;
 
-const SpecSection = styled("div")`
+const SpecSection = styled.div`
   margin-bottom: 1.5rem;
 
   &:last-child {
@@ -498,7 +498,7 @@ const SpecSection = styled("div")`
   }
 `;
 
-const SectionTitle = styled("h3")`
+const SectionTitle = styled.h3`
   font-size: 0.75rem;
   font-weight: 700;
   color: ${tokens.text.secondary};
@@ -508,7 +508,7 @@ const SectionTitle = styled("h3")`
   border-bottom: 1px solid ${tokens.overlay.white10};
 `;
 
-const SpecItem = styled("div")`
+const SpecItem = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -519,13 +519,13 @@ const SpecItem = styled("div")`
   }
 `;
 
-const SpecLabel = styled("span")`
+const SpecLabel = styled.span`
   font-size: 0.875rem;
   color: ${tokens.text.secondary};
   flex-shrink: 0;
 `;
 
-const SpecValue = styled("span")`
+const SpecValue = styled.span`
   font-size: 0.875rem;
   font-weight: 500;
   color: ${tokens.text.onDark};
@@ -533,14 +533,14 @@ const SpecValue = styled("span")`
   margin-left: 1rem;
 `;
 
-const AddressWrapper = styled("div")`
+const AddressWrapper = styled.div`
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
   margin-left: 1rem;
 `;
 
-const AddressMono = styled("span")`
+const AddressMono = styled.span`
   font-family: monospace;
   font-size: 0.75rem;
   font-weight: 500;
@@ -548,7 +548,7 @@ const AddressMono = styled("span")`
   cursor: default;
 `;
 
-const CopyButton = styled("button")`
+const CopyButton = styled.button`
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -566,7 +566,7 @@ const CopyButton = styled("button")`
   }
 `;
 
-const SpecLink = styled("a")`
+const SpecLink = styled.a`
   font-size: 0.875rem;
   font-weight: 500;
   color: ${tokens.text.onDark};

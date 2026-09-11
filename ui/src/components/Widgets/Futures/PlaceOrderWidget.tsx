@@ -1,5 +1,4 @@
-import styled from "@emotion/styled";
-import { css } from "@emotion/react";
+import { styled, css } from "next-yak";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { type ComponentProps, type CSSProperties, useState, useEffect, useId, useMemo, useRef } from "react";
 import { SliderMark } from "../../Slider";
@@ -42,7 +41,7 @@ import {
   OrderTypeRow,
   PriceButton,
   PriceInputContainer,
-  pulseHighlight,
+  highlightedPulse,
   SliderContainer,
   TifDropdown,
 } from "../../Forms/Shared/OrderFields";
@@ -1832,7 +1831,7 @@ const PlaceOrderContainer = styled(SmallWidget)`
   }
 `;
 
-const MainSection = styled("div")`
+const MainSection = styled.div`
   display: flex;
   width: 100%;
   flex-direction: column;
@@ -1845,7 +1844,7 @@ const MainSection = styled("div")`
   }
 `;
 
-const InputSection = styled("div")`
+const InputSection = styled.div`
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -1853,14 +1852,14 @@ const InputSection = styled("div")`
   width: 100%;
 `;
 
-const _MinMarginLabel = styled("div")`
+const _MinMarginLabel = styled.div`
   font-size: 0.75rem;
   color: ${tokens.text.secondary};
   margin-top: 0.25rem;
   text-align: center;
 `;
 
-const _ExpectedQuantityLabel = styled("div")`
+const _ExpectedQuantityLabel = styled.div`
   font-size: 0.75rem;
   color: ${tokens.accent.main};
   margin-top: 0.25rem;
@@ -1870,13 +1869,13 @@ const _ExpectedQuantityLabel = styled("div")`
 
 
 /** Tooltip anchor: a disabled button fires no pointer events, so the wrapper takes them. */
-const ButtonSlot = styled("span")`
+const ButtonSlot = styled.span`
   display: flex;
   flex: 1;
   min-width: 0;
 `;
 
-const ButtonSection = styled("div")`
+const ButtonSection = styled.div`
   gap: 0.75rem;
   flex-shrink: 0;
   align-self: end;
@@ -1906,7 +1905,7 @@ const ButtonSection = styled("div")`
   }
 `;
 
-const BuyButton = styled("button")<{ $isHighlighted?: boolean; $isCapped?: boolean }>`
+const BuyButton = styled.button<{ $isHighlighted?: boolean; $isCapped?: boolean }>`
   width: 100%;
   padding: 0.875rem 1rem;
   background: ${tokens.trading.long};
@@ -1918,7 +1917,7 @@ const BuyButton = styled("button")<{ $isHighlighted?: boolean; $isCapped?: boole
   cursor: pointer;
   transition: transform 0.1s ease;
   min-width: 120px;
-  animation: ${(props) => (props.$isHighlighted ? css`${pulseHighlight} 1.5s ease-in-out infinite` : "none")};
+  ${(props) => props.$isHighlighted && highlightedPulse};
   &:hover:not(:disabled) {
     background: ${tokens.trading.longHover};
     transform: translateY(-1px);
@@ -1948,7 +1947,7 @@ const BuyButton = styled("button")<{ $isHighlighted?: boolean; $isCapped?: boole
     `}
 `;
 
-const SellButton = styled("button")<{ $isHighlighted?: boolean; $isCapped?: boolean }>`
+const SellButton = styled.button<{ $isHighlighted?: boolean; $isCapped?: boolean }>`
   width: 100%;
   padding: 0.875rem 1rem;
   background: ${tokens.trading.short};
@@ -1960,7 +1959,7 @@ const SellButton = styled("button")<{ $isHighlighted?: boolean; $isCapped?: bool
   cursor: pointer;
   transition: transform 0.1s ease;
   min-width: 120px;
-  animation: ${(props) => (props.$isHighlighted ? css`${pulseHighlight} 1.5s ease-in-out infinite` : "none")};
+  ${(props) => props.$isHighlighted && highlightedPulse};
   &:hover:not(:disabled) {
     background: ${tokens.trading.shortHover};
     transform: translateY(-1px);
@@ -1990,7 +1989,7 @@ const SellButton = styled("button")<{ $isHighlighted?: boolean; $isCapped?: bool
     `}
 `;
 
-const OrderSummary = styled("div")`
+const OrderSummary = styled.div`
   width: 100%;
   border: 1px solid ${tokens.border.default};
   border-radius: ${tokens.radius.md};
@@ -2001,7 +2000,7 @@ const OrderSummary = styled("div")`
   background: ${tokens.surface.inputIsland};
 `;
 
-const OrderSummaryRow = styled("div")`
+const OrderSummaryRow = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -2053,7 +2052,7 @@ const CapAwareMark = (props: Record<string, unknown>) => {
 };
 
 /** Same tick as the quarter marks, just coloured for the side it caps. */
-const CapMark = styled("span")<{ $color: string }>`
+const CapMark = styled.span<{ $color: string }>`
   position: absolute;
   top: 50%;
   /* Wider than the visible tick so it can actually be hovered for the tooltip. */
@@ -2076,14 +2075,14 @@ const CapMark = styled("span")<{ $color: string }>`
   }
 `;
 
-const _SliderInfoContainer = styled("div")`
+const _SliderInfoContainer = styled.div`
   display: flex;
   justify-content: center;
   align-items: center;
   margin-top: 0.25rem;
 `;
 
-const _SliderInfo = styled("span")`
+const _SliderInfo = styled.span`
   color: ${tokens.text.primary};
   font-weight: 500;
   text-align: center;

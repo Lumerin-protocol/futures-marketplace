@@ -1,11 +1,11 @@
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { tokens } from "../../../styles/tokens";
 
 /**
  * Header action for pulling every open order at once. Same treatment as the
  * per-row Modify / Cancel buttons so the table reads as one set of controls.
  */
-export const CancelAllButton = styled("button")`
+export const CancelAllButton = styled.button`
   flex: none;
   padding: 0.5rem 0.875rem;
   background: ${tokens.neutralButton.bg};

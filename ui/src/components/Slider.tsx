@@ -1,5 +1,4 @@
-import styled from "@emotion/styled";
-import { css } from "@emotion/react";
+import { css, styled } from "next-yak";
 import {
   type CSSProperties,
   type ChangeEvent,

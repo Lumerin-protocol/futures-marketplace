@@ -1,4 +1,4 @@
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { tokens } from "../../../styles/tokens";
 import { useRecentTrades } from "../../../hooks/data/useRecentTrades";
 import { useFuturesTokenInfo } from "../../../hooks/data/useFuturesTokenInfo";
@@ -71,13 +71,13 @@ export const TradesList = ({ contractMode = "futures" }: TradesListProps) => {
   );
 };
 
-const Container = styled("div")`
+const Container = styled.div`
   width: 100%;
   display: flex;
   flex-direction: column;
 `;
 
-const ColumnHeader = styled("div")`
+const ColumnHeader = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   position: sticky;
@@ -115,7 +115,7 @@ const ColumnHeader = styled("div")`
   }
 `;
 
-const Row = styled("div")`
+const Row = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   align-items: center;
@@ -137,17 +137,17 @@ const Row = styled("div")`
   }
 `;
 
-const PriceCol = styled("span")<{ $side: "buy" | "sell" }>`
+const PriceCol = styled.span<{ $side: "buy" | "sell" }>`
   text-align: left;
   color: ${(props) => (props.$side === "buy" ? tokens.trading.long : tokens.trading.short)};
 `;
 
-const AmountCol = styled("span")`
+const AmountCol = styled.span`
   text-align: right;
   color: ${tokens.text.onDark};
 `;
 
-const TimeCol = styled("div")`
+const TimeCol = styled.div`
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -155,7 +155,7 @@ const TimeCol = styled("div")`
   color: ${tokens.text.secondary};
 `;
 
-const TxLink = styled("a")`
+const TxLink = styled.a`
   display: inline-flex;
   align-items: center;
   color: ${tokens.trading.info};
@@ -166,7 +166,7 @@ const TxLink = styled("a")`
   }
 `;
 
-const StateRow = styled("div")`
+const StateRow = styled.div`
   text-align: center;
   padding: 2rem 0.5rem;
   color: ${tokens.text.muted};

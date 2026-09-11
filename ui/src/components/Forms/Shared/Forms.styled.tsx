@@ -1,6 +1,6 @@
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 
-export const InputWrapper = styled("div")`
+export const InputWrapper = styled.div`
   width: 100%;
   max-width: 400px;
   margin-top: 1.3rem;

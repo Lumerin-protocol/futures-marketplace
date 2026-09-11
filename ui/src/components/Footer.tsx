@@ -4,7 +4,7 @@ import { faTelegram } from "@fortawesome/free-brands-svg-icons/faTelegram";
 import { faTiktok } from "@fortawesome/free-brands-svg-icons/faTiktok";
 import { faXTwitter } from "@fortawesome/free-brands-svg-icons/faXTwitter";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { tokens } from "../styles/tokens";
 import { FlagCircleIcon, HelpIcon, ShieldIcon } from "./icons";
 
@@ -52,13 +52,13 @@ export const Footer = () => {
   );
 };
 
-const FooterWrapper = styled("footer")`
+const FooterWrapper = styled.footer`
   width: 100%;
   margin-top: auto;
   padding: 2rem 0;
 `;
 
-const FooterContent = styled("div")`
+const FooterContent = styled.div`
   max-width: 1920px;
   margin: 0 auto;
   padding: 0 1.5rem;
@@ -75,7 +75,7 @@ const FooterContent = styled("div")`
   }
 `;
 
-const _SectionTitle = styled("h3")`
+const _SectionTitle = styled.h3`
   color: ${tokens.text.onDark};
   font-size: 0.875rem;
   font-weight: 600;
@@ -84,12 +84,12 @@ const _SectionTitle = styled("h3")`
   letter-spacing: 0.05em;
 `;
 
-const LeftSection = styled("div")`
+const LeftSection = styled.div`
   display: flex;
   flex-direction: column;
 `;
 
-const LinksRow = styled("div")`
+const LinksRow = styled.div`
   display: flex;
   gap: 1.5rem;
   flex-wrap: wrap;
@@ -99,7 +99,7 @@ const LinksRow = styled("div")`
   }
 `;
 
-const ResourceLink = styled("a")`
+const ResourceLink = styled.a`
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -113,7 +113,7 @@ const ResourceLink = styled("a")`
   }
 `;
 
-const RightSection = styled("div")`
+const RightSection = styled.div`
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -123,12 +123,12 @@ const RightSection = styled("div")`
   }
 `;
 
-const SocialsRow = styled("div")`
+const SocialsRow = styled.div`
   display: flex;
   gap: 1rem;
 `;
 
-const SocialLink = styled("a")`
+const SocialLink = styled.a`
   display: flex;
   align-items: center;
   justify-content: center;
@@ -146,7 +146,7 @@ const SocialLink = styled("a")`
   }
 `;
 
-const VersionText = styled("div")`
+const VersionText = styled.div`
   font-size: 0.75rem;
   color: ${tokens.text.footerSubtle};
   margin-top: 1rem;

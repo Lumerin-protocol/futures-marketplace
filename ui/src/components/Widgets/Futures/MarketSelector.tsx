@@ -1,5 +1,5 @@
 import { MenuItem, Select } from "../../Select";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import HpdxLogomark from "../../../images/icons/hpdx-logomark.svg?react";
 import { tokens } from "../../../styles/tokens";
 import {
@@ -142,7 +142,7 @@ const TriggerLogo = styled(HpdxLogomark)`
 
 /* The two lines sit tight against each other so they read as one label rather
    than as two stacked stats. */
-const TriggerValue = styled("span")`
+const TriggerValue = styled.span`
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -150,7 +150,7 @@ const TriggerValue = styled("span")`
 
 /* A step above the 1rem/600 the header stats use, so the instrument reads as the
    page's subject and the stats as facts about it. */
-const TriggerLabel = styled("span")`
+const TriggerLabel = styled.span`
   font-size: 1.15rem;
   font-weight: 700;
   line-height: 1.15;
@@ -162,7 +162,7 @@ const TriggerLabel = styled("span")`
   }
 `;
 
-const TriggerMeta = styled("span")`
+const TriggerMeta = styled.span`
   font-size: 0.6rem;
   font-weight: 500;
   line-height: 1.1;
@@ -172,7 +172,7 @@ const TriggerMeta = styled("span")`
   white-space: nowrap;
 `;
 
-const OptionRow = styled("span")`
+const OptionRow = styled.span`
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -180,7 +180,7 @@ const OptionRow = styled("span")`
   gap: 1.5rem;
 `;
 
-const OptionMeta = styled("span")`
+const OptionMeta = styled.span`
   font-size: 0.75rem;
   color: ${tokens.text.secondary};
   flex-shrink: 0;

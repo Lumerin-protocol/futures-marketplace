@@ -1,6 +1,6 @@
 import { tokens } from "../../../styles/tokens";
 import { useState } from "react";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import type { Participant, ParticipantOrder } from "../../../hooks/data/getUserFuturesOrders";
 import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
@@ -193,7 +193,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, accountBa
 
 // Flat section rather than a card: the tab widget already draws the border and
 // pads its content, so a SmallWidget here would nest a second card inside it.
-const OrdersContainer = styled("div")`
+const OrdersContainer = styled.div`
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -207,7 +207,7 @@ const OrdersContainer = styled("div")`
   }
 `;
 
-const TableContainer = styled("div")`
+const TableContainer = styled.div`
   width: 100%;
   overflow-x: auto;
   
@@ -226,7 +226,7 @@ const TableContainer = styled("div")`
   }
 `;
 
-const Table = styled("table")`
+const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
   min-width: 400px;
@@ -259,7 +259,7 @@ const Table = styled("table")`
   }
 `;
 
-const TableRow = styled("tr")`
+const TableRow = styled.tr`
   &:hover {
     background-color: ${tokens.overlay.white02};
   }
@@ -269,7 +269,7 @@ const TableRow = styled("tr")`
   }
 `;
 
-const TypeBadge = styled("span")<{ $type: string }>`
+const TypeBadge = styled.span<{ $type: string }>`
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
@@ -279,7 +279,7 @@ const TypeBadge = styled("span")<{ $type: string }>`
   color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
-const _StatusBadge = styled("span")<{ $status: string }>`
+const _StatusBadge = styled.span<{ $status: string }>`
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
@@ -300,13 +300,13 @@ const _StatusBadge = styled("span")<{ $status: string }>`
   color: ${(props) => getStatusColor(props.$status)};
 `;
 
-const ActionButtons = styled("div")`
+const ActionButtons = styled.div`
   display: flex;
   gap: 0.5rem;
   align-items: center;
 `;
 
-const ModifyButton = styled("button")`
+const ModifyButton = styled.button`
   padding: 0.5rem 0.875rem;
   background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};
@@ -333,7 +333,7 @@ const ModifyButton = styled("button")`
   }
 `;
 
-const CancelButton = styled("button")`
+const CancelButton = styled.button`
   padding: 0.5rem 0.875rem;
   background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};
@@ -360,7 +360,7 @@ const CancelButton = styled("button")`
   }
 `;
 
-const EmptyState = styled("div")`
+const EmptyState = styled.div`
   text-align: center;
   padding: 1rem 2rem 4rem 2rem;
   color: ${tokens.text.muted};
