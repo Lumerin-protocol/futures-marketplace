@@ -1,13 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { graphqlRequest } from "./graphql";
-import { HistoricalPositionsQuery } from "./graphql-queries";
-import { toFuturesSessionTrade, type FuturesSessionTrade } from "./getUserFuturesPositions";
+import { sessionIsLong } from "../../lib/positionDirection";
+import { HistoricalPositionsQuery } from "./queries/futures";
 
 export const HISTORICAL_POSITIONS_QK = "HistoricalPositions";
 
 const PAGE_SIZE = 100;
-
-const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`;
 
 export type HistoricalPosition = {
   id: string;
@@ -26,8 +24,10 @@ export type HistoricalPosition = {
   /// Realized PnL for the session as reported by the indexer. Replaces the
   /// legacy `buyerPnl` / `sellerPnl` split.
   pnl: number;
-  /// Direction of the closed session, inferred from the signed sum of the
-  /// underlying trade quantities.
+  /// Direction of the closed session, from `sessionIsLong`.
+  ///
+  /// A closed session is flat, so `netQuantity` cannot answer this; it is
+  /// resolved from the one fill the query carries for the purpose.
   isLong: boolean;
   /// Cumulative qty closed during the session's lifetime (mirrors
   /// `PositionSession.closedQuantity` on the indexer).
@@ -35,9 +35,12 @@ export type HistoricalPosition = {
   /// Cumulative qty force-closed via liquidation during the session's lifetime
   /// (mirrors `PositionSession.liquidatedQuantity`). 0 if never liquidated.
   liquidatedQuantity: number;
-  /// Peak signed net quantity reached during the session's lifetime
-  /// (mirrors `PositionSession.maxQuantity` on the indexer). Positive for
-  /// long sessions, negative for short sessions. Use `Math.abs` for display.
+  /// Peak net quantity reached during the session's lifetime (mirrors
+  /// `PositionSession.maxQuantity` on the indexer). Documented upstream as
+  /// signed, but arrives unsigned — its sign agreed with the session's actual
+  /// direction in only 11 of 20 live sessions, i.e. no better than chance, so it
+  /// is a size and nothing more. Use `Math.abs` for display, and `isLong` above
+  /// for direction.
   maxQuantity: number;
   isActive: boolean;
   closedAt: string | null;
@@ -45,9 +48,6 @@ export type HistoricalPosition = {
   settlementPrice: bigint | null;
   /// Block timestamp at which the settlement price was pinned, or null.
   settledAt: string | null;
-  transactionHash: `0x${string}`;
-  // Underlying on-chain Trade rows from the source PositionSession.
-  trades: FuturesSessionTrade[];
 };
 
 export type RawHistoricalPositionSession = {
@@ -67,22 +67,13 @@ export type RawHistoricalPositionSession = {
     settlementPrice: string | null;
     settledAt: string | null;
   } | null;
+  netQuantity: number;
+  /// One fill, for `sessionIsLong`. Always length 1 unless the session has no
+  /// fills at all, which the indexer does not produce.
+  lastFill: { netQuantityAfter: number; tradeQuantity: number }[];
   user: {
     id: string;
   };
-  trades: {
-    id: string;
-    blockNumber: string;
-    expirationAt: string;
-    fillCount: number;
-    netQuantityAfter: number;
-    realizedPnl: string;
-    timestamp: string;
-    tradePrice: string;
-    tradeQuantity: number;
-    tradingFee: string;
-    transactionHash: `0x${string}`;
-  }[];
 };
 
 export type HistoricalPositionsResponse = {
@@ -92,44 +83,20 @@ export type HistoricalPositionsResponse = {
       timestamp: string;
     };
   };
-  positionSessions: RawHistoricalPositionSession[];
+  historyPositions: RawHistoricalPositionSession[];
 };
 
-/// Collapse a closed PositionSession into the HistoricalPosition shape.
-/// Direction (long/short) is taken from the sign of the session's first
-/// trade — the fill that opened the position. Subsequent fills (partial or
-/// full closes) flip sign, so summing them would misrepresent the side a
-/// user actually entered. Price comes from the session's `entryPrice` and
-/// PnL from `realizedPnl` — the row no longer encodes a buyer/seller split
-/// since a session belongs to a single user.
+/// Collapse a closed PositionSession into the HistoricalPosition shape. Price
+/// comes from the session's `entryPrice` and PnL from `realizedPnl` — the row no
+/// longer encodes a buyer/seller split since a session belongs to a single user.
+///
+/// A closed session is flat, so its direction comes from the single fill the
+/// query carries for the purpose. Reading it off the *whole* fill history, which
+/// is what this used to do, dwarfed everything else the UI fetched.
 export const sessionToHistoricalPosition = (
   session: RawHistoricalPositionSession,
 ): HistoricalPosition => {
-  type SessionTrade = RawHistoricalPositionSession["trades"][number];
-
-  // Earliest trade by (timestamp, blockNumber, fillCount). Subgraph ordering
-  // for nested arrays isn't guaranteed, so sort defensively.
-  const firstTrade = session.trades.reduce<SessionTrade | undefined>((earliest, t) => {
-    if (!earliest) return t;
-    const earliestKey = [
-      Number(earliest.timestamp),
-      Number(earliest.blockNumber),
-      earliest.fillCount,
-    ];
-    const candidateKey = [Number(t.timestamp), Number(t.blockNumber), t.fillCount];
-    for (let i = 0; i < earliestKey.length; i++) {
-      if (candidateKey[i] < earliestKey[i]) return t;
-      if (candidateKey[i] > earliestKey[i]) return earliest;
-    }
-    return earliest;
-  }, undefined);
-
-  const isLong = Number(firstTrade?.tradeQuantity ?? 0) >= 0;
-
-  const latestTrade = session.trades.reduce<SessionTrade | undefined>(
-    (latest, t) => (!latest || Number(t.timestamp) > Number(latest.timestamp) ? t : latest),
-    undefined,
-  );
+  const isLong = sessionIsLong(session.netQuantity, session.lastFill[0]);
 
   return {
     id: session.id,
@@ -149,8 +116,6 @@ export const sessionToHistoricalPosition = (
         ? BigInt(session.expiration.settlementPrice)
         : null,
     settledAt: session.expiration?.settledAt ?? null,
-    transactionHash: (latestTrade?.transactionHash as `0x${string}`) ?? ZERO_HASH,
-    trades: session.trades.map(toFuturesSessionTrade),
   };
 };
 
@@ -168,8 +133,8 @@ const fetchAllHistoricalPositions = async (
   while (hasMore) {
     const variables = {
       address: address.toLowerCase(),
-      first: PAGE_SIZE,
-      skip,
+      historyFirst: PAGE_SIZE,
+      historySkip: skip,
     };
 
     const response = await graphqlRequest<HistoricalPositionsResponse>(
@@ -180,10 +145,10 @@ const fetchAllHistoricalPositions = async (
     blockNumber = response._meta.block.number;
 
     allPositions = allPositions.concat(
-      response.positionSessions.map(sessionToHistoricalPosition),
+      response.historyPositions.map(sessionToHistoricalPosition),
     );
 
-    if (response.positionSessions.length < PAGE_SIZE) {
+    if (response.historyPositions.length < PAGE_SIZE) {
       hasMore = false;
     } else {
       skip += PAGE_SIZE;

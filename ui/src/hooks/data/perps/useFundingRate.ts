@@ -1,14 +1,18 @@
 import { graphqlRequest } from "../graphql";
-import { useQuery } from "@tanstack/react-query";
-import { FundingUpdatesQuery } from "./graphql-queries";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { snapshotFedQueryOptions } from "../snapshot/config";
+import { readViaSnapshot } from "../snapshot/snapshotFed";
+import { FundingUpdatesQuery } from "../queries/perps";
 
 export const FUNDING_RATE_QK = "FundingRate";
 
+/// Kept fresh by `usePerpsSnapshot`, which writes this cache entry directly.
 export const useFundingRate = () => {
+  const qc = useQueryClient();
   const query = useQuery({
     queryKey: [FUNDING_RATE_QK],
-    queryFn: () => fetchFundingRateAsync(),
-    staleTime: Infinity,
+    queryFn: () => readViaSnapshot(qc, "perpetual", [FUNDING_RATE_QK], fetchFundingRateAsync),
+    ...snapshotFedQueryOptions,
   });
 
   return query;
@@ -21,14 +25,20 @@ const fetchFundingRateAsync = async () => {
     process.env.REACT_APP_SUBGRAPH_PERPS_URL
   );
 
-  if (!response.fundingUpdates || response.fundingUpdates.length === 0) {
+  return mapFundingRate(response.funding);
+};
+
+/// Shared with `PerpsSnapshotQuery`'s `funding` alias, which writes this cache
+/// entry directly. Both paths must produce identical shapes.
+export const mapFundingRate = (rows: FundingUpdateRow[] | null) => {
+  if (!rows || rows.length === 0) {
     return {
       data: null,
       formattedRate: "0%",
     };
   }
 
-  const latestUpdate = response.fundingUpdates[0];
+  const latestUpdate = rows[0];
 
   // Apply formula: fundingRate / 10**18
   const fundingRateBigInt = BigInt(latestUpdate.fundingRate);
@@ -62,13 +72,15 @@ export type FundingUpdate = {
   transactionHash: string;
 };
 
+export type FundingUpdateRow = {
+  blockNumber: string;
+  cumulativeFundingPerUnit: string;
+  fundingRate: string;
+  id: string;
+  timestamp: string;
+  transactionHash: string;
+};
+
 type FundingUpdatesResponse = {
-  fundingUpdates: {
-    blockNumber: string;
-    cumulativeFundingPerUnit: string;
-    fundingRate: string;
-    id: string;
-    timestamp: string;
-    transactionHash: string;
-  }[];
+  funding: FundingUpdateRow[];
 };

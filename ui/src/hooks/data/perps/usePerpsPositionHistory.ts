@@ -1,4 +1,5 @@
-import { UserClosedPositionSessionsQuery } from "./graphql-queries";
+import { UserClosedPositionSessionsQuery } from "../queries/perps";
+import { sessionIsLong } from "../../../lib/positionDirection";
 import type { PositionSession } from "./useUserPositionSessions";
 import {
   usePaginatedHistory,
@@ -24,22 +25,12 @@ type RawPositionSession = {
   user: {
     id: string;
   };
-  trades: {
-    aggregatedEntryPriceAfter: string;
-    blockNumber: string;
-    id: string;
-    netQuantityAfter: string;
-    realizedPnl: string;
-    timestamp: string;
-    tradePrice: string;
-    tradeQuantity: string;
-    tradingFee: string;
-    transactionHash: string;
-  }[];
+  /// One fill, for `sessionIsLong`.
+  lastFill: { netQuantityAfter: string; tradeQuantity: string }[];
 };
 
 type Response = {
-  positionSessions: RawPositionSession[];
+  historyPositions: RawPositionSession[];
 };
 
 const mapSession = (session: RawPositionSession): PositionSession => ({
@@ -59,18 +50,7 @@ const mapSession = (session: RawPositionSession): PositionSession => ({
   user: {
     id: session.user.id,
   },
-  trades: session.trades.map((trade) => ({
-    aggregatedEntryPriceAfter: BigInt(trade.aggregatedEntryPriceAfter),
-    blockNumber: Number(trade.blockNumber),
-    id: trade.id,
-    netQuantityAfter: BigInt(trade.netQuantityAfter),
-    realizedPnl: BigInt(trade.realizedPnl),
-    timestamp: trade.timestamp,
-    tradePrice: BigInt(trade.tradePrice),
-    tradeQuantity: BigInt(trade.tradeQuantity),
-    tradingFee: BigInt(trade.tradingFee),
-    transactionHash: trade.transactionHash,
-  })),
+  isLong: sessionIsLong(session.netQuantity, session.lastFill[0]),
 });
 
 /// Paginated ("Load More") view of a user's closed Perps position sessions.
@@ -85,7 +65,7 @@ export const usePerpsPositionHistory = (
     query: UserClosedPositionSessionsQuery,
     variables: { address },
     subgraphUrl: process.env.REACT_APP_SUBGRAPH_PERPS_URL,
-    selectRows: (response) => response.positionSessions,
+    selectRows: (response) => response.historyPositions,
     mapRow: mapSession,
     getId: (session) => session.id,
     enabled: !!address && enabled,

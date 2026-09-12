@@ -358,6 +358,16 @@ interface HashrateChartProps {
   liquidationDirection?: "down" | "up";
   timePeriod: TimePeriod;
   onTimePeriodChange: (period: TimePeriod) => void;
+  /**
+   * Which of the optional series the legend has switched on.
+   *
+   * Held by the page rather than here because it also decides which series the
+   * chart polls for its bar in progress — an unticked series is not fetched.
+   */
+  isBtcPriceVisible: boolean;
+  isNetworkHashrateVisible: boolean;
+  onToggleBtcPrice: () => void;
+  onToggleNetworkHashrate: () => void;
 }
 
 export const HashrateChart: FC<HashrateChartProps> = ({
@@ -380,10 +390,12 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   liquidationDirection,
   timePeriod,
   onTimePeriodChange,
+  isBtcPriceVisible,
+  isNetworkHashrateVisible,
+  onToggleBtcPrice,
+  onToggleNetworkHashrate,
 }) => {
   const [chartMode, setChartMode] = useState<ChartMode>(readStoredChartMode);
-  const [isBtcPriceVisible, setIsBtcPriceVisible] = useState(false);
-  const [isNetworkHashrateVisible, setIsNetworkHashrateVisible] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -395,13 +407,6 @@ export const HashrateChart: FC<HashrateChartProps> = ({
   const priceLinesRef = useRef<IPriceLine[]>([]);
   const priceLinesOwnerRef = useRef<HashpriceSeries | null>(null);
 
-  const handleBtcPriceLegendClick = useCallback(() => {
-    setIsBtcPriceVisible((prev) => !prev);
-  }, []);
-
-  const handleNetworkHashrateLegendClick = useCallback(() => {
-    setIsNetworkHashrateVisible((prev) => !prev);
-  }, []);
 
   const handleChartModeChange = useCallback((mode: ChartMode) => {
     setChartMode(mode);
@@ -771,7 +776,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
             <LegendCheckbox $color={tokens.trading.long} $checked />
             <span>{HASHPRICE_LABEL}</span>
           </LegendItem>
-          <LegendButton type="button" onClick={handleBtcPriceLegendClick} aria-pressed={isBtcPriceVisible}>
+          <LegendButton type="button" onClick={onToggleBtcPrice} aria-pressed={isBtcPriceVisible}>
             <LegendCheckbox $color={tokens.chart.seriesBtc} $checked={isBtcPriceVisible}>
               {isBtcPriceVisible ? "✓" : null}
             </LegendCheckbox>
@@ -779,7 +784,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
           </LegendButton>
           <LegendButton
             type="button"
-            onClick={handleNetworkHashrateLegendClick}
+            onClick={onToggleNetworkHashrate}
             aria-pressed={isNetworkHashrateVisible}
           >
             <LegendCheckbox $color={tokens.chart.seriesHashrate} $checked={isNetworkHashrateVisible}>

@@ -1,4 +1,5 @@
-import { HistoricalOrdersQuery } from "./graphql-queries";
+import { fetchFuturesHistoryFirstPage } from "./futuresHistoryBatch";
+import { HistoricalOrdersQuery } from "./queries/futures";
 import { usePaginatedHistory, type PaginatedHistoryResult } from "./usePaginatedHistory";
 
 export const HISTORICAL_ORDERS_QK = "HistoricalOrders";
@@ -47,7 +48,7 @@ type RawOrder = {
 };
 
 type HistoricalOrdersResponse = {
-  orders: RawOrder[];
+  historyOrders: RawOrder[];
 };
 
 const mapOrder = (order: RawOrder): HistoricalOrder => ({
@@ -79,9 +80,12 @@ export const useHistoricalOrders = (
     queryKey: [HISTORICAL_ORDERS_QK, address],
     query: HistoricalOrdersQuery,
     variables: { address: address?.toLowerCase() },
-    selectRows: (response) => response.orders,
+    selectRows: (response) => response.historyOrders,
     mapRow: mapOrder,
     getId: (order) => order.id,
+    firstPageBatch: address
+      ? (pageSize) => fetchFuturesHistoryFirstPage("historyOrders", address.toLowerCase(), pageSize)
+      : undefined,
     enabled: !!address && enabled,
   });
 };

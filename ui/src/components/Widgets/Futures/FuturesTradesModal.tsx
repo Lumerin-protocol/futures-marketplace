@@ -8,7 +8,8 @@ import { ModalCard } from "../../Modal.styled";
 import { DateTimeCell } from "../../DateTimeCell";
 import { LoadMoreButton } from "../../LoadMoreButton";
 import { useHistoricalPositions } from "../../../hooks/data/useHistoricalPositions";
-import type { PositionBookPosition, FuturesSessionTrade } from "../../../hooks/data/getUserFuturesPositions";
+import { useSessionTrades } from "../../../hooks/data/useSessionTrades";
+import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPositions";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { getTxUrl } from "../../../lib/indexer";
 import type { ContractMode } from "../../../types/types";
@@ -37,7 +38,8 @@ interface TradeRow {
   counterparty: `0x${string}` | null;
   quantity: number;
   hasActive: boolean;
-  transactionHash: `0x${string}`;
+  /// Null on the perpetual path, which has no fill to point at.
+  transactionHash: `0x${string}` | null;
 }
 
 // Normalized shape that unifies active (PositionBookPosition) and historical
@@ -46,14 +48,12 @@ interface TradeRow {
 // row-level pnl is flattened (active rows have no realized pnl yet).
 interface NormalizedPosition {
   id: string;
-  transactionHash: `0x${string}`;
   timestamp: string;
   expirationAt: string;
   pricePerDay: bigint;
   isLong: boolean;
   isActive: boolean;
   pnl: number;
-  trades: FuturesSessionTrade[];
 }
 
 const _truncateAddress = (address: string) => {
@@ -74,7 +74,10 @@ export const FuturesTradesModal = ({
   // trigger a refetch.
   const historicalPositionsQuery = useHistoricalPositions(participantAddress, open);
 
-  const matchingTrades = useMemo<TradeRow[]>(() => {
+  // Which sessions the selected row stands for. Matching is on session-level
+  // fields alone, so it does not need the fills — which is what lets them be
+  // fetched afterwards, for these sessions only.
+  const matchingPositions = useMemo<NormalizedPosition[]>(() => {
     if (!selection) return [];
 
     // Side determination follows the same approach as `HistoricalPositionsListWidget`
@@ -97,45 +100,51 @@ export const FuturesTradesModal = ({
           : p.buyPricePerDay > 0n;
         return {
           id: p.id,
-          transactionHash: p.transactionHash,
           timestamp: p.timestamp,
           expirationAt: p.expirationAt,
           pricePerDay: isLong ? p.buyPricePerDay : p.sellPricePerDay,
           isLong,
           isActive: p.isActive,
           pnl: 0,
-          trades: p.trades ?? [],
         };
       }),
       ...historical.map<NormalizedPosition>((p) => ({
         id: p.id,
-        transactionHash: p.transactionHash,
         timestamp: p.timestamp,
         expirationAt: p.expirationAt,
         pricePerDay: p.pricePerDay,
         isLong: p.isLong,
         isActive: p.isActive,
         pnl: p.pnl,
-        trades: p.trades ?? [],
       })),
     ];
 
-    const matchingPositions = normalized.filter((p) => {
+    return normalized.filter((p) => {
       if (p.expirationAt !== selection.expirationAt) return false;
       const positionType: "Long" | "Short" = p.isLong ? "Long" : "Short";
       if (positionType !== selection.positionType) return false;
       return p.pricePerDay === selection.pricePerDay;
     });
+  }, [selection, historicalPositionsQuery.data?.data, activePositions, participantAddress]);
 
-    // Futures mode: every position row carries the underlying
-    // PositionSession.trades[] (see usePositionBook / useHistoricalPositions).
-    // Render one row per real on-chain Trade instead of synthesising rows
-    // from positions.
+  // The only place in the UI that renders fills, so the only place that fetches
+  // them. Scoped to the sessions behind the row that was clicked.
+  const sessionTradesQuery = useSessionTrades(
+    matchingPositions.map((p) => p.id),
+    open && contractMode === "futures",
+  );
+
+  const matchingTrades = useMemo<TradeRow[]>(() => {
+    if (!selection) return [];
+
+    // Futures mode: render one row per real on-chain Trade rather than
+    // synthesising rows from positions.
     if (contractMode === "futures") {
+      const bySession = sessionTradesQuery.data;
       const seen = new Set<string>();
       const rows: TradeRow[] = [];
       for (const p of matchingPositions) {
-        for (const trade of p.trades) {
+        for (const trade of bySession?.get(p.id) ?? []) {
           if (seen.has(trade.id)) continue;
           seen.add(trade.id);
           // Each fill has its own signed `tradeQuantity`. A session opened
@@ -161,46 +170,22 @@ export const FuturesTradesModal = ({
     }
 
     // Perpetual fallback (kept for safety; this modal isn't currently opened
-    // outside futures, but the `contractMode` prop allows for it). Group one
-    // row per (transactionHash, expirationAt, pricePerDay) tuple.
-    const groups = new Map<string, TradeRow>();
-    for (const p of matchingPositions) {
-      const positionType: "Long" | "Short" = p.isLong ? "Long" : "Short";
-      const key = `${p.transactionHash}-${p.expirationAt}-${p.pricePerDay}`;
-
-      const existing = groups.get(key);
-      if (!existing) {
-        groups.set(key, {
-          id: key,
-          timestamp: p.timestamp,
-          pricePerDay: p.pricePerDay,
-          positionType,
-          realizedPnl: p.pnl,
-          counterparty: null,
-          quantity: 1,
-          hasActive: p.isActive,
-          transactionHash: p.transactionHash,
-        });
-        continue;
-      }
-
-      existing.quantity += 1;
-      existing.realizedPnl += p.pnl;
-      if (p.isActive) {
-        existing.hasActive = true;
-      }
-    }
-
-    const rows = Array.from(groups.values());
+    // outside futures, but the `contractMode` prop allows for it). One row per
+    // session, since without fills there is nothing finer to group by.
+    const rows = matchingPositions.map<TradeRow>((p) => ({
+      id: p.id,
+      timestamp: p.timestamp,
+      pricePerDay: p.pricePerDay,
+      positionType: p.isLong ? "Long" : "Short",
+      realizedPnl: p.pnl,
+      counterparty: null,
+      quantity: 1,
+      hasActive: p.isActive,
+      transactionHash: null,
+    }));
     rows.sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
     return rows;
-  }, [
-    selection,
-    historicalPositionsQuery.data?.data,
-    activePositions,
-    participantAddress,
-    contractMode,
-  ]);
+  }, [selection, matchingPositions, sessionTradesQuery.data, contractMode]);
 
   const formatPrice = (price: bigint) => (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   const formatPnl = (pnlRaw: number) => {
@@ -220,7 +205,8 @@ export const FuturesTradesModal = ({
 
   const displayedTrades = matchingTrades.slice(0, visibleCount);
 
-  const isLoading = open && historicalPositionsQuery.isLoading;
+  const isLoading =
+    open && (historicalPositionsQuery.isLoading || sessionTradesQuery.isLoading);
 
   return (
     <Modal open={open} onClose={onClose}>
@@ -280,13 +266,17 @@ export const FuturesTradesModal = ({
                       </PnLCell>
                     </td>
                     <td>
-                      <TxLink
-                        href={getTxUrl(trade.transactionHash)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {trade.transactionHash.slice(0, 6)}...{trade.transactionHash.slice(-4)}
-                      </TxLink>
+                      {trade.transactionHash ? (
+                        <TxLink
+                          href={getTxUrl(trade.transactionHash)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {trade.transactionHash.slice(0, 6)}...{trade.transactionHash.slice(-4)}
+                        </TxLink>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                   </TableRow>
                 ))}

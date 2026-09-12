@@ -2,8 +2,9 @@ import { usePublicClient, useWalletClient, useWriteContract } from "wagmi";
 import { getContract } from "viem";
 import { useQueryClient } from "@tanstack/react-query";
 import { HashPowerFuturesAbi } from "futures-marketplace-abi/HashPowerFutures.ts";
-import { waitForBlockNumberPositionBook } from "./getUserFuturesPositions";
+import { waitForIndexedBlock } from "./snapshot/waitForIndexedBlock";
 import { FUTURES_POSITION_HISTORY_QK } from "./useFuturesPositionHistory";
+import { POSITION_BOOK_QK } from "./getUserFuturesPositions";
 import { invalidatePortfolioPnl } from "./pnl/invalidate";
 import { withErrors } from "../../lib/withErrors";
 
@@ -49,8 +50,11 @@ export function useSettlePositions() {
     const hash = await writeContractAsync(req.request);
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
-    await waitForBlockNumberPositionBook(receipt.blockNumber, queryClient, account);
+    await waitForIndexedBlock("futures", receipt.blockNumber);
 
+    // The settled position leaves the book, so refresh it rather than waiting
+    // out the venue snapshot's tick.
+    await queryClient.invalidateQueries({ queryKey: [POSITION_BOOK_QK, account] });
     queryClient.resetQueries({ queryKey: [FUTURES_POSITION_HISTORY_QK, account] });
     // Settlement retires the position and books its PnL as realized, so both
     // header figures move.

@@ -1,17 +1,33 @@
 import { graphqlRequest } from "../graphql";
-import { useQuery } from "@tanstack/react-query";
-import { PerpsCollectionQuery } from "./graphql-queries";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { PerpsCollectionQuery } from "../queries/perps";
+import { snapshotFedQueryOptions } from "../snapshot/config";
+import { readViaSnapshot } from "../snapshot/snapshotFed";
 
 export const PERPS_COLLECTION_QK = "PerpsCollection";
 
+/// Kept fresh by `usePerpsSnapshot`, which writes this cache entry directly.
 export const usePerpsCollection = () => {
+  const qc = useQueryClient();
   const query = useQuery({
     queryKey: [PERPS_COLLECTION_QK],
-    queryFn: () => fetchPerpsCollectionAsync(),
+    queryFn: () =>
+      readViaSnapshot(qc, "perpetual", [PERPS_COLLECTION_QK], fetchPerpsCollectionAsync),
+    ...snapshotFedQueryOptions,
   });
 
   return query;
 };
+
+/// Shared with `PerpsSnapshotQuery`'s `collection` alias, which writes this
+/// cache entry directly. Both paths must produce identical shapes.
+export const mapPerpsCollection = (row: PerpsCollectionRow): PerpsCollection => ({
+  makerFeeBps: row.makerFeeBps,
+  takerFeeBps: row.takerFeeBps,
+  minimumMarginPerOrder: parseInt(row.minimumMarginPerOrder),
+  minimumPriceIncrement: parseInt(row.minimumPriceIncrement),
+  totalVolume: row.totalVolume,
+});
 
 const fetchPerpsCollectionAsync = async () => {
   const response = await graphqlRequest<PerpsCollectionResponse>(
@@ -21,18 +37,8 @@ const fetchPerpsCollectionAsync = async () => {
   );
 
   // perps_collection is an array, get the first item
-  const data = response.perps_collection[0];
-
-  const result: PerpsCollection = {
-    makerFeeBps: data.makerFeeBps,
-    takerFeeBps: data.takerFeeBps,
-    minimumMarginPerOrder: parseInt(data.minimumMarginPerOrder),
-    minimumPriceIncrement: parseInt(data.minimumPriceIncrement),
-    totalVolume: data.totalVolume,
-  };
-
   return {
-    data: result,
+    data: mapPerpsCollection(response.collection[0]),
   };
 };
 
@@ -44,13 +50,15 @@ export type PerpsCollection = {
   totalVolume: string;
 };
 
+export type PerpsCollectionRow = {
+  makerFeeBps: number;
+  takerFeeBps: number;
+  minimumMarginPerOrder: string;
+  minimumPriceIncrement: string;
+  totalVolume: string;
+};
+
 type PerpsCollectionResponse = {
-  perps_collection: {
-    makerFeeBps: number;
-    takerFeeBps: number;
-    minimumMarginPerOrder: string;
-    minimumPriceIncrement: string;
-    totalVolume: string;
-  }[];
+  collection: PerpsCollectionRow[];
 };
 

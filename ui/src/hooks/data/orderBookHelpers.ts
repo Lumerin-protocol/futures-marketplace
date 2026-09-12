@@ -1,22 +1,25 @@
-import { waitForAggregateBlockNumber, AGGREGATE_ORDER_BOOK_QK } from "../../hooks/data/useAggregateOrderBook";
-import { waitForPerpsBlockNumber, PERPS_ORDER_BOOK_QK } from "../../hooks/data/perps/usePerpsOrderBook";
+import { AGGREGATE_ORDER_BOOK_QK } from "../../hooks/data/useAggregateOrderBook";
+import { PERPS_ORDER_BOOK_QK } from "../../hooks/data/perps/usePerpsOrderBook";
+import { waitForIndexedBlock } from "./snapshot/waitForIndexedBlock";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ContractMode } from "../../types/types";
 
 /**
- * Wait for the order book to sync to a specific block number based on contract mode
+ * Wait for the venue's subgraph to have indexed a specific block.
+ *
+ * `qc` and `expirationAt` are vestigial: this used to poll a particular order
+ * book cache entry, which meant the futures path silently skipped waiting at
+ * all when no expiration had been resolved. The indexed head is a property of
+ * the subgraph, not of any one entry, so both arguments are ignored. They are
+ * kept so the call sites read unchanged.
  */
 export const waitForOrderBookBlockNumber = async (
   blockNumber: bigint,
-  qc: QueryClient,
+  _qc: QueryClient,
   contractMode: ContractMode,
-  expirationAt?: number,
+  _expirationAt?: number,
 ) => {
-  if (contractMode === "perpetual") {
-    await waitForPerpsBlockNumber(blockNumber, qc);
-  } else {
-    await waitForAggregateBlockNumber(blockNumber, qc, expirationAt);
-  }
+  await waitForIndexedBlock(contractMode, blockNumber);
 };
 
 /**

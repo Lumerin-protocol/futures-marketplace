@@ -7,6 +7,10 @@ still in the codebase. Added while bringing `pnpm typecheck` and
 Both commands are green as of this document. If either starts reporting again,
 something below probably regressed.
 
+Most entries here are things that are merely untidy. **§8 is the one that needs
+somebody else: the UI derives position direction because the indexer does not
+expose it, and one field upstream would delete the derivation.**
+
 ---
 
 ## 1. Two copies of `@wagmi/core` in the tree (v2 and v3)
@@ -141,6 +145,65 @@ directory any more and a clean `pnpm install` no longer breaks the build.
 
 **To resolve:** it is safe to delete. It will disappear on the next
 `rm -rf node_modules && pnpm install`.
+
+## 8. Position direction is derived, not indexed
+
+**Where:** `src/lib/positionDirection.ts` (`sessionIsLong`), used by the four
+session mappers on both venues.
+
+*Was: "Closed positions all read as Long." That defect is fixed; what is left is
+the derivation that replaced it, which is sound but is doing the indexer's job.*
+
+A `PositionSession` still does not say which way it was opened. Direction used to
+be recovered by pulling **every fill of every session** and taking the sign of
+the earliest one. That worked, and it was ruinously expensive: the fills were 98%
+of the futures position book payload and 87% of the closed-session payload, on a
+query re-fetched every 5 seconds. One live account was pulling ~17 KB of fills
+every tick, about 12 MB an hour, growing with every fill it had ever made.
+
+Sessions now carry **one** fill, selected as `lastFill`, and direction comes from
+`sessionIsLong`:
+
+- while the session is open, its `netQuantity` carries the sign;
+- once it is flat, the fill answers instead. Only the fill that closes a session
+  can leave `netQuantityAfter` at zero, so a zero means this fill traded against
+  the position and the direction is the reverse of its sign; a non-zero is the
+  position itself, which covers a session that expired while still open.
+
+Verified against every session on both subgraphs — 21 closed sessions, futures
+and perps — as well as all 16 open ones, against the old rule. The unit tests in
+`positionDirection.test.ts` pin the cases, including that *any* fill of a session
+yields the same answer, which is what makes it safe that two fills in the same
+block cannot be ordered.
+
+**Why this is still debt.** It is one nested row per session on a 5-second tick,
+to recover a boolean the indexer already knows. It is also load-bearing in a way
+that is easy to break: remove `lastFill` from a session query and direction
+silently falls back to Long rather than failing.
+
+**To resolve:** one field on `PositionSession`, either `isLong: Boolean!` or
+making `maxQuantity` genuinely signed as its schema documentation already claims.
+Then `sessionIsLong` reduces to reading it, `lastFill` comes out of all four
+session queries, and this entry goes away.
+
+> `maxQuantity` looks like it should already rescue this — its doc comment
+> upstream and in `HistoricalPosition` describes it as signed — but it arrives
+> unsigned. Its sign agreed with the session's real direction in 11 of 20 live
+> futures sessions and 0 of 1 perps sessions, i.e. no better than a coin toss.
+> Do not build on it before checking it again. The perps positions tab *was*
+> reading direction off it, and was wrong for closed sessions because of it.
+
+One ambiguity is worth settling when the field is defined: the two futures
+mappers disagreed before any of this — `sessionToPosition` used the sign of the
+*summed* fills, `sessionToHistoricalPosition` the sign of the *earliest* fill.
+They differ only for a session that flips through zero.
+
+**Deliberately not restored:** the row-level `transactionHash` on
+`PositionBookPosition` and `HistoricalPosition`. It was derived from the latest
+fill and nothing rendered it — every tx link in the UI comes from a `Trade` row,
+which carries its own hash. Its one remaining use was a grouping key in
+`FuturesTradesModal`'s perpetual branch, which that branch's own comment notes is
+never reached.
 
 ---
 

@@ -90,7 +90,11 @@ export const OrdersPositionsTabWidget = ({
   // is gated on the active tab.
   const historicalOrdersQuery = useHistoricalOrders(participantAddress, true);
   const historicalPositionsQuery = useFuturesPositionHistory(participantAddress, true);
-  const tradesQuery = useUserFuturesTrades(participantAddress, { refetch: activeTab === "TRADES" });
+  // Not polled: refetching an infinite query refetches every page the user has
+  // loaded, so the cost grows with scroll depth. The user's own trades only move
+  // when they trade (covered by `refreshVenueViews` post-tx) or when a keeper
+  // liquidates them (covered by `useLiquidationNotifications`).
+  const tradesQuery = useUserFuturesTrades(participantAddress);
 
   // Open, unmatured positions, one per delivery. Sessions are per (user,
   // expirationAt), so every row of a delivery carries the same signed net
