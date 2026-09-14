@@ -1,5 +1,7 @@
 import { type FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styled from "@mui/material/styles/styled";
+import CandlestickChartIcon from "@mui/icons-material/CandlestickChart";
+import ShowChartIcon from "@mui/icons-material/ShowChart";
 import {
   CandlestickSeries,
   ColorType,
@@ -18,7 +20,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import type { TimePeriod } from "../../hooks/data/useHashRateIndexData";
-import { CHART_RANGE_INTERVAL_LABELS, CHART_RANGE_LABELS, CHART_RANGES } from "../../lib/chartBars";
+import { CHART_RANGE_LABELS, CHART_RANGES } from "../../lib/chartBars";
 import { foldLivePriceIntoCandles, type HashpriceCandle } from "../../lib/chartCandles";
 import { tokens } from "../../styles/tokens";
 import { DATE_LOCALE } from "../../lib/dates";
@@ -79,6 +81,9 @@ const PeriodButton = styled("button")<{ $active: boolean }>`
   color: ${tokens.text.onDark};
   border: none;
   font-size: 0.875rem;
+  /* Pinned rather than left at normal so the height does not depend on the
+     inherited font's metrics: the icon variant below sizes itself off this. */
+  line-height: 1.2;
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.2s ease;
@@ -90,6 +95,22 @@ const PeriodButton = styled("button")<{ $active: boolean }>`
 
   &:not(:last-child) {
     border-right: 1px solid ${tokens.border.muted05};
+  }
+`;
+
+/* Squared off around the glyph. The icon box is the line height of the text
+   buttons, so this switch and the range switch beside it match exactly. */
+const ModeButton = styled(PeriodButton)`
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 0.625rem;
+
+  /* Sized via font-size, which resolves against the button, so MUI's own
+     width/height of 1em lands on the text buttons' line box. Setting the
+     width and height here instead would resolve em against the icon's own
+     font-size (1.5rem by default) and blow the button up. */
+  svg {
+    font-size: 1.2em;
   }
 `;
 
@@ -106,13 +127,6 @@ const ChartTitle = styled("div")`
   color: ${tokens.text.secondary};
   text-transform: uppercase;
   letter-spacing: 0.03em;
-`;
-
-const ChartIntervalHint = styled("span")`
-  font-weight: 400;
-  letter-spacing: 0;
-  text-transform: none;
-  color: ${tokens.text.muted};
 `;
 
 const ChartControls = styled("div")`
@@ -761,10 +775,7 @@ export const HashrateChart: FC<HashrateChartProps> = ({
 
   return (
     <>
-      <ChartTitle>
-        Hashprice Index
-        <ChartIntervalHint> · {CHART_RANGE_INTERVAL_LABELS[timePeriod]}</ChartIntervalHint>
-      </ChartTitle>
+      <ChartTitle>Hashprice Index</ChartTitle>
       <ChartControls>
         <Legend>
           <LegendItem>
@@ -790,22 +801,26 @@ export const HashrateChart: FC<HashrateChartProps> = ({
         </Legend>
         <SwitchGroup>
           <PeriodSwitch>
-            <PeriodButton
+            <ModeButton
               type="button"
               $active={chartMode === "line"}
               aria-pressed={chartMode === "line"}
+              aria-label="Line chart"
+              title="Line chart"
               onClick={() => handleChartModeChange("line")}
             >
-              Line
-            </PeriodButton>
-            <PeriodButton
+              <ShowChartIcon />
+            </ModeButton>
+            <ModeButton
               type="button"
               $active={chartMode === "candles"}
               aria-pressed={chartMode === "candles"}
+              aria-label="Candlestick chart"
+              title="Candlestick chart"
               onClick={() => handleChartModeChange("candles")}
             >
-              Candles
-            </PeriodButton>
+              <CandlestickChartIcon />
+            </ModeButton>
           </PeriodSwitch>
           <PeriodSwitch>
             {CHART_RANGES.map((range) => (
