@@ -1,7 +1,8 @@
 import react from "@vitejs/plugin-react";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig } from "vite";
 import svgr from "vite-plugin-svgr";
 import { type Env, EnvSchema } from "./env.schema";
+import { loadAppEnv } from "./load-env";
 import { version } from "./package.json";
 import { newAjv } from "./validator";
 import mkcert from "vite-plugin-mkcert";
@@ -17,8 +18,8 @@ declare global {
 
 const envsToInject = Object.keys(EnvSchema.properties);
 
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), "");
+export default defineConfig(() => {
+  const env = loadAppEnv();
   // Use env var if set (from CI/CD), otherwise fallback to package.json version
   env.REACT_APP_VERSION = env.REACT_APP_VERSION || version;
 
