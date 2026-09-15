@@ -5,18 +5,20 @@ import { parse } from "dotenv";
 /**
  * Load env with increasing priority:
  * 1. `config/{APP_ENV}.env`
- * 2. `cwd/.env`
- * 3. shell `process.env` (wins on conflict)
+ * 2. repo-root `../.env`
+ * 3. `cwd/.env`
+ * 4. shell `process.env` (wins on conflict)
  *
- * APP_ENV is taken from the shell, then from `.env`.
+ * APP_ENV is taken from the shell, then `cwd/.env`, then `../.env`.
  */
 export function loadAppEnv(cwd = process.cwd()): Record<string, string> {
   const dir = configDir(cwd);
+  const rootFile = path.resolve(cwd, "../.env");
   const localFile = path.join(cwd, ".env");
+  const root = parseEnvFile(rootFile);
   const local = parseEnvFile(localFile);
-  const name = process.env.APP_ENV || local.APP_ENV;
+  const name = process.env.APP_ENV || local.APP_ENV || root.APP_ENV;
   const loaded: Record<string, string> = {};
-
   const sources: string[] = [];
 
   if (name) {
@@ -30,6 +32,11 @@ export function loadAppEnv(cwd = process.cwd()): Record<string, string> {
     sources.push(`config/${name}.env`);
   }
 
+  Object.assign(loaded, root);
+  if (fs.existsSync(rootFile)) {
+    sources.push("../.env");
+  }
+
   Object.assign(loaded, local);
   if (fs.existsSync(localFile)) {
     sources.push(".env");
@@ -37,7 +44,7 @@ export function loadAppEnv(cwd = process.cwd()): Record<string, string> {
 
   console.log(`[load-env] APP_ENV=${name ?? "(unset)"} loaded: ${sources.join(" + ") || "(none)"}`);
 
-  if (!name && !fs.existsSync(localFile)) {
+  if (!name && !fs.existsSync(rootFile) && !fs.existsSync(localFile)) {
     throw new Error(
       `[load-env] set APP_ENV (shell or .env). Available: ${availableMessage(dir)}`,
     );
@@ -47,7 +54,12 @@ export function loadAppEnv(cwd = process.cwd()): Record<string, string> {
     if (value === undefined) {
       continue;
     }
-    if (key in loaded || key.startsWith("REACT_APP_") || key === "DEV_SERVER_HTTPS") {
+    if (
+      key in loaded ||
+      key.startsWith("REACT_APP_") ||
+      key === "DEV_SERVER_HTTPS" ||
+      key === "ALCHEMY_API_KEY"
+    ) {
       loaded[key] = value;
     }
   }

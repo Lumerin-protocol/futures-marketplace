@@ -22,6 +22,10 @@ export default defineConfig(() => {
   const env = loadAppEnv();
   // Use env var if set (from CI/CD), otherwise fallback to package.json version
   env.REACT_APP_VERSION = env.REACT_APP_VERSION || version;
+  env.REACT_APP_READ_ONLY_ETH_NODE_URL ??= getAlchemyUrl(
+    Number(env.REACT_APP_CHAIN_ID ?? env.CHAIN_ID),
+    env.ALCHEMY_API_KEY,
+  );
 
   const ajv = newAjv();
   const validate = ajv.compile(EnvSchema);
@@ -161,3 +165,41 @@ export default defineConfig(() => {
     },
   };
 });
+
+enum ChainId {
+  EthereumMainnet = 1,
+  EthereumSepolia = 11155111,
+  BaseMainnet = 8453,
+  BaseSepolia = 84532,
+  ArbitrumMainnet = 42161,
+  ArbitrumSepolia = 421614,
+  Hardhat = 31337,
+}
+
+function getAlchemyUrl(chainID: number, apiKey: string) {
+  if (chainID === ChainId.Hardhat) {
+    return `http://127.0.0.1:8545`;
+  }
+
+  const slug = chainIdToAlchemySlug[chainID as ChainId];
+  if (!slug) {
+    throw new Error(`Unsupported chain ID: ${chainID}`);
+  }
+
+  return alchemyUrl(slug, apiKey);
+}
+
+const chainIdToAlchemySlug: Record<ChainId, string> = {
+  [ChainId.EthereumMainnet]: "eth-mainnet",
+  [ChainId.EthereumSepolia]: "eth-sepolia",
+  [ChainId.BaseMainnet]: "base-mainnet",
+  [ChainId.BaseSepolia]: "base-sepolia",
+  [ChainId.ArbitrumMainnet]: "arb-mainnet",
+  [ChainId.ArbitrumSepolia]: "arb-sepolia",
+  [ChainId.Hardhat]: "hardhat",
+};
+
+function alchemyUrl(network: string, apiKey: string) {
+  return `https://${network}.g.alchemy.com/v2/${apiKey}`;
+}
+
