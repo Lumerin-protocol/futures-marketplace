@@ -358,6 +358,48 @@ Here nothing qualifies once the fills are removed.
 
 ---
 
+## Could React Query do the fan-out itself?
+
+The snapshot driver hand-rolls what looks like library work: coalescing
+concurrent callers, discarding a stale response that lands late, and not
+re-rendering for data that did not change. The alternative is one cache entry
+per venue with each consumer taking its slice through `select`, letting React
+Query do all three.
+
+Measured against the installed **@tanstack/query-core 5.101.2**, with a scratch
+`QueryObserver` harness (not kept — it tests the library, not this app):
+
+| Question | Result | What it would replace |
+|---|---|---|
+| Do two observers on one key share a request? | yes, one call | `driverRegistry`'s in-flight map |
+| Does `invalidateQueries` restart a fetch in flight? | **only if the query already has data** | `dropInFlightSnapshot` |
+| Does a cancelled fetch resolving late overwrite? | no, discarded | `writeIfChanged`'s `startedAt` guard |
+| Does an unchanged slice keep its reference? | yes, via structural sharing + `select` | `writeIfChanged`'s comparison |
+
+The second row is the sharp edge, and it is not a documented default so much as
+a condition in `Query.fetch`:
+
+```js
+if (this.state.data !== void 0 && fetchOptions?.cancelRefetch) {
+  this.cancel({ silent: true });
+} else if (this.#retryer) {
+  this.#retryer.continueRetry();
+  return this.#retryer.promise;   // ← the invalidation is absorbed
+}
+```
+
+So a query still on its **first** fetch absorbs the invalidation and hands the
+caller the request that started before it. Applied here: a transaction confirmed
+while the session's very first snapshot is still in the air would be served
+pre-transaction data. That window is one request wide on a page that has no
+tradeable data loaded yet, so it is unreachable in practice — but it is the one
+case `dropInFlightSnapshot` covers that the library does not.
+
+Everything else on that list the library does do, which means three of the four
+reasons the machinery exists would not survive the switch to a single key.
+
+---
+
 ## Code organization
 
 Implemented, and it turned out smaller than the sketch below it predicted.

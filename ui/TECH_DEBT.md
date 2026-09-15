@@ -252,3 +252,20 @@ that way and needed no suppression afterwards.
 | Location | Reason |
 | --- | --- |
 | `vite-plugin-seed-meta.ts` (file-level) | `@types/node` is pinned at v12 and cannot resolve `node:fs` / `node:path`. See section 6. |
+
+
+Discover store improvements.
+│                                                      │
+│     [ ] Prototype the single-key + select design on  │
+│         a branch and measure what it deletes         │
+│         (Recommended)                                │
+│     [ ] Just remove the dead parts for now —         │
+│         hasSnapshotDriver and the unreachable        │
+│         no-driver path                               │
+│   › [ ] Spike only the v5 cancel-on-invalidate       │
+│         behaviour, so we know if                     │
+│         dropInFlightSnapshot is redundant            │
+│     [ ] Leave it as is — it works, and the branch is │
+│         already committed                            │
+│     [ ] Other: (type to answer)                      │
+                                   
