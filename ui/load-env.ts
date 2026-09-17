@@ -1,6 +1,9 @@
-import fs from "node:fs";
-import path from "node:path";
-import { parse } from "dotenv";
+import { existsSync, readdirSync, readFileSync } from "fs";
+import { join, resolve } from "path";
+
+const loadEnvFile = (
+  process as typeof process & { loadEnvFile: (path: string) => void }
+).loadEnvFile;
 
 /**
  * Load env with increasing priority:
@@ -9,53 +12,47 @@ import { parse } from "dotenv";
  * 3. `cwd/.env`
  * 4. shell `process.env` (wins on conflict)
  *
- * APP_ENV is taken from the shell, then `cwd/.env`, then `../.env`.
+ * `process.loadEnvFile` never overwrites a variable that is already set, so
+ * files are read most-specific first. APP_ENV is taken from the shell, then
+ * `.env`, then `../.env`.
  */
 export function loadAppEnv(cwd = process.cwd()): Record<string, string> {
-  const dir = configDir(cwd);
-  const rootFile = path.resolve(cwd, "../.env");
-  const localFile = path.join(cwd, ".env");
-  const root = parseEnvFile(rootFile);
-  const local = parseEnvFile(localFile);
-  const name = process.env.APP_ENV || local.APP_ENV || root.APP_ENV;
-  const loaded: Record<string, string> = {};
+  const dir = resolve(cwd, "../config");
+  const rootFile = resolve(cwd, "../.env");
+  const localFile = join(cwd, ".env");
+  const fileKeys = new Set<string>();
   const sources: string[] = [];
 
+  // Highest priority files first so later loads cannot clobber them.
+  tryLoad(localFile, ".env", fileKeys, sources);
+  tryLoad(rootFile, "../.env", fileKeys, sources);
+
+  const name = process.env.APP_ENV;
   if (name) {
-    const configFile = path.join(dir, `${name}.env`);
-    if (!fs.existsSync(configFile)) {
+    const configFile = join(dir, `${name}.env`);
+    if (!existsSync(configFile)) {
       throw new Error(
         `[load-env] config/${name}.env not found. Available: ${availableMessage(dir)}`,
       );
     }
-    Object.assign(loaded, parseEnvFile(configFile));
-    sources.push(`config/${name}.env`);
-  }
-
-  Object.assign(loaded, root);
-  if (fs.existsSync(rootFile)) {
-    sources.push("../.env");
-  }
-
-  Object.assign(loaded, local);
-  if (fs.existsSync(localFile)) {
-    sources.push(".env");
+    tryLoad(configFile, `config/${name}.env`, fileKeys, sources);
   }
 
   console.log(`[load-env] APP_ENV=${name ?? "(unset)"} loaded: ${sources.join(" + ") || "(none)"}`);
 
-  if (!name && !fs.existsSync(rootFile) && !fs.existsSync(localFile)) {
+  if (!name && !existsSync(rootFile) && !existsSync(localFile)) {
     throw new Error(
       `[load-env] set APP_ENV (shell or .env). Available: ${availableMessage(dir)}`,
     );
   }
 
+  const loaded: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value === undefined) {
       continue;
     }
     if (
-      key in loaded ||
+      fileKeys.has(key) ||
       key.startsWith("REACT_APP_") ||
       key === "DEV_SERVER_HTTPS" ||
       key === "ALCHEMY_API_KEY"
@@ -63,31 +60,43 @@ export function loadAppEnv(cwd = process.cwd()): Record<string, string> {
       loaded[key] = value;
     }
   }
-
   return loaded;
 }
 
-function configDir(cwd: string): string {
-  return path.resolve(cwd, "../config");
+function tryLoad(
+  filePath: string,
+  label: string,
+  fileKeys: Set<string>,
+  sources: string[],
+): void {
+  if (!existsSync(filePath)) {
+    return;
+  }
+  for (const key of keysInEnvFile(filePath)) {
+    fileKeys.add(key);
+  }
+  loadEnvFile(filePath);
+  sources.push(label);
+}
+
+function keysInEnvFile(filePath: string): string[] {
+  return readFileSync(filePath, "utf8")
+    .split(/\r?\n/)
+    .flatMap((line) => {
+      const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)=/.exec(line);
+      return match ? [match[1]] : [];
+    });
 }
 
 function listEnvironments(dir: string): string[] {
-  if (!fs.existsSync(dir)) {
+  if (!existsSync(dir)) {
     return [];
   }
 
-  return fs
-    .readdirSync(dir)
+  return readdirSync(dir)
     .filter((fileName) => fileName.endsWith(".env"))
     .map((fileName) => fileName.slice(0, -".env".length))
     .sort();
-}
-
-function parseEnvFile(filePath: string): Record<string, string> {
-  if (!fs.existsSync(filePath)) {
-    return {};
-  }
-  return parse(fs.readFileSync(filePath));
 }
 
 function availableMessage(dir: string): string {

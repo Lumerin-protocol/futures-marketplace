@@ -1,5 +1,10 @@
 name: Deploy Notifications ECS Service
 
+# Container public config (LOG_LEVEL, contract addresses, …) comes from
+# config/dev.env and config/prd.env. Secrets (TELEGRAM_BOT_TOKEN via Secrets
+# Manager, DATABASE_URL planted by Terraform) stay on the existing task
+# definition — this workflow does not change how secrets reach the container.
+
 on:
    push:
      branches:
@@ -9,6 +14,7 @@ on:
        - 'cicd/**'
      paths:
        - 'notifications/**'
+       - 'config/*.env'
        - '.github/workflows/deploy-notifications.yml'
 
    pull_request:
@@ -18,6 +24,7 @@ on:
        - main
      paths:
        - 'notifications/**'
+       - 'config/*.env'
        - '.github/workflows/deploy-notifications.yml'
 
    workflow_dispatch:
@@ -53,6 +60,7 @@ jobs:
       ecs_service: ${{ steps.env_config.outputs.ecs_service }}
       task_family: ${{ steps.env_config.outputs.task_family }}
       aws_region: ${{ steps.env_config.outputs.aws_region }}
+      config_env: ${{ steps.env_config.outputs.config_env }}
       is_cicd_branch: ${{ steps.gen_tag.outputs.is_cicd_branch }}
     
     steps:
@@ -83,16 +91,23 @@ jobs:
               echo "aws_region=us-east-1" >> $GITHUB_OUTPUT
               echo "ecs_cluster=ecs-futures-marketplace-dev" >> $GITHUB_OUTPUT
               echo "ecs_service=svc-futures-notifications-dev" >> $GITHUB_OUTPUT
+              echo "config_env=dev" >> $GITHUB_OUTPUT
               ;;
             stg)
               echo "aws_region=us-east-1" >> $GITHUB_OUTPUT
               echo "ecs_cluster=ecs-futures-marketplace-stg" >> $GITHUB_OUTPUT
               echo "ecs_service=svc-futures-notifications-stg" >> $GITHUB_OUTPUT
+              echo "config_env=prd" >> $GITHUB_OUTPUT
               ;;
             main)
               echo "aws_region=us-east-1" >> $GITHUB_OUTPUT
               echo "ecs_cluster=ecs-futures-marketplace-lmn" >> $GITHUB_OUTPUT
               echo "ecs_service=svc-futures-notifications-lmn" >> $GITHUB_OUTPUT
+              echo "config_env=prd" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "::error::Unknown environment '$ENV' (expected dev, stg, or main)"
+              exit 1
               ;;
           esac
 
@@ -151,6 +166,12 @@ jobs:
     if: github.event_name != 'pull_request' && needs.build.outputs.is_cicd_branch != 'true'
     
     steps:
+      # Needed for config/<env>.env, which supplies the public container environment.
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -159,51 +180,81 @@ jobs:
           role-session-name: GitHubActions-FuturesNotifications-${{ github.run_id }}
 
       - name: Update task definition and deploy
+        env:
+          CLUSTER: ${{ needs.build.outputs.ecs_cluster }}
+          SERVICE: ${{ needs.build.outputs.ecs_service }}
+          TASK_FAMILY: ${{ needs.build.outputs.task_family }}
+          IMAGE: ${{ env.GHCR_IMAGE }}:${{ needs.build.outputs.version }}
+          REGION: ${{ needs.build.outputs.aws_region }}
+          CONFIG_ENV: ${{ needs.build.outputs.config_env }}
         run: |
-          CLUSTER="${{ needs.build.outputs.ecs_cluster }}"
-          SERVICE="${{ needs.build.outputs.ecs_service }}"
-          TASK_FAMILY="${{ needs.build.outputs.task_family }}"
-          IMAGE="${{ env.GHCR_IMAGE }}:${{ needs.build.outputs.version }}"
-          REGION="${{ needs.build.outputs.aws_region }}"
-          
+          set -euo pipefail
+          CONFIG="config/${CONFIG_ENV}.env"
+
           echo "🚀 Deploying to ${{ needs.build.outputs.environment }} environment"
           echo "   Cluster: ${CLUSTER}"
           echo "   Service: ${SERVICE}"
           echo "   Task Family: ${TASK_FAMILY}"
           echo "   Image: ${IMAGE}"
-          
-          # Get current task definition
+          echo "   Config: ${CONFIG}"
+
           echo "📥 Fetching current task definition..."
           aws ecs describe-task-definition \
-            --task-definition ${TASK_FAMILY} \
-            --region ${REGION} \
+            --task-definition "${TASK_FAMILY}" \
+            --region "${REGION}" \
             --query 'taskDefinition' > task-def.json
-          
-          # Update task definition with new image
+
           echo "🔧 Updating container image in task definition..."
           jq --arg IMAGE "${IMAGE}" \
               '.containerDefinitions[0].image = $IMAGE |
               del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' \
             task-def.json > new-task-def.json
-          
-          # Register new task definition
+
+          # Public keys from config/<env>.env. Empty values are dropped so the
+          # app applies its own defaults (LOG_LEVEL defaults to "info").
+          # DATABASE_URL and the Secrets Manager `secrets` block stay as they
+          # are in the current task definition — this task does not change
+          # how secrets reach the container.
+          set -a && . "$CONFIG" && set +a
+
+          KEYS=$(sed -n 's/^[[:space:]]*\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' "$CONFIG")
+
+          jq -n --arg keys "$KEYS" '[
+            $keys
+            | split("\n")
+            | unique
+            | .[]
+            | select(. != "" and ($ENV[.] // "") != "")
+            | {name: ., value: $ENV[.]}
+          ]' > env-block.json
+
+          echo "   Container env keys from config: $(jq -r '[.[].name] | join(", ")' env-block.json)"
+
+          jq --slurpfile env env-block.json '
+            (.containerDefinitions[0].environment // []) as $old |
+            ($env[0] | map(.name)) as $new_names |
+            .containerDefinitions[0].environment = (
+              [ $old[] | select(.name as $n | $new_names | index($n) | not) ]
+              + $env[0]
+            )
+          ' new-task-def.json > final-task-def.json
+
           echo "📝 Registering new task definition revision..."
           NEW_TASK_DEF=$(aws ecs register-task-definition \
-            --cli-input-json file://new-task-def.json \
-            --region ${REGION} \
+            --cli-input-json file://final-task-def.json \
+            --region "${REGION}" \
             --query 'taskDefinition.taskDefinitionArn' --output text)
-          
+
           echo "✅ Registered new task definition: ${NEW_TASK_DEF}"
-          
-          # Update ECS service with new task definition
+
           echo "🚀 Updating ECS service..."
           aws ecs update-service \
-            --cluster ${CLUSTER} \
-            --service ${SERVICE} \
-            --task-definition ${NEW_TASK_DEF} \
-            --region ${REGION} \
+            --cluster "${CLUSTER}" \
+            --service "${SERVICE}" \
+            --task-definition "${NEW_TASK_DEF}" \
+            --region "${REGION}" \
             --force-new-deployment
-          
+
           echo "✅ Deployment triggered successfully"
 
   verify:

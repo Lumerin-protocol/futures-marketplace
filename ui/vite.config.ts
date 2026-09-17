@@ -59,6 +59,9 @@ export default defineConfig(() => {
   }
 
   return {
+    server: {
+      port: 3001,
+    },
     define: processEnvDefineMap,
     plugins: [
       // Inject version into HTML meta tag for easy verification

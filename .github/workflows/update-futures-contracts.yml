@@ -62,13 +62,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Map config environment
+        id: cfg
+        run: |
+          ENV="${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}"
+          case "$ENV" in
+            dev) echo "config_env=dev" >> "$GITHUB_OUTPUT" ;;
+            stg|main) echo "config_env=prd" >> "$GITHUB_OUTPUT" ;;
+            *)
+              echo "::error::Unknown environment '$ENV' (expected dev, stg, or main)"
+              exit 1
+              ;;
+          esac
+
       - name: Run update script
-        run: pnpm hardhat --config hardhat-prod.config.ts run scripts/update-futures.ts
-          --network default
+        run: pnpm hardhat --env ${{ steps.cfg.outputs.config_env }} run scripts/update-futures.ts
         env:
           ETH_NODE_ADDRESS: ${{ secrets.ETH_NODE_ADDRESS }}
           OWNER_PRIVATEKEY: ${{ secrets.OWNER_PRIVATEKEY }}
           PROPOSER_PRIVATEKEY: ${{ secrets.PROPOSER_PRIVATEKEY }}
           ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
-          FUTURES_ADDRESS: ${{ secrets.FUTURES_ADDRESS }}
-          SAFE_OWNER_ADDRESS: ${{ secrets.SAFE_OWNER_ADDRESS }}

@@ -68,11 +68,10 @@ jobs:
 
       - name: Render subgraph manifest
         working-directory: ./indexer
-        env:
-          NETWORK: arbitrum-sepolia
-          FUTURES_ADDRESS: "0x0000000000000000000000000000000000000000"
-          START_BLOCK_FUTURES: "0"
-        run: pnpm prepare:env
+        run: |
+          ENV_FILE=.env.example pnpm prepare:env
+          echo "--- subgraph.yaml ---"
+          cat subgraph.yaml
 
       - name: Generate types
         working-directory: ./indexer

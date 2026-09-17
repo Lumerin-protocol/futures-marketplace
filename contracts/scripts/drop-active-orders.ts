@@ -41,7 +41,9 @@ async function main(): Promise<void> {
     ),
     indexerUrl: process.env.FUTURES_INDEXER_URL ?? process.env.SUBGRAPH_URL,
     latestBlock: latestBlock.number,
-    startBlock: readOptionalBigInt("FUTURES_START_BLOCK"),
+    startBlock:
+      readOptionalBigInt("START_BLOCK_FUTURES") ??
+      readOptionalBigInt("FUTURES_START_BLOCK"),
     eventChunkSize: readOptionalBigInt("EVENT_SCAN_CHUNK_SIZE") ?? DEFAULT_EVENT_CHUNK_SIZE,
     maxIndexerLagBlocks:
       readOptionalBigInt("MAX_INDEXER_LAG_BLOCKS") ?? DEFAULT_MAX_INDEXER_LAG_BLOCKS,

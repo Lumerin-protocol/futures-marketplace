@@ -1,12 +1,16 @@
 {
   "name": "futures",
   "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.9"
+  },
   "type": "module",
   "scripts": {
     "clean": "rm -rf data generated build",
     "codegen": "graph codegen",
-    "prepare:env": "envsubst < subgraph.template.yaml > subgraph.yaml",
-    "prepare-local": "set -a && source ../.env && set +a && envsubst < subgraph.template.yaml > subgraph.yaml",
+    "//prepare:env": "`.` searches PATH when its operand has no slash, so a bare filename must be made explicitly relative for dash, which is /bin/sh on the CI runners.",
+    "prepare:env": "ENV_FILE=\"${ENV_FILE:?ENV_FILE must point at an env file, e.g. ../config/dev.env}\"; case \"$ENV_FILE\" in */*) ;; *) ENV_FILE=\"./$ENV_FILE\" ;; esac; set -a && . \"$ENV_FILE\" && set +a && envsubst < subgraph.template.yaml > subgraph.yaml",
+    "prepare-local": "ENV_FILE=../config/dev.env pnpm prepare:env",
     "build": "graph build",
     "deploy": "graph deploy --node https://api.studio.thegraph.com/deploy/ futures",
     "create-local": "graph create --node http://localhost:8020/ futures",
@@ -15,7 +19,7 @@
     "setup-local": "pnpm prepare-local && pnpm codegen && pnpm build && pnpm create-local && pnpm deploy-local",
     "test": "pnpm test:integration",
     "test:unit": "graph test",
-    "indexer": "docker-compose up",
+    "indexer": "docker compose --env-file ../config/dev.env --env-file ../.env up",
     "test:integration": "hardhat test nodejs",
     "test:integration:debug": "MATCHSTICK_VERBOSE=true hardhat test nodejs",
     "typecheck": "tsgo --noEmit -p integration/tsconfig.json",
