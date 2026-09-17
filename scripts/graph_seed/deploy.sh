@@ -228,10 +228,13 @@ if [ ! -d "node_modules" ]; then
     yarn install
 fi
 
-# Export environment variables for subgraph.yaml generation
-export NETWORK
-export FUTURES_ADDRESS
-export START_BLOCK_FUTURES
+# Addresses / NETWORK / start block come from the shared config file.
+# Deploy keys stay in this script's own environment.
+case $ENV in
+    dev) ENV_FILE="$REPO_DIR/config/dev.env" ;;
+    stg|lmn) ENV_FILE="$REPO_DIR/config/prd.env" ;;
+esac
+export ENV_FILE
 
 #############################################
 # PHASE 1: Prepare and Build
@@ -241,8 +244,8 @@ echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━�
 echo -e "${YELLOW}📦 PHASE 1: Build Subgraph${NC}"
 echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-echo "⚙️  Preparing subgraph configuration..."
-yarn prepare:env
+echo "⚙️  Preparing subgraph configuration from ${ENV_FILE}..."
+pnpm prepare:env
 
 echo ""
 echo "🔨 Generating AssemblyScript types..."

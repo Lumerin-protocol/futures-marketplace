@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { TransactionReceipt } from "viem";
-import { useCustomWalletClient } from "./data/useCustomWalletClient";
+import { usePublicClient } from "wagmi";
 
 export type TransactionStep = {
   label: string;
@@ -8,19 +8,29 @@ export type TransactionStep = {
   postConfirmation?: (receipt: TransactionReceipt) => Promise<void>;
 };
 
+/// `state` is an opaque hand-off between steps: a step stores whatever it needs
+/// and a later step casts it back to the shape it expects.
 export type ActionResult =
-  | { isSkipped: false; txhash?: `0x${string}`; state?: any }
-  | { isSkipped: true; state?: any };
+  | { isSkipped: false; txhash?: `0x${string}`; state?: unknown }
+  | { isSkipped: true; state?: unknown };
 
 export type TxState = {
   state: "pending" | "sending" | "sent" | "confirmed" | "failed" | "skipped";
   error?: Error;
   txhash?: `0x${string}`;
-  customState?: any;
+  /**
+   * Block the step's tx was mined in (once confirmed). Later steps can pin
+   * their reads/simulations to this block instead of `latest` to avoid
+   * racing RPC read-after-write lag right after a dependency (e.g. an
+   * ERC20 approve) confirms — see `retryUntilBlockAvailable`.
+   */
+  blockNumber?: bigint;
+  /// See `ActionResult.state`.
+  customState?: unknown;
 };
 
 export function useMultistepTx(props: { steps: TransactionStep[] }) {
-  const wc = useCustomWalletClient();
+  const wc = usePublicClient();
 
   const [txState, setTxState] = useState(() => {
     return props.steps.reduce<Record<number, TxState>>((acc, _, index) => {
@@ -48,6 +58,11 @@ export function useMultistepTx(props: { steps: TransactionStep[] }) {
   const isSuccess = lastStepState.state === "confirmed" || lastStepState.state === "skipped";
   const isPending = !isSuccess && !isError;
 
+  // Lifted out of MultipleTransactionProgress so the toggle survives step
+  // remounts (changing steps still remounts via `key={step}`).
+  const [showError, setShowError] = useState(false);
+  const toggleShowError = () => setShowError((v) => !v);
+
   const executeNextTransaction = async (txNumber: number) => {
     try {
       const actionPromise = props.steps[txNumber].action(stateRef.current);
@@ -63,12 +78,14 @@ export function useMultistepTx(props: { steps: TransactionStep[] }) {
 
       try {
         if (!actionResult.isSkipped && actionResult.txhash) {
-          const receipt = await wc!.waitForTransactionReceipt({
+          if (!wc) throw new Error("No public client available to await the transaction receipt");
+          const receipt = await wc.waitForTransactionReceipt({
             hash: actionResult.txhash,
           });
           updateStep(txNumber, {
             state: receipt.status === "success" ? "confirmed" : "failed",
             txhash: actionResult.txhash,
+            blockNumber: receipt.blockNumber,
           });
           if (props.steps[txNumber].postConfirmation) {
             await props.steps[txNumber].postConfirmation(receipt);
@@ -97,5 +114,7 @@ export function useMultistepTx(props: { steps: TransactionStep[] }) {
     isSuccess,
     isError,
     isPending,
+    showError,
+    toggleShowError,
   };
 }

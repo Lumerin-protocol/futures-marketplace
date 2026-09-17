@@ -25,13 +25,12 @@ export function useMediaQuery(
     return defaultValue;
   });
 
-  // Handles the change event of the media query.
-  function handleChange() {
-    setMatches(getMatches(query));
-  }
-
   useLayoutEffect(() => {
     const matchMedia = window.matchMedia(query);
+
+    // Declared inside the effect so the subscription is not torn down and
+    // rebuilt on every render just because the handler identity changed.
+    const handleChange = () => setMatches(matchMedia.matches);
 
     // Triggered at the first client-side load and if query changes
     handleChange();

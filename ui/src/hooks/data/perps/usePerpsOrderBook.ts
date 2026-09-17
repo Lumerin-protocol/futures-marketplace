@@ -1,5 +1,5 @@
 import { graphqlRequest } from "../graphql";
-import { QueryClient, useQuery } from "@tanstack/react-query";
+import { type QueryClient, useQuery } from "@tanstack/react-query";
 import type { GetResponse } from "../../../gateway/interfaces";
 import { PerpsOrderBookQuery } from "./graphql-queries";
 

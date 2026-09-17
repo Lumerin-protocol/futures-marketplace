@@ -1,13 +1,13 @@
-import { type FC, type ReactNode, useState } from "react";
+import { type FC, Fragment, type ReactNode, useState } from "react";
 import Button from "@mui/material/Button";
 import Alert from "@mui/material/Alert";
 import styled from "@mui/material/styles/styled";
 import CheckCircle from "@mui/icons-material/CheckCircle";
 import SkipNext from "@mui/icons-material/SkipNext";
 import ErrorIcon from "@mui/icons-material/Error";
-import { FormButtonsWrapper, PrimaryButton, SecondaryButton } from "../FormButtons/Buttons.styled";
+import { PrimaryButton, SecondaryButton } from "../FormButtons/Buttons.styled";
 import { truncateAddress } from "../../../utils/formatters";
-import { BaseError, ContractFunctionRevertedError, type PublicClient, UserRejectedRequestError } from "viem";
+import { BaseError, ContractFunctionRevertedError, UserRejectedRequestError } from "viem";
 import { type TransactionStep, type TxState, useMultistepTx } from "../../../hooks/useTxForm";
 import { SpinnerV2 } from "../../Spinner.styled";
 import { Link } from "react-router";
@@ -19,13 +19,24 @@ interface TransactionFormProps {
   description: ReactNode;
   inputForm?: FC<StepComponentProps> | ReactNode;
   validateInput?: () => Promise<boolean>;
+  disableReview?: boolean;
   reviewForm: FC<StepComponentProps>;
   resultForm?: FC<StepComponentProps>;
   transactionSteps: TransactionStep[];
   onClose: () => void;
+  /** Label of the review step's primary button; defaults to "Execute". */
+  executeLabel?: string;
+  /**
+   * Where "Back" on the review step goes when the form has no input step of
+   * its own — e.g. the caller renders the inputs and swaps this form in for
+   * review. Without it, Back closes the form.
+   */
+  onBack?: () => void;
 }
 
 export const TransactionForm = (props: TransactionFormProps) => {
+  // Pulled into a const so the guard below narrows it inside the step closures.
+  const { resultForm } = props;
   const multistepTx = useMultistepTx({
     steps: props.transactionSteps,
   });
@@ -51,10 +62,11 @@ export const TransactionForm = (props: TransactionFormProps) => {
                 component: (p: StepComponentProps) => (
                   <>
                     <p className="mb-2">{props.description}</p>
-                    {typeof props.inputForm === "function" ? props.inputForm!(p) : props.inputForm}
+                    {typeof props.inputForm === "function" ? props.inputForm(p) : props.inputForm}
                     <MultistepFormActions
                       primary={{
                         label: "Review",
+                        disabled: props.disableReview,
                         onClick: async () => {
                           if (props.validateInput && !(await props.validateInput())) {
                             return;
@@ -94,6 +106,8 @@ export const TransactionForm = (props: TransactionFormProps) => {
               <MultipleTransactionProgress
                 steps={props.transactionSteps}
                 txState={multistepTx.txState}
+                showError={multistepTx.showError}
+                onToggleShowError={multistepTx.toggleShowError}
                 onRetry={(stepNumber) => handleExecuteTransaction(stepNumber)}
               />
               <MultistepFormActions
@@ -106,13 +120,13 @@ export const TransactionForm = (props: TransactionFormProps) => {
             </>
           ),
         },
-        ...(props.resultForm
+        ...(resultForm
           ? [
               {
                 label: props.title,
                 component: (p: StepComponentProps) => (
                   <>
-                    {props.resultForm!(p)}
+                    {resultForm(p)}
                     <MultistepFormActions
                       primary={{ label: "Close", onClick: () => props.onClose() }}
                       secondary={{ label: "Back", onClick: () => p.prevStep() }}
@@ -153,10 +167,11 @@ export const TransactionFormV2 = (props: TransactionFormProps) => {
                 component: (p: StepComponentProps) => (
                   <>
                     <p className="mb-2">{props.description}</p>
-                    {typeof props.inputForm === "function" ? props.inputForm!(p) : props.inputForm}
+                    {typeof props.inputForm === "function" ? props.inputForm(p) : props.inputForm}
                     <MultistepFormActions
                       primary={{
                         label: "Review",
+                        disabled: props.disableReview,
                         onClick: async () => {
                           if (props.validateInput && !(await props.validateInput())) {
                             return;
@@ -178,7 +193,7 @@ export const TransactionFormV2 = (props: TransactionFormProps) => {
               {props.reviewForm(p)}
               <MultistepFormActions
                 primary={{
-                  label: "Execute",
+                  label: props.executeLabel ?? "Execute",
                   onClick: async () => {
                     if (props.validateInput && !(await props.validateInput())) {
                       return;
@@ -187,7 +202,10 @@ export const TransactionFormV2 = (props: TransactionFormProps) => {
                     await handleExecuteTransaction();
                   },
                 }}
-                secondary={{ label: "Back", onClick: () => p.prevStep() }}
+                secondary={{
+                  label: "Back",
+                  onClick: () => (props.onBack && !props.inputForm ? props.onBack() : p.prevStep()),
+                }}
               />
             </>
           ),
@@ -199,9 +217,11 @@ export const TransactionFormV2 = (props: TransactionFormProps) => {
               <MultipleTransactionProgress
                 steps={props.transactionSteps}
                 txState={multistepTx.txState}
+                showError={multistepTx.showError}
+                onToggleShowError={multistepTx.toggleShowError}
                 onRetry={(stepNumber) => handleExecuteTransaction(stepNumber)}
               />
-              {multistepTx.isSuccess && props.resultForm!(p)}
+              {multistepTx.isSuccess && props.resultForm?.(p)}
               <MultistepFormActions
                 primary={{
                   label: multistepTx.isSuccess && props.resultForm ? "Okay" : "Cancel",
@@ -222,9 +242,11 @@ export const TransactionFormV2 = (props: TransactionFormProps) => {
 export const MultipleTransactionProgress = (props: {
   steps: TransactionStep[];
   txState: Record<number, TxState>;
+  showError: boolean;
+  onToggleShowError: () => void;
   onRetry: (txNumber: number) => void;
 }) => {
-  const [showError, useShowError] = useState(false);
+  const { showError, onToggleShowError } = props;
   return (
     <div>
       <Alert severity="warning" sx={{ margin: "0 0 1em 0" }}>
@@ -248,7 +270,7 @@ export const MultipleTransactionProgress = (props: {
                   size="small"
                   type="button"
                   color="error"
-                  onClick={() => useShowError(!showError)}
+                  onClick={onToggleShowError}
                 >
                   {showError ? "Hide" : "Show"} Details
                 </RetryButton>
@@ -280,7 +302,7 @@ function mapErrorToString(error: Error): string {
   if (error instanceof BaseError) {
     let found: string | undefined;
 
-    const err = error.walk((err) => {
+    const _err = error.walk((err) => {
       const errorString = knownError(err as BaseError);
       if (errorString) {
         found = errorString;
@@ -308,7 +330,7 @@ function getStepProgressIcon(tx: TxState["state"]): ReactNode {
   };
   switch (tx) {
     case "pending":
-      return <></>;
+      return null;
     case "sending":
       return <SpinnerV2 />;
     case "sent":
@@ -432,39 +454,43 @@ export type StepComponentProps = {
 interface MultistepProps {
   steps: {
     label: string;
-    component: FC<StepComponentProps>;
+    // Render function, not a component type. TransactionForm rebuilds
+    // `steps[].component` on every parent render (balance polls, wallet
+    // state, etc.). Using that function as `<StepComponent />` would change
+    // the element type and remount the tree, stealing focus from inputs.
+    component: (props: StepComponentProps) => ReactNode;
   }[];
   onClose: () => void;
 }
 
 export const MultistepForm = (props: MultistepProps) => {
   const [step, _setStep] = useState(0);
-  const StepComponent = props.steps[step].component;
 
-  function setStep(step: number) {
-    if (step < 0) {
+  function setStep(nextStep: number) {
+    if (nextStep < 0) {
       props.onClose();
       _setStep(0);
       return;
     }
 
-    if (step > props.steps.length - 1) {
+    if (nextStep > props.steps.length - 1) {
       props.onClose();
       return;
     }
-    _setStep(step);
+    _setStep(nextStep);
   }
 
   return (
     <>
       <h2>{props.steps[step].label}</h2>
-      <StepComponent
-        key={step}
-        goToStep={setStep}
-        nextStep={() => setStep(step + 1)}
-        prevStep={() => setStep(step - 1)}
-        closeForm={props.onClose}
-      />
+      <Fragment key={step}>
+        {props.steps[step].component({
+          goToStep: setStep,
+          nextStep: () => setStep(step + 1),
+          prevStep: () => setStep(step - 1),
+          closeForm: props.onClose,
+        })}
+      </Fragment>
     </>
   );
 };

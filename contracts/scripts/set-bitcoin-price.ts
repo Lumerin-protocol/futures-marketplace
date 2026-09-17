@@ -1,13 +1,15 @@
-import { viem } from "hardhat";
+import { createInterface } from "node:readline";
+import hre from "hardhat";
 import { formatUnits, parseUnits } from "viem";
-import { createInterface } from "readline";
 
 async function main() {
-  const oracleAddress = process.env.HASHRATE_ORACLE_ADDRESS as `0x${string}` | undefined;
+  const { viem } = await hre.network.getOrCreate();
+
+  const oracleAddress = process.env.HASHPRICE_USD_ADDRESS as `0x${string}` | undefined;
   if (!oracleAddress) {
-    console.error("HASHRATE_ORACLE_ADDRESS environment variable is required");
+    console.error("HASHPRICE_USD_ADDRESS environment variable is required");
     console.error(
-      "Usage: HASHRATE_ORACLE_ADDRESS=0x... npx hardhat run scripts/set-bitcoin-price.ts --network localhost",
+      "Usage: HASHPRICE_USD_ADDRESS=0x... npx hardhat run scripts/set-bitcoin-price.ts --network localhost",
     );
     process.exit(1);
   }
@@ -16,16 +18,13 @@ async function main() {
 
   const pc = await viem.getPublicClient();
 
-  const priceFeedMock = await viem.getContractAt(
-    "contracts/PriceFeedMock.sol:PriceFeedMock",
-    oracleAddress,
-  );
+  const priceFeedMock = await viem.getContractAt("PriceFeedMock", oracleAddress);
 
   const [, answer] = await priceFeedMock.read.latestRoundData();
   const decimals = await priceFeedMock.read.decimals();
   let currentPrice = Number(formatUnits(answer, decimals));
 
-  console.log(`Current hashprice: $${currentPrice.toLocaleString()} per 100 TH/s per day`);
+  console.log(`Current hashprice: $${currentPrice.toLocaleString()} per 1 PH/s per day`);
 
   const rl = createInterface({
     input: process.stdin,
@@ -33,7 +32,7 @@ async function main() {
   });
 
   const prompt = () => {
-    console.log("\n" + "=".repeat(50));
+    console.log(`\n${"=".repeat(50)}`);
     console.log(`Current hashprice: $${currentPrice.toLocaleString()}`);
     console.log("=".repeat(50));
     console.log('Enter price change (e.g., "+2" for +2%, "-5" for -5%)');
@@ -56,7 +55,7 @@ async function main() {
       }
 
       const sign = match[1] === "-" ? -1 : 1;
-      const percent = parseFloat(match[2]) * sign;
+      const percent = Number.parseFloat(match[2]) * sign;
 
       const newPrice = currentPrice * (1 + percent / 100);
       const newPriceScaled = parseUnits(newPrice.toFixed(Number(decimals)), decimals);

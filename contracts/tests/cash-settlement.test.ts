@@ -1,209 +1,236 @@
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { deployFuturesFixture } from "./fixtures";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { network } from "hardhat";
 import { parseEventLogs, parseUnits } from "viem";
-import { expect } from "chai";
-import { quantizePrice, refreshHashprice } from "./utils";
+import { deployFuturesFixture, type FuturesFixture } from "./fixtures.ts";
+import { quantizePrice, refreshHashprice, scaleHashprice } from "./utils.ts";
+import { TimeInForce } from "./timeInForce.ts";
+
+const { networkHelpers } = await network.getOrCreate();
+
+async function totalContractBalance(contracts: FuturesFixture["contracts"]) {
+  const { futures, collateralVault } = contracts;
+  const insuranceFundAddr = await collateralVault.read.INSURANCE_FUND_ADDR();
+  return (
+    (await collateralVault.read.balanceOf([futures.address])) +
+    (await collateralVault.read.balanceOf([insuranceFundAddr]))
+  );
+}
+
+async function reachMaturityWithMovedMark(
+  contracts: FuturesFixture["contracts"],
+  tc: FuturesFixture["accounts"]["tc"],
+  expirationAt: bigint,
+) {
+  await scaleHashprice(contracts.hashpriceUsd, 12n, 10n);
+  await refreshHashprice(contracts.hashpriceUsd, expirationAt);
+  await tc.setNextBlockTimestamp({ timestamp: expirationAt });
+}
 
 describe("Futures - Offset & Cash Settlement", () => {
   it("should handle position offset and settlement with contract balance correctly when buyer exits at profit", async () => {
-    const data = await loadFixture(deployFuturesFixture);
+    const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts, config } = data;
-    const { futures } = contracts;
-    const { seller, buyer, buyer2, validator, tc, pc, owner } = accounts;
+    const { futures, collateralVault } = contracts;
+    const { owner, seller, buyer, buyer2, validator, tc, pc } = accounts;
 
     const marginAmount = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
-    const dst = "https://destination-url.com";
+    const takerFeeBps = 100n; // 1%
 
-    // Step 1: Add margin for all participants
-    await futures.write.addMargin([marginAmount], { account: seller.account });
-    await futures.write.addMargin([marginAmount], { account: buyer.account });
-    await futures.write.addMargin([marginAmount], { account: buyer2.account });
+    await futures.write.setTakerFeeBps([Number(takerFeeBps)], { account: owner.account });
 
-    // Get initial balances
-    const contractBalanceBefore = await futures.read.balanceOf([futures.address]);
-    const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
+    await collateralVault.write.deposit([marginAmount], { account: seller.account });
+    await collateralVault.write.deposit([marginAmount], { account: buyer.account });
+    await collateralVault.write.deposit([marginAmount], { account: buyer2.account });
 
-    // Step 2: Party A (buyer) enters into position with Party B (seller) at price 100
+    const contractBalanceBefore = await totalContractBalance(contracts);
+    const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
+
     const initialPrice = quantizePrice(parseUnits("100", 6), config.priceLadderStep);
-
-    // Create sell order first
-    await futures.write.createOrder([initialPrice, deliveryDate, "", -1], {
-      account: seller.account,
-    });
-
-    // Create buy order to match and create position
-    await futures.write.createOrder([initialPrice, deliveryDate, dst, 1], {
-      account: buyer.account,
-    });
-
-    // Step 3: Price changes - Party A (buyer) exits by creating sell order at higher price (120)
-    // This represents a profit scenario where buyer exits at a higher price
     const exitPrice = quantizePrice(parseUnits("120", 6), config.priceLadderStep);
 
-    // Buyer creates sell order to exit
-    await futures.write.createOrder([exitPrice, deliveryDate, "", -1], {
+    await futures.write.createOrder([initialPrice, deliveryDate, -1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
+    await futures.write.createOrder([initialPrice, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
 
-    // Step 4: Party C (buyer2) creates buy order at exit price, matching with buyer's sell order
-    // This offsets buyer's position and creates new position between seller and buyer2
-    const offsetTxHash = await futures.write.createOrder([exitPrice, deliveryDate, dst, 1], {
-      account: buyer2.account,
+    await futures.write.createOrder([exitPrice, deliveryDate, -1n, TimeInForce.GTC], {
+      account: buyer.account,
     });
 
+    const offsetTxHash = await futures.write.createOrder(
+      [exitPrice, deliveryDate, 1n, TimeInForce.GTC],
+      {
+        account: buyer2.account,
+      },
+    );
     const offsetReceipt = await pc.waitForTransactionReceipt({ hash: offsetTxHash });
 
-    const positionCreatedEvents = parseEventLogs({
+    const matches = parseEventLogs({
       logs: offsetReceipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "OrderMatched",
     });
+    assert.equal(matches.length, 1);
 
-    expect(positionCreatedEvents.length).to.be.greaterThan(0);
-    // Get the new position ID
-    const newPositionId = positionCreatedEvents[0].args.positionId;
-    const newPosition = await futures.read.getPositionById([newPositionId]);
-
-    // Step 5: Verify buyer was credited from contract balance (profit scenario)
-    // When buyer exits at higher price, they profit, so contract pays them
-    const buyerBalanceAfterOffset = await futures.read.balanceOf([buyer.account.address]);
-    const contractBalanceAfterOffset = await futures.read.balanceOf([futures.address]);
-
-    // Calculate expected PnL: (exitPrice - initialPrice) * deliveryDurationDays
-    const expectedPnL = (exitPrice - initialPrice) * BigInt(config.deliveryDurationDays);
-    // Buyer created 2 orders (entry and exit), so 2 * orderFee was deducted
-    const orderFee = await futures.read.orderFee();
-    const expectedBuyerBalanceChange = expectedPnL - orderFee * 2n;
-    expect(buyerBalanceAfterOffset - buyerBalanceBefore).to.equal(expectedBuyerBalanceChange);
-
-    // Contract balance decreases by PnL paid, but increases by order fees collected
-    // Total orders created: seller (1) + buyer (2) + buyer2 (1) = 4 orders
-    const totalOrderFees = orderFee * 4n;
-    const expectedContractBalanceChange = expectedPnL - totalOrderFees;
-    expect(contractBalanceBefore - contractBalanceAfterOffset).to.equal(
-      expectedContractBalanceChange
+    assert.equal(
+      (await futures.read.getUserPosition([buyer.account.address, deliveryDate])).netQuantity,
+      0n,
+    );
+    assert.equal(
+      (await futures.read.getUserPosition([seller.account.address, deliveryDate])).netQuantity,
+      -1n,
+    );
+    assert.equal(
+      (await futures.read.getUserPosition([buyer2.account.address, deliveryDate])).netQuantity,
+      1n,
     );
 
-    // Step 6: Move time forward to delivery date and settle the new position
-    await refreshHashprice(contracts.hashrateOracle, deliveryDate);
-    await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
+    const buyerBalanceAfterOffset = await collateralVault.read.balanceOf([buyer.account.address]);
+    const contractBalanceAfterOffset = await totalContractBalance(contracts);
 
-    // Get balances before settlement
-    const contractBalanceBeforeSettlement = await futures.read.balanceOf([futures.address]);
+    const expectedPnL = exitPrice - initialPrice;
+    // Taker fee per fill: notional (qty=1, so the fill price) × bps. Buyer paid
+    // it on the entry fill; buyer2 paid it on the offset fill at exitPrice.
+    const entryFee = (initialPrice * takerFeeBps) / 10_000n;
+    const exitFee = (exitPrice * takerFeeBps) / 10_000n;
+    const expectedBuyerBalanceChange = expectedPnL - entryFee;
+    assert.equal(buyerBalanceAfterOffset - buyerBalanceBefore, expectedBuyerBalanceChange);
 
-    // Close delivery for the new position
-    await futures.write.closeDelivery([newPositionId, false], {
+    const totalFees = entryFee + exitFee;
+    const expectedContractBalanceChange = expectedPnL - totalFees;
+    assert.equal(contractBalanceBefore - contractBalanceAfterOffset, expectedContractBalanceChange);
+
+    await reachMaturityWithMovedMark(contracts, tc, deliveryDate);
+
+    await futures.write.settlePosition([seller.account.address, deliveryDate], {
+      account: validator.account,
+    });
+    await futures.write.settlePosition([buyer2.account.address, deliveryDate], {
       account: validator.account,
     });
 
-    // Step 7: Verify funds are returned to contract balance during settlement
-    const contractBalanceAfterSettlement = await futures.read.balanceOf([futures.address]);
-    expect(contractBalanceBefore + totalOrderFees).to.equal(contractBalanceAfterSettlement);
+    const contractBalanceAfterSettlement = await totalContractBalance(contracts);
+    assert.equal(contractBalanceBefore + totalFees, contractBalanceAfterSettlement);
+
+    assert.equal(
+      (await futures.read.getUserPosition([seller.account.address, deliveryDate])).netQuantity,
+      0n,
+    );
+    assert.equal(
+      (await futures.read.getUserPosition([buyer2.account.address, deliveryDate])).netQuantity,
+      0n,
+    );
   });
 
   it("should handle position offset and settlement with contract balance correctly when buyer exits at loss", async () => {
-    const data = await loadFixture(deployFuturesFixture);
+    const data = await networkHelpers.loadFixture(deployFuturesFixture);
     const { contracts, accounts, config } = data;
-    const { futures } = contracts;
-    const { seller, buyer, buyer2, validator, tc, pc } = accounts;
+    const { futures, collateralVault } = contracts;
+    const { owner, seller, buyer, buyer2, validator, tc, pc } = accounts;
 
     const marginAmount = parseUnits("10000", 6);
     const deliveryDate = config.deliveryDates[0];
-    const dst = "https://destination-url.com";
+    const takerFeeBps = 100n; // 1%
 
-    // Step 1: Add margin for all participants
-    await futures.write.addMargin([marginAmount], { account: seller.account });
-    await futures.write.addMargin([marginAmount], { account: buyer.account });
-    await futures.write.addMargin([marginAmount], { account: buyer2.account });
+    await futures.write.setTakerFeeBps([Number(takerFeeBps)], { account: owner.account });
 
-    // Get initial balances
-    const contractBalanceBefore = await futures.read.balanceOf([futures.address]);
-    const buyerBalanceBefore = await futures.read.balanceOf([buyer.account.address]);
+    await collateralVault.write.deposit([marginAmount], { account: seller.account });
+    await collateralVault.write.deposit([marginAmount], { account: buyer.account });
+    await collateralVault.write.deposit([marginAmount], { account: buyer2.account });
 
-    // Step 2: Party A (buyer) enters into position with Party B (seller) at price 100
+    const contractBalanceBefore = await totalContractBalance(contracts);
+    const buyerBalanceBefore = await collateralVault.read.balanceOf([buyer.account.address]);
+
     const initialPrice = quantizePrice(parseUnits("100", 6), config.priceLadderStep);
-
-    // Create sell order first
-    await futures.write.createOrder([initialPrice, deliveryDate, "", -1], {
-      account: seller.account,
-    });
-
-    // Create buy order to match and create position
-    await futures.write.createOrder([initialPrice, deliveryDate, dst, 1], {
-      account: buyer.account,
-    });
-
-    // Step 3: Price changes - Party A (buyer) exits by creating sell order at higher price (120)
-    // This represents a profit scenario where buyer exits at a higher price
     const exitPrice = quantizePrice(parseUnits("90", 6), config.priceLadderStep);
 
-    // Buyer creates sell order to exit
-    await futures.write.createOrder([exitPrice, deliveryDate, "", -1], {
+    await futures.write.createOrder([initialPrice, deliveryDate, -1n, TimeInForce.GTC], {
+      account: seller.account,
+    });
+    await futures.write.createOrder([initialPrice, deliveryDate, 1n, TimeInForce.GTC], {
       account: buyer.account,
     });
 
-    // Step 4: Party C (buyer2) creates buy order at exit price, matching with buyer's sell order
-    // This offsets buyer's position and creates new position between seller and buyer2
-    const offsetTxHash = await futures.write.createOrder([exitPrice, deliveryDate, dst, 1], {
-      account: buyer2.account,
+    await futures.write.createOrder([exitPrice, deliveryDate, -1n, TimeInForce.GTC], {
+      account: buyer.account,
     });
 
+    const offsetTxHash = await futures.write.createOrder(
+      [exitPrice, deliveryDate, 1n, TimeInForce.GTC],
+      {
+        account: buyer2.account,
+      },
+    );
     const offsetReceipt = await pc.waitForTransactionReceipt({ hash: offsetTxHash });
 
-    const positionCreatedEvents = parseEventLogs({
+    const matches = parseEventLogs({
       logs: offsetReceipt.logs,
       abi: futures.abi,
-      eventName: "PositionCreated",
+      eventName: "OrderMatched",
     });
+    assert.equal(matches.length, 1);
 
-    expect(positionCreatedEvents.length).to.be.greaterThan(0);
-    // Get the new position ID
-    const newPositionId = positionCreatedEvents[0].args.positionId;
-
-    // Step 5: Verify buyer was debited from contract balance (loss scenario)
-    const buyerBalanceAfterOffset = await futures.read.balanceOf([buyer.account.address]);
-    const contractBalanceAfterOffset = await futures.read.balanceOf([futures.address]);
-
-    // Calculate expected PnL: (exitPrice - initialPrice) * deliveryDurationDays
-    const expectedPnL = (exitPrice - initialPrice) * BigInt(config.deliveryDurationDays);
-    // Buyer created 2 orders (entry and exit), so 2 * orderFee was deducted
-    const orderFee = await futures.read.orderFee();
-    const expectedBuyerBalanceChange = expectedPnL - orderFee * 2n;
-    expect(buyerBalanceAfterOffset - buyerBalanceBefore).to.equal(expectedBuyerBalanceChange);
-    // Contract balance decreases by PnL paid, but increases by order fees collected
-    // Total orders created: seller (1) + buyer (2) + buyer2 (1) = 4 orders
-    const totalOrderFees = orderFee * 4n;
-    const expectedContractBalanceChange = expectedPnL - totalOrderFees;
-    expect(contractBalanceBefore - contractBalanceAfterOffset).to.equal(
-      expectedContractBalanceChange
+    assert.equal(
+      (await futures.read.getUserPosition([buyer.account.address, deliveryDate])).netQuantity,
+      0n,
+    );
+    assert.equal(
+      (await futures.read.getUserPosition([seller.account.address, deliveryDate])).netQuantity,
+      -1n,
+    );
+    assert.equal(
+      (await futures.read.getUserPosition([buyer2.account.address, deliveryDate])).netQuantity,
+      1n,
     );
 
-    // Step 6: Move time forward to delivery date and settle the new position
-    await refreshHashprice(contracts.hashrateOracle, deliveryDate);
-    await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
+    const buyerBalanceAfterOffset = await collateralVault.read.balanceOf([buyer.account.address]);
+    const contractBalanceAfterOffset = await totalContractBalance(contracts);
 
-    const sellerBalanceBeforeSettlement = await futures.read.balanceOf([seller.account.address]);
-    const buyer2BalanceBeforeSettlement = await futures.read.balanceOf([buyer2.account.address]);
+    const expectedPnL = exitPrice - initialPrice;
+    // Taker fee per fill: notional (qty=1, so the fill price) × bps. Buyer paid
+    // it on the entry fill; buyer2 paid it on the offset fill at exitPrice.
+    const entryFee = (initialPrice * takerFeeBps) / 10_000n;
+    const exitFee = (exitPrice * takerFeeBps) / 10_000n;
+    const expectedBuyerBalanceChange = expectedPnL - entryFee;
+    assert.equal(buyerBalanceAfterOffset - buyerBalanceBefore, expectedBuyerBalanceChange);
 
-    // Close delivery for the new position
-    await futures.write.closeDelivery([newPositionId, false], {
+    const totalFees = entryFee + exitFee;
+    const expectedContractBalanceChange = expectedPnL - totalFees;
+    assert.equal(contractBalanceBefore - contractBalanceAfterOffset, expectedContractBalanceChange);
+
+    await reachMaturityWithMovedMark(contracts, tc, deliveryDate);
+
+    const sellerBalanceBeforeSettlement = await collateralVault.read.balanceOf([
+      seller.account.address,
+    ]);
+    const buyer2BalanceBeforeSettlement = await collateralVault.read.balanceOf([
+      buyer2.account.address,
+    ]);
+
+    await futures.write.settlePosition([seller.account.address, deliveryDate], {
+      account: validator.account,
+    });
+    await futures.write.settlePosition([buyer2.account.address, deliveryDate], {
       account: validator.account,
     });
 
-    // Step 7: Verify funds are returned to contract balance during settlement
-    const contractBalanceAfterSettlement = await futures.read.balanceOf([futures.address]);
-    expect(contractBalanceBefore + totalOrderFees).to.equal(contractBalanceAfterSettlement);
+    const contractBalanceAfterSettlement = await totalContractBalance(contracts);
+    assert.equal(contractBalanceBefore + totalFees, contractBalanceAfterSettlement);
+
     const marketPrice = await futures.read.getMarketPrice();
 
-    const sellerBalance = await futures.read.balanceOf([seller.account.address]);
+    const sellerBalance = await collateralVault.read.balanceOf([seller.account.address]);
     const deltaSeller = sellerBalance - sellerBalanceBeforeSettlement;
-    const expectedSellerPnl = (initialPrice - marketPrice) * BigInt(config.deliveryDurationDays);
-    expect(deltaSeller).to.equal(expectedSellerPnl);
+    const expectedSellerPnl = initialPrice - marketPrice;
+    assert.equal(deltaSeller, expectedSellerPnl);
 
-    const buyer2Balance = await futures.read.balanceOf([buyer2.account.address]);
+    const buyer2Balance = await collateralVault.read.balanceOf([buyer2.account.address]);
     const deltaBuyer2 = buyer2Balance - buyer2BalanceBeforeSettlement;
-    const expectedBuyer2Pnl = (marketPrice - exitPrice) * BigInt(config.deliveryDurationDays);
-    expect(deltaBuyer2).to.equal(expectedBuyer2Pnl);
+    const expectedBuyer2Pnl = marketPrice - exitPrice;
+    assert.equal(deltaBuyer2, expectedBuyer2Pnl);
   });
 });

@@ -25,7 +25,7 @@ export const NetworkBox = styled(ModalBox)`
   }
 `;
 
-export const ModalCard = styled("div")`
+export const ModalCard = styled("div")<{ $compact?: boolean }>`
   background: ${tokens.modal.bg};
   border: 1px solid ${tokens.border.default};
   color: ${tokens.text.onDark};
@@ -33,9 +33,24 @@ export const ModalCard = styled("div")`
   display: flex;
   flex-direction: column;
   margin: 3rem auto;
-  max-width: 600px;
-  padding: 2rem 4rem 4rem;
+  max-width: ${(p) => (p.$compact ? "460px" : "600px")};
+  padding: ${(p) => (p.$compact ? "2rem" : "2rem 4rem 4rem")};
   box-shadow: ${tokens.shadow.level3};
+
+  /* Compact cards pin the close button to the corner so it does not push the
+     title down and the content starts at the same offset on every side. */
+  ${(p) =>
+    p.$compact &&
+    `
+    position: relative;
+
+    .close {
+      position: absolute;
+      top: 1.25rem;
+      right: 1.25rem;
+      margin-left: 0;
+    }
+  `}
 
   @media (max-width: 600px) {
     padding: 1rem 2rem 2rem;

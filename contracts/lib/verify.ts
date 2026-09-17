@@ -1,38 +1,60 @@
-import { run } from "hardhat";
+import {
+  verifyContract as hreVerify,
+  type VerifyContractArgs,
+} from "@nomicfoundation/hardhat-verify/verify";
+import hre from "hardhat";
+import { getAddress, isAddress } from "viem";
 
-const VERIFY_MAX_ATTEMPTS = 5;
-const VERIFY_RETRY_DELAY_MS = 10_000;
+/// Providers we attempt by default. Independent indexers — verifying on more
+/// than one is fine, and a failure on one (e.g. Etherscan being picky about
+/// constructor encoding for proxies) shouldn't mask a success on another.
+const DEFAULT_PROVIDERS = ["etherscan", "blockscout", "sourcify"] as const;
+type Provider = NonNullable<VerifyContractArgs["provider"]>;
 
-export async function verifyContract(address: string, constructorArgs?: any[]) {
-  for (let attempt = 1; attempt <= VERIFY_MAX_ATTEMPTS; attempt++) {
+export type VerifyOpts = {
+  /** Fully qualified name, e.g. `contracts/HashPowerFutures.sol:HashPowerFutures`. */
+  contract?: string;
+  force?: boolean;
+};
+
+/// Verify on each provider in turn. Never throws — failures are logged so the
+/// deploy script can keep going.
+export async function verifyContract(
+  address: string,
+  constructorArgs?: readonly unknown[],
+  providers: readonly Provider[] = DEFAULT_PROVIDERS,
+  opts: VerifyOpts = {},
+) {
+  // hardhat-verify defaults to the built-in `production` profile (runs=200, no
+  // viaIR). Deploy/compile use `default` (viaIR + our optimizer settings).
+  // Force `default` so the compiler input matches on-chain bytecode.
+  if (hre.globalOptions.buildProfile === undefined) {
+    hre.globalOptions.buildProfile = "default";
+  }
+
+  const normalizedArgs = (constructorArgs ?? []).map((arg) =>
+    typeof arg === "string" && isAddress(arg) ? getAddress(arg) : arg,
+  );
+
+  const args: Omit<VerifyContractArgs, "provider"> = {
+    address: getAddress(address),
+    constructorArgs: normalizedArgs as unknown[],
+    contract: opts.contract,
+    force: opts.force,
+  };
+
+  for (const provider of providers) {
+    console.log(`\nVerifying ${args.address} on ${provider}...`);
     try {
-      await run("verify:verify", {
-        address,
-        constructorArguments: constructorArgs,
-      });
-      return;
+      await hreVerify({ ...args, provider }, hre);
+      console.log(`  ${provider}: verified.`);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-
-      // If already verified, treat as success.
-      if (/already verified/i.test(message)) {
-        console.log(`Contract ${address} is already verified.`);
-        return;
+      const msg = (err as Error).message ?? String(err);
+      if (msg.includes("Already Verified") || msg.includes("already been verified")) {
+        console.log(`  ${provider}: already verified.`);
+      } else {
+        console.warn(`  ${provider}: verification failed — ${msg}`);
       }
-
-      if (attempt < VERIFY_MAX_ATTEMPTS) {
-        console.warn(
-          `Verification attempt ${attempt}/${VERIFY_MAX_ATTEMPTS} failed for ${address}: ${message}`
-        );
-        console.warn(`Retrying in ${VERIFY_RETRY_DELAY_MS / 1000}s...`);
-        await new Promise((resolve) => setTimeout(resolve, VERIFY_RETRY_DELAY_MS));
-        continue;
-      }
-
-      console.error(
-        `Verification failed for ${address} after ${VERIFY_MAX_ATTEMPTS} attempts. Continuing script.`
-      );
-      console.error(err);
     }
   }
 }

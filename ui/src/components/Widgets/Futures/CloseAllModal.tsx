@@ -7,10 +7,11 @@ import IconButton from "@mui/material/IconButton";
 import { ModalCard } from "../../Modal.styled";
 import { ModalActions, ModalCancelButton, ModalConfirmButton } from "./PerpsOrderFormFields";
 import type { PositionSession } from "../../../hooks/data/perps/useUserPositionSessions";
-import { readContract } from "@wagmi/core";
-import { PerpsABI } from "../../../abi/Perps";
+import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
 import { useConfig } from "wagmi";
+import { readContract } from "wagmi/actions";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { withErrors } from "../../../lib/withErrors";
 
 interface SimulationResult {
   sessionId: string;
@@ -29,7 +30,8 @@ interface CloseAllModalProps {
   onCloseAll?: () => void;
 }
 
-export const CloseAllModal = ({ open, onClose, positionSessions, marketPrice, onCloseAll }: CloseAllModalProps) => {
+// `onCloseAll` is accepted but never invoked — see ui/TECH_DEBT.md.
+export const CloseAllModal = ({ open, onClose, positionSessions, marketPrice }: CloseAllModalProps) => {
   const [simResults, setSimResults] = useState<SimulationResult[]>([]);
   const [isSimulating, setIsSimulating] = useState(false);
   const [simError, setSimError] = useState<string | null>(null);
@@ -42,7 +44,7 @@ export const CloseAllModal = ({ open, onClose, positionSessions, marketPrice, on
 
   const totalSize = useMemo(() => {
     return openPositions.reduce((sum, s) => {
-      const qty = s.user.netQuantity < 0n ? -s.user.netQuantity : s.user.netQuantity;
+      const qty = s.netQuantity < 0n ? -s.netQuantity : s.netQuantity;
       return sum + qty;
     }, 0n);
   }, [openPositions]);
@@ -62,7 +64,7 @@ export const CloseAllModal = ({ open, onClose, positionSessions, marketPrice, on
       const results: SimulationResult[] = [];
 
       for (const session of openPositions) {
-        const netQty = session.user.netQuantity;
+        const netQty = session.netQuantity;
         if (netQty === 0n) continue;
 
         const closeQuantity = -netQty;
@@ -72,7 +74,7 @@ export const CloseAllModal = ({ open, onClose, positionSessions, marketPrice, on
 
         const result = await readContract(config, {
           address: process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`,
-          abi: PerpsABI,
+          abi: withErrors(HashPowerPerpsDEXAbi),
           functionName: "simulateOrder",
           args: [closePrice, closeQuantity],
         });

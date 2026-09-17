@@ -9,6 +9,7 @@ on:
       - "cicd/**"
     paths:
       - "indexer/**"
+      - "config/*.env"
       - ".github/workflows/update-futures-oracle.yml"
   workflow_dispatch:
     inputs:
@@ -81,12 +82,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "yarn"
-          cache-dependency-path: indexer/yarn.lock
+          node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: |
+            indexer/pnpm-lock.yaml
+            contracts/pnpm-lock.yaml
 
       - name: Set environment outputs
         id: env
@@ -100,19 +108,28 @@ jobs:
           fi
           echo "goldsky_subgraph_name=$GS_NAME" >> $GITHUB_OUTPUT
 
-          # Rolling tag and public endpoint per environment
+          # Rolling tag, public endpoint, and the config/<name>.env to load.
+          # Goldsky name/tag/endpoint configure the deployment, not the
+          # container, so they stay as GitHub / org variables.
           case $ENV in
             dev)
               echo "goldsky_rolling_tag=dev-latest" >> $GITHUB_OUTPUT
               echo "goldsky_endpoint=${{ vars.DEV_GS_FUTURES }}" >> $GITHUB_OUTPUT
+              echo "config_env=dev" >> $GITHUB_OUTPUT
               ;;
             stg)
               echo "goldsky_rolling_tag=stg-latest" >> $GITHUB_OUTPUT
               echo "goldsky_endpoint=${{ vars.STG_GS_FUTURES }}" >> $GITHUB_OUTPUT
+              echo "config_env=prd" >> $GITHUB_OUTPUT
               ;;
             main)
               echo "goldsky_rolling_tag=lmn-latest" >> $GITHUB_OUTPUT
               echo "goldsky_endpoint=${{ vars.LMN_GS_FUTURES }}" >> $GITHUB_OUTPUT
+              echo "config_env=prd" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "::error::Unknown environment '$ENV' (expected dev, stg, or main)"
+              exit 1
               ;;
           esac
 
@@ -120,34 +137,35 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./indexer
-        run: yarn install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build contracts and generate ABIs
         working-directory: ./contracts
         run: |
-          yarn install --frozen-lockfile
-          yarn hardhat compile
+          pnpm install --frozen-lockfile
+          pnpm hardhat compile
           echo "✅ Contracts compiled and ABIs generated"
 
+      # Addresses, start blocks and NETWORK all come from config/<env>.env.
       - name: Prepare subgraph configuration
         working-directory: ./indexer
         env:
-          NETWORK: ${{ vars.NETWORK }}
-          FUTURES_ADDRESS: ${{ vars.REACT_APP_FUTURES_TOKEN_ADDRESS }}
-          START_BLOCK_FUTURES: ${{ vars.START_BLOCK_FUTURES }}
+          CONFIG_ENV: ${{ steps.env.outputs.config_env }}
+          DEPLOY_ENV: ${{ needs.setup.outputs.environment }}
         run: |
-          echo "⚙️ Preparing subgraph for ${{ needs.setup.outputs.environment }}..."
-          echo "   Network: ${NETWORK}"
-          echo "   Futures Address: ${FUTURES_ADDRESS}"
-          echo "   Start Block:    ${START_BLOCK_FUTURES}"
-          yarn prepare:env
+          set -euo pipefail
+          ENV_FILE="../config/${CONFIG_ENV}.env"
+          echo "⚙️ Preparing subgraph for ${DEPLOY_ENV} from ${ENV_FILE}..."
+          ENV_FILE="$ENV_FILE" pnpm prepare:env
           echo "✅ Configuration ready"
+          echo "--- subgraph.yaml ---"
+          cat subgraph.yaml
 
       - name: Generate code and build
         working-directory: ./indexer
         run: |
-          yarn codegen
-          yarn build
+          pnpm codegen
+          pnpm build
           echo "✅ Build complete"
 
       - name: Upload build artifacts
