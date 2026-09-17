@@ -1,0 +1,2 @@
+# Production env must be reviewed by maintainers.
+/config/prd.env @Lumerin-protocol/lumerin-maintainers
