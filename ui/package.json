@@ -3,15 +3,19 @@
   "version": "1.0.0",
   "private": true,
   "engines": {
-    "node": "22.*",
+    "node": ">=22.9",
     "pnpm": "11.*"
   },
   "type": "module",
   "scripts": {
-    "dev": "vite --port 3001",
-    "dev:host": "DEV_SERVER_HTTPS=true vite --port 3001 --host",
+    "dev": "vite",
+    "dev:prd": "APP_ENV=prd vite",
+    "dev:local": "APP_ENV=local vite",
+    "dev:host": "APP_ENV=dev vite --host",
     "build": "vite build",
-    "build:analyze": "vite build --mode analyze && vite-bundle-analyzer build/bundle-analyzer.html",
+    "build:dev": "APP_ENV=dev vite build",
+    "build:prd": "APP_ENV=prd vite build",
+    "build:analyze": "vite build && vite-bundle-analyzer build/bundle-analyzer.html",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "serve": "serve -s build -p 3001",

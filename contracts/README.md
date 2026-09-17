@@ -18,7 +18,7 @@ and aborts if it cannot fit the configured/block gas limit; it never silently
 splits the cutover.
 
 Set `FUTURES_INDEXER_URL` (or `SUBGRAPH_URL`) for indexer discovery. Event
-discovery requires `FUTURES_START_BLOCK` or `ETHERSCAN_API_KEY`;
+discovery requires `START_BLOCK_FUTURES` (or the deprecated `FUTURES_START_BLOCK` alias) or `ETHERSCAN_API_KEY`;
 `EVENT_SCAN_CHUNK_SIZE` defaults to `100000`.
 `DRY_RUN=true` performs discovery and gas preflight without writing. Safe
 operation uses `SAFE_OWNER_ADDRESS`, `PROPOSER_PRIVATEKEY`, and optionally

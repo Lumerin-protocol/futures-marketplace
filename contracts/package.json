@@ -20,6 +20,8 @@
     "lint": "biome lint .",
     "lint:fix": "biome check --write .",
     "clean": "rm -rf abi artifacts cache",
+    "run:dev": "hardhat run --env dev",
+    "run:prd": "hardhat run --env prd",
     "deploy:futures": "hardhat run scripts/deploy-futures.ts",
     "deploy:local": "hardhat run scripts/deploy-local.ts",
     "upgrade:futures": "hardhat run scripts/update-futures.ts",

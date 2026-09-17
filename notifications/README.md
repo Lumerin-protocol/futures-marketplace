@@ -6,7 +6,8 @@ A Telegram bot service for monitoring margin balances and sending notifications.
 
 ### 1. Environment Variables
 
-Create a `.env` file with the following variables:
+Public values (log level, contract addresses) live in `config/dev.env` and
+`config/prd.env`. Put secrets in a repo-root or package-local `.env`:
 
 ```bash
 # Telegram Bot Configuration

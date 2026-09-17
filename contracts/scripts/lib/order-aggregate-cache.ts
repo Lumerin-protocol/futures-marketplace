@@ -510,7 +510,7 @@ export async function discoverOrderCacheCandidates(
   if (startBlock === undefined) {
     if (!options.etherscanApiKey) {
       throw new Error(
-        "ETHERSCAN_API_KEY is required to discover the deployment block; set FUTURES_START_BLOCK to bypass",
+        "ETHERSCAN_API_KEY is required to discover the deployment block; set START_BLOCK_FUTURES to bypass",
       );
     }
     startBlock = await fetchDeploymentBlockFromEtherscan(

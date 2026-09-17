@@ -2,7 +2,12 @@ import { OperationType } from "@safe-global/types-kit";
 import hre from "hardhat";
 import { encodeFunctionData, getAddress } from "viem";
 import { estimateContractGas, simulateContract, writeContract } from "viem/actions";
-import { readOptionalAddress, readOptionalBigInt, requireAddress } from "../lib/env.ts";
+import {
+  readOptionalAddress,
+  readOptionalBigInt,
+  requireAddress,
+  requireEnvsSet,
+} from "../lib/env.ts";
 import { addrUrl, txUrl } from "../lib/explorer.ts";
 import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts";
 import { SafeWallet } from "../lib/safe.ts";
@@ -36,7 +41,9 @@ async function main(): Promise<void> {
     ),
     indexerUrl: process.env.FUTURES_INDEXER_URL ?? process.env.SUBGRAPH_URL,
     latestBlock: latestBlock.number,
-    startBlock: readOptionalBigInt("FUTURES_START_BLOCK"),
+    startBlock:
+      readOptionalBigInt("START_BLOCK_FUTURES") ??
+      readOptionalBigInt("FUTURES_START_BLOCK"),
     eventChunkSize: readOptionalBigInt("EVENT_SCAN_CHUNK_SIZE") ?? DEFAULT_EVENT_CHUNK_SIZE,
     maxIndexerLagBlocks:
       readOptionalBigInt("MAX_INDEXER_LAG_BLOCKS") ?? DEFAULT_MAX_INDEXER_LAG_BLOCKS,
@@ -110,7 +117,8 @@ async function main(): Promise<void> {
 
   await logPrompt(`Drop active legacy orders for all ${users.length} discovered participant(s)?`);
   if (safeOwnerAddress) {
-    const safe = new SafeWallet(safeOwnerAddress, proposer!);
+    const { SAFE_API_KEY } = requireEnvsSet("SAFE_API_KEY");
+    const safe = new SafeWallet(safeOwnerAddress, proposer!, SAFE_API_KEY);
     const data = encodeFunctionData({
       abi: futures.abi,
       functionName: "dropActiveOrders",
