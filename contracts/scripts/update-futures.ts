@@ -2,7 +2,7 @@ import hre from "hardhat";
 import { encodeFunctionData, getAddress } from "viem";
 import { estimateContractGas, simulateContract } from "viem/actions";
 import { OperationType } from "@safe-global/types-kit";
-import { readOptionalAddress, readOptionalBigInt, requireAddress } from "../lib/env.ts";
+import { readOptionalAddress, readOptionalBigInt, requireAddress, requireEnvsSet } from "../lib/env.ts";
 import { verifyContract } from "../lib/verify.ts";
 import { addrUrl, txUrl } from "../lib/explorer.ts";
 import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts";
@@ -135,7 +135,8 @@ async function main() {
       args: upgradeArgs,
     });
 
-    const safe = new SafeWallet(SAFE_OWNER_ADDRESS, proposer);
+    const { SAFE_API_KEY } = requireEnvsSet("SAFE_API_KEY");
+    const safe = new SafeWallet(SAFE_OWNER_ADDRESS, proposer, SAFE_API_KEY);
     const txHash = await safe.proposeTransaction({
       data: upgradeData,
       to: futuresAddress,
