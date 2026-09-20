@@ -3,7 +3,6 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   ArrowTopRightOnSquareIcon,
-  ChartBarIcon,
   FlagIcon,
   ForwardIcon,
   QuestionMarkCircleIcon,
@@ -39,25 +38,25 @@ function sizeOf(fontSize: FontSize | undefined, sx?: IconProps["sx"], style?: CS
   return fontSize ?? FONT_SIZE.medium;
 }
 
-/** Heroicons has no candlestick glyph, so draw one in its outline style. */
-const CandlestickChart = (props: SVGProps<SVGSVGElement>) => (
+/**
+ * Material Design glyphs (MIT), inlined verbatim from @mui/icons-material so
+ * the chart toggle renders exactly what it did before MUI was dropped.
+ * Heroicons has no candlestick equivalent.
+ */
+const muiIcon = (path: string) => (props: SVGProps<SVGSVGElement>) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={1.5}
-    strokeLinecap="round"
-    strokeLinejoin="round"
+    fill="currentColor"
+    aria-hidden="true"
     {...props}
   >
-    <title>Candlestick chart</title>
-    <path d="M8 3v3.5m0 11V21" />
-    <rect x={5.25} y={6.5} width={5.5} height={11} rx={1} />
-    <path d="M16 3v6m0 7v5" />
-    <rect x={13.25} y={9} width={5.5} height={7} rx={1} />
+    <path d={path} />
   </svg>
 );
+
+const CandlestickChart = muiIcon("M9 4H7v2H5v12h2v2h2v-2h2V6H9zm10 4h-2V4h-2v4h-2v7h2v5h2v-5h2z");
+const ShowChart = muiIcon("m3.5 18.49 6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z");
 
 function wrap(Hero: ComponentType<SVGProps<SVGSVGElement>>, displayName: string) {
   const Icon = ({ fontSize = "medium", sx, style, ...rest }: IconProps) => {
@@ -87,7 +86,7 @@ function wrap(Hero: ComponentType<SVGProps<SVGSVGElement>>, displayName: string)
 }
 
 export const CloseIcon = wrap(XMarkIcon, "CloseIcon");
-export const ShowChartIcon = wrap(ChartBarIcon, "ShowChartIcon");
+export const ShowChartIcon = wrap(ShowChart, "ShowChartIcon");
 export const EastIcon = wrap(ArrowRightIcon, "EastIcon");
 export const OpenInNewIcon = wrap(ArrowTopRightOnSquareIcon, "OpenInNewIcon");
 export const EmojiEventsOutlinedIcon = wrap(TrophyIcon, "EmojiEventsOutlinedIcon");
