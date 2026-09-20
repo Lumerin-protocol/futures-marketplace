@@ -22,12 +22,14 @@ export class SafeWallet {
   private readonly wallet: WalletClient<Transport, Chain, Account>;
   private safeSigner?: Safe;
 
-  constructor(address: `0x${string}`, wallet: WalletClient<Transport, Chain, Account>) {
+  constructor(
+    address: `0x${string}`,
+    wallet: WalletClient<Transport, Chain, Account>,
+    apiKey: string,
+  ) {
     this.safeApiKit = new SafeApiKit({
       chainId: BigInt(wallet.chain.id),
-      // Safe Transaction Service recommends an API key on newer deployments.
-      // https://docs.safe.global/core-api/how-to-use-api-keys
-      apiKey: process.env.SAFE_API_KEY,
+      apiKey,
     });
     this.safeAddr = address;
     this.wallet = wallet;

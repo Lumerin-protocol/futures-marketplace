@@ -2,7 +2,7 @@ import hre from "hardhat";
 import { getAddress } from "viem";
 import { encodeFunctionData } from "viem/utils";
 import { OperationType } from "@safe-global/types-kit";
-import { readOptionalAddress, requireAddress } from "../lib/env.ts";
+import { readOptionalAddress, requireAddress, requireEnvsSet } from "../lib/env.ts";
 import { addrUrl, txUrl } from "../lib/explorer.ts";
 import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts";
 import { SafeWallet } from "../lib/safe.ts";
@@ -56,7 +56,8 @@ async function main() {
       functionName: "setOracle",
       args: [oracleAddress],
     });
-    const safe = new SafeWallet(SAFE_OWNER_ADDRESS, proposer);
+    const { SAFE_API_KEY } = requireEnvsSet("SAFE_API_KEY");
+    const safe = new SafeWallet(SAFE_OWNER_ADDRESS, proposer, SAFE_API_KEY);
     const txHash = await safe.proposeTransaction({
       to: futuresAddress,
       value: "0",

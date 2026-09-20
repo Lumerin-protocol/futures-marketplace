@@ -11,12 +11,6 @@ export const CHART_RANGE_LABELS: Record<ChartRange, string> = {
   "1m": "1M",
 };
 
-export const CHART_RANGE_INTERVAL_LABELS: Record<ChartRange, string> = {
-  "1d": "15-minute intervals",
-  "5d": "hourly intervals",
-  "1m": "12-hour intervals",
-};
-
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;

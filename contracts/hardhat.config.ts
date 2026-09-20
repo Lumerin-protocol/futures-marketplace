@@ -1,13 +1,15 @@
 import { configVariable, defineConfig } from "hardhat/config";
 import hardhatToolboxViem from "@nomicfoundation/hardhat-toolbox-viem";
 import hardhatViemAbi from "hardhat-viem-abi";
-import { tryLoadEnvFile } from "./lib/env.ts";
-
-tryLoadEnvFile("./../.env");
-tryLoadEnvFile(".env");
+import envLoader from "./plugins/env-loader/index.ts";
 
 export default defineConfig({
-  plugins: [hardhatToolboxViem, hardhatViemAbi],
+  plugins: [hardhatToolboxViem, hardhatViemAbi, envLoader],
+  envLoader: {
+    configDir: "../config",
+    // Machine/secret values; win over the named env file for overlapping keys.
+    overrideEnvFiles: ["../.env", ".env"],
+  },
   codegen: {
     // Keepers and the UI install `abi/` as this package name; do not rename casually.
     packageJson: { name: "futures-marketplace-abi" },
@@ -85,6 +87,15 @@ export default defineConfig({
       chainType: "l1",
       chainId: 84532,
       url: configVariable("ALCHEMY_API_KEY", "https://base-sepolia.g.alchemy.com/v2/{variable}"),
+      accounts: [configVariable("PRIVATE_KEY")],
+    },
+    // `base` is the Graph / viem / config-file name. `base-mainnet` is kept as
+    // a deprecated alias for already-deployed scripts and docs.
+    base: {
+      type: "http",
+      chainType: "l1",
+      chainId: 8453,
+      url: configVariable("ALCHEMY_API_KEY", "https://base-mainnet.g.alchemy.com/v2/{variable}"),
       accounts: [configVariable("PRIVATE_KEY")],
     },
     "base-mainnet": {

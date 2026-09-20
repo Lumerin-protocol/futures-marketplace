@@ -1,4 +1,4 @@
-import type { CSSProperties, SVGProps } from "react";
+import type { ComponentType, CSSProperties, SVGProps } from "react";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -39,7 +39,27 @@ function sizeOf(fontSize: FontSize | undefined, sx?: IconProps["sx"], style?: CS
   return fontSize ?? FONT_SIZE.medium;
 }
 
-function wrap(Hero: typeof XMarkIcon, displayName: string) {
+/** Heroicons has no candlestick glyph, so draw one in its outline style. */
+const CandlestickChart = (props: SVGProps<SVGSVGElement>) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.5}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <title>Candlestick chart</title>
+    <path d="M8 3v3.5m0 11V21" />
+    <rect x={5.25} y={6.5} width={5.5} height={11} rx={1} />
+    <path d="M16 3v6m0 7v5" />
+    <rect x={13.25} y={9} width={5.5} height={7} rx={1} />
+  </svg>
+);
+
+function wrap(Hero: ComponentType<SVGProps<SVGSVGElement>>, displayName: string) {
   const Icon = ({ fontSize = "medium", sx, style, ...rest }: IconProps) => {
     const size = sizeOf(fontSize, sx, style);
     const color = sx?.color ?? style?.color ?? (typeof style?.fill === "string" ? style.fill : undefined);
@@ -79,3 +99,4 @@ export const SkipNext = wrap(ForwardIcon, "SkipNext");
 export const ErrorIcon = wrap(ExclamationCircleIcon, "ErrorIcon");
 export const FlagCircleIcon = wrap(FlagIcon, "FlagCircleIcon");
 export const ShieldIcon = wrap(ShieldCheckIcon, "ShieldIcon");
+export const CandlestickChartIcon = wrap(CandlestickChart, "CandlestickChartIcon");

@@ -116,7 +116,8 @@ async function main() {
     if (!proposer) {
       throw new Error("PROPOSER_PRIVATEKEY is required when SAFE_OWNER_ADDRESS is set");
     }
-    const safe = new SafeWallet(SAFE_OWNER_ADDRESS, proposer);
+    const { SAFE_API_KEY } = requireEnvsSet("SAFE_API_KEY");
+    const safe = new SafeWallet(SAFE_OWNER_ADDRESS, proposer, SAFE_API_KEY);
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i];
       const data = encodeFunctionData({

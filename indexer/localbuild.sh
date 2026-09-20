@@ -7,7 +7,9 @@
 
 set -e
 
-set -a && source .env && set +a
+set -a && source ../config/dev.env && set +a
+if [ -f ../.env ]; then set -a && source ../.env && set +a; fi
+if [ -f .env ]; then set -a && source .env && set +a; fi
 
 GOLDSKY_SUBGRAPH_NAME="${GOLDSKY_SUBGRAPH_NAME:-hpow-futures}"
 GOLDSKY_ROLLING_TAG="${GOLDSKY_ROLLING_TAG:-dev-latest}"
@@ -15,10 +17,10 @@ SUBGRAPH_SEMVER="${SUBGRAPH_SEMVER:-1.0.0}"
 GRAFT_FROM="${GRAFT_FROM:-lumerin-futures}"
 GRAFT_FROM_VERSION="${GRAFT_FROM_VERSION:-v3.2.55-dev}"
 
-yarn install
-yarn prepare-local
-yarn codegen
-yarn build
+pnpm install
+ENV_FILE=../config/dev.env pnpm prepare:env
+pnpm codegen
+pnpm build
 
 # Clean previous deployment (tag first, then subgraph — both may not exist, so don't fail)
 # goldsky subgraph tag delete "${GOLDSKY_SUBGRAPH_NAME}/${SUBGRAPH_SEMVER}" --tag "${GOLDSKY_ROLLING_TAG}" --token "${GOLDSKY_API_KEY}" --force 2>/dev/null || true

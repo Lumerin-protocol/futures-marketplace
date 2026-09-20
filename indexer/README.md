@@ -54,16 +54,13 @@ On initialization, the handler also reads current contract state via `try_*` cal
 cp .env.example ../.env
 ```
 
-`pnpm prepare-local` sources `../.env` (the `futures-marketplace` root), so put the values there:
+`pnpm prepare-local` renders `subgraph.yaml` from `../config/dev.env`. Put secrets and the graph-node RPC URL in the repo-root `.env`:
 
 ```
-NETWORK=arbitrum-sepolia
-FUTURES_ADDRESS=0x...
-START_BLOCK_FUTURES=222848905
-SUBGRAPH_ETH_NODE=arbitrum-sepolia:https://arb-sepolia.g.alchemy.com/v2/YOUR_KEY
+ETH_NODE_ADDRESS=https://base-sepolia.g.alchemy.com/v2/YOUR_KEY
 ```
 
-`SUBGRAPH_ETH_NODE` is the `ethereum` connection string for graph-node in `network:url` format, read by `docker-compose.yml`.
+`docker compose` interpolates `ethereum: ${NETWORK}:${ETH_NODE_ADDRESS}` — `NETWORK` comes from the config file, the RPC URL from `.env`.
 
 ### 2. Start infrastructure
 
@@ -114,10 +111,10 @@ http://localhost:8000/subgraphs/name/futures
 
 | Script | Description |
 | --- | --- |
-| `pnpm indexer` | Start graph-node + IPFS + Postgres via Docker Compose |
+| `pnpm indexer` | Start graph-node + IPFS + Postgres via Docker Compose (`config/dev.env` then `../.env`) |
 | `pnpm setup-local` | Full local pipeline: prepare, codegen, build, create, deploy |
-| `pnpm prepare-local` | Substitute `../.env` vars into `subgraph.yaml` from template |
-| `pnpm prepare:env` | Same substitution, but from the ambient environment (CI/ECS) |
+| `pnpm prepare-local` | Substitute `../config/dev.env` vars into `subgraph.yaml` from template |
+| `pnpm prepare:env` | Same substitution, from `$ENV_FILE` (CI uses `.env.example` or `config/<env>.env`) |
 | `pnpm codegen` | Generate AssemblyScript types |
 | `pnpm build` | Compile the subgraph |
 | `pnpm create-local` | Register subgraph with local graph-node |
