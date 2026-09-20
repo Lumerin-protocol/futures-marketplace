@@ -1,6 +1,5 @@
-import MenuItem from "@mui/material/MenuItem";
-import Select from "@mui/material/Select";
-import styled from "@mui/material/styles/styled";
+import { MenuItem, Select } from "../../Select";
+import { styled } from "next-yak";
 import HpdxLogomark from "../../../images/icons/hpdx-logomark.svg?react";
 import { tokens } from "../../../styles/tokens";
 import {
@@ -78,23 +77,11 @@ export const MarketSelector = ({
           </TriggerValue>
         </>
       )}
-      MenuProps={{
-        PaperProps: {
-          sx: {
-            bgcolor: tokens.surface.card,
-            color: tokens.text.onDark,
-            border: `1px solid ${tokens.border.default}`,
-            borderRadius: tokens.radius.md,
-            maxHeight: 360,
-            marginTop: "0.25rem",
-          },
-        },
-      }}
     >
       {options.map((option) => {
         const key = instrumentKey(option);
         return (
-          <MenuItem value={key} key={key} sx={{ fontSize: "0.875rem" }}>
+          <MenuItem value={key} key={key}>
             <OptionRow>
               <span>{formatInstrumentLabel(option)}</span>
               <OptionMeta>
@@ -112,43 +99,19 @@ export const MarketSelector = ({
 
 /* Wears the place-order inputs' skin — inputIsland fill over a white20 border,
    lifting to inputIslandHover — so the two controls a trader actually operates
-   look like one family. The theme's MuiOutlinedInput override supplies a darker
-   slate border and a blue focus ring; both are replaced here. The ring in
-   particular does not translate: a text input is only focused while you type,
-   whereas a select holds focus the whole time its menu is open and after a pick,
-   so the accent would sit in the header until the user clicked elsewhere. */
-const MarketSelect = styled(Select<string>)`
-  /* Also floors the menu, which MUI sizes off the anchor — so the rows do not
-     reflow narrower than the trigger they dropped out of. */
+   look like one family. No focus ring: a text input is only focused while you
+   type, whereas a select holds focus the whole time its menu is open and after
+   a pick, so an accent ring would sit in the header until the user clicked
+   elsewhere. */
+const MarketSelect = styled(Select)`
+  /* Also floors the menu off the trigger width so the rows do not reflow
+     narrower than the trigger they dropped out of. */
   min-width: 350px;
   flex-shrink: 0;
-  background-color: ${tokens.surface.inputIsland};
-  transition: background-color 0.2s ease;
 
-  &:hover {
-    background-color: ${tokens.surface.inputIslandHover};
-  }
-
-  & .MuiOutlinedInput-notchedOutline,
-  &:hover .MuiOutlinedInput-notchedOutline,
-  &.Mui-focused .MuiOutlinedInput-notchedOutline {
-    border-color: ${tokens.overlay.white20};
-    border-width: 1px;
-  }
-
-  /* The row itself: logomark beside the two stacked lines, all centred on each
-     other. renderValue returns both as siblings so this is their only container. */
-  & .MuiSelect-select {
-    display: flex;
-    align-items: center;
+  .select-trigger {
     gap: 0.55rem;
     padding: 0.4rem 0.85rem;
-    color: ${tokens.text.onDark};
-  }
-
-  /* Full contrast rather than muted — the chevron is what says "this opens". */
-  & .MuiSvgIcon-root {
-    color: ${tokens.text.onDark};
   }
 
   /* MOBILE-ONLY (see FuturesMobileLayout): shares its row with the chart toggle,
@@ -157,7 +120,7 @@ const MarketSelect = styled(Select<string>)`
   @media (max-width: 768px) {
     min-width: 0;
 
-    & .MuiSelect-select {
+    .select-trigger {
       padding: 0.3rem 0.5rem;
     }
   }
@@ -179,7 +142,7 @@ const TriggerLogo = styled(HpdxLogomark)`
 
 /* The two lines sit tight against each other so they read as one label rather
    than as two stacked stats. */
-const TriggerValue = styled("span")`
+const TriggerValue = styled.span`
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -187,7 +150,7 @@ const TriggerValue = styled("span")`
 
 /* A step above the 1rem/600 the header stats use, so the instrument reads as the
    page's subject and the stats as facts about it. */
-const TriggerLabel = styled("span")`
+const TriggerLabel = styled.span`
   font-size: 1.15rem;
   font-weight: 700;
   line-height: 1.15;
@@ -199,7 +162,7 @@ const TriggerLabel = styled("span")`
   }
 `;
 
-const TriggerMeta = styled("span")`
+const TriggerMeta = styled.span`
   font-size: 0.6rem;
   font-weight: 500;
   line-height: 1.1;
@@ -209,7 +172,7 @@ const TriggerMeta = styled("span")`
   white-space: nowrap;
 `;
 
-const OptionRow = styled("span")`
+const OptionRow = styled.span`
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -217,7 +180,7 @@ const OptionRow = styled("span")`
   gap: 1.5rem;
 `;
 
-const OptionMeta = styled("span")`
+const OptionMeta = styled.span`
   font-size: 0.75rem;
   color: ${tokens.text.secondary};
   flex-shrink: 0;

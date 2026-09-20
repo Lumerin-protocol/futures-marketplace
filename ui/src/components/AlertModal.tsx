@@ -1,9 +1,9 @@
-import Modal from "@mui/material/Modal";
-import styled from "@mui/material/styles/styled";
+import { styled } from "next-yak";
 import type { FC } from "react";
 import { useSyncExternalStore } from "react";
 import { tokens } from "../styles/tokens";
 import { FormButtonsWrapper, PrimaryButton, SecondaryButton } from "./Forms/FormButtons/Buttons.styled";
+import { Modal } from "./Modal";
 import { ModalCard } from "./Modal.styled";
 import { type AlertVariant, getAlertQueue, resolveCurrentAlert, subscribeAlerts } from "./AlertModal.store";
 
@@ -28,7 +28,7 @@ export const AlertModalHost: FC = () => {
   }
 
   return (
-    <Modal open disableEnforceFocus disableEscapeKeyDown sx={{ zIndex: ALERT_Z_INDEX }}>
+    <Modal open disableEscapeKeyDown zIndex={ALERT_Z_INDEX}>
       <AlertCard
         role="alertdialog"
         aria-labelledby="alert-modal-title"
@@ -75,12 +75,12 @@ const AlertCard = styled(ModalCard)`
   }
 `;
 
-const AlertTitle = styled("h2")<{ $variant: AlertVariant }>`
+const AlertTitle = styled.h2<{ $variant: AlertVariant }>`
   margin: 0;
   color: ${({ $variant }) => TITLE_COLORS[$variant]};
 `;
 
-const AlertMessage = styled("p")`
+const AlertMessage = styled.p`
   margin: 0;
   font-size: 0.9375rem;
   line-height: 1.6;

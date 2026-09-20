@@ -134,7 +134,7 @@ export function measureBundle() {
   };
   for (const f of srcFiles) {
     const text = readFileSync(f, "utf8");
-    inventory.styledHtml += [...text.matchAll(/styled\(\s*["'][A-Za-z0-9]+["']/g)].length;
+    inventory.styledHtml += [...text.matchAll(/styled(?:\.\w+|\(\s*["'][A-Za-z0-9]+["'])/g)].length;
     inventory.styledComponent += [...text.matchAll(/styled\(\s*[A-Z][A-Za-z0-9.]*/g)].length;
     inventory.sx += [...text.matchAll(/\bsx=\{/g)].length;
     if (text.includes("@mui/material/styles/styled")) inventory.muiStyledImportFiles += 1;

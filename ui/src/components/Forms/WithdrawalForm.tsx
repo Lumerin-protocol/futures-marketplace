@@ -1,13 +1,13 @@
 import { tokens } from "../../styles/tokens";
 import { type FC, useCallback, useMemo } from "react";
 import { useForm } from "react-hook-form";
-import Tooltip from "@mui/material/Tooltip";
-import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import { Tooltip } from "../Tooltip";
 import { useRemoveMargin } from "../../hooks/data/useRemoveMargin";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import { AmountInputForm } from "./Shared/AmountInputForm";
 import { formatValue, PAYMENT_TOKEN_SCALE_NUM, paymentToken } from "../../lib/units";
 import { parseUnits } from "viem";
+import { HelpOutlineIcon } from "../icons";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -113,7 +113,7 @@ export const WithdrawalForm: FC<WithdrawalFormProps> = ({
               {lockedTooltip && (
                 <Tooltip title={lockedTooltip} arrow placement="top">
                   <HelpOutlineIcon
-                    sx={{
+                    style={{
                       fontSize: "0.95rem",
                       color: tokens.text.secondary,
                       cursor: "help",
