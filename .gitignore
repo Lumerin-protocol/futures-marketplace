@@ -29,6 +29,7 @@ secret.tfvars
 secret.*
 # Hardhat files
 /cache
+/contracts/.cache
 /artifacts
 
 # TypeChain files

@@ -1,17 +1,13 @@
 import { tokens } from "../../../styles/tokens";
 import { useState } from "react";
 import styled from "@mui/material/styles/styled";
-import { SmallWidget } from "../../Cards/Cards.styled";
-import type { ParticipantOrder } from "../../../hooks/data/useParticipant";
+import type { Participant, ParticipantOrder } from "../../../hooks/data/getUserFuturesOrders";
 import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
-import { ModifyOrderForm } from "../../Forms/ModifyOrderForm";
-import { CloseOrderForm } from "../../Forms/CloseOrderForm";
-import { ServerStackIcon } from "@heroicons/react/24/outline";
-import Tooltip from "@mui/material/Tooltip";
-import { getMinMarginForPositionManual } from "../../../hooks/data/getMinMarginForPositionManual";
+import { ModifyFuturesOrderModal } from "./ModifyFuturesOrderModal";
+import { CancelOrderForm } from "../../Forms/CancelOrderForm";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
-import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
+import { useOrderMargin } from "../../../hooks/data/useOrderMargin";
 import type { AccountBalance, ContractMode } from "../../../types/types";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
@@ -26,30 +22,20 @@ interface BalanceQueryResult {
 interface OrdersListWidgetProps {
   orders: ParticipantOrder[];
   isLoading?: boolean;
-  participantData?: any;
-  minMargin?: bigint | null;
+  participantData?: Participant | null;
   accountBalance?: AccountBalance;
   contractMode?: ContractMode;
   balanceQuery: BalanceQueryResult;
 }
 
-export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin, accountBalance, contractMode = "futures", balanceQuery }: OrdersListWidgetProps) => {
+export const OrdersListWidget = ({ orders, isLoading, participantData, accountBalance, contractMode = "futures", balanceQuery }: OrdersListWidgetProps) => {
   const modifyModal = useModal();
   const closeModal = useModal();
   const { data: marketPrice } = useGetMarketPrice();
-  const contractSpecsQuery = useFuturesContractSpecs();
-  const [selectedOrder, setSelectedOrder] = useState<{
-    order: ParticipantOrder;
-    orderIds: string[];
-    currentQuantity: number;
-  } | null>(null);
-  const [selectedCloseOrder, setSelectedCloseOrder] = useState<{
-    isBuy: boolean;
-    pricePerDay: bigint;
-    deliveryAt: bigint;
-    amount: number;
-  } | null>(null);
-  const getStatusColor = (isActive: boolean, closedAt: string | null) => {
+  const orderMargin = useOrderMargin();
+  const [selectedOrder, setSelectedOrder] = useState<ParticipantOrder | null>(null);
+  const [selectedCancelOrder, setSelectedCancelOrder] = useState<ParticipantOrder | null>(null);
+  const _getStatusColor = (isActive: boolean, closedAt: string | null) => {
     if (closedAt) {
       return tokens.trading.info; // Filled/Closed
     }
@@ -63,7 +49,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   //   return isActive ? "Active" : "Cancelled";
   // };
 
-  const getTypeColor = (isBuy: boolean) => {
+  const _getTypeColor = (isBuy: boolean) => {
     return isBuy ? tokens.trading.long : tokens.trading.short;
   };
 
@@ -72,21 +58,23 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   };
 
 
-  // Get latest price from market price hook
-  const latestPrice = marketPrice ?? null;
-
-  // Get contract specs
-  const marginPercent = contractSpecsQuery.data?.data?.liquidationMarginPercent ?? 20;
-  const deliveryDurationDays = contractSpecsQuery.data?.data?.deliveryDurationDays ?? 7;
-
   // Get newest item price for high price validation
   const newestItemPrice = marketPrice ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
 
-  // Calculate margin for an order
-  const calculateMargin = (pricePerDay: bigint, amount: number, isBuy: boolean): bigint | null => {
-    if (!latestPrice) return null;
-    const qty = isBuy ? amount : -amount;
-    return getMinMarginForPositionManual(pricePerDay, qty, latestPrice, marginPercent, deliveryDurationDays);
+  // What this order contributes to the account's portfolio IM — the margin that
+  // cancelling it would free. Marginal rather than standalone, because the engine
+  // nets every leg: an order hedging the rest of the book contributes nothing.
+  const calculateMargin = (order: ParticipantOrder): bigint | null => {
+    const quote = orderMargin.quote({
+      cancel: [
+        {
+          venue: "futures",
+          price: order.pricePerDay,
+          quantity: order.isBuy ? BigInt(order.quantity) : -BigInt(order.quantity),
+        },
+      ],
+    });
+    return quote ? -quote.imIncrease : null;
   };
 
   const formatMargin = (margin: bigint | null): string => {
@@ -94,180 +82,107 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
     return `${(Number(margin) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} USDC`;
   };
 
-  const handleCloseOrder = (groupedOrder: {
-    isBuy: boolean;
-    pricePerDay: bigint;
-    deliveryAt: bigint;
-    amount: number;
-  }) => {
-    setSelectedCloseOrder(groupedOrder);
+  // What the order covers today. `originalQuantity` is frozen at creation, so
+  // after a reduce it still reports the pre-reduce size — the difference sits in
+  // `cancelledQuantity`, which would make the row disagree with Modify/Close.
+  const liveQuantity = (order: ParticipantOrder) => order.filledQuantity + order.quantity;
+
+  const handleCancelOrder = (order: ParticipantOrder) => {
+    setSelectedCancelOrder(order);
     closeModal.open();
   };
 
-  const handleModifyOrder = (order: ParticipantOrder, orderIds: string[], currentQuantity: number) => {
-    setSelectedOrder({ order, orderIds, currentQuantity });
+  const handleModifyOrder = (order: ParticipantOrder) => {
+    setSelectedOrder(order);
     modifyModal.open();
   };
-
-  // Group orders by type, pricePerDay, and deliveryAt
-  const groupedOrders = orders.reduce(
-    (acc, order) => {
-      const key = `${order.isBuy}-${order.pricePerDay}-${order.deliveryAt}`;
-
-      if (!acc[key]) {
-        acc[key] = {
-          isBuy: order.isBuy,
-          pricePerDay: order.pricePerDay,
-          deliveryAt: order.deliveryAt,
-          destURL: order.destURL,
-          amount: 0,
-          isActive: order.isActive,
-          closedAt: order.closedAt,
-          timestamp: order.timestamp,
-          orderIds: [] as string[],
-          firstOrder: order,
-        };
-      }
-
-      acc[key].amount += 1;
-      acc[key].orderIds.push(order.id);
-
-      return acc;
-    },
-    {} as Record<
-      string,
-      {
-        isBuy: boolean;
-        pricePerDay: bigint;
-        deliveryAt: bigint;
-        destURL: string;
-        amount: number;
-        isActive: boolean;
-        closedAt: string | null;
-        timestamp: string;
-        orderIds: string[];
-        firstOrder: ParticipantOrder;
-      }
-    >,
-  );
-
-  const groupedOrdersArray = Object.values(groupedOrders);
-
-  if (isLoading) {
-    return (
-      <OrdersContainer>
-        <h3>Orders</h3>
-        <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.muted }}>
-          <p>Loading orders...</p>
-        </div>
-      </OrdersContainer>
-    );
-  }
 
   return (
     <OrdersContainer>
       <h3>Orders</h3>
 
-      <TableContainer>
-        <Table>
-          <thead>
-            <tr>
-              <th>Contract Expiration</th>
-              <th>Side</th>
-              <th>Price (USDC)</th>
-              <th>Quantity</th>
-              <th>Margin</th>
-              <th>Destination</th>
-              <th>Time</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {groupedOrdersArray.map((groupedOrder, index) => (
-              <TableRow key={`${groupedOrder.isBuy}-${groupedOrder.pricePerDay}-${groupedOrder.deliveryAt}-${index}`}>
-                <td><DateTimeCell timestamp={groupedOrder.deliveryAt} /></td>
-                <td>
-                  <TypeBadge $type={groupedOrder.isBuy ? "Long" : "Short"}>
-                    {groupedOrder.isBuy ? "Long" : "Short"}
-                  </TypeBadge>
-                </td>
-                <td>{formatPrice(groupedOrder.pricePerDay)}</td>
-                <td>{groupedOrder.amount}</td>
-                <td>
-                  {formatMargin(calculateMargin(groupedOrder.pricePerDay, groupedOrder.amount, groupedOrder.isBuy))}
-                </td>
-                <td>
-                  {groupedOrder.destURL ? (
-                    <Tooltip title={groupedOrder.destURL}>
-                      <DestURLCell>
-                        <ServerStackIcon width={20} height={20} />
-                      </DestURLCell>
-                    </Tooltip>
-                  ) : (
-                    <span>---</span>
-                  )}
-                </td>
-                <td><DateTimeCell timestamp={groupedOrder.timestamp} /></td>
-                <td>
-                  {groupedOrder.isActive && !groupedOrder.closedAt && (
-                    <ActionButtons>
-                      <ModifyButton
-                        onClick={() =>
-                          handleModifyOrder(groupedOrder.firstOrder, groupedOrder.orderIds, groupedOrder.amount)
-                        }
-                      >
-                        Modify
-                      </ModifyButton>
-                      <CloseButton onClick={() => handleCloseOrder(groupedOrder)}>Close</CloseButton>
-                    </ActionButtons>
-                  )}
-                </td>
-              </TableRow>
-            ))}
-          </tbody>
-        </Table>
-      </TableContainer>
+      {isLoading ? (
+        <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.muted }}>
+          <p>Loading orders...</p>
+        </div>
+      ) : (
+        <>
+          <TableContainer>
+            <Table>
+              <thead>
+                <tr>
+                  <th>Contract Expiration</th>
+                  <th>Side</th>
+                  <th>Price (USDC)</th>
+                  <th>Filled / Quantity</th>
+                  <th>Margin</th>
+                  <th>Time</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map((order) => (
+                  <TableRow key={order.id}>
+                    <td><DateTimeCell timestamp={order.expirationAt} /></td>
+                    <td>
+                      <TypeBadge $type={order.isBuy ? "Long" : "Short"}>
+                        {order.isBuy ? "Long" : "Short"}
+                      </TypeBadge>
+                    </td>
+                    <td>{formatPrice(order.pricePerDay)}</td>
+                    <td>{order.filledQuantity} / {liveQuantity(order)}</td>
+                    <td>{formatMargin(calculateMargin(order))}</td>
+                    <td><DateTimeCell timestamp={order.timestamp} /></td>
+                    <td>
+                      {order.isActive && !order.closedAt && (
+                        <ActionButtons>
+                          <ModifyButton onClick={() => handleModifyOrder(order)}>Modify</ModifyButton>
+                          <CancelButton onClick={() => handleCancelOrder(order)}>Cancel</CancelButton>
+                        </ActionButtons>
+                      )}
+                    </td>
+                  </TableRow>
+                ))}
+              </tbody>
+            </Table>
+          </TableContainer>
 
-      {groupedOrdersArray.length === 0 && (
-        <EmptyState>
-          <p>No orders found</p>
-        </EmptyState>
+          {orders.length === 0 && (
+            <EmptyState>
+              <p>No orders found</p>
+            </EmptyState>
+          )}
+        </>
       )}
 
       {selectedOrder && (
-        <ModalItem open={modifyModal.isOpen} setOpen={modifyModal.setOpen}>
-          <ModifyOrderForm
-            order={selectedOrder.order}
-            orderIds={selectedOrder.orderIds}
-            currentQuantity={selectedOrder.currentQuantity}
-            participantData={participantData}
-            latestPrice={latestPrice}
-            marginPercent={marginPercent}
-            deliveryDurationDays={deliveryDurationDays}
-            minMargin={minMargin}
-            newestItemPrice={newestItemPrice}
-            accountBalance={accountBalance}
-            contractMode={contractMode}
-            balanceQuery={balanceQuery}
-            closeForm={() => {
-              modifyModal.close();
-              setSelectedOrder(null);
-            }}
-          />
-        </ModalItem>
+        <ModifyFuturesOrderModal
+          open={modifyModal.isOpen}
+          order={selectedOrder}
+          participantData={participantData}
+          newestItemPrice={newestItemPrice}
+          accountBalance={accountBalance}
+          contractMode={contractMode}
+          balanceQuery={balanceQuery}
+          onClose={() => {
+            modifyModal.close();
+            setSelectedOrder(null);
+          }}
+        />
       )}
 
-      {selectedCloseOrder && (
+      {selectedCancelOrder && (
         <ModalItem open={closeModal.isOpen} setOpen={closeModal.setOpen}>
-          <CloseOrderForm
-            isBuy={selectedCloseOrder.isBuy}
-            pricePerDay={selectedCloseOrder.pricePerDay}
-            deliveryAt={selectedCloseOrder.deliveryAt}
-            amount={selectedCloseOrder.amount}
+          <CancelOrderForm
+            isBuy={selectedCancelOrder.isBuy}
+            pricePerDay={selectedCancelOrder.pricePerDay}
+            expirationAt={selectedCancelOrder.expirationAt}
+            amount={selectedCancelOrder.quantity}
+            orderIds={[selectedCancelOrder.id]}
             contractMode={contractMode}
             closeForm={() => {
               closeModal.close();
-              setSelectedCloseOrder(null);
+              setSelectedCancelOrder(null);
             }}
           />
         </ModalItem>
@@ -276,9 +191,10 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, minMargin
   );
 };
 
-const OrdersContainer = styled(SmallWidget)`
+// Flat section rather than a card: the tab widget already draws the border and
+// pads its content, so a SmallWidget here would nest a second card inside it.
+const OrdersContainer = styled("div")`
   width: 100%;
-  padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -324,7 +240,7 @@ const Table = styled("table")`
     border-bottom: 1px solid ${tokens.overlay.white10};
     white-space: nowrap;
     
-    &:first-child {
+    &:first-of-type {
       width: 130px;
       min-width: 130px;
     }
@@ -336,7 +252,7 @@ const Table = styled("table")`
     color: ${tokens.text.onDark};
     border-bottom: 1px solid ${tokens.overlay.white05};
     
-    &:first-child {
+    &:first-of-type {
       width: 130px;
       min-width: 130px;
     }
@@ -363,18 +279,7 @@ const TypeBadge = styled("span")<{ $type: string }>`
   color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
-const DestURLCell = styled("span")`
-  display: inline-block;
-  max-width: 200px;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: ${tokens.text.secondary};
-  font-size: 0.875rem;
-`;
-
-const StatusBadge = styled("span")<{ $status: string }>`
+const _StatusBadge = styled("span")<{ $status: string }>`
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
@@ -428,7 +333,7 @@ const ModifyButton = styled("button")`
   }
 `;
 
-const CloseButton = styled("button")`
+const CancelButton = styled("button")`
   padding: 0.5rem 0.875rem;
   background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};
@@ -457,7 +362,7 @@ const CloseButton = styled("button")`
 
 const EmptyState = styled("div")`
   text-align: center;
-  padding: 2rem;
+  padding: 1rem 2rem 4rem 2rem;
   color: ${tokens.text.muted};
   
   p {

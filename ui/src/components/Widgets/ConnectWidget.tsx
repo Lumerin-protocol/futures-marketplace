@@ -57,7 +57,8 @@ export const ChainButton = (props?: { hideName?: boolean }) => {
   return (
     ChainIcon && (
       <Button type="button" onClick={() => open({ view: "Networks" })}>
-        <ChainIcon width="1.5rem" height="1.5rem" />
+        {/* SVG width/height attrs require unitless px (or %), not rem */}
+        <ChainIcon width={24} height={24} />
         {!props?.hideName && chain?.name}
       </Button>
     )

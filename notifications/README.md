@@ -6,7 +6,8 @@ A Telegram bot service for monitoring margin balances and sending notifications.
 
 ### 1. Environment Variables
 
-Create a `.env` file with the following variables:
+Public values (log level, contract addresses) live in `config/dev.env` and
+`config/prd.env`. Put secrets in a repo-root or package-local `.env`:
 
 ```bash
 # Telegram Bot Configuration
@@ -23,7 +24,7 @@ DB_PASSWORD=notifications_password
 # Blockchain Configuration
 FUTURES_ADDRESS=0x1234567890123456789012345678901234567890
 ETH_NODE_URL=https://eth-mainnet.alchemyapi.io/v2/your-api-key
-HASHRATE_ORACLE_ADDRESS=0x1234567890123456789012345678901234567890
+HASHPRICE_USD_ADDRESS=0x1234567890123456789012345678901234567890
 MULTICALL_ADDRESS=0x1234567890123456789012345678901234567890
 
 # Subgraph Configuration

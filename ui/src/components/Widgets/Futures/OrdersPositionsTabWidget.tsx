@@ -1,5 +1,5 @@
 import { tokens } from "../../../styles/tokens";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import styled from "@mui/material/styles/styled";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { TabSwitch } from "../../TabSwitch";
@@ -7,23 +7,27 @@ import { OrdersListWidget } from "./OrdersListWidget";
 import { PositionsListWidget } from "./PositionsListWidget";
 import { HistoricalOrdersListWidget } from "./HistoricalOrdersListWidget";
 import { HistoricalPositionsListWidget } from "./HistoricalPositionsListWidget";
-import type { ParticipantOrder } from "../../../hooks/data/useParticipant";
-import type { PositionBookPosition } from "../../../hooks/data/usePositionBook";
+import type { Participant, ParticipantOrder } from "../../../hooks/data/getUserFuturesOrders";
+import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPositions";
 import { useHistoricalOrders } from "../../../hooks/data/useHistoricalOrders";
-import { useHistoricalPositions } from "../../../hooks/data/useHistoricalPositions";
-// Commented out: Receive Payment feature
-// import { usePaidSellerPositions } from "../../../hooks/data/usePaidSellerPositions";
-// import { useModal } from "../../../hooks/useModal";
-// import { ModalItem } from "../../Modal";
-// import { useWithdrawDeliveryPaymentBatch } from "../../../hooks/data/useWithdrawDeliveryPaymentBatch";
-// import { TransactionFormV2 as TransactionForm } from "../../Forms/Shared/MultistepForm";
-// import { useQueryClient } from "@tanstack/react-query";
-// import { waitForBlockNumberPositionBook } from "../../../hooks/data/usePositionBook";
-// import type { TransactionReceipt } from "viem";
+import { useFuturesPositionHistory } from "../../../hooks/data/useFuturesPositionHistory";
+import { useUserFuturesTrades, type UserFuturesTrade } from "../../../hooks/data/useUserFuturesTrades";
+import { DateTimeCell } from "../../DateTimeCell";
+import { LoadMoreButton } from "../../LoadMoreButton";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { getTxUrl } from "../../../lib/indexer";
+import { LiquidationChip, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
+import { ClosePositionForm, type ClosablePosition } from "../../Forms/ClosePositionForm";
+import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
+import { ModalItem } from "../../Modal";
+import { CancelAllOrdersForm, type CancellableOrder } from "../../Forms/CancelAllOrdersForm";
+import { ExitAllForm, type ExitAllPosition } from "../../Forms/ExitAllForm";
+import { CancelAllButton } from "./CancelAllButton";
+import { useFuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 
 import type { AccountBalance, ContractMode } from "../../../types/types";
 
-type TimeFilter = "OPEN" | "LAST_30_DAYS";
+type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "POSITION_HISTORY" | "ORDER_HISTORY";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -38,9 +42,8 @@ interface OrdersPositionsTabWidgetProps {
   ordersLoading?: boolean;
   positionsLoading?: boolean;
   participantAddress?: `0x${string}`;
-  onClosePosition?: (price: string, amount: number, isBuy: boolean) => void;
-  participantData?: any;
-  minMargin?: bigint | null;
+  onPositionClosed?: () => void | Promise<void>;
+  participantData?: Participant | null;
   accountBalance?: AccountBalance;
   contractMode?: ContractMode;
   balanceQuery: BalanceQueryResult;
@@ -52,222 +55,339 @@ export const OrdersPositionsTabWidget = ({
   ordersLoading,
   positionsLoading,
   participantAddress,
-  onClosePosition,
+  onPositionClosed,
   participantData,
-  minMargin,
   accountBalance,
   contractMode = "futures",
   balanceQuery,
 }: OrdersPositionsTabWidgetProps) => {
-  const [activeTab, setActiveTab] = useState<"ORDERS" | "POSITIONS">("ORDERS");
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>("OPEN");
+  const [activeTab, setActiveTab] = useState<TabType>("OPEN_ORDERS");
+  const [closePosition, setClosePosition] = useState<ClosablePosition | null>(null);
+  // Snapshot of the orders at the moment "Cancel all" was clicked. Held in
+  // state rather than derived, so the result screen still knows what it
+  // cancelled after the list has emptied underneath it.
+  const [cancelAllOrders, setCancelAllOrders] = useState<CancellableOrder[] | null>(null);
+  // Same idea for "Close all": what was open when the user clicked.
+  const [exitAll, setExitAll] = useState<{ orders: CancellableOrder[]; positions: ExitAllPosition[] } | null>(null);
+  const { data: marketPrice } = useGetMarketPrice();
+  const contractSpecs = useFuturesContractSpecs();
+  const priceStep = contractSpecs.data?.data?.minimumPriceIncrement ?? 10_000n;
 
-  // Fetch historical data only when "Last 30 days" is selected
-  const isHistoricalMode = timeFilter === "LAST_30_DAYS";
-  const historicalOrdersQuery = useHistoricalOrders(participantAddress, isHistoricalMode);
-  const historicalPositionsQuery = useHistoricalPositions(participantAddress, isHistoricalMode);
+  // Only rows the table offers a Close button for; the list may still carry
+  // just-filled or just-cancelled rows while the indexer catches up.
+  const cancellableOrders = useMemo<CancellableOrder[]>(
+    () =>
+      orders
+        .filter((o) => o.isActive && !o.closedAt)
+        .map((o) => ({ id: o.id, isBuy: o.isBuy, expirationAt: o.expirationAt })),
+    [orders],
+  );
 
-  // Commented out: Receive Payment feature
-  // const paidSellerPositionsQuery = usePaidSellerPositions(participantAddress, { refetch: true });
-  // const deliveryDatesModal = useModal();
-  // const withdrawModal = useModal();
-  // const { withdrawDeliveryPaymentBatchAsync, isPending: isWithdrawPending } = useWithdrawDeliveryPaymentBatch();
-  // const queryClient = useQueryClient();
+  // Fetch up-front so the tab badge counts (Order History / Position History /
+  // Trades) are accurate on initial render. Each query is cached by react-query
+  // and shared with other consumers (e.g. Futures.tsx already calls
+  // useHistoricalPositions), so this doesn't duplicate work — only auto-refetch
+  // is gated on the active tab.
+  const historicalOrdersQuery = useHistoricalOrders(participantAddress, true);
+  const historicalPositionsQuery = useFuturesPositionHistory(participantAddress, true);
+  const tradesQuery = useUserFuturesTrades(participantAddress, { refetch: activeTab === "TRADES" });
 
-  // Get unique deliveryAt values that are older than now
-  // const claimableDeliveryDates = useMemo(() => {
-  //   if (!paidSellerPositionsQuery.data?.data?.positions) return [];
-  //   const now = Math.floor(Date.now() / 1000);
-  //   const uniqueDates = new Set<string>();
-  //   paidSellerPositionsQuery.data.data.positions.forEach((position) => {
-  //     const deliveryAt = Number(position.deliveryAt);
-  //     if (deliveryAt < now) {
-  //       uniqueDates.add(position.deliveryAt);
-  //     }
-  //   });
-  //   return Array.from(uniqueDates).sort((a, b) => Number(a) - Number(b));
-  // }, [paidSellerPositionsQuery.data?.data?.positions]);
-
-  // Show button only if there are claimable delivery dates
-  // const hasClaimableDates = claimableDeliveryDates.length > 0;
-
-  const ordersCount = useMemo(() => {
-    if (isHistoricalMode) {
-      const historicalOrders = historicalOrdersQuery.data?.data || [];
-      const unique = new Set<string>();
-      historicalOrders.forEach((order) => {
-        unique.add(`${order.deliveryAt.toString()}_${order.pricePerDay.toString()}`);
+  // Open, unmatured positions, one per delivery. Sessions are per (user,
+  // expirationAt), so every row of a delivery carries the same signed net
+  // quantity; the first one seen speaks for all. Matured deliveries are
+  // settled by the keeper (or the Claim button), not traded out of.
+  const closablePositions = useMemo<ExitAllPosition[]>(() => {
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const byExpiration = new Map<string, ExitAllPosition>();
+    for (const p of positions) {
+      if (!p.isActive || p.closedAt || p.netQuantity === 0) continue;
+      if (contractMode === "futures" && Number(p.expirationAt) > 0 && Number(p.expirationAt) < nowSeconds) continue;
+      if (byExpiration.has(p.expirationAt)) continue;
+      const isLong = participantAddress && p.buyer.address.toLowerCase() === participantAddress.toLowerCase();
+      byExpiration.set(p.expirationAt, {
+        netQuantity: BigInt(p.netQuantity),
+        entryPrice: isLong ? p.buyPricePerDay : p.sellPricePerDay,
+        expirationAt: BigInt(p.expirationAt),
       });
-      return unique.size;
     }
-    const unique = new Set<string>();
-    orders.forEach((order) => {
-      unique.add(`${order.deliveryAt.toString()}_${order.pricePerDay.toString()}`);
-    });
-    return unique.size;
-  }, [orders, isHistoricalMode, historicalOrdersQuery.data?.data]);
+    return [...byExpiration.values()];
+  }, [positions, participantAddress, contractMode]);
+
+  // Counts for the tab badges, matching the row count each widget renders.
+  // Open Orders is one row per on-chain order; Positions still collapses by
+  // `(pricePerDay, expirationAt)` the way PositionsListWidget does.
+  const ordersCount = orders.length;
 
   const positionsCount = useMemo(() => {
-    if (isHistoricalMode) {
-      const historicalPositions = historicalPositionsQuery.data?.data || [];
-      const unique = new Set<string>();
-      historicalPositions.forEach((p) => {
-        const isLong = participantAddress && p.buyer.address.toLowerCase() === participantAddress.toLowerCase();
-        const pricePerDay = isLong ? p.buyPricePerDay : p.sellPricePerDay;
-        unique.add(`${p.deliveryAt.toString()}_${pricePerDay.toString()}`);
-      });
-      return unique.size;
-    }
     const unique = new Set<string>();
     positions.forEach((p) => {
-      // Determine position type and use appropriate price
       const isLong = participantAddress && p.buyer.address.toLowerCase() === participantAddress.toLowerCase();
       const pricePerDay = isLong ? p.buyPricePerDay : p.sellPricePerDay;
-      unique.add(`${p.deliveryAt.toString()}_${pricePerDay.toString()}`);
+      unique.add(`${p.expirationAt.toString()}_${pricePerDay.toString()}`);
     });
     return unique.size;
-  }, [positions, participantAddress, isHistoricalMode, historicalPositionsQuery.data?.data]);
+  }, [positions, participantAddress]);
 
-  // Auto-switch to Positions tab when there are no open orders but there are open positions (Active only).
+  const tradesCount = tradesQuery.data.length;
+
+  const orderHistoryCount = historicalOrdersQuery.data.length;
+
+  const positionHistoryCount = historicalPositionsQuery.data.length;
+
+  // Snap to Positions only on the first loaded snapshot. Doing this whenever
+  // open orders later drop to zero (cancel) unmounts OrdersListWidget and
+  // destroys the close/modify transaction-progress modal mid-flight.
+  const didInitialTabSync = useRef(false);
   useEffect(() => {
-    if (isHistoricalMode) return;
+    if (didInitialTabSync.current) return;
     if (ordersLoading || positionsLoading) return;
+    didInitialTabSync.current = true;
     if (ordersCount === 0 && positionsCount > 0) {
       setActiveTab("POSITIONS");
     }
-  }, [isHistoricalMode, ordersLoading, positionsLoading, ordersCount, positionsCount]);
+  }, [ordersLoading, positionsLoading, ordersCount, positionsCount]);
 
   return (
     <TabContainer>
       <Header>
-        <TabSwitch
-          values={[
-            { text: "Orders", value: "ORDERS", count: ordersCount },
-            { text: "Positions", value: "POSITIONS", count: positionsCount },
-          ]}
-          value={activeTab}
-          setValue={setActiveTab}
-        />
-        <TimeFilterSwitch>
-          <TimeFilterButton $active={timeFilter === "OPEN"} onClick={() => setTimeFilter("OPEN")}>
-            Active
-          </TimeFilterButton>
-          <TimeFilterButton $active={timeFilter === "LAST_30_DAYS"} onClick={() => setTimeFilter("LAST_30_DAYS")}>
-            Last 30 days
-          </TimeFilterButton>
-        </TimeFilterSwitch>
-        {/* Commented out: Receive Payment button */}
-        {/* {hasClaimableDates && (
-          <ClaimButton onClick={() => withdrawModal.open()} disabled={isWithdrawPending}>
-            Receive Payment
-          </ClaimButton>
-        )} */}
+        <TabSwitchWrapper>
+          <TabSwitch
+            values={[
+              { text: "Open Orders", value: "OPEN_ORDERS", count: ordersCount },
+              { text: "Positions", value: "POSITIONS", count: positionsCount },
+              { text: "Trades", value: "TRADES", count: tradesCount },
+              { text: "Position History", value: "POSITION_HISTORY", count: positionHistoryCount },
+              { text: "Order History", value: "ORDER_HISTORY", count: orderHistoryCount },
+            ]}
+            value={activeTab}
+            setValue={setActiveTab}
+          />
+        </TabSwitchWrapper>
+        {activeTab === "OPEN_ORDERS" && cancellableOrders.length > 0 && (
+          <CancelAllButton onClick={() => setCancelAllOrders(cancellableOrders)}>Cancel all</CancelAllButton>
+        )}
+        {activeTab === "POSITIONS" && closablePositions.length > 0 && (
+          <CancelAllButton
+            onClick={() => setExitAll({ orders: cancellableOrders, positions: closablePositions })}
+            disabled={marketPrice === undefined}
+            title={
+              cancellableOrders.length > 0
+                ? "Close every position at market and cancel all open orders"
+                : "Close every position at market"
+            }
+          >
+            Close all
+          </CancelAllButton>
+        )}
       </Header>
 
       <Content>
-        {activeTab === "ORDERS" && !isHistoricalMode && (
-          <OrdersWrapper>
-            <OrdersListWidget
-              orders={orders}
-              isLoading={ordersLoading}
-              participantData={participantData}
-              minMargin={minMargin}
-              accountBalance={accountBalance}
-              contractMode={contractMode}
-              balanceQuery={balanceQuery}
-            />
-          </OrdersWrapper>
-        )}
-        {activeTab === "ORDERS" && isHistoricalMode && (
-          <OrdersWrapper>
-            <HistoricalOrdersListWidget
-              orders={historicalOrdersQuery.data?.data || []}
-              isLoading={historicalOrdersQuery.isLoading}
-            />
-          </OrdersWrapper>
-        )}
-        {activeTab === "POSITIONS" && !isHistoricalMode && (
+        {/* Keep mounted while hidden so a close/modify tx modal survives tab changes. */}
+        <OrdersWrapper hidden={activeTab !== "OPEN_ORDERS"}>
+          <OrdersListWidget
+            orders={orders}
+            isLoading={ordersLoading}
+            participantData={participantData}
+            accountBalance={accountBalance}
+            contractMode={contractMode}
+            balanceQuery={balanceQuery}
+          />
+        </OrdersWrapper>
+        {activeTab === "POSITIONS" && (
           <PositionsWrapper>
             <PositionsListWidget
               positions={positions}
               isLoading={positionsLoading}
               participantAddress={participantAddress}
-              onClosePosition={onClosePosition}
+              onClosePosition={setClosePosition}
               contractMode={contractMode}
               balanceQuery={balanceQuery}
             />
           </PositionsWrapper>
         )}
-        {activeTab === "POSITIONS" && isHistoricalMode && (
+        {activeTab === "TRADES" && (
+          <TradesWrapper>
+            <FuturesTradesTable
+              trades={tradesQuery.data}
+              isLoading={tradesQuery.loading}
+              hasMore={tradesQuery.hasMore}
+              isFetchingMore={tradesQuery.isFetchingMore}
+              onLoadMore={tradesQuery.loadMore}
+            />
+          </TradesWrapper>
+        )}
+        {activeTab === "POSITION_HISTORY" && (
           <PositionsWrapper>
             <HistoricalPositionsListWidget
-              positions={historicalPositionsQuery.data?.data || []}
-              isLoading={historicalPositionsQuery.isLoading}
+              positions={historicalPositionsQuery.data}
+              isLoading={historicalPositionsQuery.loading}
               participantAddress={participantAddress}
+              hasMore={historicalPositionsQuery.hasMore}
+              isFetchingMore={historicalPositionsQuery.isFetchingMore}
+              onLoadMore={historicalPositionsQuery.loadMore}
             />
           </PositionsWrapper>
         )}
+        {activeTab === "ORDER_HISTORY" && (
+          <OrdersWrapper>
+            <HistoricalOrdersListWidget
+              orders={historicalOrdersQuery.data}
+              isLoading={historicalOrdersQuery.loading}
+              hasMore={historicalOrdersQuery.hasMore}
+              isFetchingMore={historicalOrdersQuery.isFetchingMore}
+              onLoadMore={historicalOrdersQuery.loadMore}
+            />
+          </OrdersWrapper>
+        )}
       </Content>
 
-      {/* Commented out: Receive Payment modal */}
-      {/* <ModalItem open={withdrawModal.isOpen} setOpen={withdrawModal.setOpen}>
-        <TransactionForm
-          onClose={() => {
-            withdrawModal.close();
-            paidSellerPositionsQuery.refetch();
-          }}
-          title="Receive Payment"
-          description="Withdraw delivery payments for completed positions"
-          reviewForm={() => (
-            <div className="space-y-4">
-              <p className="text-gray-300 text-sm">
-                You are about to withdraw delivery payments for the following {claimableDeliveryDates.length} delivery
-                date(s):
-              </p>
-              <DeliveryDatesList>
-                {claimableDeliveryDates.map((deliveryAt) => {
-                  const date = new Date(Number(deliveryAt) * 1000);
-                  return (
-                    <DeliveryDateItem key={deliveryAt}>
-                      {date.toLocaleDateString("en-US", {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })}{" "}
-                      ({date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })})
-                    </DeliveryDateItem>
-                  );
-                })}
-              </DeliveryDatesList>
-            </div>
-          )}
-          transactionSteps={[
-            {
-              label: "Withdraw Delivery Payments",
-              async action() {
-                const deliveryDatesBigInt = claimableDeliveryDates.map((date) => BigInt(date));
-                const result = await withdrawDeliveryPaymentBatchAsync({
-                  deliveryDates: deliveryDatesBigInt,
-                });
-                if (!result) throw new Error("Transaction failed");
-                return { isSkipped: false, txhash: result };
-              },
-              postConfirmation: async (receipt: TransactionReceipt) => {
-                await waitForBlockNumberPositionBook(BigInt(receipt.blockNumber), queryClient);
-              },
-            },
-          ]}
-          resultForm={(props) => (
-            <div className="space-y-4">
-              <p className="text-gray-300">Your delivery payments have been withdrawn successfully.</p>
-              <p className="text-white font-medium mt-2">
-                Withdrawn payments for {claimableDeliveryDates.length} delivery date(s)
-              </p>
-            </div>
-          )}
-        />
-      </ModalItem> */}
+      {cancelAllOrders && (
+        <ModalItem open setOpen={(isOpen) => !isOpen && setCancelAllOrders(null)}>
+          <CancelAllOrdersForm
+            orders={cancelAllOrders}
+            contractMode={contractMode}
+            closeForm={() => setCancelAllOrders(null)}
+          />
+        </ModalItem>
+      )}
+
+      {exitAll && (
+        <ModalItem open setOpen={(isOpen) => !isOpen && setExitAll(null)}>
+          <ExitAllForm
+            contractMode={contractMode}
+            orders={exitAll.orders}
+            positions={exitAll.positions}
+            marketPrice={marketPrice}
+            priceStep={priceStep}
+            closeForm={() => setExitAll(null)}
+            onConfirmed={onPositionClosed}
+          />
+        </ModalItem>
+      )}
+
+      {closePosition && (
+        <ModalItem compact open setOpen={(isOpen) => !isOpen && setClosePosition(null)}>
+          <ClosePositionForm
+            contractMode={contractMode}
+            position={closePosition}
+            marketPrice={marketPrice}
+            priceStep={priceStep}
+            participantData={participantData}
+            closeForm={() => setClosePosition(null)}
+            onConfirmed={onPositionClosed}
+          />
+        </ModalItem>
+      )}
     </TabContainer>
+  );
+};
+
+// Futures Trades Table Component
+interface FuturesTradesTableProps {
+  trades: UserFuturesTrade[];
+  isLoading?: boolean;
+  hasMore?: boolean;
+  isFetchingMore?: boolean;
+  onLoadMore: () => void;
+}
+
+const FuturesTradesTable = ({
+  trades,
+  isLoading,
+  hasMore = false,
+  isFetchingMore,
+  onLoadMore,
+}: FuturesTradesTableProps) => {
+  const formatPrice = (price: bigint) => {
+    return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+  };
+
+  const formatPnL = (pnl: bigint) => {
+    const value = Number(pnl) / PAYMENT_TOKEN_SCALE_NUM;
+    return `${value >= 0 ? "+" : ""}${value.toFixed(2)} USDC`;
+  };
+
+  const sortedTrades = [...trades].sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
+  const displayedTrades = sortedTrades;
+
+  if (isLoading) {
+    return (
+      <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.muted }}>
+        <p>Loading trades...</p>
+      </div>
+    );
+  }
+
+  if (sortedTrades.length === 0) {
+    return (
+      <EmptyState>
+        <p>No trades found</p>
+      </EmptyState>
+    );
+  }
+
+  return (
+    <TableContainer>
+      <Table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Contract Expiration</th>
+            <th>Side</th>
+            <th>Price (USDC)</th>
+            <th>Quantity</th>
+            <th>Trading Fee</th>
+            <th>Realized PnL</th>
+            <th>Tx Hash</th>
+          </tr>
+        </thead>
+        <tbody>
+          {displayedTrades.map((trade) => {
+            const isLong = trade.tradeQuantity >= 0;
+            return (
+              <TableRow
+                key={trade.id}
+                style={trade.isLiquidation ? { backgroundColor: LIQUIDATION_ROW_BG } : undefined}
+              >
+                <td>
+                  <DateTimeCell timestamp={trade.timestamp} />
+                </td>
+                <td>
+                  <DateTimeCell timestamp={trade.expirationAt} />
+                </td>
+                <td>
+                  <SideCell>
+                    <TypeBadge $type={isLong ? "Long" : "Short"}>{isLong ? "Long" : "Short"}</TypeBadge>
+                    {trade.isLiquidation && <LiquidationChip>Liquidation</LiquidationChip>}
+                  </SideCell>
+                </td>
+                <td>{formatPrice(trade.tradePrice)}</td>
+                <td>{Math.abs(trade.tradeQuantity)}</td>
+                <td>{formatPrice(trade.tradingFee)}</td>
+                <td>
+                  <PnLText
+                    $isPositive={Number(trade.realizedPnl) >= 0}
+                    $isZero={Number(trade.realizedPnl) === 0}
+                  >
+                    {formatPnL(trade.realizedPnl)}
+                  </PnLText>
+                </td>
+                <td>
+                  <TxLink
+                    href={getTxUrl(trade.transactionHash as `0x${string}`)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {trade.transactionHash.slice(0, 6)}...{trade.transactionHash.slice(-4)}
+                  </TxLink>
+                </td>
+              </TableRow>
+            );
+          })}
+        </tbody>
+      </Table>
+      <LoadMoreButton hasMore={hasMore} isLoading={isFetchingMore} onClick={onLoadMore} />
+    </TableContainer>
   );
 };
 
@@ -278,7 +398,7 @@ const TabContainer = styled(SmallWidget)`
   flex-direction: column;
   align-items: start;
   border: 1px solid ${tokens.border.muted04};
-  
+
   h3 {
     margin: 0;
     font-size: 1.1rem;
@@ -292,41 +412,17 @@ const Header = styled("div")`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  width: 100%;
   gap: 0.75rem;
-  flex-wrap: wrap;
-
-  @media (max-width: 768px) {
-    flex-direction: column;
-    align-items: stretch;
-  }
+  width: 100%;
 `;
 
-const ClaimButton = styled("button")`
-  padding: 0.5rem 1rem;
-  background: ${tokens.neutralButton.bg};
-  color: ${tokens.text.onDark};
-  border: none;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.1s ease;
-  white-space: nowrap;
-  
-  &:hover:not(:disabled) {
-    background: ${tokens.neutralButton.hover};
-    transform: translateY(-1px);
-  }
-  
-  &:active:not(:disabled) {
-    transform: translateY(0);
-  }
+const TabSwitchWrapper = styled("div")`
+  width: 100%;
+  min-width: 0;
 
-  &:disabled {
-    background: ${tokens.text.muted};
-    cursor: not-allowed;
-    opacity: 0.6;
+  button {
+    font-size: 0.875rem;
+    padding: 0.1em 0.5em;
   }
 `;
 
@@ -337,7 +433,11 @@ const Content = styled("div")`
 
 const OrdersWrapper = styled("div")`
   width: 100%;
-  
+
+  &[hidden] {
+    display: none;
+  }
+
   /* Hide the widget's header since we have tabs */
   h3 {
     display: none;
@@ -346,101 +446,115 @@ const OrdersWrapper = styled("div")`
 
 const PositionsWrapper = styled("div")`
   width: 100%;
-  
+
   /* Hide the widget's header since we have tabs */
   h3 {
     display: none;
   }
 `;
 
-const DeliveryDatesModalContent = styled("div")`
-  padding: 1.5rem;
-  color: ${tokens.text.onDark};
-  
-  h3 {
-    margin: 0 0 1rem 0;
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: ${tokens.text.onDark};
-  }
+const TradesWrapper = styled("div")`
+  width: 100%;
 `;
 
-const DeliveryDatesList = styled("div")`
-  max-height: 400px;
-  overflow-y: auto;
-  margin-bottom: 1.5rem;
-  
+const TableContainer = styled("div")`
+  width: 100%;
+  overflow-x: auto;
+
   &::-webkit-scrollbar {
-    width: 6px;
+    height: 4px;
   }
-  
+
   &::-webkit-scrollbar-track {
     background: ${tokens.overlay.white10};
-    border-radius: 3px;
+    border-radius: 2px;
   }
-  
+
   &::-webkit-scrollbar-thumb {
     background: ${tokens.overlay.white30};
-    border-radius: 3px;
+    border-radius: 2px;
   }
 `;
 
-const DeliveryDateItem = styled("div")`
-  padding: 0.75rem;
-  margin-bottom: 0.5rem;
-  background: ${tokens.overlay.white05};
-  border-radius: 6px;
-  font-size: 0.875rem;
-  color: ${tokens.text.onDark};
-  border: 1px solid ${tokens.overlay.white10};
+const Table = styled("table")`
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 600px;
+
+  th {
+    text-align: left;
+    padding: 0.75rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: ${tokens.text.secondary};
+    border-bottom: 1px solid ${tokens.overlay.white10};
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 0.75rem 0.5rem;
+    font-size: 0.875rem;
+    color: ${tokens.text.onDark};
+    border-bottom: 1px solid ${tokens.overlay.white05};
+  }
 `;
 
-const ModalActions = styled("div")`
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
+const TableRow = styled("tr")`
+  &:hover {
+    background-color: ${tokens.overlay.white02};
+  }
+
+  &:last-child td {
+    border-bottom: none;
+  }
 `;
 
-const CloseButton = styled("button")`
-  padding: 0.5rem 1rem;
-  background: ${tokens.neutralButton.bg};
-  color: ${tokens.text.onDark};
-  border: none;
-  border-radius: 6px;
-  font-size: 0.875rem;
+const TypeBadge = styled("span")<{ $type: string }>`
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
   font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  
-  &:hover {
-    background: ${tokens.neutralButton.hover};
-  }
+  background-color: ${(props) => (props.$type === "Long" ? tokens.trading.longRowBg : tokens.trading.shortRowBg)};
+  color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
-const TimeFilterSwitch = styled("div")`
+const SideCell = styled("div")`
   display: flex;
-  gap: 0;
-  border: 1px solid ${tokens.border.default};
-  border-radius: 6px;
-  overflow: hidden;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
 `;
 
-const TimeFilterButton = styled("button")<{ $active: boolean }>`
-  padding: 0.5rem 1rem;
-  background: ${(props) => (props.$active ? tokens.surface.tabActive : "transparent")};
-  color: ${tokens.text.onDark};
-  border: none;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  white-space: nowrap;
-  
-  &:hover {
-    background: ${(props) => (props.$active ? tokens.surface.tabHover : tokens.surface.tabInactiveHover)};
-  }
-  
-  &:first-of-type {
-    border-right: 1px solid ${tokens.border.muted05};
+const EmptyState = styled("div")`
+  text-align: center;
+  padding: 2rem;
+  color: ${tokens.text.muted};
+
+  p {
+    margin: 0;
+    font-size: 0.875rem;
   }
 `;
+
+const PnLText = styled("span")<{ $isPositive: boolean; $isZero?: boolean }>`
+  color: ${(props) =>
+    props.$isZero
+      ? tokens.text.primary
+      : props.$isPositive
+        ? tokens.trading.long
+        : tokens.trading.short};
+  font-weight: 600;
+`;
+
+const TxLink = styled("a")`
+  color: ${tokens.trading.info};
+  text-decoration: none;
+  font-family: monospace;
+  font-size: 0.8rem;
+
+  &:hover {
+    text-decoration: underline;
+  }
+`;
+

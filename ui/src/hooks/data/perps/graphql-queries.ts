@@ -80,8 +80,14 @@ query UserPerpsOrdersByStatus ($address: ID!, $statuses: [String!]!)  {
     `
 
 export const UserPerpsOrdersExcludeStatusQuery = gql`
-query UserPerpsOrdersExcludeStatus ($address: ID!, $statuses: [String!]!)  {
-  orders(where: { user: $address, status_not_in: $statuses }) {
+query UserPerpsOrdersExcludeStatus ($address: ID!, $statuses: [String!]!, $first: Int, $skip: Int)  {
+  orders(
+    where: { user: $address, status_not_in: $statuses }
+    orderBy: createdAt
+    orderDirection: desc
+    first: $first
+    skip: $skip
+  ) {
     blockNumber
     closedAt
     createdAt
@@ -107,53 +113,6 @@ query UserPerpsOrdersExcludeStatus ($address: ID!, $statuses: [String!]!)  {
 }
     `
 
-
-export const UserPositionSnapshotsQuery = gql`
- query UserPositionSnapshots ($address: ID!) {
-        positionSnapshots (where: { user: $address }) {
-          aggregatedEntryPriceAfter
-          blockNumber
-          id
-          netQuantityAfter
-          timestamp
-          tradePrice
-          tradeQuantity
-          transactionHash
-          user {
-            id
-          }
-        }
-      }
-    `
-
-
-export const UserPerpsTradesQuery = gql`
-    query UserPerpsTrades  ($address: ID!){
-  trades(
-    where: {
-      or: [
-        { buyer: $address }
-        { seller: $address }
-      ]
-    }
-  ) {
-    blockNumber
-    makerOrderId
-    id
-    price
-    quantity
-    timestamp
-    transactionHash
-    volume
-    seller {
-      id
-    }
-    buyer {
-      id
-    }
-  }
-}`
-
 export const FundingUpdatesQuery = gql`
   query FundingUpdates {
     fundingUpdates(
@@ -173,21 +132,71 @@ export const FundingUpdatesQuery = gql`
 
 export const UserPositionSessionsQuery = gql`
   query UserPositionSessions($address: ID!) {
-    positionSessions(where: { user: $address }) {
+    positionSessions(
+      where: { user: $address }
+      orderBy: openedAt
+      orderDirection: desc
+      first: 100
+    ) {
       closePrice
       entryPrice
       closedQuantity
+      liquidatedQuantity
       fundingFees
       id
       lastTradeAt
       maxQuantity
+      netQuantity
       openedAt
       realizedPnl
       status
       tradingFees
       user {
         id
-        netQuantity
+      }
+      trades {
+        aggregatedEntryPriceAfter
+        blockNumber
+        id
+        netQuantityAfter
+        realizedPnl
+        timestamp
+        tradePrice
+        tradeQuantity
+        tradingFee
+        transactionHash
+      }
+    }
+  }
+`
+
+// Closed PositionSessions for a user, paged with first/skip and ordered
+// newest-first. Powers the perps Position History "Load More" table — the open
+// Positions tab keeps using the unfiltered `UserPositionSessionsQuery`.
+export const UserClosedPositionSessionsQuery = gql`
+  query UserClosedPositionSessions($address: ID!, $first: Int!, $skip: Int!) {
+    positionSessions(
+      where: { user: $address, status: CLOSE }
+      orderBy: lastTradeAt
+      orderDirection: desc
+      first: $first
+      skip: $skip
+    ) {
+      closePrice
+      entryPrice
+      closedQuantity
+      liquidatedQuantity
+      fundingFees
+      id
+      lastTradeAt
+      maxQuantity
+      netQuantity
+      openedAt
+      realizedPnl
+      status
+      tradingFees
+      user {
+        id
       }
       trades {
         aggregatedEntryPriceAfter
@@ -206,8 +215,14 @@ export const UserPositionSessionsQuery = gql`
 `
 
 export const UserTradesQuery = gql`
-  query UserTrades($address: ID!) {
-    trades(where: { user: $address }, orderBy: timestamp, orderDirection: desc) {
+  query UserTrades($address: ID!, $first: Int!, $skip: Int!) {
+    trades(
+      where: { user: $address }
+      orderBy: timestamp
+      orderDirection: desc
+      first: $first
+      skip: $skip
+    ) {
       user {
         id
       }
@@ -221,6 +236,9 @@ export const UserTradesQuery = gql`
       tradePrice
       tradeQuantity
       tradingFee
+      isLiquidation
+      liquidator
+      liquidationFee
     }
   }
 `
@@ -232,8 +250,6 @@ export const PerpsCollectionQuery = gql`
       takerFeeBps
       minimumMarginPerOrder
       minimumPriceIncrement
-      marginPercent
-      maintenanceMarginPercent
       totalVolume
     }
   }

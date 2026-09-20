@@ -7,7 +7,7 @@ import { default as addFormats } from "ajv-formats";
 const schema = Type.Object({
   // FUTURES_ADDRESS: TypeEthAddress(),
   // ETH_NODE_URL: Type.String({ format: "url" }),
-  // HASHRATE_ORACLE_ADDRESS: TypeEthAddress(),
+  // HASHPRICE_USD_ADDRESS: TypeEthAddress(),
   LOG_LEVEL: Type.Union(
     [
       Type.Literal("trace"),
@@ -38,6 +38,9 @@ addFormats.default(ajv);
 
 export const config = envSchema<Config>({
   schema,
-  dotenv: true, // load .env if it is there, default: false
+  // Local scripts load files via Node `--env-file` / `--env-file-if-exists`.
+  // The Docker image does not receive those flags: the task definition supplies
+  // the environment. Do not add `--env-file` to the Dockerfile CMD.
+  dotenv: false,
   ajv,
 });

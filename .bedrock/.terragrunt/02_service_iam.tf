@@ -22,7 +22,7 @@ EOF
     var.default_tags,
     var.foundation_tags,
     {
-      Name = "Bedrock${local.shortname} IAM Role",
+      Name       = "Bedrock${local.shortname} IAM Role",
       Capability = "Bedrock IAM Role",
     },
   )

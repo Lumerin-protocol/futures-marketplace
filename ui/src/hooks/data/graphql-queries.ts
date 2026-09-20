@@ -1,35 +1,41 @@
 import { gql } from "graphql-request";
 
-export const ParticipantQuery = gql`
-  query Participant(
-    $participantAddress: ID!
-    $orderOffset: Int!
-    $orderLimit: Int!
+// Per-user futures Orders, paged with first/skip and filtered by status + future expirationAt.
+// Mirrors the perps `UserPerpsOrdersByStatusQuery` shape (the futures Order entity exposes
+// the same fields plus `expirationAt`).
+export const UserFuturesOrdersByStatusQuery = gql`
+  query UserFuturesOrdersByStatus(
+    $address: ID!
+    $statuses: [String!]!
     $now: BigInt!
+    $first: Int!
+    $skip: Int!
   ) {
-    participant(id: $participantAddress) {
-      address
-      balance
-      lastBalanceUpdate
-      orderCount
-      totalDeposited
-      totalVolume
-      totalWithdrawn
-      orders(where: { isActive: true, deliveryAt_gt: $now }, first: $orderLimit, skip: $orderOffset, orderBy: timestamp, orderDirection: desc) {
-        closedAt
-        closedBy
-        deliveryAt
+    orders(
+      where: { user: $address, status_in: $statuses, expirationAt_gt: $now }
+      first: $first
+      skip: $skip
+      orderBy: createdAt
+      orderDirection: desc
+    ) {
+      user {
         id
-        destURL
-        isActive
-        isBuy
-        participant {
-          address
-        }
-        pricePerDay
-        timestamp
       }
-    },
+      blockNumber
+      cancelledQuantity
+      closedAt
+      expirationAt
+      createdAt
+      filledQuantity
+      id
+      isBuy
+      originalQuantity
+      quantity
+      price
+      status
+      transactionHash
+      updatedAt
+    }
     _meta {
       block {
         number
@@ -39,57 +45,47 @@ export const ParticipantQuery = gql`
   }
 `;
 
+// Per-user PositionSessions for futures, mirroring the perps `UserPositionSessionsQuery`.
+// The futures schema replaces the legacy `Position` book with per-(user, expirationAt) sessions
+// that aggregate the user's trades; the UI collapses each session into a single
+// PositionBookPosition row downstream so consumers keep working.
 export const PositionsBookQuery = gql`
-  query PositionsBookQuery($address: ID!, $now: BigInt!) {
-  positions(
-    where: {
-      or: [
-        { isActive: true, deliveryAt_gt: $now, buyer_: { address: $address } },
-        { isActive: true, deliveryAt_gt: $now, seller_: { address: $address } }
-      ]
-    },
-    orderBy: timestamp,
-    orderDirection: desc
-  ) {
-    transactionHash
-    timestamp
-    deliveryAt
-    sellPricePerDay
-    buyPricePerDay
-    isActive
-    id
-    closedBy
-    closedAt
-    destURL
-    isPaid
-    buyer {
-      address
-    }
-    seller {
-      address
-    }
-  }
-  _meta {
-    block {
-      number
-      timestamp
-    }
-  }
-}
-`;
-
-export const OrderBookQuery = gql`
-  query OrderBook($deliveryAt: BigInt!) {
-    orders(where: { deliveryAt: $deliveryAt, isActive: true }) {
+  query PositionsBookQuery($address: ID!) {
+    positionSessions(where: { user: $address, netQuantity_not: 0 }) {
+      closePrice
+      closedQuantity
+      liquidatedQuantity
+      expirationAt
+      entryPrice
       id
-      pricePerDay
-      deliveryAt
-      participant {
-        address
+      lastTradeAt
+      maxQuantity
+      netQuantity
+      openedAt
+      realizedPnl
+      status
+      tradingFees
+      expiration {
+        settlementPrice
+        settledAt
       }
-      isBuy,
-      isActive
-    },
+      user {
+        id
+      }
+      trades {
+        blockNumber
+        expirationAt
+        fillCount
+        id
+        netQuantityAfter
+        realizedPnl
+        timestamp
+        tradePrice
+        tradeQuantity
+        tradingFee
+        transactionHash
+      }
+    }
     _meta {
       block {
         number
@@ -100,18 +96,18 @@ export const OrderBookQuery = gql`
 `;
 
 export const AggregateOrderBookQuery = gql`
-  query AggregateOrderBook($deliveryAt: BigInt!, $first: Int!, $lastId: ID!) {
-    deliveryDateOrders(
+  query AggregateOrderBookQuery($expirationAt: BigInt!, $first: Int!, $lastId: ID!) {
+    priceLevels(
       first: $first
-      where: { deliveryDate: $deliveryAt, id_gt: $lastId }
+      where: { expirationAt: $expirationAt, id_gt: $lastId, totalQuantity_gte: 1 }
       orderBy: id
       orderDirection: asc
     ) {
-      buyOrdersCount
-      deliveryDate
       id
+      isBid
+      expirationAt
       price
-      sellOrdersCount
+      totalQuantity
     }
     _meta {
       block {
@@ -125,13 +121,10 @@ export const AggregateOrderBookQuery = gql`
 export const ContractSpecsQuery = gql`
   query ContractSpecs {
     futures(id: "0") {
-      deliveryDurationDays
-      liquidationMarginPercent
-      hashrateOracleAddress
+      priceOracle
       minimumPriceIncrement
-      speedHps
-      tokenAddress
-      validatorAddress
+      contractSizeHpsDay
+      contractAddress
     }
     _meta {
       block {
@@ -143,13 +136,12 @@ export const ContractSpecsQuery = gql`
 `;
 
 export const HashrateIndexQuery = gql`
-  query HashpriceIndex($startDate: BigInt!, $first: Int!, $skip: Int!) {
+  query HashpriceIndex($startDate: BigInt!, $cursor: BigInt!, $first: Int!) {
     hashpriceUsds(
-      where: { timestamp_gte: $startDate }
+      where: { timestamp_gte: $startDate, timestamp_lt: $cursor }
       orderBy: timestamp
       orderDirection: desc
       first: $first
-      skip: $skip
     ) {
       blockNumber
       id
@@ -169,67 +161,72 @@ export const AggregatedHashrateIndexQuery = gql`
   }
 }`;
 
-export const DeliveryDatesQuery = gql`
-  query DeliveryDates($now: BigInt!) {
-    deliveryDates(where: { deliveryDate_gte: $now }, orderBy: deliveryDate, orderDirection: asc) {
-      deliveryDate
-      id
-    },
-    _meta {
-      block {
-        number
-        timestamp
-      }
-    }
-  }
-`;
-
-export const PaidSellerPositionsQuery = gql`
-  query PaidSellerPositionsQuery($address: ID!) {
-    positions(
-      where: { isPaid: true, seller_: { address: $address }}
+export const HashpriceCandlesQuery = gql`
+  query HashpriceCandlesQuery($interval: String!, $first: Int!, $startTimestamp: BigInt!) {
+    hashpriceUsdCandles(
+      interval: $interval
+      first: $first
+      current: include
+      orderBy: timestamp
+      orderDirection: desc
+      where: { timestamp_gte: $startTimestamp }
     ) {
-      deliveryAt
-      sellPricePerDay
-    }
-    _meta {
-      block {
-        number
-        timestamp
-      }
+      id
+      open
+      high
+      low
+      close
+      sum
+      count
+      timestamp
     }
   }
 `;
 
-// Historical positions query (last 30 days, isActive: false) with cursor pagination
+// Historical (closed) PositionSessions, paged with first/skip and ordered
+// newest-first. Mirrors the active `PositionsBookQuery` shape — the only
+// difference is the `status: CLOSE` filter. Incremental "Load More" pagination
+// reaches arbitrarily far back, so there is no time-window cutoff.
 export const HistoricalPositionsQuery = gql`
-  query HistoricalPositionsQuery($address: ID!, $thirtyDaysAgo: BigInt!, $first: Int!, $skip: Int!) {
-    positions(
-      where: {
-        or: [
-          { isActive: false, deliveryAt_gte: $thirtyDaysAgo, buyer_: { address: $address } },
-          { isActive: false, deliveryAt_gte: $thirtyDaysAgo, seller_: { address: $address } }
-        ]
-      },
-      first: $first,
-      skip: $skip,
-      orderBy: timestamp,
+  query HistoricalPositionsQuery($address: ID!, $first: Int!, $skip: Int!) {
+    positionSessions(
+      where: { user: $address, status: CLOSE }
+      first: $first
+      skip: $skip
+      orderBy: lastTradeAt
       orderDirection: desc
     ) {
+      closePrice
+      closedQuantity
+      liquidatedQuantity
+      expirationAt
+      entryPrice
       id
-      timestamp
-      deliveryAt
-      sellPricePerDay
-      buyPricePerDay
-      buyerPnl
-      sellerPnl
-      isActive
-      closedAt
-      buyer {
-        address
+      lastTradeAt
+      maxQuantity
+      openedAt
+      realizedPnl
+      status
+      tradingFees
+      expiration {
+        settlementPrice
+        settledAt
       }
-      seller {
-        address
+      user {
+        id
+      }
+      trades {
+        blockNumber
+        expirationAt
+        fillCount
+        id
+        netQuantityAfter
+        realizedPnl
+        timestamp
+        tradePrice
+        tradeQuantity
+        tradingFee
+        transactionHash
       }
     }
     _meta {
@@ -241,49 +238,76 @@ export const HistoricalPositionsQuery = gql`
   }
 `;
 
-// Historical orders query (last 30 days, isActive: false) with cursor pagination
+// Historical (closed) Orders, paged with first/skip and ordered newest-first.
+// Mirrors the active `UserFuturesOrdersByStatusQuery` shape — the only
+// difference is the status filter (terminal states). Incremental "Load More"
+// pagination reaches arbitrarily far back, so there is no time-window cutoff.
 export const HistoricalOrdersQuery = gql`
-  query HistoricalOrdersQuery($participantAddress: ID!, $thirtyDaysAgo: BigInt!, $first: Int!, $skip: Int!) {
+  query HistoricalOrdersQuery($address: ID!, $first: Int!, $skip: Int!) {
     orders(
-      where: { 
-        isActive: false, 
-        deliveryAt_gte: $thirtyDaysAgo,
-        participant_: { address: $participantAddress }
-      },
-      first: $first,
-      skip: $skip,
-      orderBy: timestamp,
+      where: {
+        user: $address
+        status_in: ["FILLED", "CANCELLED", "LIQUIDATED", "EXPIRED"]
+      }
+      first: $first
+      skip: $skip
+      orderBy: createdAt
       orderDirection: desc
     ) {
-      id
-      timestamp
-      deliveryAt
-      pricePerDay
-      isBuy
-      isActive
-      closedAt
-      participant {
-        address
+      user {
+        id
       }
+      blockNumber
+      cancelledQuantity
+      closedAt
+      expirationAt
+      createdAt
+      filledQuantity
+      id
+      isBuy
+      originalQuantity
+      quantity
+      price
+      status
+      transactionHash
+      updatedAt
+      # Populated only when a keeper force-cancelled the order (status LIQUIDATED).
+      liquidator
+      liquidationFee
     }
     _meta {
       block {
         number
         timestamp
       }
+    }
+  }
+`;
+
+// All-users recent Trades feed for the order book "Trades" tab. Works against
+// both the futures and perps subgraphs since both expose the per-user `Trade`
+// entity with a signed `tradeQuantity` (positive = buy/long, negative =
+// sell/short), `tradePrice`, `timestamp` and `transactionHash`.
+export const RecentTradesQuery = gql`
+  query RecentTrades($first: Int!) {
+    trades(orderBy: timestamp, orderDirection: desc, first: $first) {
+      id
+      tradePrice
+      tradeQuantity
+      timestamp
+      transactionHash
     }
   }
 `;
 
 // BTC Price Oracle queries (similar to Hashrate Index)
 export const BtcPriceIndexQuery = gql`
-  query BtcPriceIndex($startDate: BigInt!, $first: Int!, $skip: Int!) {
+  query BtcPriceIndex($startDate: BigInt!, $cursor: BigInt!, $first: Int!) {
     btcUsds(
-      where: { timestamp_gte: $startDate }
+      where: { timestamp_gte: $startDate, timestamp_lt: $cursor }
       orderBy: timestamp
       orderDirection: desc
       first: $first
-      skip: $skip
     ) {
       blockNumber
       id
@@ -295,11 +319,95 @@ export const BtcPriceIndexQuery = gql`
 
 export const AggregatedBtcPriceIndexQuery = gql`
   query AggregatedBtcPriceIndexQuery($interval: String!, $first: Int!, $skip: Int!, $startTimestamp: BigInt!) {
-    btcUsdCandles(interval: $interval, first: $first, skip: $skip, where: { timestamp_gte: $startTimestamp }) {
+    btcUsdCandles(
+      interval: $interval
+      first: $first
+      skip: $skip
+      current: include
+      orderBy: timestamp
+      orderDirection: desc
+      where: { timestamp_gte: $startTimestamp }
+    ) {
       count
       id
       sum
       timestamp
+    }
+  }
+`;
+
+// Difficulty-implied Bitcoin network hashrate in hashes/second, served by the
+// same oracle subgraph as the price feeds and with the same timeseries/candle
+// shape. Difficulty only retargets every ~2016 blocks, so the series is a step
+// function that stays flat within an epoch.
+// The oracle subgraph publishes the network hashrate over two trailing windows,
+// 144 blocks (~1 day) and 1008 blocks (~7 days). We read the 7-day series: block
+// discovery is Poisson, so a 1-day estimate carries roughly 8% standard error
+// against 3% for the 7-day one, and the shorter series mostly plots mining luck.
+export const NetworkHashrateIndexQuery = gql`
+  query NetworkHashrateIndex($startDate: BigInt!, $cursor: BigInt!, $first: Int!) {
+    networkHashrate7Ds(
+      where: { timestamp_gte: $startDate, timestamp_lt: $cursor }
+      orderBy: timestamp
+      orderDirection: desc
+      first: $first
+    ) {
+      blockNumber
+      id
+      hashrateHpS
+      timestamp
+    }
+  }
+`;
+
+export const AggregatedNetworkHashrateIndexQuery = gql`
+  query AggregatedNetworkHashrateIndexQuery($interval: String!, $first: Int!, $skip: Int!, $startTimestamp: BigInt!) {
+    networkHashrate7DCandles(
+      interval: $interval
+      first: $first
+      skip: $skip
+      current: include
+      orderBy: timestamp
+      orderDirection: desc
+      where: { timestamp_gte: $startTimestamp }
+    ) {
+      count
+      id
+      sum
+      timestamp
+    }
+  }
+`;
+
+// Per-user futures Trades, mirroring the perps `UserTradesQuery` shape.
+// The futures Trade entity additionally carries `expirationAt`, which the perps
+// one has no equivalent for.
+export const UserFuturesTradesQuery = gql`
+  query UserFuturesTrades($address: ID!, $first: Int!, $skip: Int!) {
+    trades(
+      where: { user: $address }
+      orderBy: timestamp
+      orderDirection: desc
+      first: $first
+      skip: $skip
+    ) {
+      user {
+        id
+      }
+      transactionHash
+      blockNumber
+      expirationAt
+      fillCount
+      id
+      netQuantityAfter
+      realizedPnl
+      timestamp
+      tradePrice
+      tradeQuantity
+      tradingFee
+      isLiquidation
+      liquidator
+      liquidationFee
     }
   }
 `;
