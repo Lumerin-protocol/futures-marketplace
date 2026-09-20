@@ -134,12 +134,12 @@ export const CancelOrderForm: FC<CancelOrderFormProps> = ({
             const ids = orderIds.map((id) => id as `0x${string}`);
 
             if (contractMode === "perpetual") {
-              // Perps cancel is one id per call; cancel the grouped row sequentially.
-              let txhash: `0x${string}` | undefined;
-              for (const orderId of ids) {
-                const hash = await cancelOrderAsync({ orderId });
-                if (!hash) throw new Error("Wallet not ready. Please try again.");
-                txhash = hash;
+              // Perps cancel is one id per call; cancel the grouped row
+              // sequentially and report the last hash, since the row only
+              // disappears once every id is gone.
+              let txhash = await cancelOrderAsync({ orderId: ids[0] });
+              for (const orderId of ids.slice(1)) {
+                txhash = await cancelOrderAsync({ orderId });
               }
               setOutcome({ cancelled: ids.length, stale: 0 });
               return { txhash, isSkipped: false };

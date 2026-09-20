@@ -17,7 +17,10 @@ export function useRemoveMargin() {
   const { data: collateralVaultAddress } = useFuturesCollateralVault();
 
   const removeMarginAsync = async (props: RemoveMarginProps) => {
-    if (!writeContractAsync || !walletClient || !collateralVaultAddress) return;
+    if (!walletClient) throw new Error("Wallet not ready. Please try again.");
+    if (!collateralVaultAddress) {
+      throw new Error("Collateral vault address not loaded yet. Please try again.");
+    }
 
     const vault = getContract({
       address: collateralVaultAddress,
