@@ -9,7 +9,8 @@ something below probably regressed.
 
 Most entries here are things that are merely untidy. **§8 is the one that needs
 somebody else: the UI derives position direction because the indexer does not
-expose it, and one field upstream would delete the derivation.**
+expose it, and one field upstream would delete the derivation.** **§9 is the one
+that needs a decision before any work starts.**
 
 ---
 
@@ -193,6 +194,45 @@ fill and nothing rendered it — every tx link in the UI comes from a `Trade` ro
 which carries its own hash. Its one remaining use was a grouping key in
 `FuturesTradesModal`'s perpetual branch, which that branch's own comment notes is
 never reached.
+
+---
+
+## 9. The snapshot driver hand-rolls what React Query 5 already does
+
+**Where:** `src/hooks/data/snapshot/driverRegistry.ts`,
+`src/hooks/data/snapshot/snapshotFed.ts`
+
+*Open decision — nothing here is broken, so this is a question of how much of
+the machinery to keep, not whether to fix it.*
+
+The registry coalesces concurrent callers onto one request, discards a cancelled
+fetch that resolves late, and avoids re-rendering for data that did not change.
+Measured against the installed `@tanstack/query-core 5.101.2`, the library does
+all three: one cache entry per venue, with each consumer taking its slice
+through `select`, would replace `driverRegistry`'s in-flight map and
+`writeIfChanged`'s comparison and `startedAt` guard. The harness and the results
+are in `QUERY_GROUPS.md`, "Could React Query do the fan-out itself?".
+
+One reason survives the switch. A query still on its **first** fetch absorbs an
+invalidation and hands the caller the request that started before it, which is a
+condition in `Query.fetch` rather than a documented default. Applied here, a
+transaction confirmed while a session's very first snapshot is in the air would
+be served pre-transaction data — the one case `dropInFlightSnapshot` covers and
+the library does not. The window is one request wide on a page that has no
+tradeable data loaded yet.
+
+Two pieces are dead regardless of what is decided: `hasSnapshotDriver` has no
+caller outside its own test, and `runSnapshotOnce`'s no-driver path cannot be
+reached on the trade pages, where both drivers mount whichever tab is open.
+
+**To resolve:** pick one.
+
+| Option | What it buys |
+| --- | --- |
+| Prototype the single-key + `select` design on a branch and measure what it deletes | *Recommended.* The case for it is on paper until a branch shows the deletion with the request count unchanged. |
+| Spike only the v5 cancel-on-invalidate behaviour | Settles whether `dropInFlightSnapshot` is redundant, which is the only open question behind the option above, at a fraction of the work. |
+| Remove the dead parts now — `hasSnapshotDriver` and the unreachable no-driver path | Safe on its own and independent of the rest, but leaves the duplication in place. |
+| Leave it as is | It works and it is committed. Costs nothing today; the duplication stays until someone reads the registry and wonders why it exists. |
 
 ---
 
