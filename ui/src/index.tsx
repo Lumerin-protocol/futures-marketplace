@@ -2,24 +2,18 @@ import "./wdyr";
 import "./fonts.css";
 import "./index.css";
 
-import React from "react";
-import { ErrorBoundary, type ErrorBoundaryPropsWithRender } from "react-error-boundary";
+import React, { type ErrorInfo } from "react";
+import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { BrowserRouter } from "react-router";
 import { App } from "./App";
 import { ErrorPage } from "./components/ErrorPage";
 import { createRoot } from "react-dom/client";
 
-// error handling logic
-// display <ErrorPage /> with error message
-const ErrorFallback: ErrorBoundaryPropsWithRender["fallbackRender"] = ({ error }) => {
-  return <ErrorPage error={error} />;
+const ErrorFallback = ({ error }: FallbackProps) => {
+  return <ErrorPage error={error instanceof Error ? error : new Error(String(error))} />;
 };
 
-// add reset logic if needed
-const onResetHandler: () => void = () => {};
-
-// log to local filestore or localStorage if needed
-const errorHandler: (error: Error, info: { componentStack: string }) => void = (_error, _info) => {};
+const errorHandler = (_error: unknown, _info: ErrorInfo) => {};
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {
@@ -29,7 +23,7 @@ if (!rootElement) {
 createRoot(rootElement).render(
   <React.StrictMode>
     <BrowserRouter>
-      <ErrorBoundary fallbackRender={ErrorFallback} onReset={onResetHandler} onError={errorHandler}>
+      <ErrorBoundary fallbackRender={ErrorFallback} onError={errorHandler}>
         <App />
       </ErrorBoundary>
     </BrowserRouter>
