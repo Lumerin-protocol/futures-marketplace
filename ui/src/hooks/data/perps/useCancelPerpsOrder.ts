@@ -13,7 +13,8 @@ export function useCancelPerpsOrder() {
   const { data: walletClient } = useWalletClient();
 
   const cancelOrderAsync = async (props: CancelPerpsOrderProps) => {
-    if (!writeContractAsync || !publicClient || !walletClient) return;
+    if (!walletClient) throw new Error("Wallet not ready. Please try again.");
+    if (!publicClient) throw new Error("No RPC client available. Please try again.");
 
     const perpsContract = getContract({
       address: process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`,

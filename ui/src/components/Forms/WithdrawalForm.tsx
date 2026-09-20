@@ -8,6 +8,7 @@ import { AmountInputForm } from "./Shared/AmountInputForm";
 import { formatValue, PAYMENT_TOKEN_SCALE_NUM, paymentToken } from "../../lib/units";
 import { parseUnits } from "viem";
 import { HelpOutlineIcon } from "../icons";
+import type { TransactionStep } from "../../hooks/useTxForm";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -200,7 +201,7 @@ export const WithdrawalForm: FC<WithdrawalFormProps> = ({
     return true;
   }, [form, balanceQuery.data, availableBalance, isLockedAmountError]);
 
-  const transactionSteps = [
+  const transactionSteps: TransactionStep[] = [
     {
       label: "Withdraw Collateral",
       async action() {
@@ -208,7 +209,7 @@ export const WithdrawalForm: FC<WithdrawalFormProps> = ({
         if (!amount) throw new Error("Amount not set");
         const amountBigInt = parseUnits(amount, paymentToken.decimals);
         const result = await removeMarginAsync({ amount: amountBigInt });
-        return result ? { isSkipped: false, txhash: result } : { isSkipped: false };
+        return { isSkipped: false, txhash: result };
       },
     },
   ];
