@@ -1,5 +1,5 @@
 import { tokens } from "../../../styles/tokens";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useAggregateOrderBook } from "../../../hooks/data/useAggregateOrderBook";
@@ -385,20 +385,20 @@ const OrderBookWidget = styled(SmallWidget)`
 /* Holds the Order Book / Trades tabs. The expiration switcher that used to share
    this row — and the wrapping rules the pair needed at narrow widths — moved to
    the header's market selector. */
-const TopBar = styled("div")`
+const TopBar = styled.div`
   display: flex;
   width: 100%;
   align-items: center;
   margin-bottom: 0.4rem;
 `;
 
-const StatusMessage = styled("div")<{ $error?: boolean }>`
+const StatusMessage = styled.div<{ $error?: boolean }>`
   text-align: center;
   padding: 2rem;
   color: ${(props) => (props.$error ? tokens.trading.short : tokens.text.secondary)};
 `;
 
-const TableContainer = styled("div")`
+const TableContainer = styled.div`
   position: relative;
   overflow-y: auto;
   width: 100%;
@@ -435,14 +435,14 @@ const TableContainer = styled("div")`
   }
 `;
 
-const ViewToggle = styled("div")`
+const ViewToggle = styled.div`
   display: inline-flex;
   border: 1px solid ${tokens.overlay.white15};
   border-radius: 6px;
   overflow: hidden;
 `;
 
-const ToggleButton = styled("button")<{ $active?: boolean }>`
+const ToggleButton = styled.button<{ $active?: boolean }>`
   border: none;
   cursor: pointer;
   padding: 0.2rem 0.6rem;
@@ -465,7 +465,7 @@ const ToggleButton = styled("button")<{ $active?: boolean }>`
   }
 `;
 
-const _PerpsInfoHeader = styled("div")`
+const _PerpsInfoHeader = styled.div`
   display: flex;
   justify-content: space-around;
   align-items: center;
@@ -475,7 +475,7 @@ const _PerpsInfoHeader = styled("div")`
   gap: 1rem;
 `;
 
-const _InfoLabel = styled("div")`
+const _InfoLabel = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;

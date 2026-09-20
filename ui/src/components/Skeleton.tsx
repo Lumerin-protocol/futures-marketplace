@@ -1,5 +1,4 @@
-import styled from "@emotion/styled";
-import { css, keyframes } from "@emotion/react";
+import { css, keyframes, styled } from "next-yak";
 import { tokens } from "../styles/tokens";
 
 type Variant = "text" | "rectangular" | "rounded" | "circular";

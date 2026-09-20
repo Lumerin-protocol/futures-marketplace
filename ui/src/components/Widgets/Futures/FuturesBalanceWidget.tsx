@@ -1,6 +1,5 @@
-import styled from "@emotion/styled";
+import { styled, css, keyframes } from "next-yak";
 import { Tooltip } from "../../Tooltip";
-import { css, keyframes } from "@emotion/react";
 import type { ReactNode } from "react";
 import { tokens } from "../../../styles/tokens";
 import { useAccount } from "wagmi";
@@ -331,7 +330,7 @@ const pulse = keyframes`
 `;
 
 // Replaces SmallWidget — renders as a flat panel section (no outer border/card)
-const PanelSection = styled("div")<{ $tier: MarginTier }>`
+const PanelSection = styled.div<{ $tier: MarginTier }>`
   padding: 0.875rem 1rem;
   display: flex;
   flex-direction: column;
@@ -345,13 +344,13 @@ const PanelSection = styled("div")<{ $tier: MarginTier }>`
     $tier === "healthy" ? "none" : `2px solid ${tierColor($tier)}`} !important;
 `;
 
-const SectionHeader = styled("div")`
+const SectionHeader = styled.div`
   display: flex;
   align-items: center;
   gap: 0.4rem;
 `;
 
-const SectionTitle = styled("span")`
+const SectionTitle = styled.span`
   font-size: 0.7rem;
   font-weight: 500;
   color: ${tokens.text.secondary};
@@ -359,7 +358,7 @@ const SectionTitle = styled("span")`
   letter-spacing: 0.03em;
 `;
 
-const DisconnectedMsg = styled("div")`
+const DisconnectedMsg = styled.div`
   font-size: 0.75rem;
   color: ${tokens.text.secondary};
   text-align: center;
@@ -368,25 +367,25 @@ const DisconnectedMsg = styled("div")`
 
 // Two columns of their own height rather than a row-major grid: the right-hand
 // column carries one more metric than the left.
-const MetricsGrid = styled("div")`
+const MetricsGrid = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.5rem 0.75rem;
 `;
 
-const MetricColumn = styled("div")`
+const MetricColumn = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 `;
 
-const MetricCell = styled("div")`
+const MetricCell = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
 `;
 
-const MetricLabel = styled("span")`
+const MetricLabel = styled.span`
   font-size: 0.6rem;
   font-weight: 500;
   color: ${tokens.text.secondary};
@@ -399,16 +398,16 @@ const MetricLabel = styled("span")`
 `;
 
 /** The metric values' type size, in rem; the gauge is measured against it. */
-const VALUE_FONT_SIZE_REM = 0.95;
+const VALUE_FONT_SIZE = "0.95rem";
 
-const MetricValue = styled("span")`
-  font-size: ${VALUE_FONT_SIZE_REM}rem;
+const MetricValue = styled.span`
+  font-size: ${VALUE_FONT_SIZE};
   font-weight: 600;
   color: ${tokens.text.onDark};
   line-height: 1.2;
 `;
 
-const ActionButtons = styled("div")`
+const ActionButtons = styled.div`
   display: flex;
   gap: 0.5rem;
 `;
@@ -430,7 +429,7 @@ const GaugeCell = styled(MetricCell)`
 
 // Baseline-aligned so the dial's bottom sits on the digits' baseline and its
 // top, at their cap height, lines up with the top of the number.
-const GaugeBlock = styled("div")`
+const GaugeBlock = styled.div`
   display: flex;
   align-items: baseline;
   gap: 0.4rem;
@@ -440,7 +439,7 @@ const GaugeBlock = styled("div")`
 // same constants rather than in em, so nothing depends on what the svg
 // inherits. The 2:1 viewBox makes it twice as wide (~11×22px). The row still
 // sits inside the 18px line box, so it matches the other cells.
-const GaugeSvg = styled("svg")`
+const GaugeSvg = styled.svg`
   display: block;
   height: 0.8rem;
   width: auto;
@@ -450,7 +449,7 @@ const GaugeSvg = styled("svg")`
 
 // In viewBox units, so it scales with the dial rather than needing a rewrite
 // each time the arc is resized. At digit height this lands just under 4px.
-const GaugeArc = styled("path")<{ $color: string }>`
+const GaugeArc = styled.path<{ $color: string }>`
   fill: none;
   stroke: ${({ $color }) => $color};
   stroke-width: 17;
@@ -460,8 +459,8 @@ const GaugeArc = styled("path")<{ $color: string }>`
 
 // Typography copied from MetricValue: the ratio is a metric like any other, and
 // the tier colour is enough to set it apart.
-const GaugeValue = styled("span")<{ $color: string }>`
-  font-size: ${VALUE_FONT_SIZE_REM}rem;
+const GaugeValue = styled.span<{ $color: string }>`
+  font-size: ${VALUE_FONT_SIZE};
   font-weight: 600;
   line-height: 1.2;
   white-space: nowrap;
@@ -472,7 +471,7 @@ const GaugeValue = styled("span")<{ $color: string }>`
 // only statement about what the account may no longer do, and it now carries that
 // on its own — the muted note under Available is gone. Amber because it is a
 // restriction to read, not the liquidation risk the red banner is reserved for.
-const RestrictedNote = styled("div")`
+const RestrictedNote = styled.div`
   padding: 0.35rem 0.5rem;
   background-color: ${tokens.perps.highlightBg};
   border: 1px solid ${tokens.perps.highlightBorderSoft};
@@ -483,14 +482,14 @@ const RestrictedNote = styled("div")`
   font-weight: 500;
 `;
 
-const CautionNote = styled("div")`
+const CautionNote = styled.div`
   font-size: 0.68rem;
   line-height: 1.35;
   font-weight: 500;
   color: ${tokens.trading.highlight};
 `;
 
-const DangerBanner = styled("div")<{ $pulsing: boolean }>`
+const DangerBanner = styled.div<{ $pulsing: boolean }>`
   padding: 0.35rem 0.5rem;
   background-color: ${tokens.trading.shortRowBgAlt};
   border: 1px solid ${tokens.trading.short};
@@ -501,9 +500,8 @@ const DangerBanner = styled("div")<{ $pulsing: boolean }>`
   font-weight: 600;
   text-align: center;
   ${({ $pulsing }) =>
-    $pulsing
-      ? css`
-          animation: ${pulse} 1.4s ease-in-out infinite;
-        `
-      : undefined}
+    $pulsing &&
+    css`
+      animation: ${pulse} 1.4s ease-in-out infinite;
+    `}
 `;

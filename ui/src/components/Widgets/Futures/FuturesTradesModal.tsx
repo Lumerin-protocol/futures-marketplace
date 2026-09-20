@@ -1,4 +1,4 @@
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { useEffect, useMemo, useState } from "react";
 import { tokens } from "../../../styles/tokens";
 import { Modal } from "../../Modal";
@@ -328,7 +328,7 @@ const TradesModalCard = styled(ModalCard)`
   }
 `;
 
-const _SelectionSummary = styled("div")`
+const _SelectionSummary = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 1.5rem;
@@ -338,26 +338,26 @@ const _SelectionSummary = styled("div")`
   margin-bottom: 1rem;
 `;
 
-const _SummaryItem = styled("div")`
+const _SummaryItem = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 `;
 
-const _SummaryLabel = styled("span")`
+const _SummaryLabel = styled.span`
   color: ${tokens.text.secondary};
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 `;
 
-const _SummaryValue = styled("span")`
+const _SummaryValue = styled.span`
   color: ${tokens.text.onDark};
   font-size: 0.875rem;
   font-weight: 600;
 `;
 
-const TradesTableContainer = styled("div")`
+const TradesTableContainer = styled.div`
   flex: 1 1 auto;
   width: 100%;
   min-height: 0;
@@ -380,7 +380,7 @@ const TradesTableContainer = styled("div")`
   }
 `;
 
-const TradesTable = styled("table")`
+const TradesTable = styled.table`
   width: 100%;
   border-collapse: collapse;
   min-width: 800px;
@@ -415,9 +415,9 @@ const TradesTable = styled("table")`
   }
 `;
 
-const TableRow = styled("tr")``;
+const TableRow = styled.tr``;
 
-const TypeBadge = styled("span")<{ $type: string }>`
+const TypeBadge = styled.span<{ $type: string }>`
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
@@ -428,14 +428,14 @@ const TypeBadge = styled("span")<{ $type: string }>`
   color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
-const _CounterpartyAddress = styled("span")`
+const _CounterpartyAddress = styled.span`
   font-family: monospace;
   font-size: 0.8125rem;
   color: ${tokens.text.secondary};
   cursor: help;
 `;
 
-const TxLink = styled("a")`
+const TxLink = styled.a`
   color: ${tokens.trading.info};
   text-decoration: none;
   font-family: monospace;
@@ -446,13 +446,13 @@ const TxLink = styled("a")`
   }
 `;
 
-const PnLCell = styled("span")<{ $isPositive: boolean; $isZero: boolean }>`
+const PnLCell = styled.span<{ $isPositive: boolean; $isZero: boolean }>`
   color: ${(props) =>
     props.$isZero ? tokens.text.onDark : props.$isPositive ? tokens.trading.long : tokens.trading.short};
   font-weight: 600;
 `;
 
-const EmptyState = styled("div")`
+const EmptyState = styled.div`
   text-align: center;
   padding: 2rem;
   color: ${tokens.text.muted};
@@ -463,7 +463,7 @@ const EmptyState = styled("div")`
   }
 `;
 
-const LoadingState = styled("div")`
+const LoadingState = styled.div`
   text-align: center;
   padding: 2rem;
   color: ${tokens.text.muted};

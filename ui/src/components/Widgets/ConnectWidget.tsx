@@ -1,5 +1,5 @@
 import { useAccount } from "wagmi";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { AddressLength } from "../../types/types";
 import { PrimaryButton } from "../Forms/FormButtons/Buttons.styled";
 import { useAppKit } from "@reown/appkit/react";
@@ -85,7 +85,7 @@ const WuiAvatar = (props: { address: string }) => {
   return <wui-avatar alt={address} address={address} size="sm" />;
 };
 
-const ConnectorIcon = styled("img")`
+const ConnectorIcon = styled.img`
   width: 1.5rem;
   height: 1.5rem;
 `;

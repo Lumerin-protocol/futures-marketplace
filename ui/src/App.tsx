@@ -1,5 +1,5 @@
 import type { FC } from "react";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { Router } from "./Router";
 import { AlertModalHost } from "./components/AlertModal";
 import useAnalytics from "./hooks/useAnalytics";
@@ -20,7 +20,7 @@ export const App: FC = () => {
   );
 };
 
-const AppRoot = styled("div")`
+const AppRoot = styled.div`
   min-height: 100vh;
   background-color: ${tokens.app.bg};
 `;

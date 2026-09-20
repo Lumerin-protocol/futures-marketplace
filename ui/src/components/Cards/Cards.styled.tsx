@@ -1,7 +1,7 @@
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { tokens } from "../../styles/tokens";
 
-export const Card = styled("div")`
+export const Card = styled.div`
   padding: 1.5rem;
   background-color: ${tokens.card.bg};
   border: 1px solid ${tokens.border.default};
@@ -42,7 +42,7 @@ export const SmallWidget = styled(Card)`
   }
 `;
 
-export const MobileWidget = styled("div")`
+export const MobileWidget = styled.div`
   padding: 0.5rem;
   background-color: ${tokens.card.bg};
   border: 1px solid ${tokens.border.default};

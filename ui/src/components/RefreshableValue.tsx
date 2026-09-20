@@ -1,6 +1,5 @@
 import type { FC, ReactNode, CSSProperties } from "react";
-import { keyframes, css } from "@emotion/react";
-import styled from "@emotion/styled";
+import { styled, keyframes, css } from "next-yak";
 import { tokens } from "../styles/tokens";
 
 interface RefreshableValueProps {
@@ -67,18 +66,17 @@ const shimmer = keyframes`
   100% { opacity: 0.35; }
 `;
 
-const Value = styled("span")<{ $pending?: boolean }>`
+const Value = styled.span<{ $pending?: boolean }>`
   display: inline-block;
   min-height: 1.1em;
   ${({ $pending }) =>
-    $pending
-      ? css`
-          animation: ${blink} 1s ease-in-out infinite;
-        `
-      : undefined}
+    $pending &&
+    css`
+      animation: ${blink} 1s ease-in-out infinite;
+    `}
 `;
 
-const Skeleton = styled("span")`
+const Skeleton = styled.span`
   display: inline-block;
   width: 3.25rem;
   height: 0.85em;

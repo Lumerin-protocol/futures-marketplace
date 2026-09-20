@@ -1,7 +1,7 @@
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { AccountButton, ChainButton, ConnectorButton } from "./Widgets/ConnectWidget";
 import { AddressLength } from "../types/types";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 
 export const HeaderConnect = () => {
   const isMobile = useMediaQuery("(max-width: 768px)");
@@ -19,7 +19,7 @@ export const HeaderConnect = () => {
   );
 };
 
-const ConnectGroup = styled("div")`
+const ConnectGroup = styled.div`
   display: flex;
   gap: 1rem;
 `;

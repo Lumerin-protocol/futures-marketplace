@@ -1,4 +1,4 @@
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { MenuItem, Select } from "./Select";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { tokens } from "../styles/tokens";
@@ -88,7 +88,7 @@ const MobileTabSelect = styled(Select)`
   }
 `;
 
-const MobileTabSelectValue = styled("span")`
+const MobileTabSelectValue = styled.span`
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -97,7 +97,7 @@ const MobileTabSelectValue = styled("span")`
   padding-right: 0.25rem;
 `;
 
-const MobileMenuItemInner = styled("span")`
+const MobileMenuItemInner = styled.span`
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -105,7 +105,7 @@ const MobileMenuItemInner = styled("span")`
   gap: 0.75rem;
 `;
 
-const MobileCountBadge = styled("span")`
+const MobileCountBadge = styled.span`
   display: flex;
   align-items: center;
   justify-content: center;
@@ -119,7 +119,7 @@ const MobileCountBadge = styled("span")`
   flex-shrink: 0;
 `;
 
-export const TabSwitchStyled = styled("div")<{ $numTabs: number }>`
+export const TabSwitchStyled = styled.div<{ $numTabs: number }>`
   display: inline-grid;
   grid-template-columns: ${(props) => `repeat(${props.$numTabs}, 1fr)`};
   align-items: center;

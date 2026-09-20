@@ -1,6 +1,6 @@
 import { tokens } from "../../../styles/tokens";
 import { useState, useCallback } from "react";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { ModalItem } from "../../Modal";
 import { PrimaryButton } from "../../Forms/FormButtons/Buttons.styled";
 
@@ -143,21 +143,21 @@ export const ClosePositionModal = ({
 };
 
 // Styled Components
-const ClosePositionModalContent = styled("div")`
+const ClosePositionModalContent = styled.div`
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
   max-width: 450px;
 `;
 
-const ModalTitle = styled("h2")`
+const ModalTitle = styled.h2`
   margin: 0;
   font-size: 1.5rem;
   font-weight: 600;
   color: ${tokens.text.onDark};
 `;
 
-const ModalMessage = styled("p")`
+const ModalMessage = styled.p`
   margin: 0;
   font-size: 1rem;
   color: ${tokens.closePositionModal.textMuted};
@@ -169,14 +169,14 @@ const ModalMessage = styled("p")`
   }
 `;
 
-const ModalNote = styled("p")`
+const ModalNote = styled.p`
   margin: 0;
   font-size: 0.875rem;
   color: ${tokens.closePositionModal.textSubtle};
   font-style: italic;
 `;
 
-const CheckboxContainer = styled("div")`
+const CheckboxContainer = styled.div`
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -199,14 +199,14 @@ const CheckboxContainer = styled("div")`
   }
 `;
 
-const ModalButtons = styled("div")`
+const ModalButtons = styled.div`
   display: flex;
   gap: 0.75rem;
   justify-content: flex-end;
   margin-top: 0.5rem;
 `;
 
-const _CancelButton = styled("button")`
+const _CancelButton = styled.button`
   padding: 0.75rem 1.25rem;
   background: ${tokens.overlay.white10};
   color: ${tokens.text.onDark};

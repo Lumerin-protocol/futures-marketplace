@@ -1,5 +1,5 @@
 import { type FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import styled from "@emotion/styled";
+import { css, styled } from "next-yak";
 import {
   CandlestickSeries,
   ColorType,
@@ -24,8 +24,6 @@ import { tokens } from "../../styles/tokens";
 import { DATE_LOCALE } from "../../lib/dates";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 import { Spinner } from "../Spinner.styled";
-
-const CHART_HEIGHT = 400;
 
 const HASHPRICE_LABEL = "Hashprice";
 const BTC_LABEL = "BTC Price";
@@ -65,7 +63,7 @@ const withMinimumRange = (original: () => AutoscaleInfo | null): AutoscaleInfo |
 /** Values arrive already divided down to exahashes per second. */
 const formatHashrate = (value: number): string => `${value.toFixed(2)} EH/s`;
 
-const PeriodSwitch = styled("div")`
+const PeriodSwitch = styled.div`
   display: flex;
   gap: 0;
   border: 1px solid ${tokens.border.default};
@@ -73,7 +71,7 @@ const PeriodSwitch = styled("div")`
   overflow: hidden;
 `;
 
-const PeriodButton = styled("button")<{ $active: boolean }>`
+const PeriodButton = styled.button<{ $active: boolean }>`
   padding: 0.5rem 1rem;
   background: ${(props) => (props.$active ? tokens.surface.tabActive : "transparent")};
   color: ${tokens.text.onDark};
@@ -93,14 +91,14 @@ const PeriodButton = styled("button")<{ $active: boolean }>`
   }
 `;
 
-const SwitchGroup = styled("div")`
+const SwitchGroup = styled.div`
   display: flex;
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
 `;
 
-const ChartTitle = styled("div")`
+const ChartTitle = styled.div`
   font-size: 0.7rem;
   font-weight: 500;
   color: ${tokens.text.secondary};
@@ -108,14 +106,14 @@ const ChartTitle = styled("div")`
   letter-spacing: 0.03em;
 `;
 
-const ChartIntervalHint = styled("span")`
+const ChartIntervalHint = styled.span`
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
   color: ${tokens.text.muted};
 `;
 
-const ChartControls = styled("div")`
+const ChartControls = styled.div`
   display: flex;
   align-items: center;
   width: 100%;
@@ -128,13 +126,13 @@ const ChartControls = styled("div")`
   gap: 1rem;
 `;
 
-const Legend = styled("div")`
+const Legend = styled.div`
   display: flex;
   align-items: center;
   gap: 1rem;
 `;
 
-const LegendItem = styled("div")`
+const legendItemStyle = css`
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -142,7 +140,12 @@ const LegendItem = styled("div")`
   font-size: 0.8125rem;
 `;
 
-const LegendButton = styled(LegendItem.withComponent("button"))`
+const LegendItem = styled.div`
+  ${legendItemStyle};
+`;
+
+const LegendButton = styled.button`
+  ${legendItemStyle};
   padding: 0;
   border: none;
   background: none;
@@ -150,7 +153,7 @@ const LegendButton = styled(LegendItem.withComponent("button"))`
   cursor: pointer;
 `;
 
-const LegendCheckbox = styled("span")<{ $color: string; $checked: boolean }>`
+const LegendCheckbox = styled.span<{ $color: string; $checked: boolean }>`
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -167,7 +170,7 @@ const LegendCheckbox = styled("span")<{ $color: string; $checked: boolean }>`
 
 /* Takes whatever height the widget has left after the title and controls. In a
    content-sized parent (tablet, mobile) that is the canvas's own basis below. */
-const ChartArea = styled("div")`
+const ChartArea = styled.div`
   position: relative;
   display: flex;
   flex-direction: column;
@@ -177,14 +180,14 @@ const ChartArea = styled("div")`
 `;
 
 /* Grows and shrinks with the space above (the chart is `autoSize`d, so it
-   follows); ${CHART_HEIGHT}px is what it asks for when nothing constrains it. */
-const ChartCanvas = styled("div")`
+   follows); 400px is what it asks for when nothing constrains it. */
+const ChartCanvas = styled.div`
   width: 100%;
-  flex: 1 1 ${CHART_HEIGHT}px;
+  flex: 1 1 400px;
   min-height: 0;
 `;
 
-const TooltipBox = styled("div")`
+const TooltipBox = styled.div`
   position: absolute;
   z-index: 6;
   padding: 6px 8px;
@@ -198,12 +201,12 @@ const TooltipBox = styled("div")`
   pointer-events: none;
 `;
 
-const TooltipTime = styled("div")`
+const TooltipTime = styled.div`
   color: ${tokens.chart.axisMuted};
   font-size: 10px;
 `;
 
-const StateOverlay = styled("div")`
+const StateOverlay = styled.div`
   position: absolute;
   inset: 0;
   z-index: 7;

@@ -2,7 +2,7 @@ import { type FC, useMemo } from "react";
 import { useAccount } from "wagmi";
 import { Tooltip } from "../../components/Tooltip";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { tokens } from "../../styles/tokens";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
 import { truncateAddress } from "../../utils/formatters";
@@ -241,7 +241,7 @@ export const Leaderboard: FC = () => {
   );
 };
 
-const PageContainer = styled("div")`
+const PageContainer = styled.div`
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -249,26 +249,26 @@ const PageContainer = styled("div")`
   margin-top: 10px;
 `;
 
-const _PageHeader = styled("div")`
+const _PageHeader = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 `;
 
-const _PageTitle = styled("h1")`
+const _PageTitle = styled.h1`
   margin: 0;
   font-size: 1.6rem;
   font-weight: 700;
   color: ${tokens.text.onDark};
 `;
 
-const _PageSubtitle = styled("p")`
+const _PageSubtitle = styled.p`
   margin: 0;
   font-size: 0.9rem;
   color: ${tokens.text.secondary};
 `;
 
-const SectionTitle = styled("span")`
+const SectionTitle = styled.span`
   font-size: 0.7rem;
   font-weight: 600;
   color: ${tokens.text.secondary};
@@ -283,7 +283,7 @@ const ScoreWidget = styled(SmallWidget)`
   padding: 1.25rem 1.5rem;
 `;
 
-const ScoreContent = styled("div")`
+const ScoreContent = styled.div`
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -296,7 +296,7 @@ const ScoreContent = styled("div")`
   }
 `;
 
-const ScoreBlock = styled("div")`
+const ScoreBlock = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -311,7 +311,7 @@ const ScoreBlock = styled("div")`
   }
 `;
 
-const ScoreDivider = styled("div")`
+const ScoreDivider = styled.div`
   width: 1px;
   align-self: stretch;
   background: ${tokens.border.default};
@@ -323,7 +323,7 @@ const ScoreDivider = styled("div")`
   }
 `;
 
-const ScoreLabel = styled("span")`
+const ScoreLabel = styled.span`
   font-size: 0.7rem;
   font-weight: 500;
   text-transform: uppercase;
@@ -331,13 +331,13 @@ const ScoreLabel = styled("span")`
   color: ${tokens.text.muted};
 `;
 
-const ScoreValue = styled("span")<{ $highlight?: boolean }>`
+const ScoreValue = styled.span<{ $highlight?: boolean }>`
   font-size: 1.35rem;
   font-weight: 700;
   color: ${(props) => (props.$highlight ? tokens.trading.profit : tokens.text.onDark)};
 `;
 
-const ContentGrid = styled("div")`
+const ContentGrid = styled.div`
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 1rem;
@@ -355,7 +355,7 @@ const TableWidget = styled(SmallWidget)`
   padding: 1.25rem 1.5rem;
 `;
 
-const TableContainer = styled("div")`
+const TableContainer = styled.div`
   width: 100%;
   overflow-x: auto;
 
@@ -378,7 +378,7 @@ const TableContainer = styled("div")`
   }
 `;
 
-const Table = styled("table")`
+const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
   min-width: 400px;
@@ -416,7 +416,7 @@ const Table = styled("table")`
   }
 `;
 
-const TableRow = styled("tr")<{ $highlight?: boolean }>`
+const TableRow = styled.tr<{ $highlight?: boolean }>`
   background-color: ${(props) => (props.$highlight ? tokens.trading.infoRowBg : "transparent")};
 
   &:hover {
@@ -428,7 +428,7 @@ const TableRow = styled("tr")<{ $highlight?: boolean }>`
   }
 `;
 
-const RankBadge = styled("span")<{ $rank: number }>`
+const RankBadge = styled.span<{ $rank: number }>`
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -457,7 +457,7 @@ const RankBadge = styled("span")<{ $rank: number }>`
   }
 `;
 
-const WalletCell = styled("span")`
+const WalletCell = styled.span`
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -482,7 +482,7 @@ const WalletCell = styled("span")`
   }
 `;
 
-const YouTag = styled("span")`
+const YouTag = styled.span`
   padding: 0.1rem 0.4rem;
   border-radius: ${tokens.radius.sm};
   font-size: 0.65rem;
@@ -493,12 +493,12 @@ const YouTag = styled("span")`
   background-color: ${tokens.trading.infoRowBg};
 `;
 
-const Points = styled("span")`
+const Points = styled.span`
   font-weight: 700;
   color: ${tokens.trading.profit};
 `;
 
-const SideColumn = styled("div")`
+const SideColumn = styled.div`
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -518,7 +518,7 @@ const LogsWidget = styled(SmallWidget)`
   padding: 1.25rem 1.5rem;
 `;
 
-const TxHashLink = styled("a")`
+const TxHashLink = styled.a`
   font-family: "Inter", monospace;
   color: ${tokens.trading.info};
   text-decoration: none;
@@ -528,13 +528,13 @@ const TxHashLink = styled("a")`
   }
 `;
 
-const RulesList = styled("div")`
+const RulesList = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
 `;
 
-const RuleItem = styled("div")`
+const RuleItem = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -544,27 +544,27 @@ const RuleItem = styled("div")`
   background-color: ${tokens.overlay.white02};
 `;
 
-const RuleHeader = styled("div")`
+const RuleHeader = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
 `;
 
-const RuleAction = styled("span")`
+const RuleAction = styled.span`
   font-size: 0.9rem;
   font-weight: 600;
   color: ${tokens.text.onDark};
 `;
 
-const RateList = styled("div")`
+const RateList = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
   margin-top: 0.25rem;
 `;
 
-const RateRow = styled("div")`
+const RateRow = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -574,32 +574,32 @@ const RateRow = styled("div")`
   background-color: ${tokens.overlay.white02};
 `;
 
-const RateLabel = styled("span")`
+const RateLabel = styled.span`
   font-size: 0.8rem;
   font-weight: 500;
   color: ${tokens.text.secondary};
 `;
 
-const RatePoints = styled("span")`
+const RatePoints = styled.span`
   font-size: 0.85rem;
   font-weight: 700;
   color: ${tokens.trading.profit};
 `;
 
-const RuleDescription = styled("span")`
+const RuleDescription = styled.span`
   font-size: 0.8rem;
   color: ${tokens.text.secondary};
   line-height: 1.4;
 `;
 
-const EmptyState = styled("div")`
+const EmptyState = styled.div`
   padding: 1.5rem 0;
   text-align: center;
   color: ${tokens.text.muted};
   font-size: 0.9rem;
 `;
 
-const EmptyCell = styled("td")`
+const EmptyCell = styled.td`
   padding: 1.5rem 0.5rem !important;
   text-align: center !important;
   color: ${tokens.text.muted};

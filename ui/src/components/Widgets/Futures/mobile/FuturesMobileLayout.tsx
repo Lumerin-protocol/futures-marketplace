@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { tokens } from "../../../../styles/tokens";
 import { ShowChartIcon } from "../../../icons";
 
@@ -65,7 +65,7 @@ export const FuturesMobileLayout = ({
   );
 };
 
-const MobileContainer = styled("div")`
+const MobileContainer = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -80,7 +80,7 @@ const MobileContainer = styled("div")`
   }
 `;
 
-const ChartToggleButton = styled("button")<{ $active: boolean }>`
+const ChartToggleButton = styled.button<{ $active: boolean }>`
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -93,7 +93,7 @@ const ChartToggleButton = styled("button")<{ $active: boolean }>`
   line-height: 1;
 `;
 
-const MobileChartSlot = styled("div")`
+const MobileChartSlot = styled.div`
   min-height: 260px;
 
   && > * {
@@ -104,7 +104,7 @@ const MobileChartSlot = styled("div")`
   }
 `;
 
-const MobileBalanceSlot = styled("div")`
+const MobileBalanceSlot = styled.div`
   && > * {
     width: 100%;
     min-width: 0;
@@ -112,7 +112,7 @@ const MobileBalanceSlot = styled("div")`
   }
 `;
 
-const MobileSplitRow = styled("div")`
+const MobileSplitRow = styled.div`
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.5rem;
@@ -123,7 +123,7 @@ const MobileSplitRow = styled("div")`
 // inside this slot so the virtualized ladder (thousands of futures ticks) never
 // inflates the row height. The slot keeps a floor of 420px and stretches when
 // the place-order column is taller.
-const MobileBookSlot = styled("div")`
+const MobileBookSlot = styled.div`
   position: relative;
   min-width: 0;
   min-height: 420px;
@@ -144,7 +144,7 @@ const MobileBookSlot = styled("div")`
 
 // SmallWidget carries min-width: 215px and the place-order form is padded for a
 // 300px desktop column, so both are relaxed here to fit half a phone screen.
-const MobilePlaceOrderSlot = styled("div")`
+const MobilePlaceOrderSlot = styled.div`
   min-width: 0;
 
   && > * {

@@ -1,4 +1,4 @@
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import type { FC, PropsWithChildren } from "react";
 import { Header } from "../Header";
 import { Footer } from "../Footer";
@@ -22,11 +22,11 @@ export const DefaultLayout: FC<Props> = ({ children }) => {
   );
 };
 
-const BodyWrapper = styled("div")`
+const BodyWrapper = styled.div`
   display: flex;
 `;
 
-const Page = styled("div")<{ $mobile: boolean }>`
+const Page = styled.div<{ $mobile: boolean }>`
   flex-grow: 1;
   padding: ${(p) => (p.$mobile ? "16px" : "24px")};
   width: 100%;
@@ -36,9 +36,9 @@ const Page = styled("div")<{ $mobile: boolean }>`
   flex-direction: column;
 `;
 
-const Main = styled("main")``;
+const Main = styled.main``;
 
-const ContentWrapper = styled("div")`
+const ContentWrapper = styled.div`
   max-width: 1920px;
   margin: 0 auto;
   width: 100%;

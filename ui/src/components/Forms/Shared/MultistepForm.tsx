@@ -1,5 +1,5 @@
 import { type FC, Fragment, type ReactNode, useState } from "react";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { CheckCircle, ErrorIcon, SkipNext } from "../../icons";
 import { InlineAlert } from "../../InlineAlert";
 import { PrimaryButton, SecondaryButton } from "../FormButtons/Buttons.styled";
@@ -288,7 +288,7 @@ export const MultipleTransactionProgress = (props: {
   );
 };
 
-const RetryButton = styled("button")`
+const RetryButton = styled.button`
   padding: 0.1em 0.4em;
   border: none;
   border-radius: ${tokens.radius.sm};
@@ -366,44 +366,44 @@ function getStepProgressLabel(tx: TxState): string {
   }
 }
 
-const Steps = styled("div")`
+const Steps = styled.div`
   display: flex;
   flex-direction: column;
   gap: 1em;
 `;
 
-const StepStyled = styled("div")`
+const StepStyled = styled.div`
   display: grid;
   grid-template-columns: 2em 1fr;
   grid-auto-flow: row;
 `;
 
-const StepLabel = styled("div")`
+const StepLabel = styled.div`
   font-weight: 500;
   font-size: 1rem;
   margin-bottom: 0.8em;
   grid-column: span 2;
 `;
 
-const StepProgressIcon = styled("div")`
+const StepProgressIcon = styled.div`
   font-weight: normal;
   font-size: 0.8rem;
   display: flex;
   align-items: center;
 `;
 
-const StepProgressLabel = styled("div")`
+const StepProgressLabel = styled.div`
   font-weight: normal;
   font-size: 1rem;
 `;
 
-const StepTxHash = styled("div")`
+const StepTxHash = styled.div`
   font-weight: normal;
   font-size: 0.9rem;
   grid-column-start: 2;
 `;
 
-const StepError = styled("div")`
+const StepError = styled.div`
   font-weight: normal;
   color: ${tokens.trading.short};
   grid-column-start: 2;
@@ -431,7 +431,7 @@ const StepError = styled("div")`
   }
 `;
 
-const StepProgressRow = styled("div")`
+const StepProgressRow = styled.div`
   display: flex;
   flex-direction: row;
   gap: 1em;
@@ -523,7 +523,7 @@ export const MultistepFormActions = (props: {
   );
 };
 
-const ButtonGroup = styled("div")`
+const ButtonGroup = styled.div`
   display: flex;
   flex-direction: row;
   margin-top: 2rem;

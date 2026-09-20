@@ -6,8 +6,7 @@
  * from these, so they all feel like one control set; callers add spacing and
  * size variants on top rather than redrawing the parts.
  */
-import styled from "@emotion/styled";
-import { css, keyframes } from "@emotion/react";
+import { styled, css, keyframes } from "next-yak";
 import { tokens } from "../../../styles/tokens";
 import { MOBILE_TOGGLE_METRICS } from "../../Widgets/Futures/mobile/mobileTradingLayout";
 
@@ -21,15 +20,12 @@ export const pulseHighlight = keyframes`
   }
 `;
 
-export const getPulseAnimation = (isHighlighted?: boolean) => {
-  if (isHighlighted) {
-    return css`${pulseHighlight} 1.5s ease-in-out infinite`;
-  }
-  return "none";
-};
+export const highlightedPulse = css`
+  animation: ${pulseHighlight} 1.5s ease-in-out infinite;
+`;
 
 /** A label over a field; the generic `input` styles live here. */
-export const InputGroup = styled("div")<{ $isHighlighted?: boolean }>`
+export const InputGroup = styled.div<{ $isHighlighted?: boolean }>`
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -52,8 +48,12 @@ export const InputGroup = styled("div")<{ $isHighlighted?: boolean }>`
     font-size: 1rem;
     transition: border-color 0.2s ease;
     width: 100%;
-    animation: ${(props) => getPulseAnimation(props.$isHighlighted)};
-    background: ${(props) => (props.$isHighlighted ? undefined : tokens.surface.inputIsland)};
+    ${(props) => props.$isHighlighted && highlightedPulse};
+    ${(props) =>
+      !props.$isHighlighted &&
+      css`
+        background: ${tokens.surface.inputIsland};
+      `};
 
     &:focus {
       outline: none;
@@ -79,7 +79,7 @@ export const InputGroup = styled("div")<{ $isHighlighted?: boolean }>`
 `;
 
 /** `[−] price [+]`: the steppers and the input share one 48px row. */
-export const PriceInputContainer = styled("div")<{ $isHighlighted?: boolean }>`
+export const PriceInputContainer = styled.div<{ $isHighlighted?: boolean }>`
   display: flex;
   align-items: stretch;
   gap: 0.5rem;
@@ -94,8 +94,12 @@ export const PriceInputContainer = styled("div")<{ $isHighlighted?: boolean }>`
     border-right: none;
     border-top: 1px solid ${tokens.overlay.white20};
     border-bottom: 1px solid ${tokens.overlay.white20};
-    animation: ${(props) => getPulseAnimation(props.$isHighlighted)};
-    background: ${(props) => (props.$isHighlighted ? undefined : tokens.surface.inputIsland)};
+    ${(props) => props.$isHighlighted && highlightedPulse};
+    ${(props) =>
+      !props.$isHighlighted &&
+      css`
+        background: ${tokens.surface.inputIsland};
+      `};
 
     &:focus {
       border-left: 1px solid ${tokens.accent.main};
@@ -110,7 +114,7 @@ export const PriceInputContainer = styled("div")<{ $isHighlighted?: boolean }>`
   }
 `;
 
-export const PriceButton = styled("button")<{ $isHighlighted?: boolean }>`
+export const PriceButton = styled.button<{ $isHighlighted?: boolean }>`
   box-sizing: border-box;
   padding: 0 1rem;
   color: ${tokens.text.onDark};
@@ -128,8 +132,12 @@ export const PriceButton = styled("button")<{ $isHighlighted?: boolean }>`
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: ${(props) => getPulseAnimation(props.$isHighlighted)};
-  background: ${(props) => (props.$isHighlighted ? undefined : tokens.surface.inputIsland)};
+  ${(props) => props.$isHighlighted && highlightedPulse};
+  ${(props) =>
+    !props.$isHighlighted &&
+    css`
+      background: ${tokens.surface.inputIsland};
+    `};
 
   &:hover:not(:disabled) {
     background: ${tokens.surface.inputIslandHover};
@@ -168,7 +176,7 @@ export const PriceButton = styled("button")<{ $isHighlighted?: boolean }>`
 `;
 
 /** The amount field: a bare input with the Size/Quantity dropdown inside its frame. */
-export const AmountInputWrapper = styled("div")`
+export const AmountInputWrapper = styled.div`
   display: flex;
   align-items: stretch;
   box-sizing: border-box;
@@ -216,7 +224,7 @@ export const AmountInputWrapper = styled("div")`
   }
 `;
 
-export const AmountModeDropdown = styled("select")`
+export const AmountModeDropdown = styled.select`
   appearance: none;
   padding: 0 0.75rem;
   border: none;
@@ -229,7 +237,7 @@ export const AmountModeDropdown = styled("select")`
   cursor: pointer;
   min-width: 56px;
   text-align: center;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23${tokens.text.secondary.slice(1)}'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2394A3B8'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.4rem center;
   padding-right: 1.4rem;
@@ -254,7 +262,7 @@ export const AmountModeDropdown = styled("select")`
   }
 `;
 
-export const SliderContainer = styled("div")`
+export const SliderContainer = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -267,7 +275,7 @@ export const SliderContainer = styled("div")`
  * fold them into `TifDropdown` so the row still fits beside the leverage
  * toggle; wrapping is allowed only in the mobile half-width column.
  */
-export const OrderTypeRow = styled("div")`
+export const OrderTypeRow = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -294,7 +302,7 @@ export const OrderTypeRow = styled("div")`
  * time-in-force choice on perps, where the row also carries the leverage
  * toggle and three separate GTC/IOC/FOK buttons would not fit on one line.
  */
-export const TifDropdown = styled("select")`
+export const TifDropdown = styled.select`
   appearance: none;
   box-sizing: border-box;
   padding: 0.25rem 1.375rem 0.25rem 0.625rem;
@@ -337,14 +345,14 @@ export const TifDropdown = styled("select")`
   }
 `;
 
-export const ModeToggle = styled("div")`
+export const ModeToggle = styled.div`
   display: flex;
   border: 1px solid ${tokens.overlay.white15};
   border-radius: 6px;
   overflow: hidden;
 `;
 
-export const ModeButton = styled("button")<{ $active: boolean }>`
+export const ModeButton = styled.button<{ $active: boolean }>`
   padding: 0.25rem 0.625rem;
   font-size: 0.75rem;
   font-weight: 600;

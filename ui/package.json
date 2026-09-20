@@ -26,8 +26,6 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.0",
     "@fortawesome/fontawesome-svg-core": "^6.7.2",
     "@fortawesome/free-brands-svg-icons": "^6.7.2",
     "@fortawesome/free-solid-svg-icons": "^6.7.2",
@@ -48,6 +46,7 @@
     "graphql": "^16.11.0",
     "graphql-request": "^7.2.0",
     "lightweight-charts": "^5.2.1",
+    "next-yak": "^9.9.0",
     "pretty-ms": "^9.2.0",
     "react": "^19.3.0",
     "react-circular-progressbar": "^2.1.0",
@@ -64,14 +63,10 @@
     "wagmi": "^2.15.2"
   },
   "devDependencies": {
-    "@babel/core": "^8.0.1",
     "@biomejs/biome": "2.0.6",
-    "@emotion/babel-plugin": "^11.13.5",
     "@jridgewell/trace-mapping": "^0.3.31",
-    "@rolldown/plugin-babel": "^0.2.4",
     "@sinclair/typebox": "^0.34.33",
     "@tailwindcss/forms": "^0.5.10",
-    "@types/babel__core": "^7.20.5",
     "@types/luxon": "^2.0.3",
     "@types/node": "^24.13.4",
     "@types/react": "^19.3.0",

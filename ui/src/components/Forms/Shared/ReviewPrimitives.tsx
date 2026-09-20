@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { Tooltip } from "../../Tooltip";
 import { HelpOutlineIcon } from "../../icons";
 import { tokens } from "../../../styles/tokens";
@@ -67,13 +67,13 @@ export const Delta = ({
   </>
 );
 
-export const Review = styled("div")`
+export const Review = styled.div`
   display: flex;
   flex-direction: column;
   gap: 1rem;
 `;
 
-export const Headline = styled("div")`
+export const Headline = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
@@ -83,7 +83,7 @@ export const Headline = styled("div")`
   border-radius: ${tokens.radius.md};
 `;
 
-export const HeadlineTop = styled("div")`
+export const HeadlineTop = styled.div`
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -91,7 +91,7 @@ export const HeadlineTop = styled("div")`
 `;
 
 /** Bid/long in green, ask/short in red. */
-export const SideBadge = styled("span")<{ $isBuy: boolean }>`
+export const SideBadge = styled.span<{ $isBuy: boolean }>`
   display: inline-block;
   padding: 0.15rem 0.5rem;
   border-radius: ${tokens.radius.sm};
@@ -106,19 +106,19 @@ export const SideBadge = styled("span")<{ $isBuy: boolean }>`
 /* Two roles only inside the card: values are 600 in the bright text colour,
    labels and meta are 400 in the secondary one, and everything that is not
    the title shares one size. */
-export const HeadlineMeta = styled("span")`
+export const HeadlineMeta = styled.span`
   font-size: 0.8125rem;
   color: ${tokens.text.secondary};
 `;
 
-export const HeadlineDelivery = styled("span")`
+export const HeadlineDelivery = styled.span`
   margin-left: auto;
   font-size: 0.8125rem;
   color: ${tokens.text.secondary};
   white-space: nowrap;
 `;
 
-export const HeadlineTitle = styled("div")`
+export const HeadlineTitle = styled.div`
   font-size: 1.25rem;
   font-weight: 600;
   color: ${tokens.text.onDark};
@@ -126,18 +126,18 @@ export const HeadlineTitle = styled("div")`
   font-variant-numeric: tabular-nums;
 `;
 
-export const HeadlineAt = styled("span")`
+export const HeadlineAt = styled.span`
   font-weight: 400;
   color: ${tokens.text.secondary};
 `;
 
-export const HeadlineDetail = styled("div")`
+export const HeadlineDetail = styled.div`
   font-size: 0.8125rem;
   color: ${tokens.text.secondary};
 `;
 
 /** Sits directly under the title as its sub-line: one stat on the left, one on the right. */
-export const HeadlineStats = styled("div")`
+export const HeadlineStats = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -145,7 +145,7 @@ export const HeadlineStats = styled("div")`
   gap: 0.25rem 1rem;
 `;
 
-export const HeadlineStat = styled("div")`
+export const HeadlineStat = styled.div`
   display: inline-flex;
   align-items: baseline;
   gap: 0.4rem;
@@ -165,13 +165,13 @@ export const HeadlineStat = styled("div")`
   }
 `;
 
-export const Section = styled("section")`
+export const Section = styled.section`
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 `;
 
-export const SectionTitle = styled("h3")`
+export const SectionTitle = styled.h3`
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -184,7 +184,7 @@ export const SectionTitle = styled("h3")`
   color: ${tokens.text.secondary};
 `;
 
-export const CostCard = styled("div")`
+export const CostCard = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
@@ -193,20 +193,20 @@ export const CostCard = styled("div")`
   border-radius: ${tokens.radius.md};
 `;
 
-const CostRowRoot = styled("div")`
+const CostRowRoot = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
 `;
 
-const CostRowMain = styled("div")`
+const CostRowMain = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 1rem;
 `;
 
-const CostLabel = styled("span")<{ $emphasis: boolean; $muted: boolean }>`
+const CostLabel = styled.span<{ $emphasis: boolean; $muted: boolean }>`
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
@@ -215,7 +215,7 @@ const CostLabel = styled("span")<{ $emphasis: boolean; $muted: boolean }>`
   color: ${(p) => (p.$emphasis ? tokens.text.onDark : p.$muted ? tokens.text.muted : tokens.text.secondary)};
 `;
 
-const CostValue = styled("span")<{ $emphasis: boolean; $muted: boolean }>`
+const CostValue = styled.span<{ $emphasis: boolean; $muted: boolean }>`
   display: inline-flex;
   align-items: baseline;
   justify-content: flex-end;
@@ -229,22 +229,22 @@ const CostValue = styled("span")<{ $emphasis: boolean; $muted: boolean }>`
 `;
 
 /** Full-white for the one figure that is a reward rather than a cost. */
-export const Bright = styled("span")`
+export const Bright = styled.span`
   color: #fff;
   font-weight: 600;
 `;
 
-export const Muted = styled("span")`
+export const Muted = styled.span`
   color: ${tokens.text.muted};
   font-weight: 400;
 `;
 
-const Arrow = styled("span")`
+const Arrow = styled.span`
   color: ${tokens.text.muted};
   font-weight: 400;
 `;
 
-const Balance = styled("span")<{ $tone: Tone }>`
+const Balance = styled.span<{ $tone: Tone }>`
   color: ${(p) =>
     p.$tone === "danger"
       ? tokens.trading.short
@@ -255,13 +255,13 @@ const Balance = styled("span")<{ $tone: Tone }>`
 
 /** Signed PnL: gains in the long colour, losses in the short colour. Doubled
  *  selector so it wins over `HeadlineStat strong`. */
-export const PnlValue = styled("strong")<{ $positive: boolean }>`
+export const PnlValue = styled.strong<{ $positive: boolean }>`
   && {
     color: ${(p) => (p.$positive ? tokens.trading.long : tokens.trading.short)};
   }
 `;
 
-export const CostHint = styled("div")`
+export const CostHint = styled.div`
   font-size: 0.75rem;
   line-height: 1.4;
   color: ${tokens.text.muted};
@@ -269,7 +269,7 @@ export const CostHint = styled("div")`
 `;
 
 /** A short explanation in a quiet box; `strong` picks out the one thing to remember. */
-export const Note = styled("p")`
+export const Note = styled.p`
   margin: 0;
   padding: 0.75rem 1rem;
   font-size: 0.8125rem;
@@ -286,7 +286,7 @@ export const Note = styled("p")`
 `;
 
 /** A rule with its label sitting on the line: `IF FILLED ────────`. */
-export const GroupDivider = styled("div")`
+export const GroupDivider = styled.div`
   display: flex;
   align-items: center;
   gap: 0.625rem;
@@ -308,7 +308,7 @@ export const GroupDivider = styled("div")`
   }
 `;
 
-export const CostDivider = styled("hr")`
+export const CostDivider = styled.hr`
   margin: 0.125rem 0;
   border: none;
   border-top: 1px solid ${tokens.border.default};

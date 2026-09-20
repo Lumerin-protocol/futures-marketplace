@@ -1,4 +1,4 @@
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { tokens } from "../styles/tokens";
 
 interface LoadMoreButtonProps {
@@ -23,14 +23,14 @@ export const LoadMoreButton = ({ hasMore, isLoading, onClick }: LoadMoreButtonPr
   );
 };
 
-const Wrapper = styled("div")`
+const Wrapper = styled.div`
   display: flex;
   justify-content: center;
   width: 100%;
   margin-top: 0.5rem;
 `;
 
-const Button = styled("button")`
+const Button = styled.button`
   padding: 0.5rem 1.25rem;
   background: transparent;
   color: ${tokens.text.secondary};

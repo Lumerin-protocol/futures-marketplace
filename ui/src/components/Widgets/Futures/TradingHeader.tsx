@@ -1,5 +1,5 @@
 import { tokens } from "../../../styles/tokens";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { Tooltip } from "../../Tooltip";
 import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
@@ -249,7 +249,7 @@ export const TradingHeader = ({
   );
 };
 
-const HeaderBar = styled("div")`
+const HeaderBar = styled.div`
   display: flex;
   align-items: center;
   gap: 1.5rem;
@@ -267,7 +267,7 @@ const HeaderBar = styled("div")`
 // MOBILE-ONLY wrapper (only rendered when `mobileActions` is passed): claims a
 // full flex line so the market selector and the layout controls sit on their
 // own row, with the controls pushed to the right corner and the stats below.
-const ModeRow = styled("div")`
+const ModeRow = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -275,14 +275,14 @@ const ModeRow = styled("div")`
   flex: 1 1 100%;
 `;
 
-const StatsRow = styled("div")`
+const StatsRow = styled.div`
   display: flex;
   align-items: center;
   gap: 1rem;
   flex: 1;
 `;
 
-const StatItem = styled("div")`
+const StatItem = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
@@ -291,21 +291,21 @@ const StatItem = styled("div")`
 /* Deliberately a step under the market selector's label: these are facts about
    the instrument, and half a dozen of them at the selector's weight left the bar
    with no focal point. */
-const StatValue = styled("span")`
+const StatValue = styled.span`
   font-size: 0.875rem;
   font-weight: 600;
   color: ${tokens.text.onDark};
   line-height: 1.2;
 `;
 
-const PriceChange = styled("span")<{ $up: boolean }>`
+const PriceChange = styled.span<{ $up: boolean }>`
   margin-left: 0.4rem;
   font-size: 0.65rem;
   font-weight: 600;
   color: ${(props) => (props.$up ? tokens.trading.long : tokens.trading.short)};
 `;
 
-const StatLabel = styled("span")`
+const StatLabel = styled.span`
   font-size: 0.6rem;
   font-weight: 500;
   color: ${tokens.text.secondary};
@@ -313,14 +313,14 @@ const StatLabel = styled("span")`
   letter-spacing: 0.04em;
 `;
 
-const Divider = styled("div")`
+const Divider = styled.div`
   width: 1px;
   height: 28px;
   background: ${tokens.border.muted03};
   flex-shrink: 0;
 `;
 
-const DetailsLink = styled("a")`
+const DetailsLink = styled.a`
   display: flex;
   align-items: center;
   gap: 0.25rem;

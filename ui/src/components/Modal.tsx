@@ -1,6 +1,6 @@
 import { type FC, type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { tokens } from "../styles/tokens";
 import { ModalCard, ModalCloseButton, ModalCloseIcon } from "./Modal.styled";
 

@@ -1,4 +1,4 @@
-import styled from "@emotion/styled";
+import { css, styled } from "next-yak";
 import { tokens } from "../../../styles/tokens";
 import type { OrderBookData } from "./orderBookHelpers";
 import type { ContractMode } from "../../../types/types";
@@ -74,7 +74,7 @@ export const ClassicOrderBook = ({
   );
 };
 
-const Table = styled("table")`
+const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
@@ -109,7 +109,7 @@ const Table = styled("table")`
   }
 `;
 
-const TableRow = styled("tr")<{
+const TableRow = styled.tr<{
   $bidFillPercent?: number;
   $askFillPercent?: number;
 }>`
@@ -183,37 +183,36 @@ const TableRow = styled("tr")<{
   }
 `;
 
-const BidCell = styled("td")<{ $isHighlighted?: boolean }>`
+const BidCell = styled.td<{ $isHighlighted?: boolean }>`
   border-right: 1px solid ${tokens.overlay.white05};
-  background-color: ${(props) => (props.$isHighlighted ? tokens.trading.longHighlightBg : "transparent")};
   ${(props) =>
     props.$isHighlighted &&
-    `
-    box-shadow: inset 0 0 8px ${tokens.trading.longHighlightGlow};
-  `}
+    css`
+      background-color: ${tokens.trading.longHighlightBg};
+      box-shadow: inset 0 0 8px ${tokens.trading.longHighlightGlow};
+    `}
 `;
 
-const AskCell = styled("td")<{ $isHighlighted?: boolean }>`
+const AskCell = styled.td<{ $isHighlighted?: boolean }>`
   border-left: 1px solid ${tokens.overlay.white05};
-  background-color: ${(props) => (props.$isHighlighted ? tokens.trading.shortHighlightBg : "transparent")};
   ${(props) =>
     props.$isHighlighted &&
-    `
-    box-shadow: inset 0 0 8px ${tokens.trading.shortHighlightGlow};
-  `}
+    css`
+      background-color: ${tokens.trading.shortHighlightBg};
+      box-shadow: inset 0 0 8px ${tokens.trading.shortHighlightGlow};
+    `}
 `;
 
-const PriceCell = styled("td")<{ $isLastHashprice?: boolean }>`
-  background-color: ${(props) => (props.$isLastHashprice ? tokens.trading.infoHighlightBg : "transparent")};
-  font-weight: ${(props) => (props.$isLastHashprice ? "700" : "normal")};
+const PriceCell = styled.td<{ $isLastHashprice?: boolean }>`
   font-family: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
   position: relative;
-  
   ${(props) =>
     props.$isLastHashprice &&
-    `
-    box-shadow: 0 0 8px ${tokens.trading.infoHighlightGlow};
-    outline: 1px solid ${tokens.trading.infoBorder};
-    outline-offset: -1px;
-  `}
+    css`
+      background-color: ${tokens.trading.infoHighlightBg};
+      font-weight: 700;
+      box-shadow: 0 0 8px ${tokens.trading.infoHighlightGlow};
+      outline: 1px solid ${tokens.trading.infoBorder};
+      outline-offset: -1px;
+    `}
 `;

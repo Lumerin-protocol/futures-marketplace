@@ -1,7 +1,7 @@
 import type { FC } from "react";
 import { type Control, useController } from "react-hook-form";
 import { InputWrapper } from "./Forms.styled";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { TextField } from "../../TextField";
 import { tokens } from "../../../styles/tokens";
 
@@ -171,13 +171,13 @@ export const AmountInputForm: FC<Props> = ({
   );
 };
 
-const InputContainer = styled("div")`
+const InputContainer = styled.div`
   display: flex;
   gap: 0.5rem;
   align-items: flex-start;
 `;
 
-const MaxButton = styled("button")`
+const MaxButton = styled.button`
   padding: 0.75rem 1rem;
   background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};

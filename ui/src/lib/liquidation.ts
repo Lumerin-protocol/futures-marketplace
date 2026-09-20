@@ -1,4 +1,4 @@
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { tokens } from "../styles/tokens";
 import type { LiquidationDirection } from "./portfolioMargin";
 import { PAYMENT_TOKEN_SCALE_NUM } from "./units";
@@ -16,7 +16,7 @@ import { PAYMENT_TOKEN_SCALE_NUM } from "./units";
 export const LIQUIDATION_ROW_BG = tokens.trading.shortRowBg;
 
 /** Small red chip flagging a liquidated row/order. Consumer supplies the label. */
-export const LiquidationChip = styled("span")`
+export const LiquidationChip = styled.span`
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;

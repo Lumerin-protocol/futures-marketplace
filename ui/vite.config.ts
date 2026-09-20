@@ -1,5 +1,5 @@
 import react from "@vitejs/plugin-react";
-import babel from "@rolldown/plugin-babel";
+import { viteYak } from "next-yak/vite";
 import { defineConfig, loadEnv } from "vite";
 import svgr from "vite-plugin-svgr";
 import { type Env, EnvSchema } from "./env.schema.ts";
@@ -68,13 +68,15 @@ export default defineConfig(({ mode }) => {
           );
         },
       },
-      react(),
-      // plugin-react 6 no longer hosts Babel. Emotion's label plugin runs
-      // through Rolldown so `styled` still gets `css-…-PositionCard` class
-      // names in dev.
-      babel({
-        plugins: ["@emotion/babel-plugin"],
+      // Extract css`` / styled`` before the React plugin sees the source.
+      viteYak({
+        minify: mode !== "development",
+        experiments: {
+          // Nested `input` / `h3` / `.link` selectors stay global CSS, not CSS modules.
+          transpilationMode: "Css",
+        },
       }),
+      react(),
       imagetools({
         defaultDirectives: (_url) => {
           return new URLSearchParams({

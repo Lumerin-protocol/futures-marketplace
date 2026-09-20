@@ -35,7 +35,7 @@ import { useTradableExpirations } from "../../hooks/data/useGetExpirationDates";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
 import type { Instrument } from "../../lib/instruments";
 import type { ContractMode } from "../../types/types";
-import styled from "@emotion/styled";
+import { styled } from "next-yak";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 
 interface TradingPageProps {
@@ -526,7 +526,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 // no share; all of it goes to the tables row beneath. The height follows the
 // viewport within the bounds the two widgets were designed for, and the chart
 // canvas fills whatever it gets.
-const FuturesContainer = styled("div")`
+const FuturesContainer = styled.div`
   --market-row: clamp(350px, 58vh, 540px);
 
   display: grid;
@@ -545,13 +545,13 @@ const FuturesContainer = styled("div")`
 `;
 
 // Row 1, all 3 columns
-const TradingHeaderArea = styled("div")`
+const TradingHeaderArea = styled.div`
   grid-column: 1 / -1;
   grid-row: 1;
 `;
 
 // Row 2, Col 1: Chart — fills the market row (see FuturesContainer)
-const ChartArea = styled("div")`
+const ChartArea = styled.div`
   grid-column: 1;
   grid-row: 2;
   min-width: 0;
@@ -578,7 +578,7 @@ const ChartArea = styled("div")`
 // contributes to grid sizing. Without this the tall Trades list and the
 // internally scrolled order book would ask for different heights per tab; with
 // it the book fills the row identically across tabs, modes, and data density.
-const OrderBookArea = styled("div")`
+const OrderBookArea = styled.div`
   grid-column: 2;
   grid-row: 2;
   min-width: 0;
@@ -605,7 +605,7 @@ const OrderBookArea = styled("div")`
 `;
 
 // Col 3, spans rows 2 and 3 — stretches to fill full combined height
-const RightPanelArea = styled("div")`
+const RightPanelArea = styled.div`
   grid-column: 3;
   grid-row: 2 / 4;
   align-self: stretch;
@@ -663,14 +663,14 @@ const RightPanelArea = styled("div")`
 `;
 
 // Order Information block — blank placeholder at bottom of right panel
-const _OrderInfoSection = styled("div")`
+const _OrderInfoSection = styled.div`
   padding: 0.875rem 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
 `;
 
-const _OrderInfoTitle = styled("div")`
+const _OrderInfoTitle = styled.div`
   font-size: 0.7rem;
   font-weight: 600;
   color: ${tokens.text.secondary};
@@ -679,7 +679,7 @@ const _OrderInfoTitle = styled("div")`
 `;
 
 // Row 3, Col 1+2 only (right panel column continues alongside)
-const OrdersPositionsArea = styled("div")`
+const OrdersPositionsArea = styled.div`
   grid-column: 1 / 3;
   grid-row: 3;
   min-width: 0;
