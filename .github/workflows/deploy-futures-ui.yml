@@ -42,10 +42,12 @@ on:
       - 'ui/index.html'
       - 'ui/.cicd_trigger'
 
+  # On-demand: run from any branch and choose "dev" to ship that ref to DEV.
+  # stg/main stay locked to their own branches by GitHub Environment policy.
   workflow_dispatch:
     inputs:
       environment:
-        description: "Target environment (dev=DEV, stg=STG, main=LMN/PROD)"
+        description: "Target environment. Feature branches can only deploy to dev."
         required: true
         type: choice
         options:
