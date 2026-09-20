@@ -70,11 +70,8 @@ export const OrderBookTable = ({
   // Fetch order book based on contract mode
   const futuresOrderBookQuery = useAggregateOrderBook(
     contractMode === "futures" ? selectedExpirationAt : undefined,
-    { refetch: true, interval: 15000 }
   );
-  const perpsOrderBookQuery = usePerpsOrderBook(
-    contractMode === "perpetual" ? { refetch: true, interval: 15000 } : undefined
-  );
+  const perpsOrderBookQuery = usePerpsOrderBook();
 
   const orderBookQuery = contractMode === "perpetual" ? perpsOrderBookQuery : futuresOrderBookQuery;
 

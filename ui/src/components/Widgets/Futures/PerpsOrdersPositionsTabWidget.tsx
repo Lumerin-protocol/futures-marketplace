@@ -1,4 +1,5 @@
 import { tokens } from "../../../styles/tokens";
+import { usePerpsSessionTrades } from "../../../hooks/data/perps/usePerpsSessionTrades";
 import { useState, useMemo, useEffect } from "react";
 import { styled } from "next-yak";
 import { SmallWidget } from "../../Cards/Cards.styled";
@@ -83,11 +84,12 @@ export const PerpsOrdersPositionsTabWidget = ({
   // Paginated ("Load More") Position History — closed perps position sessions.
   const positionHistoryQuery = usePerpsPositionHistory(participantAddress);
 
-  // Paginated ("Load More") Trades tab.
-  const tradesQuery = useUserTrades(
-    participantAddress,
-    { refetch: activeTab === "TRADES" }
-  );
+  // Paginated ("Load More") Trades tab. Not polled: refetching an infinite query
+  // refetches every page the user has loaded, so the cost grows with scroll
+  // depth. The user's own trades only move when they trade (covered by
+  // `refreshVenueViews` post-tx) or when a keeper liquidates them (covered by
+  // `useLiquidationNotifications`).
+  const tradesQuery = useUserTrades(participantAddress);
 
   const refreshPerpsHistory = () => {
     orderHistoryQuery.refresh();
@@ -772,7 +774,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
           <tbody>
             {openPositions.map((session) => {
               const displayQuantity = session.netQuantity;
-              const isLong = displayQuantity > 0n || (displayQuantity === 0n && session.maxQuantity > 0n);
+              const isLong = session.isLong;
               const realizedPnlValue = Number(session.realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
               const unrealizedPnl = calculateUnrealizedPnL(session.entryPrice, displayQuantity);
               const unrealizedPnlValue = Number(unrealizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
@@ -935,7 +937,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, hasMore = fals
           </thead>
           <tbody>
             {displayedPositions.map((session) => {
-              const isLong = session.maxQuantity > 0n;
+              const isLong = session.isLong;
               const realizedPnlValue = Number(session.realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
               const wasLiquidated = session.liquidatedQuantity > 0n;
 
@@ -1141,11 +1143,15 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
     return `${value >= 0 ? "+" : ""}${value.toFixed(2)} USDC`;
   };
 
-  const sortedTrades = [...session.trades].sort((a, b) => 
-    Number(b.timestamp) - Number(a.timestamp)
+  // The only place in the perps UI that renders fills, so the only place that
+  // fetches them: the sessions on the 5s tick carry one fill, for direction.
+  const tradesQuery = usePerpsSessionTrades(session.id);
+  const sortedTrades = useMemo(
+    () => [...(tradesQuery.data ?? [])].sort((a, b) => Number(b.timestamp) - Number(a.timestamp)),
+    [tradesQuery.data],
   );
 
-  // Client-side "Load More" paging (the session's trades are already in memory).
+  // Client-side "Load More" paging, over the page already fetched.
   const PAGE_SIZE = 10;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const displayedTrades = sortedTrades.slice(0, visibleCount);
@@ -1160,7 +1166,7 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
           <ModalCloseIcon />
         </ModalCloseButton>
         
-        <h2>Trades ({sortedTrades.length})</h2>
+        <h2>Trades {tradesQuery.isPending ? "" : `(${sortedTrades.length})`}</h2>
         
         <TradesTableContainer>
           <TradesTable>

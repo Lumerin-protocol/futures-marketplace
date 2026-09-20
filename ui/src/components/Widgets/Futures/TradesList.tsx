@@ -26,7 +26,7 @@ const formatTime = (timestampSeconds: number): string =>
   new Date(timestampSeconds * 1000).toLocaleTimeString("en-US", { hour12: false });
 
 export const TradesList = ({ contractMode = "futures" }: TradesListProps) => {
-  const { data: trades, isLoading } = useRecentTrades(contractMode, { refetch: true });
+  const { data: trades, isLoading } = useRecentTrades(contractMode);
 
   const futuresTokenInfo = useFuturesTokenInfo();
   const perpsTokenInfo = usePerpsTokenInfo();
