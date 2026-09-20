@@ -40,7 +40,8 @@ export function useUpdateFuturesOrders() {
   const { data: walletClient } = useWalletClient();
 
   const updateOrdersAsync = async (props: UpdateFuturesOrdersProps) => {
-    if (!writeContractAsync || !publicClient || !walletClient) return;
+    if (!walletClient) throw new Error("Wallet not ready. Please try again.");
+    if (!publicClient) throw new Error("No RPC client available. Please try again.");
 
     const cancelIds = props.cancelIds ?? [];
     const reduces = props.reduces ?? [];

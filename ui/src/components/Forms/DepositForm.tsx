@@ -11,7 +11,7 @@ import { useFuturesCollateralVault } from "../../hooks/data/useFuturesCollateral
 import type { PermitSignature } from "../../hooks/data/usePermit";
 import type { AccountBalance } from "../../types/types";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
-import type { TxState } from "../../hooks/useTxForm";
+import type { TransactionStep, TxState } from "../../hooks/useTxForm";
 import { AmountInputForm } from "./Shared/AmountInputForm";
 import { formatValue, PAYMENT_TOKEN_SCALE_NUM, paymentToken } from "../../lib/units";
 import { parseUnits } from "viem";
@@ -152,7 +152,7 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance })
     [paymentTokenBalance.data, paymentTokenBalance.isLoading, inputForm],
   );
 
-  const transactionSteps = [
+  const transactionSteps: TransactionStep[] = [
     {
       // Signing a permit is off-chain (no gas, no tx to wait on) and collapses
       // the usual approve+deposit sequence into a single on-chain transaction
@@ -170,7 +170,7 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance })
         if (isPermitSupported) {
           const permit = await signPermit(amountBigInt);
           if (!permit) throw new Error("Wallet not ready. Please try again.");
-          return { isSkipped: false, state: { mode: "permit", ...permit } };
+          return { isSkipped: false, isOffChain: true, state: { mode: "permit", ...permit } };
         }
 
         const result = await approveAsync({ spender: spenderAddress, amount: amountBigInt });
@@ -195,7 +195,7 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance })
             signature: authorized.signature,
             recipient: address,
           });
-          return result ? { isSkipped: false, txhash: result } : { isSkipped: false };
+          return { isSkipped: false, txhash: result };
         }
 
         // Approve fallback: pin the deposit simulation to the block the
@@ -203,7 +203,7 @@ export const DepositForm: FC<DepositFormProps> = ({ closeForm, accountBalance })
         // `latest` tag before that node has caught up to the just-mined approve.
         const minBlockNumber = txState[0]?.blockNumber;
         const result = await addMarginAsync({ amount: amountBigInt, minBlockNumber });
-        return result ? { isSkipped: false, txhash: result } : { isSkipped: false };
+        return { isSkipped: false, txhash: result };
       },
     },
   ];

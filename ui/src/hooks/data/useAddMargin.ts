@@ -62,7 +62,13 @@ export function useAddMargin() {
   const { data: collateralVaultAddress } = useFuturesCollateralVault();
 
   const addMarginAsync = async (props: AddMarginProps) => {
-    if (!writeContractAsync || !walletClient || !collateralVaultAddress) return;
+    // Throws rather than returning undefined: callers cannot distinguish an
+    // empty return from "nothing needed doing", and the transaction runner
+    // used to report the latter as a successful deposit.
+    if (!walletClient) throw new Error("Wallet not ready. Please try again.");
+    if (!collateralVaultAddress) {
+      throw new Error("Collateral vault address not loaded yet. Please try again.");
+    }
 
     const vault = getContract({
       address: collateralVaultAddress,
@@ -100,7 +106,10 @@ export function useAddMarginWithPermit() {
   const { data: collateralVaultAddress } = useFuturesCollateralVault();
 
   const addMarginWithPermitAsync = async (props: AddMarginWithPermitProps) => {
-    if (!writeContractAsync || !walletClient || !collateralVaultAddress) return;
+    if (!walletClient) throw new Error("Wallet not ready. Please try again.");
+    if (!collateralVaultAddress) {
+      throw new Error("Collateral vault address not loaded yet. Please try again.");
+    }
 
     const vault = getContract({
       address: collateralVaultAddress,
