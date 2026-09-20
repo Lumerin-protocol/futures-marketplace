@@ -11,7 +11,16 @@ export type TransactionStep = {
 /// `state` is an opaque hand-off between steps: a step stores whatever it needs
 /// and a later step casts it back to the shape it expects.
 export type ActionResult =
-  | { isSkipped: false; txhash?: `0x${string}`; state?: unknown }
+  /// A transaction was sent; the runner waits for its receipt.
+  | { isSkipped: false; isOffChain?: false; txhash: `0x${string}`; state?: unknown }
+  /**
+   * The step finished its work off-chain and has no receipt to wait for — an
+   * EIP-2612 permit signature, say. Spelled out rather than inferred from a
+   * missing `txhash`, so that a step which meant to send a transaction but
+   * came back empty-handed cannot be reported to the user as a success.
+   */
+  | { isSkipped: false; isOffChain: true; txhash?: undefined; state?: unknown }
+  /// There was nothing to do — e.g. the ERC20 allowance already covered it.
   | { isSkipped: true; state?: unknown };
 
 export type TxState = {
@@ -77,7 +86,11 @@ export function useMultistepTx(props: { steps: TransactionStep[] }) {
       });
 
       try {
-        if (!actionResult.isSkipped && actionResult.txhash) {
+        if (actionResult.isSkipped) {
+          updateStep(txNumber, { state: "skipped" });
+        } else if (actionResult.isOffChain) {
+          updateStep(txNumber, { state: "confirmed" });
+        } else {
           if (!wc) throw new Error("No public client available to await the transaction receipt");
           const receipt = await wc.waitForTransactionReceipt({
             hash: actionResult.txhash,
@@ -90,10 +103,6 @@ export function useMultistepTx(props: { steps: TransactionStep[] }) {
           if (props.steps[txNumber].postConfirmation) {
             await props.steps[txNumber].postConfirmation(receipt);
           }
-        } else if (actionResult.isSkipped) {
-          updateStep(txNumber, { state: "skipped" });
-        } else {
-          updateStep(txNumber, { state: "confirmed" });
         }
         return true;
       } catch (error) {
