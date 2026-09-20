@@ -16,15 +16,17 @@ interface ApproveProps {
   minBlockNumber?: bigint;
 }
 
-/// `tokenAddress` may be undefined while the caller is still resolving it from
-/// chain; approving is a no-op until it is known.
+/// Resolves to `undefined` only when the existing allowance already covers the
+/// amount — every other dead end throws, so callers can treat `undefined` as
+/// "no approval needed" without it doubling as "wallet missing".
 export function useApproveERC20(tokenAddress: `0x${string}` | undefined) {
   const { writeContractAsync, ...rest } = useWriteContract();
   const { data: wc } = useWalletClient();
 
   const approveAsync = useCallback(
     async (props: ApproveProps) => {
-      if (!writeContractAsync || !wc || !tokenAddress) return;
+      if (!wc) throw new Error("Wallet not ready. Please try again.");
+      if (!tokenAddress) throw new Error("Token address not loaded yet. Please try again.");
 
       const token = getContract({
         address: tokenAddress,
