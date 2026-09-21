@@ -1,21 +1,16 @@
 ################################################################################
 # Beta alias hostname (e.g. beta.hashpower.exchange) for the marketplace site
 #
-# This is an OPTIONAL, env-scoped sibling of aws_cloudfront_distribution.marketplace
-# in 04_futures_ui.tf. It exists so a human-readable hostname (var.beta_alias.hostname)
-# can serve the same content as the canonical env hostname (local.hp_dns["exc"].name)
-# without disturbing the existing distribution or its (out-of-band) ACM cert.
+# Second CloudFront distribution for var.beta_alias.hostname (beta.hashpower.exchange).
+# Origin is the app bucket. While apex_site is "hold", GitHub Actions publishes here
+# and the apex coming-soon page is a different bucket.
 #
-# Architecture:
-#   - DNS for var.beta_alias.hostname lives in the hashpower.exchange ROOT zone
-#     (titanio-net account) — beta.* is a sibling of stg.*, not a child of it.
-#   - ACM cert is issued in us-east-1 (CloudFront requirement) and DNS-validated
-#     against that root zone via aws.titanio-net.
-#   - The CloudFront distribution shares the existing marketplace S3 bucket as origin.
-#     The bucket policy in 04_futures_ui.tf includes both distributions in its
-#     AWS:SourceARN condition.
+# The certificate covers the beta hostname and the zone apex. apex_site "hold" attaches
+# only the beta name. apex_site "beta" removes the apex alias from the marketplace
+# distribution first (depends_on below), then attaches it here and moves the apex
+# Route53 record onto this distribution.
 #
-# Toggle via var.beta_alias.create. Defaults off; only stg sets it true today.
+# DNS for the beta hostname lives in the hashpower.exchange root zone (titanio-net).
 ################################################################################
 
 # Root zone lookup — required to write validation + alias records into hashpower.exchange
@@ -30,10 +25,11 @@ data "aws_route53_zone" "hp_exchange_root" {
 # ACM cert — us-east-1, DNS validated against the root zone
 ################################
 resource "aws_acm_certificate" "beta_alias" {
-  count             = var.beta_alias.create ? 1 : 0
-  provider          = aws.use1
-  domain_name       = var.beta_alias.hostname
-  validation_method = "DNS"
+  count                     = var.beta_alias.create ? 1 : 0
+  provider                  = aws.use1
+  domain_name               = var.beta_alias.hostname
+  subject_alternative_names = [local.hp_dns["exc"].name]
+  validation_method         = "DNS"
 
   lifecycle {
     create_before_destroy = true
@@ -88,8 +84,9 @@ resource "aws_cloudfront_origin_access_control" "beta_alias" {
 }
 
 resource "aws_cloudfront_distribution" "beta_alias" {
-  count    = var.beta_alias.create ? 1 : 0
-  provider = aws.use1
+  count      = var.beta_alias.create ? 1 : 0
+  provider   = aws.use1
+  depends_on = [aws_cloudfront_distribution.marketplace]
 
   origin {
     domain_name              = aws_s3_bucket.marketplace[0].bucket_regional_domain_name
@@ -104,7 +101,7 @@ resource "aws_cloudfront_distribution" "beta_alias" {
   is_ipv6_enabled     = true
   comment             = "${var.beta_alias.hostname} alias of ${local.hp_dns["exc"].name}"
   default_root_object = "index.html"
-  aliases             = [var.beta_alias.hostname]
+  aliases             = var.apex_site == "beta" ? [var.beta_alias.hostname, local.hp_dns["exc"].name] : [var.beta_alias.hostname]
   price_class         = "PriceClass_100" # Cheapest tier; this is just an alias hostname
 
   default_cache_behavior {

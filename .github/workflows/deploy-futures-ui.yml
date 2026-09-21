@@ -2,14 +2,13 @@ name: Deploy Futures UI
 
 # Public build-time values (chain id, addresses, subgraph URLs, …) come from
 # config/dev.env and config/prd.env. GitHub Environments `dev` → config/dev.env;
-# `stg` and `main` → config/prd.env. Secrets and computed values (WalletConnect,
+# `main` → config/prd.env. Secrets and computed values (WalletConnect,
 # read-only RPC, marketplace URL, version) are written to ui/.env and win.
 
 on:
   push:
     branches:
       - dev
-      - stg
       - main
       - 'cicd/**'
 
@@ -28,7 +27,6 @@ on:
   pull_request:
     branches:
       - dev
-      - stg
       - main
     paths:
       - '.github/workflows/deploy-futures-ui.yml'
@@ -43,7 +41,7 @@ on:
       - 'ui/.cicd_trigger'
 
   # On-demand: run from any branch and choose "dev" to ship that ref to DEV.
-  # stg/main stay locked to their own branches by GitHub Environment policy.
+  # main stays locked to its own branch by GitHub Environment policy.
   workflow_dispatch:
     inputs:
       environment:
@@ -52,7 +50,6 @@ on:
         type: choice
         options:
           - dev
-          - stg
           - main
 
 concurrency:
@@ -115,7 +112,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ needs.generate-tag.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || needs.generate-tag.outputs.environment == 'stg' && secrets.AWS_ROLE_ARN_STG || secrets.AWS_ROLE_ARN_LMN }}
+          role-to-assume: ${{ needs.generate-tag.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_LMN }}
           aws-region: us-east-1
           role-session-name: GitHubActions-Marketplace-Setup-${{ github.run_id }}
 
@@ -128,9 +125,6 @@ jobs:
           case $ENV in
             dev)
               SECRET_NAME="futures-marketplace-secrets-v3-dev"
-              ;;
-            stg)
-              SECRET_NAME="futures-marketplace-secrets-v3-stg"
               ;;
             main)
               SECRET_NAME="futures-marketplace-secrets-v3-lmn"
@@ -211,9 +205,9 @@ jobs:
 
           case "$ENV" in
             dev) CONFIG_ENV=dev ;;
-            stg|main) CONFIG_ENV=prd ;;
+            main) CONFIG_ENV=prd ;;
             *)
-              echo "::error::Unknown environment '$ENV' (expected dev, stg, or main)"
+              echo "::error::Unknown environment '$ENV' (expected dev or main)"
               exit 1
               ;;
           esac
@@ -362,7 +356,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ needs.generate-tag.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || needs.generate-tag.outputs.environment == 'stg' && secrets.AWS_ROLE_ARN_STG || secrets.AWS_ROLE_ARN_LMN }}
+          role-to-assume: ${{ needs.generate-tag.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_LMN }}
           aws-region: ${{ needs.setup.outputs.aws_region }}
           role-session-name: GitHubActions-Marketplace-Deploy-${{ github.run_id }}
 

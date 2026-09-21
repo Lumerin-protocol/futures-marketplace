@@ -9,7 +9,6 @@ on:
    push:
      branches:
        - dev
-       - stg
        - main
        - 'cicd/**'
      paths:
@@ -20,7 +19,6 @@ on:
    pull_request:
      branches:
        - dev
-       - stg
        - main
      paths:
        - 'notifications/**'
@@ -28,7 +26,7 @@ on:
        - '.github/workflows/deploy-notifications.yml'
 
    # On-demand: run from any branch and choose "dev" to ship that ref to DEV.
-   # stg/main stay locked to their own branches by GitHub Environment policy.
+   # main stays locked to its own branch by GitHub Environment policy.
    workflow_dispatch:
     inputs:
       environment:
@@ -37,7 +35,6 @@ on:
         type: choice
         options:
           - dev
-          - stg
           - main
 
 permissions:
@@ -95,12 +92,6 @@ jobs:
               echo "ecs_service=svc-futures-notifications-dev" >> $GITHUB_OUTPUT
               echo "config_env=dev" >> $GITHUB_OUTPUT
               ;;
-            stg)
-              echo "aws_region=us-east-1" >> $GITHUB_OUTPUT
-              echo "ecs_cluster=ecs-futures-marketplace-stg" >> $GITHUB_OUTPUT
-              echo "ecs_service=svc-futures-notifications-stg" >> $GITHUB_OUTPUT
-              echo "config_env=prd" >> $GITHUB_OUTPUT
-              ;;
             main)
               echo "aws_region=us-east-1" >> $GITHUB_OUTPUT
               echo "ecs_cluster=ecs-futures-marketplace-lmn" >> $GITHUB_OUTPUT
@@ -108,7 +99,7 @@ jobs:
               echo "config_env=prd" >> $GITHUB_OUTPUT
               ;;
             *)
-              echo "::error::Unknown environment '$ENV' (expected dev, stg, or main)"
+              echo "::error::Unknown environment '$ENV' (expected dev or main)"
               exit 1
               ;;
           esac
@@ -177,7 +168,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ needs.build.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || needs.build.outputs.environment == 'stg' && secrets.AWS_ROLE_ARN_STG || secrets.AWS_ROLE_ARN_LMN }}
+          role-to-assume: ${{ needs.build.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_LMN }}
           aws-region: ${{ needs.build.outputs.aws_region }}
           role-session-name: GitHubActions-FuturesNotifications-${{ github.run_id }}
 
@@ -269,7 +260,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ needs.build.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || needs.build.outputs.environment == 'stg' && secrets.AWS_ROLE_ARN_STG || secrets.AWS_ROLE_ARN_LMN }}
+          role-to-assume: ${{ needs.build.outputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || secrets.AWS_ROLE_ARN_LMN }}
           aws-region: ${{ needs.build.outputs.aws_region }}
           role-session-name: GitHubActions-FuturesNotifications-Verify-${{ github.run_id }}
 
