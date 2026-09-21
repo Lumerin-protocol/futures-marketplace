@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - dev
-      - stg
       - main
       - "cicd/**"
     paths:
@@ -12,7 +11,7 @@ on:
       - "config/*.env"
       - ".github/workflows/update-futures-oracle.yml"
   # On-demand: run from any branch and choose "dev" to ship that ref to DEV.
-  # stg/main stay locked to their own branches by GitHub Environment policy.
+  # main stays locked to its own branch by GitHub Environment policy.
   workflow_dispatch:
     inputs:
       environment:
@@ -21,7 +20,6 @@ on:
         type: choice
         options:
           - dev
-          - stg
           - main
 
 concurrency:
@@ -119,18 +117,13 @@ jobs:
               echo "goldsky_endpoint=${{ vars.DEV_GS_FUTURES }}" >> $GITHUB_OUTPUT
               echo "config_env=dev" >> $GITHUB_OUTPUT
               ;;
-            stg)
-              echo "goldsky_rolling_tag=stg-latest" >> $GITHUB_OUTPUT
-              echo "goldsky_endpoint=${{ vars.STG_GS_FUTURES }}" >> $GITHUB_OUTPUT
-              echo "config_env=prd" >> $GITHUB_OUTPUT
-              ;;
             main)
               echo "goldsky_rolling_tag=lmn-latest" >> $GITHUB_OUTPUT
               echo "goldsky_endpoint=${{ vars.LMN_GS_FUTURES }}" >> $GITHUB_OUTPUT
               echo "config_env=prd" >> $GITHUB_OUTPUT
               ;;
             *)
-              echo "::error::Unknown environment '$ENV' (expected dev, stg, or main)"
+              echo "::error::Unknown environment '$ENV' (expected dev or main)"
               exit 1
               ;;
           esac
@@ -215,7 +208,7 @@ jobs:
         id: goldsky_deploy
         working-directory: ./indexer
         env:
-          GOLDSKY_API_KEY: ${{ needs.build.outputs.environment == 'dev' && secrets.DEV_GOLDSKY_API_KEY || needs.build.outputs.environment == 'stg' && secrets.STG_GOLDSKY_API_KEY || secrets.LMN_GOLDSKY_API_KEY }}
+          GOLDSKY_API_KEY: ${{ needs.build.outputs.environment == 'dev' && secrets.DEV_GOLDSKY_API_KEY || secrets.LMN_GOLDSKY_API_KEY }}
           GOLDSKY_SUBGRAPH_NAME: ${{ needs.build.outputs.goldsky_subgraph_name }}
           SUBGRAPH_VERSION: ${{ needs.build.outputs.version }}
           GOLDSKY_ROLLING_TAG: ${{ needs.build.outputs.goldsky_rolling_tag }}
@@ -342,7 +335,7 @@ jobs:
 
           if [ -z "${GOLDSKY_ENDPOINT}" ]; then
             echo "⚠️ No Goldsky endpoint URL configured — skipping verification"
-            echo "   Set DEV_GS_FUTURES / STG_GS_FUTURES / LMN_GS_FUTURES org variable"
+            echo "   Set DEV_GS_FUTURES / LMN_GS_FUTURES org variable"
             exit 0
           fi
 

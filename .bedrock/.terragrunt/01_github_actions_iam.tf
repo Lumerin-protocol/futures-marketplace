@@ -122,7 +122,10 @@ resource "aws_iam_role_policy" "github_marketplace_deploy" {
           "cloudfront:GetInvalidation",
           "cloudfront:ListInvalidations"
         ]
-        Resource = aws_cloudfront_distribution.marketplace[0].arn
+        Resource = concat(
+          aws_cloudfront_distribution.marketplace[*].arn,
+          aws_cloudfront_distribution.beta_alias[*].arn,
+        )
       },
       {
         Sid    = "AllowGetDistribution"
@@ -131,7 +134,10 @@ resource "aws_iam_role_policy" "github_marketplace_deploy" {
           "cloudfront:GetDistribution",
           "cloudfront:GetDistributionConfig"
         ]
-        Resource = aws_cloudfront_distribution.marketplace[0].arn
+        Resource = concat(
+          aws_cloudfront_distribution.marketplace[*].arn,
+          aws_cloudfront_distribution.beta_alias[*].arn,
+        )
       }
     ]
   })
