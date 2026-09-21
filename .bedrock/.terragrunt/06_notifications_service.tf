@@ -294,7 +294,7 @@ resource "aws_cloudwatch_log_group" "notifications_use1" {
 
 # Define Service
 resource "aws_ecs_service" "notifications_use1" {
-  lifecycle {ignore_changes = [task_definition] }
+  lifecycle { ignore_changes = [task_definition] }
   count                  = var.notifications_service.create ? 1 : 0
   provider               = aws.use1
   name                   = "svc-${var.notifications_service["svc_name"]}-${substr(var.account_shortname, 8, 3)}"
@@ -387,7 +387,7 @@ resource "aws_ecs_task_definition" "notifications_use1" {
       ]
       secrets = [
         {
-          name  = "TELEGRAM_BOT_TOKEN"
+          name      = "TELEGRAM_BOT_TOKEN"
           valueFrom = "${aws_secretsmanager_secret.notifications.arn}:telegram_bot_token::"
         }
       ]
@@ -480,7 +480,7 @@ resource "aws_alb_listener" "notifications_int_443_use1" {
   port              = "443"
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-FS-1-2-Res-2020-10"
-  certificate_arn   = data.aws_acm_certificate.lumerin_marketplace_ext.arn
+  certificate_arn   = local.hp_acm["exc"].arn
 
   default_action {
     type             = "forward"
@@ -501,8 +501,8 @@ resource "aws_alb_listener" "notifications_int_443_use1" {
 resource "aws_route53_record" "notifications_int_use1" {
   count    = var.notifications_service.create ? 1 : 0
   provider = aws.use1
-  zone_id  = data.aws_route53_zone.public_lumerin.zone_id
-  name     = "${var.notifications_service["alb_name"]}${data.aws_route53_zone.public_lumerin.name}"
+  zone_id  = local.hp_dns["exc"].zone_id
+  name     = "${var.notifications_service["alb_name"]}${local.hp_dns["exc"].name}"
   type     = "A"
 
   alias {

@@ -3,9 +3,9 @@
 ################################################################################
 # AWS Secrets Manager resources for sensitive variables
 
-# IAM policy to allow ECS task execution role to read the graph indexer secrets
+# IAM policy to allow ECS task execution role to read service secrets
 resource "aws_iam_policy" "futures_marketplace_secret_access" {
-  count       = (var.create_core || var.market_maker.create || var.notifications_service.create || var.margin_call_lambda.create) ? 1 : 0
+  count       = (var.create_core || var.market_maker.create || var.notifications_service.create) ? 1 : 0
   provider    = aws.use1
   name        = "${local.shortname}-secret-access-${substr(var.account_shortname, 8, 3)}"
   description = "Allow ECS tasks to read Futures Marketplace secrets from Secrets Manager"
@@ -21,9 +21,8 @@ resource "aws_iam_policy" "futures_marketplace_secret_access" {
         ]
         Resource = compact([
           var.create_core ? aws_secretsmanager_secret.futures.arn : "",
-          var.market_maker.create ? aws_secretsmanager_secret.market_maker.arn : "", 
-          var.notifications_service.create ? aws_secretsmanager_secret.notifications.arn : "",
-          var.margin_call_lambda.create ? aws_secretsmanager_secret.margin_call.arn : ""
+          var.market_maker.create ? aws_secretsmanager_secret.market_maker[0].arn : "",
+          var.notifications_service.create ? aws_secretsmanager_secret.notifications.arn : ""
         ])
       }
     ]
@@ -41,7 +40,7 @@ resource "aws_iam_policy" "futures_marketplace_secret_access" {
 
 # Attach the policy to the bedrock foundation role
 resource "aws_iam_role_policy_attachment" "futures_marketplace_secret_access" {
-  count      = (var.create_core || var.market_maker.create || var.notifications_service.create || var.margin_call_lambda.create) ? 1 : 0
+  count      = (var.create_core || var.market_maker.create || var.notifications_service.create) ? 1 : 0
   provider   = aws.use1
   role       = "bedrock-foundation-role"
   policy_arn = aws_iam_policy.futures_marketplace_secret_access[0].arn
@@ -68,9 +67,11 @@ resource "aws_secretsmanager_secret_version" "futures" {
     # AWS deployment configuration (auto-populated by Terraform)
     # These values are read by GitHub Actions to prevent manual transcription errors
     deployment = {
-      s3_bucket                  = var.create_core ? aws_s3_bucket.marketplace[0].id : ""
-      cloudfront_distribution_id = var.create_core ? aws_cloudfront_distribution.marketplace[0].id : ""
-      marketplace_url            = var.create_core ? (var.account_lifecycle == "prd" ? "https://${local.s3_cf_website}.${data.aws_route53_zone.public_lumerin_root.name}" : "https://${local.s3_cf_website}.${data.aws_route53_zone.public_lumerin.name}") : ""
+      s3_bucket = var.create_core ? aws_s3_bucket.marketplace[0].id : ""
+      # hold and beta: invalidate the beta distribution (the apex alias lives there after cutover).
+      # app: keep invalidating the apex distribution, including when a beta alias also exists.
+      cloudfront_distribution_id = coalesce(contains(["hold", "beta"], var.apex_site) ? one(aws_cloudfront_distribution.beta_alias[*].id) : null, one(aws_cloudfront_distribution.marketplace[*].id), "")
+      marketplace_url            = var.apex_site == "hold" && var.beta_alias.create ? "https://${var.beta_alias.hostname}" : "https://${local.hp_dns["exc"].name}"
       aws_region                 = var.default_region
       environment                = var.account_lifecycle
     }
@@ -83,9 +84,22 @@ resource "aws_secretsmanager_secret_version" "futures" {
 # Separate secret for Market Maker service
 # Contains private key and ETH node URL (sensitive trading credentials)
 
+# `moved` block migrates the previously-unindexed secret state address into
+# the count-indexed [0] address that this resource now uses. This keeps stg/lmn
+# (where var.market_maker.create is still true) intact across the count
+# refactor; in dev (count = 0) the moved block is a no-op and the secret is
+# planned for destroy. recovery_window_in_days = 0 forces immediate deletion
+# rather than the default 30-day soft-delete window.
+moved {
+  from = aws_secretsmanager_secret.market_maker
+  to   = aws_secretsmanager_secret.market_maker[0]
+}
+
 resource "aws_secretsmanager_secret" "market_maker" {
-  name        = "market-maker-secrets-v3-${substr(var.account_shortname, 8, 3)}"
-  description = "Secrets for Market Maker trading service (private key and ETH node URL)"
+  count                   = var.market_maker.create ? 1 : 0
+  name                    = "market-maker-secrets-v3-${substr(var.account_shortname, 8, 3)}"
+  description             = "Secrets for Market Maker trading service (private key and ETH node URL)"
+  recovery_window_in_days = 0
   tags = merge(var.default_tags, var.foundation_tags, {
     Name = "market-maker-secrets-v3-${substr(var.account_shortname, 8, 3)}"
   })
@@ -94,12 +108,12 @@ resource "aws_secretsmanager_secret" "market_maker" {
 resource "aws_secretsmanager_secret_version" "market_maker" {
   count = var.market_maker.create ? 1 : 0
   # lifecycle {ignore_changes = [secret_string]}
-  secret_id = aws_secretsmanager_secret.market_maker.id
+  secret_id = aws_secretsmanager_secret.market_maker[0].id
   secret_string = jsonencode({
     private_key          = var.market_maker_private_key
     eth_node_url         = var.market_maker_eth_node_url
-    futures_subgraph_url = "https://gateway.thegraph.com/api/${var.graph_api_key}/subgraphs/id/${var.futures_subgraph_id}"
-    oracles_subgraph_url = "https://gateway.thegraph.com/api/${var.graph_api_key}/subgraphs/id/${var.oracles_subgraph_id}"
+    futures_subgraph_url = lookup(var.gs_subgraphs, "futures", "")
+    oracles_subgraph_url = lookup(var.gs_subgraphs, "oracles", "")
   })
 }
 
@@ -126,25 +140,3 @@ resource "aws_secretsmanager_secret_version" "notifications" {
   })
 }
 
-################################################################################
-# MARGIN CALL LAMBDA SECRETS
-################################################################################
-# Separate secret for Margin Call Lambda
-# Contains futures subgraph URL (constructed from API key and subgraph ID)
-
-resource "aws_secretsmanager_secret" "margin_call" {
-  name        = "margin-call-secrets-v3-${substr(var.account_shortname, 8, 3)}"
-  description = "Secrets for Margin Call Lambda (subgraph URL)"
-  tags = merge(var.default_tags, var.foundation_tags, {
-    Name = "margin-call-secrets-v3-${substr(var.account_shortname, 8, 3)}"
-  })
-}
-
-resource "aws_secretsmanager_secret_version" "margin_call" {
-  count = var.margin_call_lambda.create ? 1 : 0
-  # lifecycle {ignore_changes = [secret_string]}
-  secret_id = aws_secretsmanager_secret.margin_call.id
-  secret_string = jsonencode({
-    futures_subgraph_url = "https://gateway.thegraph.com/api/${var.graph_api_key}/subgraphs/id/${var.futures_subgraph_id}"
-  })
-}

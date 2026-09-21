@@ -1,311 +1,509 @@
 import styled from "@mui/material/styles/styled";
+import Tooltip from "@mui/material/Tooltip";
+import { css, keyframes } from "@emotion/react";
+import type { ReactNode } from "react";
+import { tokens } from "../../../styles/tokens";
 import { useAccount } from "wagmi";
-import { useMemo } from "react";
-import { useGetFutureBalance } from "../../../hooks/data/useGetFutureBalance";
-import { useLmrBalanceValidation } from "../../../hooks/data/useLmrBalanceValidation";
 import { useModal } from "../../../hooks/useModal";
-import { SmallWidget } from "../../Cards/Cards.styled";
-import { Spinner } from "../../Spinner.styled";
+import { RefreshableValue } from "../../RefreshableValue";
 import { formatValue, paymentToken } from "../../../lib/units";
+import { REALIZED_PNL_WINDOW_DAYS } from "../../../lib/portfolioPnl";
+import {
+  formatMarginRatio,
+  marginStatusCopy,
+  RESTRICTED_STATUS_COPY,
+  type MarginTier,
+} from "../../../lib/marginRisk";
+import type { MarginRiskState } from "../../../hooks/data/useMarginRisk";
 import { UsdcIcon } from "../../../images";
 import { PrimaryButton } from "../../Forms/FormButtons/Buttons.styled";
 import { ModalItem } from "../../Modal";
 import { DepositForm } from "../../Forms/DepositForm";
 import { WithdrawalForm } from "../../Forms/WithdrawalForm";
-import EastIcon from "@mui/icons-material/East";
+import type { AccountBalance } from "../../../types/types";
 
-interface FuturesBalanceWidgetProps {
-  minMargin: bigint | null;
-  isLoadingMinMargin: boolean;
-  unrealizedPnL: bigint | null;
-  realizedPnL30D: number | null;
-  isLoadingRealizedPnL?: boolean;
+interface BalanceQueryResult {
+  data: bigint | undefined;
+  isLoading: boolean;
+  isSuccess: boolean;
+  isFetching?: boolean;
+  refetch: () => void;
 }
 
+interface FuturesBalanceWidgetProps {
+  /** Everything derived from the margin engine: see `useMarginRisk`. */
+  marginRisk: MarginRiskState;
+  /** Mark-to-market across every venue, not just the one being traded. */
+  unrealizedPnL: bigint | null;
+  isLoadingUnrealizedPnL?: boolean;
+  isRefreshingUnrealizedPnL?: boolean;
+  /** Realized over the trailing window, across every venue. */
+  realizedPnLInWindow: bigint | null;
+  isLoadingRealizedPnL?: boolean;
+  isRefreshingRealizedPnL?: boolean;
+  balanceQuery: BalanceQueryResult;
+  accountBalance?: AccountBalance;
+  /** Account-wide liquidation level, quoted in the Danger status line. */
+  liqPrice?: bigint;
+}
+
+// Both PnL figures cover the whole account, so they do not change when the user
+// switches trading tabs. Spelling that out avoids reading them as futures-only.
+const ALL_VENUES_HINT = "Across all venues (Futures and Perpetuals)";
+
+const EQUITY_HINT = "Balance plus unrealized PnL across all venues.";
+const MARGIN_USED_HINT = "Initial margin held for open positions and resting orders.";
+const AVAILABLE_HINT =
+  "Withdrawable and usable for new positions. Unrealized gains are not available until realized.";
+const MARGIN_RATIO_HINT =
+  "Maintenance stress ÷ equity, with unrealized losses counted and gains ignored as the margin engine does. Amber begins where balance meets initial margin; positions are liquidated at 100%.";
+
+const pnlColor = (pnl: bigint | null) => {
+  if (pnl === null || pnl === 0n) return tokens.text.onDark;
+  return pnl > 0n ? tokens.trading.long : tokens.trading.short;
+};
+
+/// `valueRounded` carries a K/M suffix past five characters, which `Number`
+/// cannot parse; the unrounded string always can.
+const amount = (value: bigint | null): string | null =>
+  value === null ? null : Number(formatValue(value, paymentToken).value).toFixed(2);
+
+/// Every figure on this panel is derived rather than read straight off chain, so
+/// each one carries an explanation. A native `title` was too easy to miss for
+/// that: it waits about a second and renders in OS chrome rather than the app's.
+const HintedLabel = ({ hint, children }: { hint: string; children: ReactNode }) => (
+  <Tooltip title={hint} arrow placement="top">
+    <MetricLabel>{children}</MetricLabel>
+  </Tooltip>
+);
+
+const tierColor = (tier: MarginTier) => {
+  switch (tier) {
+    case "liquidatable":
+    case "danger":
+      return tokens.trading.short;
+    case "caution":
+      return tokens.trading.highlight;
+    default:
+      return tokens.trading.long;
+  }
+};
+
+/// A 155° arc of radius 42.5 centred at (50, 51), drawn left to right: chord
+/// 83 wide, 33 high, inside a stroke of 17, so the whole mark is 100×50 units —
+/// a 2:1 box that is scaled to the height of the digits beside it (~11×22px).
+/// Constant curvature keeps the sweep easy to judge.
+const GAUGE_PATH = "M 8.5 41.8 A 42.5 42.5 0 0 1 91.5 41.8";
+
+/// Authored length for the dash maths. Declaring it frees the sweep from the
+/// ellipse's real perimeter, which has no closed form and would otherwise have
+/// to be re-derived every time the arc is reshaped.
+const GAUGE_PATH_LENGTH = 100;
+
+interface MarginRatioGaugeProps {
+  /** `null` when there is no ratio to show: an empty account or a failed read. */
+  ratioPercent: number | null;
+  tier: MarginTier;
+  isLoading: boolean;
+  isRefreshing: boolean;
+}
+
+/**
+ * The margin ratio as a dial whose full sweep is the liquidation threshold.
+ *
+ * A bare percentage needs the reader to remember what number is fatal; how far
+ * round the dial the needle has travelled does not. The arc is deliberately
+ * clamped at 100% — past that the account is already liquidatable and the exact
+ * overshoot changes nothing.
+ */
+const MarginRatioGauge = ({
+  ratioPercent,
+  tier,
+  isLoading,
+  isRefreshing,
+}: MarginRatioGaugeProps) => {
+  const swept = ratioPercent === null ? 0 : Math.min(Math.max(ratioPercent, 0), 100) / 100;
+  const color = ratioPercent === null ? tokens.text.onDark : tierColor(tier);
+
+  return (
+    <GaugeBlock>
+      <GaugeSvg
+        viewBox="0 0 100 50"
+        role="img"
+        aria-label={`Margin ratio ${formatMarginRatio(ratioPercent)} of 100%`}
+      >
+        {/* A solid track rather than the row-highlight tint the old linear bar
+            used: the unswept arc is what conveys the remaining headroom, and at
+            15% alpha it disappeared into the panel. */}
+        <GaugeArc d={GAUGE_PATH} pathLength={GAUGE_PATH_LENGTH} $color={tokens.border.default} />
+        {ratioPercent !== null && (
+          <GaugeArc
+            d={GAUGE_PATH}
+            pathLength={GAUGE_PATH_LENGTH}
+            $color={color}
+            strokeDasharray={GAUGE_PATH_LENGTH}
+            strokeDashoffset={GAUGE_PATH_LENGTH * (1 - swept)}
+          />
+        )}
+      </GaugeSvg>
+      <GaugeValue $color={color}>
+        <RefreshableValue isInitialLoading={isLoading} isRefreshing={isRefreshing}>
+          {ratioPercent === null ? null : formatMarginRatio(ratioPercent)}
+        </RefreshableValue>
+      </GaugeValue>
+    </GaugeBlock>
+  );
+};
+
 export const FuturesBalanceWidget = ({
-  minMargin,
-  isLoadingMinMargin,
+  marginRisk,
   unrealizedPnL,
-  realizedPnL30D,
+  isLoadingUnrealizedPnL = false,
+  isRefreshingUnrealizedPnL = false,
+  realizedPnLInWindow,
   isLoadingRealizedPnL,
+  isRefreshingRealizedPnL = false,
+  balanceQuery,
+  accountBalance,
+  liqPrice,
 }: FuturesBalanceWidgetProps) => {
   const { address } = useAccount();
-  const futureBalance = useGetFutureBalance(address);
-  const lmrBalanceValidation = useLmrBalanceValidation(address);
   const depositModal = useModal();
   const withdrawalModal = useModal();
 
   const handleDepositSuccess = () => {
-    futureBalance.refetch();
+    balanceQuery.refetch();
     depositModal.close();
   };
 
   const handleWithdrawalSuccess = () => {
-    futureBalance.refetch();
+    balanceQuery.refetch();
     withdrawalModal.close();
   };
 
-  const isLoading = futureBalance.isLoading;
-  const isSuccess = !!(futureBalance.isSuccess && address);
-  const balanceValue = formatValue(futureBalance.data ?? 0n, paymentToken);
-  const lockedBalanceValue = formatValue(minMargin ?? 0n, paymentToken);
-  const unrealizedPnLValue = formatValue(unrealizedPnL ?? 0n, paymentToken);
-  const unrealizedPnlColor =
-    unrealizedPnL && unrealizedPnL > 0 ? "#22c55e" : unrealizedPnL && unrealizedPnL < 0 ? "#ef4444" : "#fff";
-  const realizedPnlColor =
-    realizedPnL30D && realizedPnL30D > 0 ? "#22c55e" : realizedPnL30D && realizedPnL30D < 0 ? "#ef4444" : "#fff";
-  const realizedPnL30DFormatted = realizedPnL30D !== null ? (realizedPnL30D / 1e6).toFixed(2) : "-";
-
-  // Check if LMR balance meets minimum requirement
-  const requiredLmrAmount = BigInt(process.env.REACT_APP_FUTURES_REQUIRED_LMR || "10000");
-  const hasMinimumLmrBalance = lmrBalanceValidation.totalBalance >= requiredLmrAmount;
-  const isLmrBalanceLoading = lmrBalanceValidation.isLoading;
-
-  // Check if locked amount is at or above threshold percentage of balance
-  const lockedBalanceThreshold = Number(process.env.REACT_APP_MARGIN_UTILIZATION_WARNING_PERCENT || "80");
-  const shouldHighlight = useMemo(() => {
-    if (!futureBalance.data || !minMargin || futureBalance.data === 0n) return false;
-    const lockedAmount = minMargin > 0n ? minMargin : -minMargin; // Use absolute value
-    const lockedPercentage = (Number(lockedAmount) / Number(futureBalance.data)) * 100;
-    return lockedPercentage >= lockedBalanceThreshold;
-  }, [futureBalance.data, minMargin, lockedBalanceThreshold]);
+  const { tier, ratioPercent, belowIM, isError } = marginRisk;
+  const statusCopy = marginStatusCopy(tier, { ratioPercent, liqPrice });
+  // An empty account and a failed read both have no ratio, and neither should be
+  // coloured as though it had passed a health check.
+  const hasRatio = !isError && ratioPercent !== null;
 
   return (
     <>
-      <BalanceWidgetContainer className="lg:w-[60%]" $shouldHighlight={shouldHighlight} $centerContent={!address}>
-        {address && (
-          <div className="flex items-center justify-center" style={{ fontSize: "0.75rem" }}>
-            <UsdcIcon style={{ width: "18px", marginRight: "6px" }} />
-            <span>Portfolio Overview (USDC)</span>
-          </div>
-        )}
-        <BalanceContainer $shouldHighlight={shouldHighlight}>
-          {!address && <div>Connect wallet to view balance and use marketplace</div>}
-          {isLoading && address && <Spinner fontSize="0.3em" />}
-          {isSuccess && address && hasMinimumLmrBalance && (
-            <BalanceRow>
-              <MetricsGrid>
-                {/* Row 1: Balance | Unrealized PnL */}
+      <PanelSection $tier={tier}>
+        {/* Header row */}
+        <SectionHeader>
+          <UsdcIcon style={{ width: "14px", flexShrink: 0 }} />
+          <SectionTitle>Account Portfolio (USDC)</SectionTitle>
+        </SectionHeader>
+
+        {/* Not connected */}
+        {!address && <DisconnectedMsg>Connect wallet to view balance</DisconnectedMsg>}
+
+        {/* Metrics stay mounted — no full-panel spinner. Values blink / skeleton while loading. */}
+        {!!address && (
+          <>
+            <MetricsGrid>
+              <MetricColumn>
                 <MetricCell>
-                  <MetricLabel>Balance</MetricLabel>
-                  <MetricValue>{Number(balanceValue?.valueRounded).toFixed(2)}</MetricValue>
-                </MetricCell>
-                <MetricCell>
-                  <MetricLabel>Unrealized PnL</MetricLabel>
-                  <MetricValue style={{ color: unrealizedPnlColor }}>
-                    {unrealizedPnL !== null ? Number(unrealizedPnLValue.valueRounded).toFixed(2) : "-"}
-                  </MetricValue>
-                </MetricCell>
-                {/* Row 2: Locked | Realized PnL (30D) */}
-                <MetricCell>
-                  <MetricLabel>Locked</MetricLabel>
+                  <HintedLabel hint={EQUITY_HINT}>Equity</HintedLabel>
                   <MetricValue>
-                    {isLoadingMinMargin ? (
-                      <Spinner fontSize="0.2em" />
-                    ) : (
-                      Number(lockedBalanceValue.valueRounded).toFixed(2)
-                    )}
+                    <RefreshableValue
+                      isInitialLoading={marginRisk.isLoading}
+                      isRefreshing={marginRisk.isRefreshing}
+                    >
+                      {amount(marginRisk.equity)}
+                    </RefreshableValue>
                   </MetricValue>
                 </MetricCell>
                 <MetricCell>
-                  <MetricLabel>Realized PnL (30D)</MetricLabel>
-                  <MetricValue style={{ color: realizedPnlColor }}>
-                    {isLoadingRealizedPnL ? <Spinner fontSize="0.2em" /> : realizedPnL30DFormatted}
+                  <HintedLabel hint={ALL_VENUES_HINT}>Unrealized PnL</HintedLabel>
+                  <MetricValue>
+                    <RefreshableValue
+                      isInitialLoading={isLoadingUnrealizedPnL}
+                      isRefreshing={isRefreshingUnrealizedPnL}
+                      style={{ color: pnlColor(unrealizedPnL) }}
+                    >
+                      {amount(unrealizedPnL)}
+                    </RefreshableValue>
                   </MetricValue>
                 </MetricCell>
-              </MetricsGrid>
-              <ActionButtons>
-                <PrimaryButton
-                  onClick={depositModal.open}
-                  disabled={!hasMinimumLmrBalance || isLmrBalanceLoading}
-                  title={
-                    !hasMinimumLmrBalance ? `Insufficient LMR balance. Required: ${requiredLmrAmount} LMR` : undefined
-                  }
-                >
-                  Deposit
-                </PrimaryButton>
-                <PrimaryButton
-                  onClick={withdrawalModal.open}
-                  disabled={!hasMinimumLmrBalance || isLmrBalanceLoading}
-                  title={
-                    !hasMinimumLmrBalance ? `Insufficient LMR balance. Required: ${requiredLmrAmount} LMR` : undefined
-                  }
-                >
-                  Withdraw
-                </PrimaryButton>
-              </ActionButtons>
-            </BalanceRow>
-          )}
-          {isSuccess && address && !hasMinimumLmrBalance && (
-            <p onClick={(e) => e.preventDefault()}>
-              {isLmrBalanceLoading
-                ? "Checking LMR balance..."
-                : hasMinimumLmrBalance
-                  ? `✓ LMR balance sufficient (${lmrBalanceValidation.totalBalance.toString()} LMR)`
-                  : `⚠ Insufficient LMR balance (${lmrBalanceValidation.totalBalance.toString()} LMR). Required: ${process.env.REACT_APP_FUTURES_REQUIRED_LMR} LMR (Arbitrum or Ethereum)`}
-            </p>
-          )}
-        </BalanceContainer>
-        {isSuccess && address && !hasMinimumLmrBalance && (
-          <div className="link">
-            <a href={process.env.REACT_APP_BUY_LMR_URL} target="_blank" rel="noreferrer">
-              Buy LMR tokens on Uniswap <EastIcon style={{ fontSize: "0.75rem" }} />
-            </a>
-          </div>
-        )}
+                <MetricCell>
+                  <HintedLabel hint={MARGIN_USED_HINT}>Margin Used</HintedLabel>
+                  <MetricValue>
+                    <RefreshableValue
+                      isInitialLoading={marginRisk.isLoading}
+                      isRefreshing={marginRisk.isRefreshing}
+                    >
+                      {amount(marginRisk.marginUsed)}
+                    </RefreshableValue>
+                  </MetricValue>
+                </MetricCell>
+              </MetricColumn>
 
-        {shouldHighlight && (
-          <MarginCallWarning>⚠️ Margin Call Warning: Add Funds to Avoid Liquidation</MarginCallWarning>
-        )}
+              <MetricColumn>
+                <MetricCell>
+                  <HintedLabel hint={AVAILABLE_HINT}>Available</HintedLabel>
+                  <MetricValue>
+                    <RefreshableValue
+                      isInitialLoading={marginRisk.isLoading}
+                      isRefreshing={marginRisk.isRefreshing}
+                      style={{
+                        color:
+                          marginRisk.available === 0n ? tokens.text.muted : tokens.text.onDark,
+                      }}
+                    >
+                      {amount(marginRisk.available)}
+                    </RefreshableValue>
+                  </MetricValue>
+                </MetricCell>
+                <MetricCell>
+                  <HintedLabel hint={ALL_VENUES_HINT}>
+                    Realized PnL ({REALIZED_PNL_WINDOW_DAYS}D)
+                  </HintedLabel>
+                  <MetricValue>
+                    <RefreshableValue
+                      isInitialLoading={!!isLoadingRealizedPnL}
+                      isRefreshing={isRefreshingRealizedPnL}
+                      style={{ color: pnlColor(realizedPnLInWindow) }}
+                    >
+                      {amount(realizedPnLInWindow)}
+                    </RefreshableValue>
+                  </MetricValue>
+                </MetricCell>
+                {/* Built like every other cell — label, then value — so the dial
+                    reads as one more metric rather than as a decoration. */}
+                <GaugeCell>
+                  <HintedLabel hint={MARGIN_RATIO_HINT}>Margin Ratio</HintedLabel>
+                  <MarginRatioGauge
+                    ratioPercent={hasRatio ? ratioPercent : null}
+                    tier={tier}
+                    isLoading={marginRisk.isLoading}
+                    isRefreshing={marginRisk.isRefreshing}
+                  />
+                </GaugeCell>
+              </MetricColumn>
+            </MetricsGrid>
 
-        {/* Bottom footer */}
-        {!shouldHighlight && hasMinimumLmrBalance && (
-          <div className="link">
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-              }}
-            ></a>
-          </div>
+            <ActionButtons>
+              <ActionButton onClick={depositModal.open}>Deposit</ActionButton>
+              <ActionButton onClick={withdrawalModal.open}>Withdraw</ActionButton>
+            </ActionButtons>
+
+            {/* One note at a time. Caution begins exactly where balance drops
+                below IM, so the two amber notes would always appear together;
+                the Restricted copy wins because it says what the user can no
+                longer do, while the ratio is already on the gauge. The plain
+                Caution line only survives the rounding edge where the tier and
+                the flag disagree. Danger replaces both: at that point the
+                capability block is the least of the news. */}
+            {!isError && statusCopy && (tier === "danger" || tier === "liquidatable") ? (
+              <DangerBanner $pulsing={tier === "liquidatable"}>⚠️ {statusCopy}</DangerBanner>
+            ) : !isError && belowIM ? (
+              <RestrictedNote>{RESTRICTED_STATUS_COPY}</RestrictedNote>
+            ) : !isError && statusCopy && tier === "caution" ? (
+              <CautionNote>{statusCopy}</CautionNote>
+            ) : null}
+          </>
         )}
-      </BalanceWidgetContainer>
+      </PanelSection>
 
       <ModalItem open={depositModal.isOpen} setOpen={depositModal.setOpen}>
-        <DepositForm closeForm={handleDepositSuccess} />
+        <DepositForm closeForm={handleDepositSuccess} accountBalance={accountBalance} />
       </ModalItem>
 
       <ModalItem open={withdrawalModal.isOpen} setOpen={withdrawalModal.setOpen}>
         <WithdrawalForm
           closeForm={handleWithdrawalSuccess}
-          minMargin={minMargin}
-          isLoadingMinMargin={isLoadingMinMargin}
+          lockedAmount={marginRisk.im}
+          isLoadingLockedAmount={marginRisk.isLoading}
+          isLockedAmountError={marginRisk.isError}
+          lockedTooltip={MARGIN_USED_HINT}
+          balanceQuery={balanceQuery}
         />
       </ModalItem>
     </>
   );
 };
 
-const BalanceContainer = styled("div")<{ $shouldHighlight: boolean }>`
-  // padding: ${(props) => (props.$shouldHighlight ? "1rem 0 0 0" : "1rem 0")};
+const pulse = keyframes`
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+`;
+
+// Replaces SmallWidget — renders as a flat panel section (no outer border/card)
+const PanelSection = styled("div")<{ $tier: MarginTier }>`
+  padding: 0.875rem 1rem;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  gap: 1rem;
+  gap: 0.75rem;
+  background: ${({ $tier }) => {
+    if ($tier === "caution") return tokens.perps.yellowRadial;
+    if ($tier === "danger" || $tier === "liquidatable") return tokens.perps.redRadial;
+    return "transparent";
+  }};
+  border-left: ${({ $tier }) =>
+    $tier === "healthy" ? "none" : `2px solid ${tierColor($tier)}`} !important;
 `;
 
-const BalanceRow = styled("div")`
+const SectionHeader = styled("div")`
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  gap: 1rem;
-  
-  @media (max-width: 768px) {
-    flex-direction: column;
-    gap: 0.75rem;
-  }
+  gap: 0.4rem;
 `;
 
+const SectionTitle = styled("span")`
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: ${tokens.text.secondary};
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+`;
+
+const DisconnectedMsg = styled("div")`
+  font-size: 0.75rem;
+  color: ${tokens.text.secondary};
+  text-align: center;
+  padding: 0.5rem 0;
+`;
+
+// Two columns of their own height rather than a row-major grid: the right-hand
+// column carries one more metric than the left.
 const MetricsGrid = styled("div")`
   display: grid;
   grid-template-columns: 1fr 1fr;
-  // gap: 0.5rem 1.5rem; // Gaps betwen rows
-  flex: 1;
-  
-  @media (max-width: 1200px) {
-    gap: 0.4rem 1rem;
-  }
-  
-  @media (max-width: 768px) {
-    width: 100%;
-    gap: 0.5rem 1rem;
-  }
+  gap: 0.5rem 0.75rem;
+`;
+
+const MetricColumn = styled("div")`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 `;
 
 const MetricCell = styled("div")`
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 0.15rem;
-  
-  @media (max-width: 768px) {
-    align-items: center;
-  }
+  gap: 0.1rem;
 `;
 
 const MetricLabel = styled("span")`
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   font-weight: 500;
-  color: #a7a9b6;
+  color: ${tokens.text.secondary};
   text-transform: uppercase;
   letter-spacing: 0.02em;
   white-space: nowrap;
+  /* Every label on this panel is hinted, so the cursor is the affordance. */
+  width: fit-content;
+  cursor: help;
 `;
 
+/** The metric values' type size, in rem; the gauge is measured against it. */
+const VALUE_FONT_SIZE_REM = 0.95;
+
 const MetricValue = styled("span")`
-  font-size: 1.25rem;
+  font-size: ${VALUE_FONT_SIZE_REM}rem;
   font-weight: 600;
-  color: #fff;
+  color: ${tokens.text.onDark};
   line-height: 1.2;
-  
-  @media (max-width: 1200px) {
-    font-size: 1.1rem;
-  }
-  
-  @media (max-width: 768px) {
-    font-size: 1.2rem;
-  }
 `;
 
 const ActionButtons = styled("div")`
   display: flex;
-  gap: 0.75rem;
+  gap: 0.5rem;
+`;
+
+const ActionButton = styled(PrimaryButton)`
+  flex: 1;
+  padding: 0.45rem 0.5rem;
+  font-size: 0.8rem;
+  min-width: 0;
+`;
+
+// Pushed to the foot of its column so the dial lines up with Margin Used
+// across the grid instead of leaving the gap under it that prompted the chart.
+// Pushed to the foot of its column so the reading lines up with Margin Used
+// even when Available carries its below-initial-margin note.
+const GaugeCell = styled(MetricCell)`
+  margin-top: auto;
+`;
+
+// Baseline-aligned so the dial's bottom sits on the digits' baseline and its
+// top, at their cap height, lines up with the top of the number.
+const GaugeBlock = styled("div")`
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+`;
+
+// Exactly the height of the reading's lining digits, stated in rem from the
+// same constants rather than in em, so nothing depends on what the svg
+// inherits. The 2:1 viewBox makes it twice as wide (~11×22px). The row still
+// sits inside the 18px line box, so it matches the other cells.
+const GaugeSvg = styled("svg")`
+  display: block;
+  height: 0.8rem;
+  width: auto;
   flex-shrink: 0;
-  
-  button {
-    padding: 0.75rem 1rem;
-    font-size: 0.9rem;
-    min-width: 80px;
-  }
-  
-  @media (max-width: 768px) {
-    width: 100%;
-    justify-content: center;
-    
-    button {
-      flex: 1;
-      max-width: 120px;
-    }
-  }
-
-  @media (min-width: 769px) and (max-width: 1562px) {
-    flex-direction: column;
-
-    button {
-      width: 100%;
-    }
-  }
+  overflow: visible;
 `;
 
-const BalanceWidgetContainer = styled(SmallWidget)<{ $shouldHighlight: boolean; $centerContent: boolean }>`
-  border: ${(props) => (props.$shouldHighlight ? "2px solid #fbbf24" : "rgba(171, 171, 171, 1) 1px solid")};
-  background: ${(props) => (props.$shouldHighlight ? "radial-gradient(circle, rgba(0, 0, 0, 0) 36%, rgba(255, 255, 0, 0.05) 100%)" : "radial-gradient(circle, rgba(0, 0, 0, 0) 36%, rgba(255, 255, 255, 0.05) 100%)")};
-  transition: border-color 0.3s ease;
-  justify-content: ${(props) => (props.$centerContent ? "center" : "space-between")};
-  align-items: ${(props) => (props.$centerContent ? "center" : "stretch")};
+// In viewBox units, so it scales with the dial rather than needing a rewrite
+// each time the arc is resized. At digit height this lands just under 4px.
+const GaugeArc = styled("path")<{ $color: string }>`
+  fill: none;
+  stroke: ${({ $color }) => $color};
+  stroke-width: 17;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.3s ease;
 `;
 
-const MarginCallWarning = styled("div")`
-  padding: 0.2rem;
-  background-color: rgba(251, 191, 36, 0.1);
-  border: 1px solid rgba(251, 191, 36, 0.3);
+// Typography copied from MetricValue: the ratio is a metric like any other, and
+// the tier colour is enough to set it apart.
+const GaugeValue = styled("span")<{ $color: string }>`
+  font-size: ${VALUE_FONT_SIZE_REM}rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: ${({ $color }) => $color};
+`;
+
+// Boxed like DangerBanner rather than set as a line of text: this is the panel's
+// only statement about what the account may no longer do, and it now carries that
+// on its own — the muted note under Available is gone. Amber because it is a
+// restriction to read, not the liquidation risk the red banner is reserved for.
+const RestrictedNote = styled("div")`
+  padding: 0.35rem 0.5rem;
+  background-color: ${tokens.perps.highlightBg};
+  border: 1px solid ${tokens.perps.highlightBorderSoft};
   border-radius: 6px;
-  color: #fbbf24;
-  font-size: 0.875rem;
+  color: ${tokens.trading.warning};
+  font-size: 0.68rem;
+  line-height: 1.35;
+  font-weight: 500;
+`;
+
+const CautionNote = styled("div")`
+  font-size: 0.68rem;
+  line-height: 1.35;
+  font-weight: 500;
+  color: ${tokens.trading.highlight};
+`;
+
+const DangerBanner = styled("div")<{ $pulsing: boolean }>`
+  padding: 0.35rem 0.5rem;
+  background-color: ${tokens.trading.shortRowBgAlt};
+  border: 1px solid ${tokens.trading.short};
+  border-radius: 6px;
+  color: ${tokens.trading.short};
+  font-size: 0.7rem;
+  line-height: 1.35;
   font-weight: 600;
   text-align: center;
-  width: 100%;
+  ${({ $pulsing }) =>
+    $pulsing
+      ? css`
+          animation: ${pulse} 1.4s ease-in-out infinite;
+        `
+      : undefined}
 `;

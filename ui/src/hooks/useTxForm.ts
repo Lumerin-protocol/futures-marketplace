@@ -1,23 +1,45 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { TransactionReceipt } from "viem";
-import { useCustomWalletClient } from "./data/useCustomWalletClient";
+import { usePublicClient } from "wagmi";
 
 export type TransactionStep = {
   label: string;
-  action: () => Promise<ActionResult>;
+  action: (txState: Record<number, TxState>) => Promise<ActionResult>;
   postConfirmation?: (receipt: TransactionReceipt) => Promise<void>;
 };
 
-export type ActionResult = { isSkipped: false; txhash?: `0x${string}` } | { isSkipped: true };
+/// `state` is an opaque hand-off between steps: a step stores whatever it needs
+/// and a later step casts it back to the shape it expects.
+export type ActionResult =
+  /// A transaction was sent; the runner waits for its receipt.
+  | { isSkipped: false; isOffChain?: false; txhash: `0x${string}`; state?: unknown }
+  /**
+   * The step finished its work off-chain and has no receipt to wait for — an
+   * EIP-2612 permit signature, say. Spelled out rather than inferred from a
+   * missing `txhash`, so that a step which meant to send a transaction but
+   * came back empty-handed cannot be reported to the user as a success.
+   */
+  | { isSkipped: false; isOffChain: true; txhash?: undefined; state?: unknown }
+  /// There was nothing to do — e.g. the ERC20 allowance already covered it.
+  | { isSkipped: true; state?: unknown };
 
 export type TxState = {
   state: "pending" | "sending" | "sent" | "confirmed" | "failed" | "skipped";
   error?: Error;
   txhash?: `0x${string}`;
+  /**
+   * Block the step's tx was mined in (once confirmed). Later steps can pin
+   * their reads/simulations to this block instead of `latest` to avoid
+   * racing RPC read-after-write lag right after a dependency (e.g. an
+   * ERC20 approve) confirms — see `retryUntilBlockAvailable`.
+   */
+  blockNumber?: bigint;
+  /// See `ActionResult.state`.
+  customState?: unknown;
 };
 
 export function useMultistepTx(props: { steps: TransactionStep[] }) {
-  const wc = useCustomWalletClient();
+  const wc = usePublicClient();
 
   const [txState, setTxState] = useState(() => {
     return props.steps.reduce<Record<number, TxState>>((acc, _, index) => {
@@ -25,7 +47,18 @@ export function useMultistepTx(props: { steps: TransactionStep[] }) {
       return acc;
     }, {});
   });
-  const [currentStep, setCurrentStep] = useState(0);
+
+  // Ref that always holds the latest state — step actions read from this
+  // instead of the React state closure, which may be stale.
+  const stateRef = useRef(txState);
+
+  const updateStep = (txNumber: number, update: Partial<TxState>) => {
+    stateRef.current = {
+      ...stateRef.current,
+      [txNumber]: { ...stateRef.current[txNumber], ...update },
+    };
+    setTxState({ ...stateRef.current });
+  };
 
   // error on any step makes the whole transaction fail
   const isError = Object.values(txState).some((state) => state.state === "failed");
@@ -34,50 +67,52 @@ export function useMultistepTx(props: { steps: TransactionStep[] }) {
   const isSuccess = lastStepState.state === "confirmed" || lastStepState.state === "skipped";
   const isPending = !isSuccess && !isError;
 
+  // Lifted out of MultipleTransactionProgress so the toggle survives step
+  // remounts (changing steps still remounts via `key={step}`).
+  const [showError, setShowError] = useState(false);
+  const toggleShowError = () => setShowError((v) => !v);
+
   const executeNextTransaction = async (txNumber: number) => {
     try {
-      const actionPromise = props.steps[txNumber].action();
-      setTxState((prev) => ({ ...prev, [txNumber]: { state: "sending" } }));
+      const actionPromise = props.steps[txNumber].action(stateRef.current);
+      updateStep(txNumber, { state: "sending" });
 
       const actionResult = await actionPromise;
-      setTxState((prev) => ({
-        ...prev,
-        [txNumber]: {
-          state: "sent",
-          txhash: actionResult.isSkipped ? undefined : actionResult.txhash,
-        },
-      }));
+
+      updateStep(txNumber, {
+        state: "sent",
+        txhash: actionResult.isSkipped ? undefined : actionResult.txhash,
+        customState: actionResult.state,
+      });
 
       try {
-        if (!actionResult.isSkipped && actionResult.txhash) {
-          const receipt = await wc!.waitForTransactionReceipt({
+        if (actionResult.isSkipped) {
+          updateStep(txNumber, { state: "skipped" });
+        } else if (actionResult.isOffChain) {
+          updateStep(txNumber, { state: "confirmed" });
+        } else {
+          if (!wc) throw new Error("No public client available to await the transaction receipt");
+          const receipt = await wc.waitForTransactionReceipt({
             hash: actionResult.txhash,
           });
-          setTxState((prev) => ({
-            ...prev,
-            [txNumber]: {
-              state: receipt.status === "success" ? "confirmed" : "failed",
-              txhash: actionResult.txhash,
-            },
-          }));
+          updateStep(txNumber, {
+            state: receipt.status === "success" ? "confirmed" : "failed",
+            txhash: actionResult.txhash,
+            blockNumber: receipt.blockNumber,
+          });
           if (props.steps[txNumber].postConfirmation) {
             await props.steps[txNumber].postConfirmation(receipt);
           }
-        } else if (actionResult.isSkipped) {
-          setTxState((prev) => ({ ...prev, [txNumber]: { state: "skipped" } }));
-        } else {
-          setTxState((prev) => ({ ...prev, [txNumber]: { state: "confirmed" } }));
         }
-        setCurrentStep((prev) => prev + 1);
         return true;
       } catch (error) {
         console.error(error);
-        setTxState((prev) => ({ ...prev, [txNumber]: { state: "failed", error: error as Error } }));
+        updateStep(txNumber, { state: "failed", error: error as Error });
         return false;
       }
     } catch (error) {
       console.error(error);
-      setTxState((prev) => ({ ...prev, [txNumber]: { state: "failed", error: error as Error } }));
+      updateStep(txNumber, { state: "failed", error: error as Error });
       return false;
     }
   };
@@ -88,5 +123,7 @@ export function useMultistepTx(props: { steps: TransactionStep[] }) {
     isSuccess,
     isError,
     isPending,
+    showError,
+    toggleShowError,
   };
 }

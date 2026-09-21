@@ -1,0 +1,338 @@
+import { tokens } from "../../../styles/tokens";
+import styled from "@mui/material/styles/styled";
+import Tooltip from "@mui/material/Tooltip";
+import EastIcon from "@mui/icons-material/East";
+import { useModal } from "../../../hooks/useModal";
+import { ModalItem } from "../../Modal";
+import { DetailedSpecsModal } from "./DetailedSpecsModal";
+import { useSettlementPrice } from "../../../hooks/data/useSettlementPrice";
+import { formatHashratePHPS, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { describeLiquidationLevel } from "../../../lib/liquidation";
+import { MarketSelector } from "./MarketSelector";
+import type { Instrument } from "../../../lib/instruments";
+import type { LiquidationDirection } from "../../../lib/portfolioMargin";
+import type { ReactNode } from "react";
+import type { UseQueryResult } from "@tanstack/react-query";
+import type { GetResponse } from "../../../gateway/interfaces";
+import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
+import type { ContractMode } from "../../../types/types";
+
+interface TradingHeaderProps {
+  contractMode: ContractMode;
+  /// Tradable futures expirations, unix seconds ascending — the futures rows of
+  /// the market selector.
+  expirations: readonly number[];
+  onInstrumentChange: (instrument: Instrument) => void;
+  contractSpecsQuery: UseQueryResult<GetResponse<FuturesContractSpecs>, Error>;
+  currentPrice?: string | null;
+  /// Change of the current market price vs the previous polled value. Used to
+  /// render a green (up) / red (down) delta next to the current price.
+  priceChange?: { delta: number; pct: number | null } | null;
+  fundingRate?: string;
+  totalVolume?: string;
+  /// Currently-selected expiration (unix seconds). Used to surface the pinned
+  /// cash-settlement price once that expiration has matured and been settled.
+  selectedExpirationAt?: number;
+  /// Account-wide, cross-product price at which the portfolio becomes liquidatable.
+  liqPrice?: bigint;
+  /// Which way spot has to move to reach `liqPrice`.
+  liqDirection?: LiquidationDirection;
+  /// Balance is already under maintenance margin at the current mark.
+  isUnderwater?: boolean;
+  /// MOBILE-ONLY (see FuturesMobileLayout): controls pinned to the right end of
+  /// the contract-mode row, currently the chart show/hide toggle. Left undefined
+  /// by the desktop layout, which renders the header exactly as before.
+  mobileActions?: ReactNode;
+}
+
+const formatVolume = (raw: string): string => {
+  const num = Number(raw) / PAYMENT_TOKEN_SCALE_NUM;
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(2)}K`;
+  return `${num.toFixed(2)}`;
+};
+
+export const TradingHeader = ({
+  contractMode,
+  expirations,
+  onInstrumentChange,
+  contractSpecsQuery,
+  currentPrice,
+  priceChange,
+  fundingRate = "0%",
+  totalVolume,
+  selectedExpirationAt,
+  liqPrice,
+  liqDirection,
+  isUnderwater,
+  mobileActions,
+}: TradingHeaderProps) => {
+  const detailedSpecsModal = useModal();
+  const { data: contractSpecs } = contractSpecsQuery;
+
+  const { data: settlementPriceRaw } = useSettlementPrice(
+    contractMode === "futures" && selectedExpirationAt ? BigInt(selectedExpirationAt) : undefined,
+  );
+  // Only show a settlement price once it's been pinned on-chain (non-zero).
+  const settlementPrice =
+    settlementPriceRaw && settlementPriceRaw > 0n
+      ? (Number(settlementPriceRaw) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)
+      : null;
+
+  const formatSpeed = (contractSizeHpsDay: bigint) => `${formatHashratePHPS(contractSizeHpsDay).full} per day`;
+
+  const renderHashPriceStat = () => (
+    <Tooltip title="Underlying price" arrow>
+      <StatItem>
+        <StatValue>
+          {currentPrice ?? "—"}
+          {renderPriceChange()}
+        </StatValue>
+        <StatLabel>Hash Price (USDC)</StatLabel>
+      </StatItem>
+    </Tooltip>
+  );
+
+  /// The account's liquidation price, sitting next to Hash Price so the mark can
+  /// be read against it directly. Margin is pooled across every futures and
+  /// perps position, so this is one number for the whole book and it is the same
+  /// in both contract modes. A flat account has no level and the stat is dropped
+  /// rather than rendered as a placeholder.
+  const renderLiquidationStat = () => {
+    const tooltip = describeLiquidationLevel({
+      price: liqPrice,
+      direction: liqDirection,
+      isUnderwater,
+    });
+
+    if (isUnderwater) {
+      return (
+        <>
+          <Divider />
+          <Tooltip title={tooltip} arrow>
+            <StatItem>
+              <StatValue style={{ color: tokens.trading.short }}>Liquidatable</StatValue>
+              <StatLabel>Liquidation</StatLabel>
+            </StatItem>
+          </Tooltip>
+        </>
+      );
+    }
+
+    if (liqPrice === undefined) return null;
+
+    return (
+      <>
+        <Divider />
+        <Tooltip title={tooltip} arrow>
+          <StatItem>
+            <StatValue>
+              {liqDirection === "up" ? "↑" : "↓"}{" "}
+              {(Number(liqPrice) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)}
+            </StatValue>
+            <StatLabel>Liquidation (USDC)</StatLabel>
+          </StatItem>
+        </Tooltip>
+      </>
+    );
+  };
+
+  const renderPriceChange = () => {
+    if (!priceChange) return null;
+    const isUp = priceChange.delta >= 0;
+    const sign = isUp ? "+" : "";
+    const pctText = priceChange.pct != null ? ` (${sign}${priceChange.pct.toFixed(2)}%)` : "";
+    return (
+      <PriceChange $up={isUp}>
+        {isUp ? "▲" : "▼"} {sign}
+        {priceChange.delta.toFixed(2)}
+        {pctText}
+      </PriceChange>
+    );
+  };
+
+  const marketSelector = (
+    <MarketSelector
+      contractMode={contractMode}
+      selectedExpirationAt={selectedExpirationAt}
+      expirations={expirations}
+      onChange={onInstrumentChange}
+    />
+  );
+
+  return (
+    <>
+      <HeaderBar>
+        {/* Left: market selector, fenced off from the read-only stats by the same
+            divider they use between themselves. On mobile it shares a full-width
+            row with the layout's controls, which sit in the right corner, and the
+            stats wrap below — so there is nothing to divide it from. */}
+        {mobileActions ? (
+          <ModeRow>
+            {marketSelector}
+            {mobileActions}
+          </ModeRow>
+        ) : (
+          <>
+            {marketSelector}
+            <Divider />
+          </>
+        )}
+
+        {/* Center: market stats */}
+        <StatsRow>
+          {contractMode === "perpetual" ? (
+            <>
+              {renderHashPriceStat()}
+              {renderLiquidationStat()}
+              <Divider />
+              <StatItem>
+                <StatValue>{fundingRate}</StatValue>
+                <StatLabel>Funding Rate</StatLabel>
+              </StatItem>
+              {totalVolume && (
+                <>
+                  <Divider />
+                  <StatItem>
+                    <StatValue>{formatVolume(totalVolume)}</StatValue>
+                    <StatLabel>Total Volume</StatLabel>
+                  </StatItem>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              {renderHashPriceStat()}
+              {renderLiquidationStat()}
+              {contractSpecs?.data && (
+                <>
+                  <Divider />
+                  <StatItem>
+                    <StatValue>{formatSpeed(contractSpecs.data.contractSizeHpsDay)}</StatValue>
+                    <StatLabel>Contract Size</StatLabel>
+                  </StatItem>
+                </>
+              )}
+              {settlementPrice && (
+                <>
+                  <Divider />
+                  <StatItem>
+                    <StatValue>{settlementPrice}</StatValue>
+                    <StatLabel>Exit Price (USDC)</StatLabel>
+                  </StatItem>
+                </>
+              )}
+            </>
+          )}
+        </StatsRow>
+
+        {/* Right: details link */}
+        <DetailsLink
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            detailedSpecsModal.open();
+          }}
+        >
+          View Details <EastIcon style={{ fontSize: "0.75rem" }} />
+        </DetailsLink>
+      </HeaderBar>
+
+      <ModalItem open={detailedSpecsModal.isOpen} setOpen={detailedSpecsModal.setOpen}>
+        <DetailedSpecsModal
+          closeForm={detailedSpecsModal.close}
+          contractSpecs={contractSpecs?.data}
+          contractMode={contractMode}
+        />
+      </ModalItem>
+    </>
+  );
+};
+
+const HeaderBar = styled("div")`
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid ${tokens.border.default};
+  border-radius: ${tokens.radius.md};
+  background: ${tokens.surface.card};
+  flex-wrap: wrap;
+
+  @media (max-width: 768px) {
+    gap: 0.75rem;
+  }
+`;
+
+// MOBILE-ONLY wrapper (only rendered when `mobileActions` is passed): claims a
+// full flex line so the market selector and the layout controls sit on their
+// own row, with the controls pushed to the right corner and the stats below.
+const ModeRow = styled("div")`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex: 1 1 100%;
+`;
+
+const StatsRow = styled("div")`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+`;
+
+const StatItem = styled("div")`
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+`;
+
+/* Deliberately a step under the market selector's label: these are facts about
+   the instrument, and half a dozen of them at the selector's weight left the bar
+   with no focal point. */
+const StatValue = styled("span")`
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: ${tokens.text.onDark};
+  line-height: 1.2;
+`;
+
+const PriceChange = styled("span")<{ $up: boolean }>`
+  margin-left: 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: ${(props) => (props.$up ? tokens.trading.long : tokens.trading.short)};
+`;
+
+const StatLabel = styled("span")`
+  font-size: 0.6rem;
+  font-weight: 500;
+  color: ${tokens.text.secondary};
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+`;
+
+const Divider = styled("div")`
+  width: 1px;
+  height: 28px;
+  background: ${tokens.border.muted03};
+  flex-shrink: 0;
+`;
+
+const DetailsLink = styled("a")`
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: ${tokens.text.secondary};
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: color 0.2s;
+
+  &:hover {
+    color: ${tokens.text.onDark};
+  }
+`;

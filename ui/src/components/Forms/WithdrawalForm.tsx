@@ -1,43 +1,60 @@
-import { type FC, useCallback, useState, useMemo } from "react";
+import { tokens } from "../../styles/tokens";
+import { type FC, useCallback, useMemo } from "react";
 import { useForm } from "react-hook-form";
-import { useAccount } from "wagmi";
+import Tooltip from "@mui/material/Tooltip";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import { useRemoveMargin } from "../../hooks/data/useRemoveMargin";
-import { useGetFutureBalance } from "../../hooks/data/useGetFutureBalance";
 import { TransactionFormV2 as TransactionForm } from "./Shared/MultistepForm";
 import { AmountInputForm } from "./Shared/AmountInputForm";
-import { formatValue, paymentToken } from "../../lib/units";
+import { formatValue, PAYMENT_TOKEN_SCALE_NUM, paymentToken } from "../../lib/units";
 import { parseUnits } from "viem";
+import type { TransactionStep } from "../../hooks/useTxForm";
+
+interface BalanceQueryResult {
+  data: bigint | undefined;
+  isLoading: boolean;
+  isSuccess: boolean;
+  refetch: () => void;
+}
 
 interface WithdrawalFormProps {
   closeForm: () => void;
-  minMargin: bigint | null;
-  isLoadingMinMargin: boolean;
+  /// Locked margin enforced by the active contract engine; deducted from the
+  /// total balance to determine the maximum withdrawable amount.
+  lockedAmount: bigint | null;
+  isLoadingLockedAmount: boolean;
+  /// Optional: if the locked amount read failed, the form should warn rather
+  /// than silently allow a withdrawal that would revert.
+  isLockedAmountError?: boolean;
+  /// Optional tooltip explaining how `lockedAmount` is computed (e.g. perps
+  /// initial margin includes margin reserved for resting orders).
+  lockedTooltip?: string;
+  balanceQuery: BalanceQueryResult;
 }
 
 interface InputValues {
   amount: string;
 }
 
-export const WithdrawalForm: FC<WithdrawalFormProps> = ({ closeForm, minMargin, isLoadingMinMargin }) => {
-  const { address } = useAccount();
-  const { removeMarginAsync, isPending } = useRemoveMargin();
-  const futureBalance = useGetFutureBalance(address);
+export const WithdrawalForm: FC<WithdrawalFormProps> = ({
+  closeForm,
+  lockedAmount,
+  isLoadingLockedAmount,
+  isLockedAmountError = false,
+  lockedTooltip,
+  balanceQuery,
+}) => {
+  const { removeMarginAsync } = useRemoveMargin();
 
-  // Calculate available balance: balance - minMargin (minMargin is locked amount)
-  // getMinMargin returns int256, where positive values represent locked amount
-  const lockedAmount = useMemo(() => {
-    // If minMargin is positive, it's the locked amount. If negative or zero, no locked amount.
-    return minMargin && minMargin > 0n ? minMargin : 0n;
-  }, [minMargin]);
+  const lockedDisplayAmount = useMemo(() => {
+    return lockedAmount && lockedAmount > 0n ? lockedAmount : 0n;
+  }, [lockedAmount]);
 
   const availableBalance = useMemo(() => {
-    if (!futureBalance.data) return undefined;
-    const balance = futureBalance.data;
-
-    // Available balance is balance minus locked amount
-    const available = balance > lockedAmount ? balance - lockedAmount : 0n;
-    return available;
-  }, [futureBalance.data, lockedAmount]);
+    if (balanceQuery.data === undefined || isLoadingLockedAmount || isLockedAmountError) return undefined;
+    const balance = balanceQuery.data;
+    return balance > lockedDisplayAmount ? balance - lockedDisplayAmount : 0n;
+  }, [balanceQuery.data, lockedDisplayAmount, isLoadingLockedAmount, isLockedAmountError]);
 
   const form = useForm<InputValues>({
     mode: "onBlur",
@@ -49,7 +66,10 @@ export const WithdrawalForm: FC<WithdrawalFormProps> = ({ closeForm, minMargin, 
 
   const validateBalance = useCallback(
     (value: string): string | true => {
-      if (!futureBalance.data || availableBalance === undefined) {
+      if (isLockedAmountError) {
+        return "Unable to fetch locked margin. Please try again.";
+      }
+      if (balanceQuery.data === undefined || availableBalance === undefined) {
         return "Unable to fetch balance. Please try again.";
       }
       const amountBigInt = parseUnits(value, paymentToken.decimals);
@@ -59,15 +79,14 @@ export const WithdrawalForm: FC<WithdrawalFormProps> = ({ closeForm, minMargin, 
       }
       return true;
     },
-    [futureBalance.data, availableBalance],
+    [balanceQuery.data, availableBalance, isLockedAmountError],
   );
 
   const handleMaxClick = useCallback(() => {
     if (availableBalance !== undefined) {
-      const numValue = Number(availableBalance) / 1e6; // Convert from wei to USDC
-      const floored = Math.floor(numValue * 100) / 100; // Round down to 2 decimals
-      const maxAmount = floored.toFixed(2);
-      form.setValue("amount", maxAmount);
+      const numValue = Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM;
+      const floored = Math.floor(numValue * 100) / 100;
+      form.setValue("amount", floored.toFixed(2));
     }
   }, [availableBalance, form]);
 
@@ -79,39 +98,68 @@ export const WithdrawalForm: FC<WithdrawalFormProps> = ({ closeForm, minMargin, 
           label="Withdrawal Amount"
           additionalValidate={validateBalance}
           onMaxClick={handleMaxClick}
-          showMaxButton={availableBalance !== undefined}
+          showMaxButton={availableBalance !== undefined && !isLoadingLockedAmount}
         />
         <div className="p-4 rounded-lg">
           <div className="flex justify-between items-center mb-2">
             <span className="text-gray-300">Total balance:</span>
             <span className="text-white font-medium">
-              {Number(futureBalance.data ? formatValue(futureBalance.data, paymentToken).value : "0").toFixed(2)}{" "}
+              {Number(balanceQuery.data ? formatValue(balanceQuery.data, paymentToken).value : "0").toFixed(2)}{" "}
               {paymentToken.symbol}
             </span>
           </div>
           <div className="flex justify-between items-center mb-2">
-            <span className="text-gray-300">Locked amount:</span>
+            <span className="text-gray-300 inline-flex items-center gap-1">
+              Locked:
+              {lockedTooltip && (
+                <Tooltip title={lockedTooltip} arrow placement="top">
+                  <HelpOutlineIcon
+                    sx={{
+                      fontSize: "0.95rem",
+                      color: tokens.text.secondary,
+                      cursor: "help",
+                      verticalAlign: "middle",
+                    }}
+                    aria-label="About locked amount"
+                  />
+                </Tooltip>
+              )}
+            </span>
             <span className="text-white font-medium">
-              {Number(formatValue(lockedAmount, paymentToken).value).toFixed(2)} {paymentToken.symbol}
+              {isLoadingLockedAmount
+                ? "..."
+                : isLockedAmountError
+                  ? "—"
+                  : `${Number(formatValue(lockedDisplayAmount, paymentToken).value).toFixed(2)} ${paymentToken.symbol}`}
             </span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-gray-300">Available balance:</span>
             <span className="text-white font-medium">
-              {availableBalance !== undefined
-                ? (() => {
-                    const numValue = Number(availableBalance) / 1e6; // Convert from wei to USDC
-                    const floored = Math.floor(numValue * 100) / 100; // Round down to 2 decimals
-                    return floored.toFixed(2);
-                  })()
-                : "0"}{" "}
+              {isLoadingLockedAmount || isLockedAmountError
+                ? isLockedAmountError
+                  ? "—"
+                  : "..."
+                : availableBalance !== undefined
+                  ? `${(Math.floor((Number(availableBalance) / PAYMENT_TOKEN_SCALE_NUM) * 100) / 100).toFixed(2)}`
+                  : "0"}{" "}
               {paymentToken.symbol}
             </span>
           </div>
         </div>
       </div>
     ),
-    [form.control, validateBalance, handleMaxClick, availableBalance, futureBalance.data, lockedAmount],
+    [
+      form.control,
+      validateBalance,
+      handleMaxClick,
+      availableBalance,
+      balanceQuery.data,
+      lockedDisplayAmount,
+      isLoadingLockedAmount,
+      isLockedAmountError,
+      lockedTooltip,
+    ],
   );
 
   const validateInput = useCallback(async () => {
@@ -124,8 +172,15 @@ export const WithdrawalForm: FC<WithdrawalFormProps> = ({ closeForm, minMargin, 
       return false;
     }
 
-    // Check if balance is available
-    if (!futureBalance.data || availableBalance === undefined) {
+    if (isLockedAmountError) {
+      form.setError("amount", {
+        type: "validation",
+        message: "Unable to fetch locked margin. Please try again.",
+      });
+      return false;
+    }
+
+    if (balanceQuery.data === undefined || availableBalance === undefined) {
       form.setError("amount", {
         type: "validation",
         message: "Unable to fetch balance. Please try again.",
@@ -133,7 +188,6 @@ export const WithdrawalForm: FC<WithdrawalFormProps> = ({ closeForm, minMargin, 
       return false;
     }
 
-    // Validate that amount doesn't exceed available balance (balance - shortfall)
     const amountBigInt = parseUnits(amountValue, paymentToken.decimals);
     if (amountBigInt > availableBalance) {
       const balanceFormatted = formatValue(availableBalance, paymentToken).valueRounded;
@@ -145,17 +199,17 @@ export const WithdrawalForm: FC<WithdrawalFormProps> = ({ closeForm, minMargin, 
     }
 
     return true;
-  }, [form, futureBalance.data, availableBalance]);
+  }, [form, balanceQuery.data, availableBalance, isLockedAmountError]);
 
-  const transactionSteps = [
+  const transactionSteps: TransactionStep[] = [
     {
-      label: "Withdraw Margin",
+      label: "Withdraw Collateral",
       async action() {
         const amount = form.getValues("amount");
         if (!amount) throw new Error("Amount not set");
         const amountBigInt = parseUnits(amount, paymentToken.decimals);
         const result = await removeMarginAsync({ amount: amountBigInt });
-        return result ? { isSkipped: false, txhash: result } : { isSkipped: false };
+        return { isSkipped: false, txhash: result };
       },
     },
   ];
@@ -163,12 +217,12 @@ export const WithdrawalForm: FC<WithdrawalFormProps> = ({ closeForm, minMargin, 
   return (
     <TransactionForm
       onClose={closeForm}
-      title="Withdraw Margin"
-      description="Remove margin from your futures account"
+      title="Withdraw Collateral"
+      description="Remove collateral from your account"
       reviewForm={inputForm}
       validateInput={validateInput}
       transactionSteps={transactionSteps}
-      resultForm={(p) => (
+      resultForm={() => (
         <div className="space-y-4">
           <div className="p-4 rounded-lg">
             <p className="text-gray-300">Your withdrawal has been processed successfully.</p>

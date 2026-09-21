@@ -1,8 +1,9 @@
-import { type FC } from "react";
+import type { FC } from "react";
 import TextField from "@mui/material/TextField";
 import { type Control, useController } from "react-hook-form";
-import { ErrorWrapper, InputWrapper } from "./Forms.styled";
+import { InputWrapper } from "./Forms.styled";
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../../../styles/tokens";
 
 interface Props {
   control: Control<{ amount: string }>;
@@ -13,12 +14,19 @@ interface Props {
 }
 
 /**
+ * The element that actually received the input. `currentTarget` is unusable here
+ * because MUI's TextField forwards `onBeforeInput` to its root `div`, so only
+ * `target` is guaranteed to be the underlying input.
+ */
+const getInputTarget = (e: React.InputEvent<HTMLElement>) => e.target as HTMLInputElement | HTMLTextAreaElement;
+
+/**
  * Validates numeric input for decimal numbers with up to 2 decimal places.
  * Prevents non-numeric characters (except single decimal point) and limits decimal places.
  * @param e - The beforeinput event
  */
-export const handleNumericDecimalInput = (e: React.FormEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-  const inputChar = e.data;
+export const handleNumericDecimalInput = (e: React.InputEvent<HTMLElement>) => {
+  const inputChar = e.nativeEvent.data;
 
   // Allow deletion or navigation
   if (!inputChar) return;
@@ -29,9 +37,10 @@ export const handleNumericDecimalInput = (e: React.FormEvent<HTMLInputElement | 
     return;
   }
 
-  const current = e.target.value;
-  const selectionStart = e.target.selectionStart;
-  const selectionEnd = e.target.selectionEnd;
+  const target = getInputTarget(e);
+  const current = target.value;
+  const selectionStart = target.selectionStart;
+  const selectionEnd = target.selectionEnd;
 
   // Predict the new value if input is allowed
   const newValue = current.slice(0, selectionStart ?? 0) + inputChar + current.slice(selectionEnd ?? 0);
@@ -45,6 +54,62 @@ export const handleNumericDecimalInput = (e: React.FormEvent<HTMLInputElement | 
   // Max 2 digits after decimal
   const parts = newValue.split(".");
   if (parts[1] && parts[1].length > 2) {
+    e.preventDefault();
+    return;
+  }
+};
+
+/**
+ * Validates whole-number input: digits only, no decimal point or sign.
+ * Used for futures quantity inputs which must be positive integers.
+ * @param e - The beforeinput event
+ */
+export const handleNumericIntegerInput = (e: React.InputEvent<HTMLElement>) => {
+  const inputChar = e.nativeEvent.data;
+
+  // Allow deletion or navigation
+  if (!inputChar) return;
+
+  // Reject anything that isn't a single digit (no ".", no "-")
+  if (!/^[0-9]$/.test(inputChar)) {
+    e.preventDefault();
+  }
+};
+
+/**
+ * Validates numeric input for decimal numbers with up to 6 decimal places.
+ * Used for perpetuals quantity input which supports higher precision.
+ * @param e - The beforeinput event
+ */
+export const handleNumericDecimalInput6Decimals = (e: React.InputEvent<HTMLElement>) => {
+  const inputChar = e.nativeEvent.data;
+
+  // Allow deletion or navigation
+  if (!inputChar) return;
+
+  // Reject anything not digit or "."
+  if (!/^[0-9.]$/.test(inputChar)) {
+    e.preventDefault();
+    return;
+  }
+
+  const target = getInputTarget(e);
+  const current = target.value;
+  const selectionStart = target.selectionStart;
+  const selectionEnd = target.selectionEnd;
+
+  // Predict the new value if input is allowed
+  const newValue = current.slice(0, selectionStart ?? 0) + inputChar + current.slice(selectionEnd ?? 0);
+
+  // Only one dot allowed
+  if ((newValue.match(/\./g) || []).length > 1) {
+    e.preventDefault();
+    return;
+  }
+
+  // Max 6 digits after decimal
+  const parts = newValue.split(".");
+  if (parts[1] && parts[1].length > 6) {
     e.preventDefault();
     return;
   }
@@ -64,7 +129,7 @@ export const AmountInputForm: FC<Props> = ({
       required: `${label} is required`,
       validate: (value: string) => {
         const numValue = parseFloat(value);
-        if (isNaN(numValue) || numValue <= 0) {
+        if (Number.isNaN(numValue) || numValue <= 0) {
           return `${label} must be a positive number`;
         }
         // Apply additional validation if provided
@@ -97,7 +162,16 @@ export const AmountInputForm: FC<Props> = ({
             min: 0.01,
             step: "0.01",
           }}
-          sx={{ flex: 1 }}
+          sx={{
+            flex: 1,
+            // Safari can render the outlined fieldset over the shrunk label.
+            // A matching background keeps the notch visually clear.
+            "& .MuiInputLabel-shrink": {
+              backgroundColor: tokens.surface.inputIsland,
+              paddingInline: "4px",
+              zIndex: 1,
+            },
+          }}
         />
         {showMaxButton && onMaxClick && (
           <MaxButton onClick={onMaxClick} type="button">
@@ -118,8 +192,8 @@ const InputContainer = styled("div")`
 
 const MaxButton = styled("button")`
   padding: 0.75rem 1rem;
-  background: #4c5a5f;
-  color: #fff;
+  background: ${tokens.neutralButton.bg};
+  color: ${tokens.text.onDark};
   height: 56px;
   width: 100px;
   border: none;
@@ -131,7 +205,7 @@ const MaxButton = styled("button")`
   white-space: nowrap;
 
   &:hover {
-    background: #5a6b70;
+    background: ${tokens.neutralButton.hover};
     transform: translateY(-1px);
   }
 

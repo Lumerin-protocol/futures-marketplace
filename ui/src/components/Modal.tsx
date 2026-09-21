@@ -10,9 +10,11 @@ interface ModalProps {
   setOpen: (isOpen: boolean) => void;
   content?: ReactNode;
   children?: ReactNode;
+  /** Narrower card with tighter padding, for short confirmation dialogs. */
+  compact?: boolean;
 }
 
-export const ModalItem: FC<ModalProps> = ({ open, setOpen, content, children }) => {
+export const ModalItem: FC<ModalProps> = ({ open, setOpen, content, children, compact = false }) => {
   return (
     <Modal
       disableEnforceFocus
@@ -22,7 +24,7 @@ export const ModalItem: FC<ModalProps> = ({ open, setOpen, content, children }) 
         position: absolute;
       `}
     >
-      <ModalCard>
+      <ModalCard $compact={compact}>
         <IconButton className="close" sx={{ color: "white" }} onClick={() => setOpen(false)}>
           <CloseIcon />
         </IconButton>

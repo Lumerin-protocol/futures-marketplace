@@ -4,7 +4,7 @@
   "main": "index.js",
   "license": "MIT",
   "engines": {
-    "node": "22.20"
+    "node": ">=22.9"
   },
   "type": "module",
   "dependencies": {
@@ -24,6 +24,7 @@
   },
   "scripts": {
     "start": "node main.ts",
+    "dev": "node --env-file=../config/dev.env --env-file-if-exists=../.env --env-file-if-exists=.env main.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit up",
     "db:studio": "drizzle-kit studio"

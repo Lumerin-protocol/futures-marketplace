@@ -1,7 +1,13 @@
+import { tokens } from "../../../styles/tokens";
 import { useState, useCallback } from "react";
 import styled from "@mui/material/styles/styled";
 import { ModalItem } from "../../Modal";
 import { PrimaryButton } from "../../Forms/FormButtons/Buttons.styled";
+
+// Legacy futures close flow: informational warning + Place Order prefill + Bid/Ask
+// highlight. Replaced by Forms/ClosePositionForm (order-creation modal shared
+// with Perps). Restore by wiring `useClosePositionModal` in Futures.tsx and passing
+// `onClosePosition` through OrdersPositionsTabWidget → PositionsListWidget.
 
 const CLOSE_POSITION_MODAL_KEY = "futures_close_position_modal_dismissed";
 
@@ -9,6 +15,7 @@ interface ClosePositionData {
   price: string;
   amount: number;
   isBuy: boolean;
+  expirationAt?: number;
 }
 
 interface ClosePositionModalProps {
@@ -21,22 +28,24 @@ interface ClosePositionModalProps {
 }
 
 // Hook to manage close position modal state and localStorage
-export const useClosePositionModal = (onProceedWithClose: (price: string, amount: number, isBuy: boolean) => void) => {
+export const useClosePositionModal = (
+  onProceedWithClose: (price: string, amount: number, isBuy: boolean, expirationAt?: number) => void,
+) => {
   const [showModal, setShowModal] = useState(false);
   const [doNotShowAgain, setDoNotShowAgain] = useState(false);
   const [pendingClosePosition, setPendingClosePosition] = useState<ClosePositionData | null>(null);
 
   const handleClosePosition = useCallback(
-    (price: string, amount: number, isBuy: boolean) => {
+    (price: string, amount: number, isBuy: boolean, expirationAt?: number) => {
       // Check if user has dismissed the modal before
       const isDismissed = localStorage.getItem(CLOSE_POSITION_MODAL_KEY) === "true";
 
       if (isDismissed) {
         // Skip modal, proceed directly with highlighting
-        onProceedWithClose(price, amount, isBuy);
+        onProceedWithClose(price, amount, isBuy, expirationAt);
       } else {
         // Store pending data and show modal
-        setPendingClosePosition({ price, amount, isBuy });
+        setPendingClosePosition({ price, amount, isBuy, expirationAt });
         setShowModal(true);
       }
     },
@@ -54,7 +63,12 @@ export const useClosePositionModal = (onProceedWithClose: (price: string, amount
 
     // Proceed with highlighting if we have pending data
     if (pendingClosePosition) {
-      onProceedWithClose(pendingClosePosition.price, pendingClosePosition.amount, pendingClosePosition.isBuy);
+      onProceedWithClose(
+        pendingClosePosition.price,
+        pendingClosePosition.amount,
+        pendingClosePosition.isBuy,
+        pendingClosePosition.expirationAt,
+      );
       setPendingClosePosition(null);
     }
 
@@ -140,17 +154,17 @@ const ModalTitle = styled("h2")`
   margin: 0;
   font-size: 1.5rem;
   font-weight: 600;
-  color: #fff;
+  color: ${tokens.text.onDark};
 `;
 
 const ModalMessage = styled("p")`
   margin: 0;
   font-size: 1rem;
-  color: #d1d5db;
+  color: ${tokens.closePositionModal.textMuted};
   line-height: 1.6;
 
   strong {
-    color: #fff;
+    color: ${tokens.text.onDark};
     font-weight: 600;
   }
 `;
@@ -158,7 +172,7 @@ const ModalMessage = styled("p")`
 const ModalNote = styled("p")`
   margin: 0;
   font-size: 0.875rem;
-  color: #9ca3af;
+  color: ${tokens.closePositionModal.textSubtle};
   font-style: italic;
 `;
 
@@ -167,19 +181,19 @@ const CheckboxContainer = styled("div")`
   align-items: center;
   gap: 0.5rem;
   padding: 0.75rem;
-  background: rgba(255, 255, 255, 0.05);
+  background: ${tokens.overlay.white05};
   border-radius: 6px;
 
   input[type="checkbox"] {
     width: 18px;
     height: 18px;
     cursor: pointer;
-    accent-color: #509EBA;
+    accent-color: ${tokens.accent.main};
   }
 
   label {
     font-size: 0.875rem;
-    color: #d1d5db;
+    color: ${tokens.closePositionModal.textMuted};
     cursor: pointer;
     user-select: none;
   }
@@ -192,11 +206,11 @@ const ModalButtons = styled("div")`
   margin-top: 0.5rem;
 `;
 
-const CancelButton = styled("button")`
+const _CancelButton = styled("button")`
   padding: 0.75rem 1.25rem;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: ${tokens.overlay.white10};
+  color: ${tokens.text.onDark};
+  border: 1px solid ${tokens.overlay.white20};
   border-radius: 6px;
   font-size: 0.875rem;
   font-weight: 600;
@@ -204,7 +218,7 @@ const CancelButton = styled("button")`
   transition: all 0.2s ease;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.3);
+    background: ${tokens.overlay.white15};
+    border-color: ${tokens.overlay.white30};
   }
 `;

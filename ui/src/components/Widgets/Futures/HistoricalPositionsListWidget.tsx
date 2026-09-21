@@ -1,99 +1,54 @@
+import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
-import { SmallWidget } from "../../Cards/Cards.styled";
+import { useMemo, useState } from "react";
 import type { HistoricalPosition } from "../../../hooks/data/useHistoricalPositions";
+import { DateTimeCell } from "../../DateTimeCell";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { FuturesTradesModal, type FuturesTradesModalSelection } from "./FuturesTradesModal";
+import { LoadMoreButton } from "../../LoadMoreButton";
+import { LiquidationChip, formatLiquidatedQty, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
 
 interface HistoricalPositionsListWidgetProps {
   positions: HistoricalPosition[];
   isLoading?: boolean;
   participantAddress?: `0x${string}`;
+  hasMore?: boolean;
+  isFetchingMore?: boolean;
+  onLoadMore?: () => void;
 }
 
 export const HistoricalPositionsListWidget = ({
   positions,
   isLoading,
   participantAddress,
+  hasMore = false,
+  isFetchingMore,
+  onLoadMore,
 }: HistoricalPositionsListWidgetProps) => {
-  const getPositionType = (position: HistoricalPosition) => {
-    if (!participantAddress) return "Unknown";
-    return position.buyer.address.toLowerCase() === participantAddress.toLowerCase() ? "Long" : "Short";
-  };
-
-  const getPriceForPosition = (position: HistoricalPosition) => {
-    const positionType = getPositionType(position);
-    return positionType === "Long" ? position.buyPricePerDay : position.sellPricePerDay;
-  };
-
-  const getPnlForPosition = (position: HistoricalPosition) => {
-    const positionType = getPositionType(position);
-    return positionType === "Long" ? position.buyerPnl : position.sellerPnl;
-  };
+  const [tradesSelection, setTradesSelection] = useState<FuturesTradesModalSelection | null>(null);
 
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2);
+    return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
   const formatPnl = (pnl: number) => {
-    const pnlValue = pnl / 1e6;
+    const pnlValue = pnl / PAYMENT_TOKEN_SCALE_NUM;
     return `${pnlValue.toFixed(2)}`;
   };
 
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(Number(timestamp) * 1000);
-    return date.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  // Group positions by price (based on position type), deliveryAt, and position type
-  const groupedPositions = positions.reduce(
-    (acc, position) => {
-      const positionType = getPositionType(position);
-      const pricePerDay = getPriceForPosition(position);
-      const pnl = getPnlForPosition(position);
-      const key = `${pricePerDay}-${position.deliveryAt}-${positionType}`;
-
-      if (!acc[key]) {
-        acc[key] = {
-          pricePerDay: pricePerDay,
-          deliveryAt: position.deliveryAt,
-          positionType: positionType,
-          amount: 0,
-          realizedPnl: 0,
-          closedAt: position.closedAt,
-          timestamp: position.timestamp,
-        };
-      }
-
-      acc[key].amount += 1;
-      acc[key].realizedPnl += pnl;
-
-      return acc;
-    },
-    {} as Record<
-      string,
-      {
-        pricePerDay: bigint;
-        deliveryAt: string;
-        positionType: string;
-        amount: number;
-        realizedPnl: number;
-        closedAt: string | null;
-        timestamp: string;
-      }
-    >,
-  );
-
-  const groupedPositionsArray = Object.values(groupedPositions);
+  // Each `HistoricalPosition` is one closed `PositionSession` and is treated
+  // as a distinct row — no grouping. Sort most-recent first using closedAt
+  // when available, falling back to the session's opening timestamp.
+  const sortedPositions = useMemo(() => {
+    const sortKey = (p: HistoricalPosition) => Number(p.closedAt ?? p.timestamp);
+    return [...positions].sort((a, b) => sortKey(b) - sortKey(a));
+  }, [positions]);
 
   if (isLoading) {
     return (
       <PositionsContainer>
         <h3>Historical Positions</h3>
-        <div style={{ textAlign: "center", padding: "2rem", color: "#6b7280" }}>
+        <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.muted }}>
           <p>Loading historical positions...</p>
         </div>
       </PositionsContainer>
@@ -109,50 +64,123 @@ export const HistoricalPositionsListWidget = ({
           <thead>
             <tr>
               <th>Contract Expiration</th>
-              <th>Type</th>
+              <th>Side</th>
+              <th>Close Reason</th>
               <th>Price (USDC)</th>
-              <th>Quantity</th>
+              <th>Max Quantity</th>
+              <th>Exit Price (USDC)</th>
               <th>Realized PnL (USDC)</th>
               <th>Created</th>
               <th>Closed</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {groupedPositionsArray.map((groupedPosition, index) => (
-              <TableRow
-                key={`${groupedPosition.pricePerDay}-${groupedPosition.deliveryAt}-${groupedPosition.positionType}-${index}`}
-              >
-                <td>{formatTimestamp(groupedPosition.deliveryAt)}</td>
-                <td>
-                  <TypeBadge $type={groupedPosition.positionType}>{groupedPosition.positionType}</TypeBadge>
-                </td>
-                <td>{formatPrice(groupedPosition.pricePerDay)}</td>
-                <td>{groupedPosition.amount}</td>
-                <td>
-                  <PnLCell $isPositive={groupedPosition.realizedPnl >= 0} $isZero={groupedPosition.realizedPnl === 0}>
-                    {formatPnl(groupedPosition.realizedPnl)}
-                  </PnLCell>
-                </td>
-                <td>{formatTimestamp(groupedPosition.timestamp)}</td>
-                <td>{groupedPosition.closedAt ? formatTimestamp(groupedPosition.closedAt) : "-"}</td>
-              </TableRow>
-            ))}
+            {sortedPositions.map((position) => {
+              const positionType: "Long" | "Short" = position.isLong ? "Long" : "Short";
+              const maxQuantity = Math.abs(position.maxQuantity);
+              const wasLiquidated = position.liquidatedQuantity > 0;
+              // A pinned price belongs to the expiration, not to this session, so
+              // its mere presence would relabel every session at that date the
+              // moment it settled. The settling exit fill lands in the pinning
+              // transaction or later, so anything that closed earlier was a
+              // trade-out by the user.
+              const wasSettled =
+                position.settledAt !== null &&
+                position.closedAt !== null &&
+                Number(position.closedAt) >= Number(position.settledAt);
+              return (
+                <TableRow
+                  key={position.id}
+                  style={wasLiquidated ? { backgroundColor: LIQUIDATION_ROW_BG } : undefined}
+                >
+                  <td><DateTimeCell timestamp={position.expirationAt} /></td>
+                  <td>
+                    <TypeBadge $type={positionType}>{positionType}</TypeBadge>
+                  </td>
+                  <td>
+                    {wasLiquidated ? (
+                      <LiquidationChip
+                        title={formatLiquidatedQty(
+                          position.liquidatedQuantity,
+                          maxQuantity - position.liquidatedQuantity,
+                        )}
+                      >
+                        {formatLiquidatedQty(
+                          position.liquidatedQuantity,
+                          maxQuantity - position.liquidatedQuantity,
+                        )}
+                      </LiquidationChip>
+                    ) : wasSettled ? (
+                      <span style={{ color: tokens.text.muted }}>Settled</span>
+                    ) : (
+                      <span style={{ color: tokens.text.muted }}>Closed</span>
+                    )}
+                  </td>
+                  <td>{formatPrice(position.pricePerDay)}</td>
+                  <td>{maxQuantity}</td>
+                  <td>
+                    {position.closePrice > 0n ? (
+                      formatPrice(position.closePrice)
+                    ) : (
+                      <span style={{ color: tokens.text.muted }}>—</span>
+                    )}
+                  </td>
+                  <td>
+                    <PnLCell $isPositive={position.pnl >= 0} $isZero={position.pnl === 0}>
+                      {formatPnl(position.pnl)}
+                    </PnLCell>
+                  </td>
+                  <td><DateTimeCell timestamp={position.timestamp} /></td>
+                  <td>{position.closedAt ? <DateTimeCell timestamp={position.closedAt} /> : "-"}</td>
+                  <td>
+                    <TradesButton
+                      onClick={() =>
+                        setTradesSelection({
+                          pricePerDay: position.pricePerDay,
+                          expirationAt: position.expirationAt,
+                          positionType,
+                        })
+                      }
+                      title="View matching trades from the last 30 days"
+                    >
+                      Trades
+                    </TradesButton>
+                  </td>
+                </TableRow>
+              );
+            })}
           </tbody>
         </Table>
       </TableContainer>
 
-      {groupedPositionsArray.length === 0 && (
+      {sortedPositions.length === 0 ? (
         <EmptyState>
-          <p>No historical positions found in the last 30 days</p>
+          <p>No historical positions found</p>
         </EmptyState>
+      ) : (
+        <LoadMoreButton
+          hasMore={hasMore}
+          isLoading={isFetchingMore}
+          onClick={() => onLoadMore?.()}
+        />
       )}
+
+      <FuturesTradesModal
+        open={tradesSelection !== null}
+        onClose={() => setTradesSelection(null)}
+        selection={tradesSelection}
+        participantAddress={participantAddress}
+        contractMode="futures"
+      />
     </PositionsContainer>
   );
 };
 
-const PositionsContainer = styled(SmallWidget)`
+// Flat section rather than a card: the tab widget already draws the border and
+// pads its content, so a SmallWidget here would nest a second card inside it.
+const PositionsContainer = styled("div")`
   width: 100%;
-  padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -161,7 +189,7 @@ const PositionsContainer = styled(SmallWidget)`
     margin: 0;
     font-size: 1.1rem;
     font-weight: 600;
-    color: #fff;
+    color: ${tokens.text.onDark};
   }
 `;
 
@@ -174,12 +202,12 @@ const TableContainer = styled("div")`
   }
   
   &::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
+    background: ${tokens.overlay.white10};
     border-radius: 2px;
   }
   
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
+    background: ${tokens.overlay.white30};
     border-radius: 2px;
   }
 `;
@@ -194,32 +222,32 @@ const Table = styled("table")`
     padding: 0.75rem 0.5rem;
     font-size: 0.75rem;
     font-weight: 600;
-    color: #a7a9b6;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: ${tokens.text.secondary};
+    border-bottom: 1px solid ${tokens.overlay.white10};
     white-space: nowrap;
     
-    &:first-child {
-      width: 200px;
-      min-width: 200px;
+    &:first-of-type {
+      width: 130px;
+      min-width: 130px;
     }
   }
   
   td {
     padding: 0.75rem 0.5rem;
     font-size: 0.875rem;
-    color: #fff;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: ${tokens.text.onDark};
+    border-bottom: 1px solid ${tokens.overlay.white05};
     
-    &:first-child {
-      width: 200px;
-      min-width: 200px;
+    &:first-of-type {
+      width: 130px;
+      min-width: 130px;
     }
   }
 `;
 
 const TableRow = styled("tr")`
   &:hover {
-    background-color: rgba(255, 255, 255, 0.02);
+    background-color: ${tokens.overlay.white02};
   }
   
   &:last-child td {
@@ -233,19 +261,46 @@ const TypeBadge = styled("span")<{ $type: string }>`
   border-radius: 4px;
   font-size: 0.75rem;
   font-weight: 600;
-  background-color: ${(props) => (props.$type === "Long" ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)")};
-  color: ${(props) => (props.$type === "Long" ? "#22c55e" : "#ef4444")};
+  background-color: ${(props) => (props.$type === "Long" ? tokens.trading.longRowBg : tokens.trading.shortRowBg)};
+  color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
 const PnLCell = styled("span")<{ $isPositive: boolean; $isZero: boolean }>`
-  color: ${(props) => (props.$isZero ? "white" : props.$isPositive ? "#22c55e" : "#ef4444")};
+  color: ${(props) => (props.$isZero ? "white" : props.$isPositive ? tokens.trading.long : tokens.trading.short)};
   font-weight: 600;
+`;
+
+const TradesButton = styled("button")`
+  padding: 0.5rem 0.875rem;
+  background: ${tokens.neutralButton.bg};
+  color: ${tokens.text.onDark};
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+
+  &:hover:not(:disabled) {
+    background: ${tokens.neutralButton.hover};
+    transform: translateY(-1px);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    background: ${tokens.text.muted};
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
 `;
 
 const EmptyState = styled("div")`
   text-align: center;
   padding: 2rem;
-  color: #6b7280;
+  color: ${tokens.text.muted};
   
   p {
     margin: 0;

@@ -20,6 +20,6 @@ output "marketplace_cloudfront_distribution_id" {
 }
 output "marketplace_url" {
   description = "URL of the marketplace website"
-  value       = var.create_core ? (var.account_lifecycle == "prd" ? "https://${local.s3_cf_website}.${data.aws_route53_zone.public_lumerin_root.name}" : "https://${local.s3_cf_website}.${data.aws_route53_zone.public_lumerin.name}") : null
+  value       = var.create_core ? "https://${local.hp_dns["exc"].name}" : null
 }
 

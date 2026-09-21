@@ -8,34 +8,23 @@ ecs_cluster = {
 
 # Configure Market Maker Lambda
 market_maker = {
-  create                      = true
+  create                      = false
   # Lambda Configuration
   timeout                     = 60          # 60 seconds (enough for blockchain tx)
   memory_size                 = 1024        # 1GB RAM
-  schedule_rate               = 1           # Run every 1 minute
+  schedule_rate               = 1           # Run every 2 minutes (Graph for Sep-ARB is 2-5 minutes (mainnet is <60 seconds)
   # Trading Parameters
-  float_amount                = 300000000   # 300 USDC (300n * 10n ** 6n)
+  float_amount                = 800000000   # 800 USDC (800n * 10n ** 6n)
   spread_amount               = 10000       # 0.01 USDC (1n * 10n ** 4n)
   grid_levels                 = 5
   active_quoting_amount_ratio = 0.4
-  risk_aversion               = 3000000     # Risk aversion parameter (higher = more conservative)
+  risk_aversion               = 15000 #3000000     # Risk aversion parameter (higher = more conservative)
   max_position                = 10
   log_level                   = "info"
-  chain_id                    = 421614      # Arbitrum Sepolia
+  chain_id                    = 84532       # Base Sepolia
   # Balance Thresholds (graceful exit when funds low)
   min_eth_balance             = "100000000000000"     # 0.0001 ETH in wei (~1.4 txns - stops before failing)
   min_usdc_balance            = "10000000"            # 10 USDC (10n * 10n ** 6n)
-}
-
-margin_call_lambda = {
-  create                             = true
-  log_level                          = "debug"
-  job_interval                       = "15"
-  timeout                            = 300
-  memory_size                        = 512
-  margin_utilization_warning_percent = "80"
-  daily_schedule_hour                = "0"           # UTC hour (0-23). Examples: 0=midnight UTC, 14=09:00 EST/10:00 EDT, 21=16:00 EST/17:00 EDT
-  daily_schedule_minute              = "0"           # UTC minute (0-59)
 }
 
 notifications_service = {
@@ -66,11 +55,19 @@ notifications_service = {
 ########################################
 # Note: ethereum_rpc_url is defined in secret.auto.tfvars (contains API key)
 # Contract addresses for the environment
-# DEV uses Arbitrum Sepolia testnet, STG/LMN use Arbitrum mainnet
-clone_factory_address   = "0x998135c509b64083cd27ed976c1bcda35ab7a40b"
-hashrate_oracle_address = "0x6f736186d2c93913721e2570c283dff2a08575e9"
-futures_address         = "0xec76867e96d942282fc7aafe3f778de34d41a311"
+# DEV uses Base Sepolia testnet, STG/LMN use Arbitrum mainnet
+clone_factory_address   = "0x998135c509b64083cd27ed976c1bcda35ab7a40b"  # not consumed by any TF resource; placeholder
+hashrate_oracle_address = "0xf97a1bbfb5e061ef73dad8ebf25939d93639fb7f"
+futures_address         = "0x56d8d4a03a0f34b93b86e0b7941aff29178d0479"
 multicall_address       = "0xcA11bde05977b3631167028862bE2a173976CA11"
+
+########################################
+# Goldsky Subgraph Endpoints (public)
+########################################
+gs_subgraphs = {
+  futures = "https://api.goldsky.com/api/public/project_cmmz59uoa7b5201wthnkxbuqy/subgraphs/hpow-futures/dev-latest/gn"
+  oracles = "https://api.goldsky.com/api/public/project_cmmz59uoa7b5201wthnkxbuqy/subgraphs/hpow-oracles/dev-latest/gn"
+}
 
 ########################################
 # Monitoring Configuration

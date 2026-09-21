@@ -19,7 +19,7 @@ const ErrorFallback: ErrorBoundaryPropsWithRender["fallbackRender"] = ({ error }
 const onResetHandler: () => void = () => {};
 
 // log to local filestore or localStorage if needed
-const errorHandler: (error: Error, info: { componentStack: string }) => void = (error, info) => {};
+const errorHandler: (error: Error, info: { componentStack: string }) => void = (_error, _info) => {};
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {

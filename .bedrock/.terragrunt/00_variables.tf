@@ -4,16 +4,45 @@ variable "create_core" {
   default     = false
 }
 
+# Optional hostname (e.g. beta.hashpower.exchange) with its own CloudFront distribution
+# on the marketplace S3 origin. While apex_site is "hold" or "beta", CI publishes
+# the UI to that distribution. Defaults off.
+variable "beta_alias" {
+  description = "Optional hostname (e.g. beta.hashpower.exchange) served by a second CloudFront distribution on the app bucket"
+  type = object({
+    create   = bool
+    hostname = string # FQDN, must be a direct child of hashpower.exchange (e.g. beta.hashpower.exchange)
+  })
+  default = {
+    create   = false
+    hostname = ""
+  }
+}
+
+# app  — apex distribution serves the app bucket (dev, and any env left as it is today).
+# hold — apex distribution serves the static coming-soon bucket. UI deploys go to beta.
+# beta — cutover. Apex alias and DNS move onto the beta distribution. Requires beta_alias.create.
+variable "apex_site" {
+  description = "Where the zone apex is served from: app (apex distribution, app bucket), hold (static coming-soon page), or beta (apex hostname moves onto the beta distribution)."
+  type        = string
+  default     = "app"
+
+  validation {
+    condition     = contains(["app", "hold", "beta"], var.apex_site)
+    error_message = "apex_site must be app, hold, or beta."
+  }
+}
+
 variable "ecs_cluster" {
   description = "ECS Cluster Variables"
-  type    = map(any)
-  default = {}
+  type        = map(any)
+  default     = {}
 }
 
 variable "market_maker" {
   description = "Market Maker Service Variables"
-  type    = map(any)
-  default = {}
+  type        = map(any)
+  default     = {}
 }
 
 variable "market_maker_private_key" {
@@ -29,16 +58,10 @@ variable "market_maker_eth_node_url" {
   default     = ""
 }
 
-variable "margin_call_lambda" {
-  description = "Margin Call Lambda Service Variables"
-  type    = map(any)
-  default = {}
-}
-
 variable "notifications_service" {
   description = "Notifications Service Variables"
-  type    = map(any)
-  default = {}
+  type        = map(any)
+  default     = {}
 }
 
 variable "telegram_bot_token" {
@@ -53,35 +76,43 @@ variable "telegram_bot_token" {
 ################################################################################
 
 variable "ethereum_rpc_url" {
-  description = "Ethereum RPC URL (used by oracle lambda, indexer, and margin call)"
+  description = "Ethereum RPC URL (used by oracle lambda and indexer)"
   type        = string
   sensitive   = true
   default     = ""
 }
 
 ################################################################################
-# THE GRAPH NETWORK CONFIGURATION
-# API key and subgraph IDs for querying published subgraphs
+# GOLDSKY SUBGRAPH CONFIGURATION
+# Public Goldsky endpoints for querying deployed subgraphs
+################################################################################
+
+variable "gs_subgraphs" {
+  description = "Goldsky public GraphQL endpoints keyed by subgraph name"
+  type        = map(string)
+  default     = {}
+}
+
+################################################################################
+# LEGACY — The Graph Network (no longer used; kept for state compatibility)
 ################################################################################
 
 variable "graph_api_key" {
-  description = "The Graph API Key for accessing published subgraphs"
+  description = "(legacy) The Graph API Key — replaced by Goldsky public endpoints"
   type        = string
   sensitive   = true
   default     = ""
 }
 
 variable "futures_subgraph_id" {
-  description = "The Graph Subgraph ID for Futures (from published subgraph)"
+  description = "(legacy) The Graph Subgraph ID for Futures — replaced by gs_subgraphs"
   type        = string
-  sensitive   = true
   default     = ""
 }
 
 variable "oracles_subgraph_id" {
-  description = "The Graph Subgraph ID for Oracles (from published subgraph)"
+  description = "(legacy) The Graph Subgraph ID for Oracles — replaced by gs_subgraphs"
   type        = string
-  sensitive   = true
   default     = ""
 }
 
@@ -96,13 +127,13 @@ variable "clone_factory_address" {
 }
 
 variable "hashrate_oracle_address" {
-  description = "Hashrate Oracle contract address (used by oracle lambda, indexer, and margin call)"
+  description = "Hashrate Oracle contract address (used by oracle lambda and indexer)"
   type        = string
   default     = ""
 }
 
 variable "futures_address" {
-  description = "Futures Marketplace contract address (used by margin call lambda)"
+  description = "Futures Marketplace contract address (used by market maker)"
   type        = string
   default     = ""
 }
@@ -121,34 +152,34 @@ variable "multicall_address" {
 variable "monitoring" {
   description = "Monitoring configuration for alarms, dashboards, and metric filters"
   type = object({
-    create                    = bool
-    create_alarms             = bool
-    create_dashboards         = bool
-    create_metric_filters     = bool
-    create_synthetics_canary  = bool     # Synthetics canary for UI (production only)
-    notifications_enabled     = bool     # Set false to disable SNS notifications (alarms still visible in console)
-    dev_alerts_topic_name     = string   # Slack notifications
-    devops_alerts_topic_name  = string   # Cell phone (critical, prod only)
-    dashboard_period          = number
+    create                   = bool
+    create_alarms            = bool
+    create_dashboards        = bool
+    create_metric_filters    = bool
+    create_synthetics_canary = bool   # Synthetics canary for UI (production only)
+    notifications_enabled    = bool   # Set false to disable SNS notifications (alarms still visible in console)
+    dev_alerts_topic_name    = string # Slack notifications
+    devops_alerts_topic_name = string # Cell phone (critical, prod only)
+    dashboard_period         = number
   })
   default = {
-    create                    = false
-    create_alarms             = false
-    create_dashboards         = false
-    create_metric_filters     = false
-    create_synthetics_canary  = false
-    notifications_enabled     = false
-    dev_alerts_topic_name     = ""
-    devops_alerts_topic_name  = ""
-    dashboard_period          = 300
+    create                   = false
+    create_alarms            = false
+    create_dashboards        = false
+    create_metric_filters    = false
+    create_synthetics_canary = false
+    notifications_enabled    = false
+    dev_alerts_topic_name    = ""
+    devops_alerts_topic_name = ""
+    dashboard_period         = 300
   }
 }
 
 variable "monitoring_schedule" {
   description = "Schedule rates for monitoring resources and alarm timing"
   type = object({
-    synthetics_canary_rate_minutes = number  # How often to run canary (5-60)
-    unhealthy_alarm_period_minutes = number  # How long to tolerate "bad" before alarm triggers
+    synthetics_canary_rate_minutes = number # How often to run canary (5-60)
+    unhealthy_alarm_period_minutes = number # How long to tolerate "bad" before alarm triggers
   })
   default = {
     synthetics_canary_rate_minutes = 15
@@ -159,36 +190,36 @@ variable "monitoring_schedule" {
 variable "alarm_thresholds" {
   description = "Environment-specific alarm thresholds (relaxed for dev/stg, strict for prod)"
   type = object({
-    ecs_cpu_threshold           = number
-    ecs_memory_threshold        = number
-    ecs_min_running_tasks       = number
-    lambda_error_threshold      = number
-    lambda_duration_threshold   = number
-    lambda_throttle_threshold   = number
-    alb_5xx_threshold           = number
-    alb_unhealthy_threshold     = number
-    alb_latency_threshold       = number
-    rds_cpu_threshold           = number
-    rds_storage_threshold       = number
-    rds_connections_threshold   = number
-    cloudfront_5xx_threshold    = number  # Percentage
-    cloudfront_4xx_threshold    = number  # Percentage
+    ecs_cpu_threshold         = number
+    ecs_memory_threshold      = number
+    ecs_min_running_tasks     = number
+    lambda_error_threshold    = number
+    lambda_duration_threshold = number
+    lambda_throttle_threshold = number
+    alb_5xx_threshold         = number
+    alb_unhealthy_threshold   = number
+    alb_latency_threshold     = number
+    rds_cpu_threshold         = number
+    rds_storage_threshold     = number
+    rds_connections_threshold = number
+    cloudfront_5xx_threshold  = number # Percentage
+    cloudfront_4xx_threshold  = number # Percentage
   })
   default = {
-    ecs_cpu_threshold           = 90
-    ecs_memory_threshold        = 90
-    ecs_min_running_tasks       = 1
-    lambda_error_threshold      = 5
-    lambda_duration_threshold   = 240000
-    lambda_throttle_threshold   = 10
-    alb_5xx_threshold           = 20
-    alb_unhealthy_threshold     = 1
-    alb_latency_threshold       = 15
-    rds_cpu_threshold           = 90
-    rds_storage_threshold       = 5
-    rds_connections_threshold   = 90
-    cloudfront_5xx_threshold    = 5
-    cloudfront_4xx_threshold    = 10
+    ecs_cpu_threshold         = 90
+    ecs_memory_threshold      = 90
+    ecs_min_running_tasks     = 1
+    lambda_error_threshold    = 5
+    lambda_duration_threshold = 240000
+    lambda_throttle_threshold = 10
+    alb_5xx_threshold         = 20
+    alb_unhealthy_threshold   = 1
+    alb_latency_threshold     = 15
+    rds_cpu_threshold         = 90
+    rds_storage_threshold     = 5
+    rds_connections_threshold = 90
+    cloudfront_5xx_threshold  = 5
+    cloudfront_4xx_threshold  = 10
   }
 }
 

@@ -1,329 +1,559 @@
-import { type FC, useState, useRef, useMemo, useEffect, useCallback } from "react";
+import { tokens } from "../../styles/tokens";
+import { type FC, type ReactNode, useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { useAccount } from "wagmi";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import { FuturesBalanceWidget } from "../../components/Widgets/Futures/FuturesBalanceWidget";
-import { FuturesMarketWidget } from "../../components/Widgets/Futures/FuturesMarketWidget";
+import { TradingHeader } from "../../components/Widgets/Futures/TradingHeader";
 import { OrderBookTable } from "../../components/Widgets/Futures/OrderBookTable";
 import { HashrateChart } from "../../components/Charts/HashrateChart";
 import { PlaceOrderWidget } from "../../components/Widgets/Futures/PlaceOrderWidget";
 import { OrdersPositionsTabWidget } from "../../components/Widgets/Futures/OrdersPositionsTabWidget";
-import { ClosePositionModal, useClosePositionModal } from "../../components/Widgets/Futures/ClosePositionModal";
+import { PerpsOrdersPositionsTabWidget } from "../../components/Widgets/Futures/PerpsOrdersPositionsTabWidget";
+import { RiskToast, type RiskToastItem } from "../../components/Widgets/Futures/RiskToast";
+import { FuturesMobileLayout } from "../../components/Widgets/Futures/mobile/FuturesMobileLayout";
+import { useIsMobileTradingLayout } from "../../components/Widgets/Futures/mobile/mobileTradingLayout";
+import { useLiquidationNotifications } from "../../hooks/data/useLiquidationNotifications";
 import { useHashrateIndexData, type TimePeriod } from "../../hooks/data/useHashRateIndexData";
+import { useHashpriceCandles } from "../../hooks/data/useHashpriceCandles";
 import { useBtcPriceIndexData } from "../../hooks/data/useBtcPriceIndexData";
-import { useParticipant } from "../../hooks/data/useParticipant";
-import { usePositionBook } from "../../hooks/data/usePositionBook";
+import { useNetworkHashrateIndexData } from "../../hooks/data/useNetworkHashrateIndexData";
+import { getUserFuturesOrders } from "../../hooks/data/getUserFuturesOrders";
+import { getUserFuturesPositions } from "../../hooks/data/getUserFuturesPositions";
 import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpecs";
-import { useGetMinMargin } from "../../hooks/data/useGetMinMargin";
+import { useMarginRisk } from "../../hooks/data/useMarginRisk";
 import { useGetMarketPrice } from "../../hooks/data/useGetMarketPrice";
-import { useHistoricalPositions } from "../../hooks/data/useHistoricalPositions";
+import { usePortfolioPnl } from "../../hooks/data/pnl/usePortfolioPnl";
+import { useGetFutureBalance } from "../../hooks/data/useGetFutureBalance";
+import { useFuturesPaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
+import { useFundingRate } from "../../hooks/data/perps/useFundingRate";
+import { usePerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
+import { useUserPositionSessions } from "../../hooks/data/perps/useUserPositionSessions";
+import { useUserPerpsOrders } from "../../hooks/data/perps/useUserPerpsOrders";
+import { useLiquidationThresholds } from "../../hooks/data/useLiquidationThresholds";
+import { usePointsHookWeights } from "../../hooks/data/usePointsHookWeights";
+import { useTradableExpirations } from "../../hooks/data/useGetExpirationDates";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
-import type { PositionBookPosition } from "../../hooks/data/usePositionBook";
+import type { Instrument } from "../../lib/instruments";
+import type { ContractMode } from "../../types/types";
 import styled from "@mui/material/styles/styled";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 
-export const Futures: FC = () => {
+interface TradingPageProps {
+  defaultMode?: ContractMode;
+}
+
+export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const { isConnected, address } = useAccount();
+  const { mode: modeParam } = useParams<{ mode: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const previousAddressRef = useRef<string | undefined>(undefined);
+  // Below 768px the page renders the mobile-only compound layout (order book
+  // beside the place-order form, chart collapsed) instead of the desktop grid.
+  const isMobileTradingLayout = useIsMobileTradingLayout();
 
-  // Track account changes and reload page when account switches
+  // The traded instrument is owned by the URL: the product by /trade/:mode and,
+  // for futures, the expiration by ?expiry=. Same route element stays mounted
+  // across every switch, so wagmi Hydrate is not recreated mid-tree.
+  const contractMode: ContractMode =
+    modeParam === "perpetual" || modeParam === "futures" ? modeParam : defaultMode;
+
   useEffect(() => {
-    // On first render, just store the current address
+    if (modeParam !== "perpetual" && modeParam !== "futures") {
+      navigate(`/trade/${defaultMode}`, { replace: true });
+    }
+  }, [modeParam, defaultMode, navigate]);
+
+  const { expirations } = useTradableExpirations();
+  const expiryParam = searchParams.get("expiry");
+
+  // Each futures expiration is its own market on-chain, so this is the second
+  // half of "what am I trading". Falls back to the front of the list while the
+  // dates load, when the URL names none, and when the one it names has rolled
+  // off the contract's forward window.
+  const selectedExpirationAt = useMemo(() => {
+    if (contractMode === "perpetual") return undefined;
+    const requested = expiryParam === null ? Number.NaN : Number(expiryParam);
+    return expirations.includes(requested) ? requested : expirations[0];
+  }, [contractMode, expiryParam, expirations]);
+
+  // Keep the URL from naming an expiration that is not the one being traded.
+  // A bare /trade/futures is left alone — it is the stable "front month" entry
+  // point rather than a stale link.
+  useEffect(() => {
+    if (contractMode !== "futures" || expiryParam === null) return;
+    if (selectedExpirationAt === undefined || expiryParam === String(selectedExpirationAt)) return;
+    setSearchParams({ expiry: String(selectedExpirationAt) }, { replace: true });
+  }, [contractMode, expiryParam, selectedExpirationAt, setSearchParams]);
+
+  const handleInstrumentChange = useCallback(
+    (instrument: Instrument) => {
+      navigate(
+        instrument.mode === "perpetual"
+          ? "/trade/perpetual"
+          : `/trade/futures?expiry=${instrument.expirationAt}`,
+        { replace: true },
+      );
+    },
+    [navigate],
+  );
+
+  // Reload the page only when the user genuinely switches to a different wallet
+  // account. `address` from useAccount() flickers undefined <-> 0x... while
+  // WalletConnect is connecting/reconnecting, so we ignore falsy values and
+  // only react to a transition between two distinct defined addresses.
+  useEffect(() => {
+    if (!address) return;
+    const normalized = address.toLowerCase();
     if (previousAddressRef.current === undefined) {
-      previousAddressRef.current = address;
+      previousAddressRef.current = normalized;
       return;
     }
-
-    // If address changed (including connecting/disconnecting), reload the page
-    if (previousAddressRef.current !== address) {
+    if (previousAddressRef.current !== normalized) {
+      previousAddressRef.current = normalized;
       window.location.reload();
     }
   }, [address]);
-  const [chartTimePeriod, setChartTimePeriod] = useState<TimePeriod>("week");
-  const hashrateQuery = useHashrateIndexData({ timePeriod: chartTimePeriod });
-  const btcPriceQuery = useBtcPriceIndexData({ timePeriod: chartTimePeriod });
-  const contractSpecsQuery = useFuturesContractSpecs();
-  const { data: participantData, isLoading: isParticipantLoading } = useParticipant(address);
-  const { data: positionBookData, isLoading: isPositionBookLoading } = usePositionBook(address);
-  const { data: historicalPositionsData, isLoading: isHistoricalPositionsLoading } = useHistoricalPositions(
-    address,
-    true,
-  );
 
-  // Get min margin for address using hook (used for withdrawal form)
-  const minMarginQuery = useGetMinMargin(address);
-  const minMargin = minMarginQuery.data ?? null;
-  const isLoadingMinMargin = minMarginQuery.isLoading;
+  const [chartTimePeriod, setChartTimePeriod] = useState<TimePeriod>("5d");
+  const hashrateQuery = useHashrateIndexData({ timePeriod: chartTimePeriod });
+  const candlesQuery = useHashpriceCandles({ timePeriod: chartTimePeriod });
+  const btcPriceQuery = useBtcPriceIndexData({ timePeriod: chartTimePeriod });
+  const networkHashrateQuery = useNetworkHashrateIndexData({ timePeriod: chartTimePeriod });
+  const contractSpecsQuery = useFuturesContractSpecs();
+  const [hasOpenOrders, setHasOpenOrders] = useState(false);
+  const [hasOpenPerpsOrders, setHasOpenPerpsOrders] = useState(false);
+  const { data: participantData, isLoading: isParticipantLoading } = getUserFuturesOrders(address, {
+    refetch: hasOpenOrders,
+  });
+  const { data: positionBookData, isLoading: isPositionBookLoading } = getUserFuturesPositions(address, {
+    refetch: hasOpenOrders,
+  });
+  // Lifted from PerpsOrdersPositionsTabWidget so we can derive `hasOpenPerpsOrders`
+  // here and gate the perps positions/orders polling cadence (15s while open, 60s
+  // baseline for positions otherwise).
+  const perpsOpenOrdersQuery = useUserPerpsOrders(address, {
+    statuses: ["ACTIVE", "PARTIALLY_FILLED"],
+    refetch: hasOpenPerpsOrders,
+  });
+  useEffect(() => {
+    setHasOpenOrders((participantData?.data?.orders?.length ?? 0) > 0);
+  }, [participantData?.data?.orders?.length]);
+  useEffect(() => {
+    const orders = perpsOpenOrdersQuery.data?.data?.orders ?? [];
+    const openCount = orders.filter(
+      (order) =>
+        (order.status === "ACTIVE" || order.status === "PARTIALLY_FILLED") &&
+        order.filledQuantity !== order.originalQuantity,
+    ).length;
+    setHasOpenPerpsOrders(openCount > 0);
+  }, [perpsOpenOrdersQuery.data?.data?.orders]);
+  // Account-wide PnL, summed over every venue the account trades. Both figures
+  // are deliberately independent of `contractMode` — the venues settle against
+  // one CollateralVault, so the portfolio header states the whole account
+  // regardless of which trading tab is open.
+  const { unrealized, realizedInWindow } = usePortfolioPnl(address);
+
+  // Single shared balance — both Futures and Perps engines settle against the same CollateralVault,
+  // so we always read `vault.balanceOf(account)` regardless of contract mode.
+  const vaultBalanceQuery = useGetFutureBalance(address);
+  const balanceQuery = useMemo(() => ({
+    data: vaultBalanceQuery.data,
+    isLoading: vaultBalanceQuery.isLoading,
+    isFetching: vaultBalanceQuery.isFetching,
+    isSuccess: vaultBalanceQuery.isSuccess,
+    refetch: vaultBalanceQuery.refetch,
+  }), [vaultBalanceQuery]);
+
+  // Wallet (ERC20) balance of the shared collateral token.
+  const walletPaymentTokenBalance = useFuturesPaymentTokenBalance(address);
+  const accountBalanceQuery = useMemo(() => ({
+    data: walletPaymentTokenBalance.data,
+    isLoading: walletPaymentTokenBalance.isLoading,
+  }), [walletPaymentTokenBalance]);
 
   // Get market price from contract - polls every 10 seconds
   const {
     data: marketPrice,
-    isLoading: isMarketPriceLoading,
+    previousData: previousMarketPrice,
     dataFetchedAt: marketPriceFetchedAt,
   } = useGetMarketPrice();
 
-  // Calculate total unrealized PnL from all active positions
-  const totalUnrealizedPnL = useMemo(() => {
-    if (!marketPrice || !positionBookData?.data?.positions || !address || !contractSpecsQuery?.data) return null;
+  // Get funding rate for perpetual contracts
+  const fundingRateQuery = useFundingRate();
 
-    const activePositions = positionBookData.data.positions.filter((p) => p.isActive && !p.closedAt);
-    let totalPnL = 0n;
+  // Get perps collection data (fees, margin requirements, etc)
+  const perpsCollectionQuery = usePerpsCollection();
 
-    activePositions.forEach((position: PositionBookPosition) => {
+  // Fetch user position sessions for perpetual contracts
+  const positionSessionsQuery = useUserPositionSessions(address, { refetch: hasOpenPerpsOrders });
+
+  // Poll both products' trade feeds for new liquidations and surface a toast.
+  const { notifications: liquidationNotifications, dismiss: dismissLiquidation } =
+    useLiquidationNotifications(address);
+
+  // Resolve the points hook address and its weighting params (WEIGHT_SCALE,
+  // wTaker, wMaker) on initial load so they're warm in cache for the place-order
+  // modal's reward estimate.
+  usePointsHookWeights();
+
+  // Account-wide liquidation prices, solved off the same portfolio margin model
+  // the Futures contract liquidates on. Cross-product, so there is one pair per
+  // account (not per position) and a hedged book can have thresholds on both sides.
+  const { liqPrice, liqDirection, alreadyUnderwater } = useLiquidationThresholds(address);
+
+  // Everything the account portfolio panel reads, off the IPortfolioMarginEngine
+  // resolved via the Futures contract. `im` is also the single source of truth
+  // for locked collateral, so it feeds every order-entry affordability check
+  // regardless of contract mode. Declared after the threshold solver because the
+  // Danger status line quotes the liquidation price.
+  const marginRisk = useMarginRisk(address, liqPrice);
+  const minMargin = marginRisk.im;
+
+  // Liquidations that already happened and margin tiers the account has just
+  // crossed into share one stack. Ids are namespaced by producer so a single
+  // dismiss handler can route back to whichever hook owns the item.
+  const riskToasts = useMemo<RiskToastItem[]>(
+    () => [
+      ...marginRisk.toasts,
+      ...liquidationNotifications.map((notification) => ({
+        id: `liq:${notification.id}`,
+        message: `Your ${notification.product} position was liquidated.`,
+        variant: "warning" as const,
+      })),
+    ],
+    [marginRisk.toasts, liquidationNotifications],
+  );
+
+  const dismissRiskToast = useCallback(
+    (id: string) => {
+      if (id.startsWith("liq:")) {
+        dismissLiquidation(id.slice("liq:".length));
+        return;
+      }
+      marginRisk.dismissToast(id);
+    },
+    [dismissLiquidation, marginRisk.dismissToast],
+  );
+
+  // Signed net open position in contract units: whole contracts for futures at
+  // the selected expiry (which the contract margins as its own bucket) and
+  // QUANTITY_SCALE units for perps. A session's `netQuantity` mirrors the net
+  // delta for its whole bucket and only one session is ever OPEN per bucket, so
+  // this reads the open session rather than summing.
+  const openPositionNetQuantity = useMemo(() => {
+    if (contractMode === "perpetual") {
+      const sessions = positionSessionsQuery.data?.positionSessions || [];
+      return sessions.find((s) => s.status === "OPEN")?.netQuantity ?? null;
+    }
+    if (!positionBookData?.data?.positions || !selectedExpirationAt) return null;
+    const position = positionBookData.data.positions.find(
+      (p) => p.isActive && !p.closedAt && p.expirationAt === String(selectedExpirationAt),
+    );
+    return position ? BigInt(position.netQuantity) : null;
+  }, [
+    contractMode,
+    positionSessionsQuery.data?.positionSessions,
+    positionBookData?.data?.positions,
+    selectedExpirationAt,
+  ]);
+
+  const openPositionEntryPrice = useMemo(() => {
+    if (contractMode === "perpetual") {
+      const sessions = positionSessionsQuery.data?.positionSessions || [];
+      const openSession = sessions.find((s) => s.status === "OPEN");
+      if (!openSession) return null;
+      return Number(openSession.entryPrice) / PAYMENT_TOKEN_SCALE_NUM;
+    } else {
+      if (!address || !positionBookData?.data?.positions || !selectedExpirationAt) return null;
+      const activePositions = positionBookData.data.positions
+        .filter((p) => p.isActive && !p.closedAt && p.expirationAt === String(selectedExpirationAt))
+        .sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
+      if (activePositions.length === 0) return null;
+      const position = activePositions[0];
       const isLong = position.buyer.address.toLowerCase() === address.toLowerCase();
       const entryPrice = isLong ? position.buyPricePerDay : position.sellPricePerDay;
-      const entryPriceNum = entryPrice;
-      const priceDiff = marketPrice - entryPriceNum;
-
-      const positionPnL = isLong ? priceDiff : -priceDiff;
-      totalPnL += positionPnL;
-    });
-
-    totalPnL = totalPnL * BigInt(contractSpecsQuery?.data?.data?.deliveryDurationDays ?? 1);
-
-    if (Math.abs(Number(totalPnL)) < 1000) {
-      return 0n;
+      return Number(entryPrice) / PAYMENT_TOKEN_SCALE_NUM;
     }
+  }, [contractMode, positionSessionsQuery.data?.positionSessions, positionBookData?.data?.positions, address, selectedExpirationAt]);
 
-    return totalPnL;
-  }, [marketPrice, positionBookData?.data?.positions, address]);
-
-  // Calculate total realized PnL (30D) from historical positions
-  const totalRealizedPnL30D = useMemo(() => {
-    if (!historicalPositionsData?.data || !address) return null;
-
-    let totalPnL = 0;
-    historicalPositionsData.data.forEach((position) => {
-      const isLong = position.buyer.address.toLowerCase() === address.toLowerCase();
-      const pnl = isLong ? position.buyerPnl : position.sellerPnl;
-      totalPnL += pnl;
-    });
-
-    return totalPnL;
-  }, [historicalPositionsData?.data, address]);
+  const liquidationPrice = useMemo(
+    () => (liqPrice !== undefined ? Number(liqPrice) / PAYMENT_TOKEN_SCALE_NUM : null),
+    [liqPrice],
+  );
 
   // State for order book selection
   const [selectedPrice, setSelectedPrice] = useState<string | undefined>();
   const [selectedAmount, setSelectedAmount] = useState<number | undefined>();
-  const [selectedDeliveryDate, setSelectedDeliveryDate] = useState<number | undefined>();
-  const [selectedIsBuy, setSelectedIsBuy] = useState<boolean | undefined>();
   const [highlightMode, setHighlightMode] = useState<"inputs" | "buttons" | undefined>();
   const [highlightTrigger, setHighlightTrigger] = useState(0);
 
-  // Track previous order book state for change detection
+  // Reset state when contract mode changes. `contractMode` is not read in the
+  // body, it is the trigger — dropping it would stop the reset from ever running.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above.
+  useEffect(() => {
+    setSelectedPrice(undefined);
+    setSelectedAmount(undefined);
+    setHighlightMode(undefined);
+    setHighlightTrigger(0);
+  }, [contractMode]);
+
   const previousOrderBookStateRef = useRef<Map<number, { bidUnits: number | null; askUnits: number | null }>>(
     new Map(),
   );
 
-  // Function to proceed with close position (highlighting)
-  const proceedWithClosePosition = useCallback((price: string, amount: number, isBuy: boolean) => {
-    setSelectedPrice(price);
-    setSelectedAmount(amount);
-    setSelectedIsBuy(isBuy);
-    setHighlightMode("buttons");
-    // Increment trigger to force highlight update
-    setHighlightTrigger((prev) => prev + 1);
-  }, []);
-
-  // Close position modal hook
-  const closePositionModal = useClosePositionModal(proceedWithClosePosition);
-
-  const handleOrderBookClick = (price: string, amount: number | null) => {
+  const handleOrderBookClick = (price: string, _amount: number | null) => {
     setSelectedPrice(price);
     setSelectedAmount(1);
     setHighlightMode("inputs");
     setHighlightTrigger((prev) => prev + 1);
   };
 
-  const handleDeliveryDateChange = (deliveryDate: number | undefined) => {
-    setSelectedDeliveryDate(deliveryDate);
-  };
+  const currentPriceFormatted = marketPrice ? (Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2) : null;
+
+  // Change of the current market price vs the previous distinct polled value.
+  const priceChange = useMemo(() => {
+    if (marketPrice == null || previousMarketPrice == null || marketPrice === previousMarketPrice) {
+      return null;
+    }
+    const delta = Number(marketPrice - previousMarketPrice) / PAYMENT_TOKEN_SCALE_NUM;
+    const prev = Number(previousMarketPrice) / PAYMENT_TOKEN_SCALE_NUM;
+    const pct = prev !== 0 ? (delta / prev) * 100 : null;
+    return { delta, pct };
+  }, [marketPrice, previousMarketPrice]);
+
+  // Surface the change indicator only briefly after each price move, then hide
+  // it so the header settles back to just the current price.
+  const [visiblePriceChange, setVisiblePriceChange] = useState<{ delta: number; pct: number | null } | null>(null);
+  useEffect(() => {
+    if (!priceChange) return;
+    setVisiblePriceChange(priceChange);
+    const timer = setTimeout(() => setVisiblePriceChange(null), 5000);
+    return () => clearTimeout(timer);
+  }, [priceChange]);
+
+  // Each block is built once here and then placed by either the desktop grid
+  // below or the mobile-only layout, so the two layouts share one set of props,
+  // handlers and hook wiring.
+  // `mobileActions` is only supplied by FuturesMobileLayout (the chart toggle);
+  // the desktop branch calls this with nothing and renders the header unchanged.
+  const renderHeader = (mobileActions?: ReactNode) => (
+    <TradingHeader
+      contractMode={contractMode}
+      expirations={expirations}
+      onInstrumentChange={handleInstrumentChange}
+      contractSpecsQuery={contractSpecsQuery}
+      currentPrice={currentPriceFormatted}
+      priceChange={visiblePriceChange}
+      fundingRate={fundingRateQuery.data?.formattedRate ?? "0%"}
+      totalVolume={perpsCollectionQuery.data?.data?.totalVolume}
+      selectedExpirationAt={selectedExpirationAt}
+      liqPrice={liqPrice}
+      liqDirection={liqDirection}
+      isUnderwater={alreadyUnderwater}
+      mobileActions={mobileActions}
+    />
+  );
+
+  const chartNode = (
+    <SmallWidget
+      className="w-full justify-start"
+      style={{
+        marginBottom: 0,
+        paddingLeft: 5,
+        paddingTop: "0.875rem",
+        paddingRight: 10,
+        height: "100%",
+        justifyContent: "start",
+        border: `1px solid ${tokens.border.muted04}`,
+      }}
+    >
+      <HashrateChart
+        data={hashrateQuery.data || []}
+        candles={candlesQuery.data || []}
+        btcPriceData={btcPriceQuery.data || []}
+        networkHashrateData={networkHashrateQuery.data || []}
+        isLoading={hashrateQuery.isLoading}
+        isCandlesLoading={candlesQuery.isLoading}
+        isBtcPriceLoading={btcPriceQuery.isLoading}
+        isNetworkHashrateLoading={networkHashrateQuery.isLoading}
+        isFetching={hashrateQuery.isFetching}
+        isCandlesFetching={candlesQuery.isFetching}
+        isBtcPriceFetching={btcPriceQuery.isFetching}
+        isNetworkHashrateFetching={networkHashrateQuery.isFetching}
+        marketPrice={marketPrice}
+        marketPriceFetchedAt={marketPriceFetchedAt}
+        entryPrice={openPositionEntryPrice}
+        liquidationPrice={liquidationPrice}
+        liquidationDirection={liqDirection}
+        timePeriod={chartTimePeriod}
+        onTimePeriodChange={setChartTimePeriod}
+      />
+    </SmallWidget>
+  );
+
+  const orderBookNode = (
+    <OrderBookTable
+      onRowClick={handleOrderBookClick}
+      contractSpecsQuery={contractSpecsQuery}
+      previousOrderBookStateRef={previousOrderBookStateRef}
+      contractMode={contractMode}
+      selectedExpirationAt={selectedExpirationAt}
+    />
+  );
+
+  const balanceNode = (
+    <FuturesBalanceWidget
+      marginRisk={marginRisk}
+      liqPrice={liqPrice}
+      unrealizedPnL={unrealized.total}
+      isLoadingUnrealizedPnL={unrealized.isLoading}
+      isRefreshingUnrealizedPnL={unrealized.isRefreshing}
+      realizedPnLInWindow={realizedInWindow.total}
+      isLoadingRealizedPnL={realizedInWindow.isLoading}
+      isRefreshingRealizedPnL={realizedInWindow.isRefreshing}
+      balanceQuery={balanceQuery}
+      accountBalance={accountBalanceQuery}
+    />
+  );
+
+  const placeOrderNode = (
+    <PlaceOrderWidget
+      externalPrice={selectedPrice}
+      externalAmount={selectedAmount}
+      externalExpirationAt={selectedExpirationAt}
+      highlightTrigger={highlightTrigger}
+      contractSpecsQuery={contractSpecsQuery}
+      participantData={participantData?.data}
+      perpsOpenOrders={perpsOpenOrdersQuery.data?.data?.orders}
+      openPositionNetQuantity={openPositionNetQuantity}
+      highlightMode={highlightMode}
+      minMargin={minMargin}
+      contractMode={contractMode}
+      accountBalance={accountBalanceQuery}
+      balanceQuery={balanceQuery}
+      perpsCollection={perpsCollectionQuery.data?.data}
+      onOrderPlaced={async () => {
+        await marginRisk.refetch();
+      }}
+    />
+  );
+
+  const tablesNode = isConnected ? (
+    contractMode === "perpetual" ? (
+      <PerpsOrdersPositionsTabWidget
+        participantAddress={address}
+        marketPrice={marketPrice}
+        positionSessions={positionSessionsQuery.data?.positionSessions || []}
+        positionSessionsLoading={positionSessionsQuery.isLoading}
+        perpsOpenOrders={perpsOpenOrdersQuery.data?.data?.orders || []}
+        perpsOpenOrdersLoading={perpsOpenOrdersQuery.isLoading}
+        onPositionClosed={async () => {
+          await marginRisk.refetch();
+        }}
+      />
+    ) : (
+      <OrdersPositionsTabWidget
+        orders={participantData?.data?.orders || []}
+        positions={positionBookData?.data?.positions || []}
+        ordersLoading={isParticipantLoading}
+        positionsLoading={isPositionBookLoading}
+        participantAddress={address}
+        onPositionClosed={async () => {
+          await marginRisk.refetch();
+        }}
+        participantData={participantData?.data}
+        accountBalance={accountBalanceQuery}
+        contractMode={contractMode}
+        balanceQuery={balanceQuery}
+      />
+    )
+  ) : null;
 
   return (
-    <FuturesContainer>
-      {/* Row 1: Balance Widget (60%) and Stats Widget (40%) */}
-      <BalanceWidgetArea>
-        <FuturesBalanceWidget
-          minMargin={minMargin}
-          isLoadingMinMargin={isLoadingMinMargin}
-          unrealizedPnL={totalUnrealizedPnL}
-          realizedPnL30D={totalRealizedPnL30D}
-          isLoadingRealizedPnL={isHistoricalPositionsLoading}
+    <>
+      <RiskToast items={riskToasts} onDismiss={dismissRiskToast} />
+
+      {isMobileTradingLayout ? (
+        <FuturesMobileLayout
+          header={renderHeader}
+          chart={chartNode}
+          balance={balanceNode}
+          orderBook={orderBookNode}
+          placeOrder={placeOrderNode}
+          tables={tablesNode}
         />
-      </BalanceWidgetArea>
+      ) : (
+        <FuturesContainer>
+          {/* Row 1: Compact Trading Header — full width */}
+          <TradingHeaderArea>{renderHeader()}</TradingHeaderArea>
 
-      <StatsWidgetArea>
-        <FuturesMarketWidget contractSpecsQuery={contractSpecsQuery} />
-      </StatsWidgetArea>
+          {/* Row 2, Col 1: Chart */}
+          <ChartArea>{chartNode}</ChartArea>
 
-      {/* Row 2: Chart (60%) */}
-      <ChartArea>
-        <SmallWidget className="w-full" style={{ marginBottom: 0, paddingLeft: 5, paddingRight: 10 }}>
-          <HashrateChart
-            data={hashrateQuery.data || []}
-            btcPriceData={btcPriceQuery.data || []}
-            isLoading={hashrateQuery.isLoading}
-            isBtcPriceLoading={btcPriceQuery.isLoading}
-            marketPrice={marketPrice}
-            marketPriceFetchedAt={marketPriceFetchedAt}
-            timePeriod={chartTimePeriod}
-            onTimePeriodChange={setChartTimePeriod}
-          />
-        </SmallWidget>
-      </ChartArea>
+          {/* Row 2, Col 2: Order Book */}
+          <OrderBookArea>{orderBookNode}</OrderBookArea>
 
-      {/* Row 3: Place Order (60%) - only shown when connected */}
-      {isConnected && (
-        <PlaceOrderArea>
-          <PlaceOrderWidget
-            externalPrice={selectedPrice}
-            externalAmount={selectedAmount}
-            externalDeliveryDate={selectedDeliveryDate}
-            externalIsBuy={selectedIsBuy}
-            highlightTrigger={highlightTrigger}
-            contractSpecsQuery={contractSpecsQuery}
-            participantData={participantData?.data}
-            highlightMode={highlightMode}
-            latestPrice={marketPrice ?? null}
-            minMargin={minMargin}
-            onOrderPlaced={async () => {
-              await minMarginQuery.refetch();
-            }}
-          />
-        </PlaceOrderArea>
+          {/* Col 3 (full height): Account Balance + Place Order + Order Information */}
+          <RightPanelArea>
+            {balanceNode}
+            {placeOrderNode}
+            {/* <OrderInfoSection>
+              <OrderInfoTitle>Order Information</OrderInfoTitle>
+            </OrderInfoSection> */}
+          </RightPanelArea>
+
+          {/* Row 3, Col 1+2: Orders and Positions — does NOT span right panel column */}
+          {tablesNode && <OrdersPositionsArea>{tablesNode}</OrdersPositionsArea>}
+        </FuturesContainer>
       )}
-
-      {/* Order Book (40%) - spans rows 2 and 3 */}
-      <OrderBookArea $isConnected={isConnected}>
-        <OrderBookTable
-          onRowClick={handleOrderBookClick}
-          onDeliveryDateChange={handleDeliveryDateChange}
-          contractSpecsQuery={contractSpecsQuery}
-          previousOrderBookStateRef={previousOrderBookStateRef}
-        />
-      </OrderBookArea>
-
-      {/* Row 4: Orders and Positions List - Full width */}
-      {isConnected && (
-        <OrdersPositionsArea>
-          <OrdersPositionsTabWidget
-            orders={participantData?.data?.orders || []}
-            positions={positionBookData?.data?.positions || []}
-            ordersLoading={isParticipantLoading}
-            positionsLoading={isPositionBookLoading}
-            participantAddress={address}
-            onClosePosition={closePositionModal.handleClosePosition}
-            participantData={participantData?.data}
-            minMargin={minMargin}
-          />
-        </OrdersPositionsArea>
-      )}
-
-      {/* Close Position Info Modal */}
-      <ClosePositionModal
-        isOpen={closePositionModal.showModal}
-        pendingClosePosition={closePositionModal.pendingClosePosition}
-        onConfirm={closePositionModal.handleConfirm}
-        onCancel={closePositionModal.handleCancel}
-        doNotShowAgain={closePositionModal.doNotShowAgain}
-        onDoNotShowAgainChange={closePositionModal.setDoNotShowAgain}
-      />
-    </FuturesContainer>
+    </>
   );
 };
 
-// Grid Container with explicit grid structure
+// 3-column grid: Chart (65%) | Order Book (35%) | Right Panel (fixed 340px)
+//
+// The right panel's width is the floor the Place Order toggles need to sit on
+// one line: Limit/Market · GTC/IOC/FOK · leverage plus the widget's 1rem side
+// padding come to ~325px at the toggles' 12px type. It no longer narrows at
+// the 1400/1100px breakpoints, because at 300px or less that row wrapped.
+//
+// The market row (chart + order book) is a definite track, not `auto`. The
+// right panel spans rows 2–3, and when a spanning item is taller than the rows
+// it spans, the grid hands the excess to its spanned `auto` tracks equally — so
+// every line the Place Order form gained or lost (a summary row appearing) used
+// to move the chart and the book by half that amount. A definite track takes
+// no share; all of it goes to the tables row beneath. The height follows the
+// viewport within the bounds the two widgets were designed for, and the chart
+// canvas fills whatever it gets.
 const FuturesContainer = styled("div")`
+  --market-row: clamp(350px, 58vh, 540px);
+
   display: grid;
-  grid-template-columns: 3fr 2fr;
-  grid-auto-rows: auto;
-  gap: 1.5rem;
+  grid-template-columns: minmax(0, 13fr) minmax(0, 7fr) 300px;
+  grid-template-rows: auto var(--market-row) auto;
+  gap: 1rem;
   width: 100%;
   margin-top: 10px;
+  align-items: start;
 
-  /* Medium screens: Adjust column ratio for better fit */
-  @media (max-width: 1400px) {
-    grid-template-columns: 3fr 2fr;
-  }
-
-  /* Tablet: Stack in single column */
+  /* Tablet: collapse to single column */
   @media (max-width: 1024px) {
     grid-template-columns: 1fr;
+    grid-template-rows: auto;
   }
 `;
 
-// Balance Widget - Row 1, Column 1 (60% width)
-const BalanceWidgetArea = styled("div")`
-  grid-column: 1;
+// Row 1, all 3 columns
+const TradingHeaderArea = styled("div")`
+  grid-column: 1 / -1;
   grid-row: 1;
-  width: 100%;
-  min-width: 0;
-
-  > * {
-    width: 100%;
-    height: 100%;
-  }
-
-  @media (max-width: 1024px) {
-    grid-column: 1;
-    grid-row: auto;
-  }
 `;
 
-// Stats Widget - Row 1, Column 2 (40% width)
-const StatsWidgetArea = styled("div")`
-  grid-column: 2;
-  grid-row: 1;
-  width: 100%;
-  min-width: 0;
-
-  > * {
-    width: 100%;
-    height: 100%;
-  }
-
-  @media (max-width: 1024px) {
-    grid-column: 1;
-    grid-row: auto;
-  }
-`;
-
-// Chart Area - Row 2, Column 1 (60% width)
+// Row 2, Col 1: Chart — fills the market row (see FuturesContainer)
 const ChartArea = styled("div")`
   grid-column: 1;
   grid-row: 2;
-  width: 100%;
-  min-width: 0;
-
-  > * {
-    width: 100%;
-  }
-
-  @media (max-width: 1024px) {
-    grid-column: 1;
-    grid-row: auto;
-  }
-`;
-
-// Place Order Area - Row 3, Column 1 (60% width)
-const PlaceOrderArea = styled("div")`
-  grid-column: 1;
-  grid-row: 3;
-  width: 100%;
-  min-width: 0;
-
-  > * {
-    width: 100%;
-  }
-
-  @media (max-width: 1024px) {
-    grid-column: 1;
-    grid-row: auto;
-  }
-`;
-
-// Order Book Area - Rows 2-3, Column 2 (40% width, spans 2 rows)
-const OrderBookArea = styled("div")<{ $isConnected: boolean }>`
-  grid-column: 2;
-  grid-row: ${(props) => (props.$isConnected ? "2 / 4" : "2 / 3")};
-  width: 100%;
   min-width: 0;
   height: 100%;
 
@@ -335,15 +565,123 @@ const OrderBookArea = styled("div")<{ $isConnected: boolean }>`
   @media (max-width: 1024px) {
     grid-column: 1;
     grid-row: auto;
-    height: auto;
   }
 `;
 
-// Orders and Positions Area - Row 4, Full width
+// Row 2, Col 2: Order Book
+// Stretches to the market row so the two blocks line up. The floor and cap
+// bracket the row's own bounds on desktop and only bite on the tablet stack,
+// where the row is content-sized: a 437px floor so the book never collapses
+// to a few records, and no cap.
+//
+// The child is absolutely positioned to fill this area so its own content never
+// contributes to grid sizing. Without this the tall Trades list and the
+// internally scrolled order book would ask for different heights per tab; with
+// it the book fills the row identically across tabs, modes, and data density.
+const OrderBookArea = styled("div")`
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+  position: relative;
+  align-self: stretch;
+
+  > * {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  @media (max-width: 1024px) {
+    grid-column: 1;
+    grid-row: auto;
+    position: static;
+    max-height: none;
+
+    > * {
+      position: static;
+    }
+  }
+`;
+
+// Col 3, spans rows 2 and 3 — stretches to fill full combined height
+const RightPanelArea = styled("div")`
+  grid-column: 3;
+  grid-row: 2 / 4;
+  align-self: stretch;
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  overflow-y: auto;
+  /* The panel is a fixed narrow column: anything inside that runs wider than it
+     is clipped rather than allowed to open a horizontal scrollbar. */
+  overflow-x: hidden;
+  border: 1px solid ${tokens.border.muted04};
+  border-radius: 8px;
+
+  /* All children: strip individual borders and blend into panel */
+  > * {
+    border: none !important;
+    border-radius: 0 !important;
+    border-bottom: 1px solid ${tokens.border.muted02} !important;
+
+    &:last-child {
+      border-bottom: none !important;
+    }
+  }
+
+  /* Balance widget: fixed, does not grow */
+  > *:first-of-type {
+    flex-shrink: 0;
+  }
+
+  /* PlaceOrderWidget: grows to fill remaining space */
+  > *:nth-of-type(2) {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* Order Information: fixed, does not grow */
+  > *:last-child {
+    flex-shrink: 0;
+  }
+
+  @media (max-width: 1024px) {
+    grid-column: 1;
+    grid-row: auto;
+    /* Both axes, not just y: leaving overflow-x hidden here would force the
+       visible overflow-y back to auto and make the stacked panel a scroller. */
+    overflow: visible;
+    align-self: auto;
+
+    > *:nth-of-type(2) {
+      flex: none;
+    }
+  }
+`;
+
+// Order Information block — blank placeholder at bottom of right panel
+const _OrderInfoSection = styled("div")`
+  padding: 0.875rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+`;
+
+const _OrderInfoTitle = styled("div")`
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: ${tokens.text.secondary};
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+`;
+
+// Row 3, Col 1+2 only (right panel column continues alongside)
 const OrdersPositionsArea = styled("div")`
-  grid-column: 1 / -1;
-  grid-row: 4;
-  width: 100%;
+  grid-column: 1 / 3;
+  grid-row: 3;
   min-width: 0;
 
   > * {

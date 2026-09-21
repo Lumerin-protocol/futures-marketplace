@@ -1,4 +1,5 @@
 import styled from "@mui/material/styles/styled";
+import { tokens } from "../styles/tokens";
 
 export const ModalBox = styled("div")`
   padding: 40px;
@@ -14,7 +15,7 @@ export const NetworkBox = styled(ModalBox)`
   display: block;
   padding: 80px 40px;
   h3 {
-    font-size: 1.75rem;
+    font-size: 1.25rem;
     font-weight: 600;
     margin-bottom: 1rem;
   }
@@ -24,16 +25,32 @@ export const NetworkBox = styled(ModalBox)`
   }
 `;
 
-export const ModalCard = styled("div")`
-  background: black radial-gradient(circle, rgba(0, 0, 0, 0.1) 36%, rgba(255, 255, 255, 0.1) 100%);
-  border: rgba(171, 171, 171, 1) 1px solid;
-  color: #fff;
-  border-radius: 20px;
+export const ModalCard = styled("div")<{ $compact?: boolean }>`
+  background: ${tokens.modal.bg};
+  border: 1px solid ${tokens.border.default};
+  color: ${tokens.text.onDark};
+  border-radius: ${tokens.radius.md};
   display: flex;
   flex-direction: column;
   margin: 3rem auto;
-  max-width: 600px;
-  padding: 2rem 4rem 4rem;
+  max-width: ${(p) => (p.$compact ? "460px" : "600px")};
+  padding: ${(p) => (p.$compact ? "2rem" : "2rem 4rem 4rem")};
+  box-shadow: ${tokens.shadow.level3};
+
+  /* Compact cards pin the close button to the corner so it does not push the
+     title down and the content starts at the same offset on every side. */
+  ${(p) =>
+    p.$compact &&
+    `
+    position: relative;
+
+    .close {
+      position: absolute;
+      top: 1.25rem;
+      right: 1.25rem;
+      margin-left: 0;
+    }
+  `}
 
   @media (max-width: 600px) {
     padding: 1rem 2rem 2rem;
@@ -49,11 +66,11 @@ export const ModalCard = styled("div")`
   }
 
   h2 {
-    font-size: 2rem;
+    font-size: 1.25rem;
     font-weight: 500;
     padding-bottom: 1rem;
     @media (max-width: 600px) {
-      font-size: 1.5rem;
+      font-size: 1rem;
     }
   }
 
@@ -69,6 +86,9 @@ export const ModalCard = styled("div")`
 export const ContractLink = styled("a")`
   font-size: 0.8rem;
   margin-bottom: 1rem;
-  color: #fff;
+  color: ${tokens.brand.blue};
   font-weight: 500;
+  &:hover {
+    color: ${tokens.brand.blueDark};
+  }
 `;

@@ -1,79 +1,73 @@
+import { tokens } from "../../../styles/tokens";
 import styled from "@mui/material/styles/styled";
-import { SmallWidget } from "../../Cards/Cards.styled";
 import type { HistoricalOrder } from "../../../hooks/data/useHistoricalOrders";
+import { DateTimeCell } from "../../DateTimeCell";
+import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { LoadMoreButton } from "../../LoadMoreButton";
+import { LiquidationChip, formatLiquidatedQty, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
 
 interface HistoricalOrdersListWidgetProps {
   orders: HistoricalOrder[];
   isLoading?: boolean;
+  hasMore?: boolean;
+  isFetchingMore?: boolean;
+  onLoadMore?: () => void;
 }
 
-export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrdersListWidgetProps) => {
+export const HistoricalOrdersListWidget = ({
+  orders,
+  isLoading,
+  hasMore = false,
+  isFetchingMore,
+  onLoadMore,
+}: HistoricalOrdersListWidgetProps) => {
   const formatPrice = (price: bigint) => {
-    return (Number(price) / 1e6).toFixed(2);
+    return (Number(price) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   };
 
-  const formatDeliveryDate = (deliveryDate: bigint) => {
-    const date = new Date(Number(deliveryDate) * 1000);
-    return date.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  const formatStatus = (status: string) => {
+    switch (status) {
+      case "ACTIVE":
+        return "Active";
+      case "FILLED":
+        return "Filled";
+      case "PARTIALLY_FILLED":
+        return "Partially Filled";
+      case "CANCELLED":
+        return "Cancelled";
+      case "LIQUIDATED":
+        return "Liquidated";
+      case "EXPIRED":
+        return "Expired";
+      default:
+        return status;
+    }
   };
 
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(Number(timestamp) * 1000);
-    return date.toLocaleString("en-US", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "ACTIVE":
+        return tokens.trading.long;
+      case "FILLED":
+        return tokens.text.muted;
+      case "PARTIALLY_FILLED":
+        return tokens.trading.warning;
+      case "CANCELLED":
+        return tokens.trading.short;
+      case "LIQUIDATED":
+        return tokens.status.error;
+      case "EXPIRED":
+        return tokens.text.muted;
+      default:
+        return tokens.text.muted;
+    }
   };
-
-  // Group orders by type, pricePerDay, and deliveryAt
-  const groupedOrders = orders.reduce(
-    (acc, order) => {
-      const key = `${order.isBuy}-${order.pricePerDay}-${order.deliveryAt}`;
-
-      if (!acc[key]) {
-        acc[key] = {
-          isBuy: order.isBuy,
-          pricePerDay: order.pricePerDay,
-          deliveryAt: order.deliveryAt,
-          amount: 0,
-          closedAt: order.closedAt,
-          timestamp: order.timestamp,
-        };
-      }
-
-      acc[key].amount += 1;
-
-      return acc;
-    },
-    {} as Record<
-      string,
-      {
-        isBuy: boolean;
-        pricePerDay: bigint;
-        deliveryAt: bigint;
-        amount: number;
-        closedAt: string | null;
-        timestamp: string;
-      }
-    >,
-  );
-
-  const groupedOrdersArray = Object.values(groupedOrders);
 
   if (isLoading) {
     return (
       <OrdersContainer>
         <h3>Historical Orders</h3>
-        <div style={{ textAlign: "center", padding: "2rem", color: "#6b7280" }}>
+        <div style={{ textAlign: "center", padding: "2rem", color: tokens.text.muted }}>
           <p>Loading historical orders...</p>
         </div>
       </OrdersContainer>
@@ -89,44 +83,74 @@ export const HistoricalOrdersListWidget = ({ orders, isLoading }: HistoricalOrde
           <thead>
             <tr>
               <th>Contract Expiration</th>
-              <th>Type</th>
+              <th>Side</th>
               <th>Price (USDC)</th>
               <th>Quantity</th>
+              <th>Status</th>
               <th>Created</th>
-              <th>Closed</th>
+              <th>Updated</th>
             </tr>
           </thead>
           <tbody>
-            {groupedOrdersArray.map((groupedOrder, index) => (
-              <TableRow key={`${groupedOrder.isBuy}-${groupedOrder.pricePerDay}-${groupedOrder.deliveryAt}-${index}`}>
-                <td>{formatDeliveryDate(groupedOrder.deliveryAt)}</td>
+            {orders.map((order) => (
+              <TableRow
+                key={order.id}
+                style={order.wasLiquidated ? { backgroundColor: LIQUIDATION_ROW_BG } : undefined}
+              >
+                <td><DateTimeCell timestamp={order.expirationAt} /></td>
                 <td>
-                  <TypeBadge $type={groupedOrder.isBuy ? "Long" : "Short"}>
-                    {groupedOrder.isBuy ? "Long" : "Short"}
+                  <TypeBadge $type={order.isBuy ? "Long" : "Short"}>
+                    {order.isBuy ? "Long" : "Short"}
                   </TypeBadge>
                 </td>
-                <td>{formatPrice(groupedOrder.pricePerDay)}</td>
-                <td>{groupedOrder.amount}</td>
-                <td>{formatTimestamp(groupedOrder.timestamp)}</td>
-                <td>{groupedOrder.closedAt ? formatTimestamp(groupedOrder.closedAt) : "-"}</td>
+                <td>{formatPrice(order.pricePerDay)}</td>
+                <td>{order.originalQuantity}</td>
+                <td>
+                  {order.wasLiquidated ? (
+                    <LiquidationChip
+                      title={formatLiquidatedQty(
+                        order.liquidatedQuantity,
+                        order.originalQuantity - order.liquidatedQuantity,
+                      )}
+                    >
+                      {formatLiquidatedQty(
+                        order.liquidatedQuantity,
+                        order.originalQuantity - order.liquidatedQuantity,
+                      )}
+                    </LiquidationChip>
+                  ) : (
+                    <StatusBadge $status={order.status} $color={getStatusColor(order.status)}>
+                      {formatStatus(order.status)}
+                    </StatusBadge>
+                  )}
+                </td>
+                <td><DateTimeCell timestamp={order.timestamp} /></td>
+                <td>{order.closedAt ? <DateTimeCell timestamp={order.closedAt} /> : "-"}</td>
               </TableRow>
             ))}
           </tbody>
         </Table>
       </TableContainer>
 
-      {groupedOrdersArray.length === 0 && (
+      {orders.length === 0 ? (
         <EmptyState>
-          <p>No historical orders found in the last 30 days</p>
+          <p>No historical orders found</p>
         </EmptyState>
+      ) : (
+        <LoadMoreButton
+          hasMore={hasMore}
+          isLoading={isFetchingMore}
+          onClick={() => onLoadMore?.()}
+        />
       )}
     </OrdersContainer>
   );
 };
 
-const OrdersContainer = styled(SmallWidget)`
+// Flat section rather than a card: the tab widget already draws the border and
+// pads its content, so a SmallWidget here would nest a second card inside it.
+const OrdersContainer = styled("div")`
   width: 100%;
-  padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -135,7 +159,7 @@ const OrdersContainer = styled(SmallWidget)`
     margin: 0;
     font-size: 1.1rem;
     font-weight: 600;
-    color: #fff;
+    color: ${tokens.text.onDark};
   }
 `;
 
@@ -148,12 +172,12 @@ const TableContainer = styled("div")`
   }
   
   &::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
+    background: ${tokens.overlay.white10};
     border-radius: 2px;
   }
   
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
+    background: ${tokens.overlay.white30};
     border-radius: 2px;
   }
 `;
@@ -168,32 +192,32 @@ const Table = styled("table")`
     padding: 0.75rem 0.5rem;
     font-size: 0.75rem;
     font-weight: 600;
-    color: #a7a9b6;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: ${tokens.text.secondary};
+    border-bottom: 1px solid ${tokens.overlay.white10};
     white-space: nowrap;
     
-    &:first-child {
-      width: 200px;
-      min-width: 200px;
+    &:first-of-type {
+      width: 130px;
+      min-width: 130px;
     }
   }
   
   td {
     padding: 0.75rem 0.5rem;
     font-size: 0.875rem;
-    color: #fff;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: ${tokens.text.onDark};
+    border-bottom: 1px solid ${tokens.overlay.white05};
     
-    &:first-child {
-      width: 200px;
-      min-width: 200px;
+    &:first-of-type {
+      width: 130px;
+      min-width: 130px;
     }
   }
 `;
 
 const TableRow = styled("tr")`
   &:hover {
-    background-color: rgba(255, 255, 255, 0.02);
+    background-color: ${tokens.overlay.white02};
   }
   
   &:last-child td {
@@ -207,14 +231,24 @@ const TypeBadge = styled("span")<{ $type: string }>`
   border-radius: 4px;
   font-size: 0.75rem;
   font-weight: 600;
-  background-color: ${(props) => (props.$type === "Long" ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)")};
-  color: ${(props) => (props.$type === "Long" ? "#22c55e" : "#ef4444")};
+  background-color: ${(props) => (props.$type === "Long" ? tokens.trading.longRowBg : tokens.trading.shortRowBg)};
+  color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
+`;
+
+const StatusBadge = styled("span")<{ $status: string; $color: string }>`
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background-color: ${(props) => `${props.$color}33`};
+  color: ${(props) => props.$color};
 `;
 
 const EmptyState = styled("div")`
   text-align: center;
   padding: 2rem;
-  color: #6b7280;
+  color: ${tokens.text.muted};
   
   p {
     margin: 0;

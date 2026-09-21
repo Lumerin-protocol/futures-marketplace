@@ -13,7 +13,7 @@ export function createBot(db: Db, botToken: string) {
     ctx.reply("Welcome to the Lumerin Futures Bot!");
 
     ctx.reply(
-      "I will send you notifications when your margin balance is low, to avoid margin calls"
+      "I will send you notifications when your margin balance is low, to avoid liquidation"
     );
     await ctx.conversation.enter("collectWalletAddress");
   });
