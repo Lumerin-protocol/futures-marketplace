@@ -46,7 +46,7 @@
     "futures-marketplace-abi": "link:../contracts/abi",
     "graphql": "^16.11.0",
     "graphql-request": "^7.2.0",
-    "konekt": "0.2.0",
+    "konekt": "0.2.1",
     "konekt-ui": "0.3.0",
     "lightweight-charts": "^5.2.1",
     "next-yak": "^9.9.0",

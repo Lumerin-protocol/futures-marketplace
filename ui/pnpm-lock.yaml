@@ -60,11 +60,11 @@ importers:
         specifier: ^7.2.0
         version: 7.4.0(graphql@16.14.2)
       konekt:
-        specifier: 0.2.0
-        version: 0.2.0
+        specifier: 0.2.1
+        version: 0.2.1
       konekt-ui:
         specifier: 0.3.0
-        version: 0.3.0(konekt@0.2.0)(react@19.3.0)(viem@2.54.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))(wagmi@2.19.5(@tanstack/query-core@5.101.2)(@tanstack/react-query@5.101.2(react@19.3.0))(@types/react@19.3.0)(bufferutil@4.1.0)(debug@4.4.3(supports-color@7.2.0))(react@19.3.0)(supports-color@7.2.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(viem@2.54.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))(zod@3.25.76))
+        version: 0.3.0(konekt@0.2.1)(react@19.3.0)(viem@2.54.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))(wagmi@2.19.5(@tanstack/query-core@5.101.2)(@tanstack/react-query@5.101.2(react@19.3.0))(@types/react@19.3.0)(bufferutil@4.1.0)(debug@4.4.3(supports-color@7.2.0))(react@19.3.0)(supports-color@7.2.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(viem@2.54.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))(zod@3.25.76))
       lightweight-charts:
         specifier: ^5.2.1
         version: 5.2.1
@@ -3159,8 +3159,8 @@ packages:
       wagmi:
         optional: true
 
-  konekt@0.2.0:
-    resolution: {integrity: sha512-NLHB+Yw7EKnw/Int0Cu4P6zWPp7UOB80JWwBO6lnLtcMJa4y3Y6rcuAmpP1IWhe1EkQr6wkAtNWoEmY0/mN/cw==}
+  konekt@0.2.1:
+    resolution: {integrity: sha512-9ZCzLpVZ6ciHGCoJyUtDjmI9demSs4gsL/meHH/K+beCvl6HjdnyYnLjhteNMLHwM6Ei/Kez7Yo6SS+N0LxSDQ==}
 
   levn@0.4.1:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
@@ -5969,7 +5969,7 @@ snapshots:
 
   '@scure/bip32@1.7.0':
     dependencies:
-      '@noble/curves': 1.9.1
+      '@noble/curves': 1.9.7
       '@noble/hashes': 1.8.0
       '@scure/base': 1.2.6
 
@@ -8651,16 +8651,16 @@ snapshots:
 
   keyvaluestorage-interface@1.0.0: {}
 
-  konekt-ui@0.3.0(konekt@0.2.0)(react@19.3.0)(viem@2.54.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))(wagmi@2.19.5(@tanstack/query-core@5.101.2)(@tanstack/react-query@5.101.2(react@19.3.0))(@types/react@19.3.0)(bufferutil@4.1.0)(debug@4.4.3(supports-color@7.2.0))(react@19.3.0)(supports-color@7.2.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(viem@2.54.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))(zod@3.25.76)):
+  konekt-ui@0.3.0(konekt@0.2.1)(react@19.3.0)(viem@2.54.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))(wagmi@2.19.5(@tanstack/query-core@5.101.2)(@tanstack/react-query@5.101.2(react@19.3.0))(@types/react@19.3.0)(bufferutil@4.1.0)(debug@4.4.3(supports-color@7.2.0))(react@19.3.0)(supports-color@7.2.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(viem@2.54.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))(zod@3.25.76)):
     dependencies:
       react: 19.3.0
       uqr: 0.1.3
     optionalDependencies:
-      konekt: 0.2.0
+      konekt: 0.2.1
       viem: 2.54.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
       wagmi: 2.19.5(@tanstack/query-core@5.101.2)(@tanstack/react-query@5.101.2(react@19.3.0))(@types/react@19.3.0)(bufferutil@4.1.0)(debug@4.4.3(supports-color@7.2.0))(react@19.3.0)(supports-color@7.2.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(viem@2.54.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))(zod@3.25.76)
 
-  konekt@0.2.0:
+  konekt@0.2.1:
     dependencies:
       '@noble/ciphers': 1.3.0
       '@noble/curves': 1.9.7
