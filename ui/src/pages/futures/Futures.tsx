@@ -345,7 +345,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       contractSpecsQuery={contractSpecsQuery}
       currentPrice={currentPriceFormatted}
       priceChange={visiblePriceChange}
-      fundingRate={fundingRateQuery.data?.formattedRate ?? "0%"}
+      fundingRate={fundingRateQuery.data?.formattedRate}
       totalVolume={perpsCollectionQuery.data?.data?.totalVolume}
       selectedExpirationAt={selectedExpirationAt}
       liqPrice={liqPrice}

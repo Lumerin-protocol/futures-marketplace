@@ -59,7 +59,7 @@ export const TradingHeader = ({
   contractSpecsQuery,
   currentPrice,
   priceChange,
-  fundingRate = "0%",
+  fundingRate = "—",
   totalVolume,
   selectedExpirationAt,
   liqPrice,
