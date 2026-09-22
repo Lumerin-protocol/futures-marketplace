@@ -419,4 +419,8 @@ const DetailsLink = styled("a")`
   &:hover {
     color: ${tokens.text.onDark};
   }
+
+  @media (max-width: 768px) {
+    line-height: 0;
+  }
 `;
