@@ -22,7 +22,7 @@ const FUNDING_SCALE = 10n ** 18n;
  */
 export const useFundingRate = () => {
   const orderBook = usePerpsOrderBook();
-  const { fundingRateMaxBps } = usePerpsContractConstants();
+  const { fundingRateMaxBps, fundingPeriodSeconds } = usePerpsContractConstants();
 
   const indexPriceQuery = useReadContract({
     address: process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`,
@@ -71,9 +71,22 @@ export const useFundingRate = () => {
 
   return {
     data,
+    /// The window the rate is quoted over (`fundingPeriod`). The rate is not
+    /// charged in discrete chunks at that cadence — the accumulator accrues
+    /// continuously, pro rata by elapsed time — so this is a unit, not a
+    /// settlement schedule.
+    periodLabel: fundingPeriodSeconds ? formatFundingPeriod(fundingPeriodSeconds) : undefined,
     isLoading: orderBook.isLoading || indexPriceQuery.isLoading,
     isError: orderBook.isError || indexPriceQuery.isError,
   };
+};
+
+export const formatFundingPeriod = (seconds: number) => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h`;
+  return `${minutes}m`;
 };
 
 /// Highest bid and lowest ask with resting size, matching the contract's

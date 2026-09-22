@@ -29,6 +29,9 @@ interface TradingHeaderProps {
   /// render a green (up) / red (down) delta next to the current price.
   priceChange?: { delta: number; pct: number | null } | null;
   fundingRate?: string;
+  /// Window the funding rate is quoted over, e.g. "24h". Read off the contract
+  /// rather than assumed, since `fundingPeriod` is an owner-set parameter.
+  fundingPeriodLabel?: string;
   totalVolume?: string;
   /// Currently-selected expiration (unix seconds). Used to surface the pinned
   /// cash-settlement price once that expiration has matured and been settled.
@@ -60,6 +63,7 @@ export const TradingHeader = ({
   currentPrice,
   priceChange,
   fundingRate = "—",
+  fundingPeriodLabel,
   totalVolume,
   selectedExpirationAt,
   liqPrice,
@@ -137,6 +141,23 @@ export const TradingHeader = ({
     );
   };
 
+  /// Funding is quoted over `fundingPeriod` but accrues continuously, which the
+  /// bare percentage reads as if it were a periodic charge — hence the unit in
+  /// the label and the tooltip.
+  const renderFundingStat = () => (
+    <Tooltip
+      title={`Order-book mid against the index price${
+        fundingPeriodLabel ? `, per ${fundingPeriodLabel}` : ""
+      }. Accrues continuously; longs pay shorts when positive.`}
+      arrow
+    >
+      <StatItem>
+        <StatValue>{fundingRate}</StatValue>
+        <StatLabel>Funding Rate{fundingPeriodLabel ? ` (${fundingPeriodLabel})` : ""}</StatLabel>
+      </StatItem>
+    </Tooltip>
+  );
+
   const renderPriceChange = () => {
     if (!priceChange) return null;
     const isUp = priceChange.delta >= 0;
@@ -186,10 +207,7 @@ export const TradingHeader = ({
               {renderHashPriceStat()}
               {renderLiquidationStat()}
               <Divider />
-              <StatItem>
-                <StatValue>{fundingRate}</StatValue>
-                <StatLabel>Funding Rate</StatLabel>
-              </StatItem>
+              {renderFundingStat()}
               {totalVolume && (
                 <>
                   <Divider />
