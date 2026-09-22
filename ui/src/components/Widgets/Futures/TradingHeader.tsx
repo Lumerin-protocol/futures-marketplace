@@ -273,6 +273,8 @@ const ModeRow = styled("div")`
   justify-content: space-between;
   gap: 0.5rem;
   flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
 `;
 
 const StatsRow = styled("div")`
@@ -296,6 +298,10 @@ const StatValue = styled("span")`
   font-weight: 600;
   color: ${tokens.text.onDark};
   line-height: 1.2;
+
+  @media (max-width: 768px) {
+    font-size: 0.75rem;
+  }
 `;
 
 const PriceChange = styled("span")<{ $up: boolean }>`
