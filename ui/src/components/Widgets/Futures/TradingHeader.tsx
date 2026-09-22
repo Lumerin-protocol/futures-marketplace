@@ -82,6 +82,17 @@ export const TradingHeader = ({
     settlementPriceRaw && settlementPriceRaw > 0n
       ? (Number(settlementPriceRaw) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)
       : null;
+  const hasLiquidation = isUnderwater || liqPrice !== undefined;
+  const liquidationTooltip = describeLiquidationLevel({
+    price: liqPrice,
+    direction: liqDirection,
+    isUnderwater,
+  });
+  const liquidationValue = isUnderwater
+    ? "Liquidatable"
+    : liqPrice !== undefined
+      ? `${liqDirection === "up" ? "↑" : "↓"} ${(Number(liqPrice) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)}`
+      : null;
 
   const formatSpeed = (contractSizeHpsDay: bigint) => `${formatHashratePHPS(contractSizeHpsDay).full} per day`;
 
@@ -92,7 +103,7 @@ export const TradingHeader = ({
           {currentPrice ?? "—"}
           {renderPriceChange()}
         </StatValue>
-        <StatLabel>Hash Price (USDC)</StatLabel>
+        <StatLabel>Hash Price</StatLabel>
       </StatItem>
     </Tooltip>
   );
@@ -103,19 +114,13 @@ export const TradingHeader = ({
   /// in both contract modes. A flat account has no level and the stat is dropped
   /// rather than rendered as a placeholder.
   const renderLiquidationStat = () => {
-    const tooltip = describeLiquidationLevel({
-      price: liqPrice,
-      direction: liqDirection,
-      isUnderwater,
-    });
-
     if (isUnderwater) {
       return (
         <>
           <Divider />
-          <Tooltip title={tooltip} arrow>
+          <Tooltip title={liquidationTooltip} arrow>
             <StatItem>
-              <StatValue style={{ color: tokens.trading.short }}>Liquidatable</StatValue>
+              <StatValue style={{ color: tokens.trading.short }}>{liquidationValue}</StatValue>
               <StatLabel>Liquidation</StatLabel>
             </StatItem>
           </Tooltip>
@@ -128,13 +133,10 @@ export const TradingHeader = ({
     return (
       <>
         <Divider />
-        <Tooltip title={tooltip} arrow>
+        <Tooltip title={liquidationTooltip} arrow>
           <StatItem>
-            <StatValue>
-              {liqDirection === "up" ? "↑" : "↓"}{" "}
-              {(Number(liqPrice) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)}
-            </StatValue>
-            <StatLabel>Liquidation (USDC)</StatLabel>
+            <StatValue>{liquidationValue}</StatValue>
+            <StatLabel>Liquidation</StatLabel>
           </StatItem>
         </Tooltip>
       </>
@@ -172,6 +174,28 @@ export const TradingHeader = ({
     );
   };
 
+  const renderMobileMarketStat = () => (
+    <MobileMarketStat>
+      <StatValue>
+        <Tooltip title="Underlying price" arrow>
+          <span>
+            {currentPrice ?? "—"}
+            {renderPriceChange()}
+          </span>
+        </Tooltip>
+        {hasLiquidation && (
+          <>
+            {" / "}
+            <Tooltip title={liquidationTooltip} arrow>
+              <span style={isUnderwater ? { color: tokens.trading.short } : undefined}>{liquidationValue}</span>
+            </Tooltip>
+          </>
+        )}
+      </StatValue>
+      <StatLabel>{hasLiquidation ? "Hash Price / Liquidation" : "Hash Price"}</StatLabel>
+    </MobileMarketStat>
+  );
+
   const marketSelector = (
     <MarketSelector
       contractMode={contractMode}
@@ -204,8 +228,11 @@ export const TradingHeader = ({
         <StatsRow>
           {contractMode === "perpetual" ? (
             <>
-              {renderHashPriceStat()}
-              {renderLiquidationStat()}
+              <DesktopMarketStats>
+                {renderHashPriceStat()}
+                {renderLiquidationStat()}
+              </DesktopMarketStats>
+              {renderMobileMarketStat()}
               <Divider />
               {renderFundingStat()}
               {totalVolume && (
@@ -220,8 +247,11 @@ export const TradingHeader = ({
             </>
           ) : (
             <>
-              {renderHashPriceStat()}
-              {renderLiquidationStat()}
+              <DesktopMarketStats>
+                {renderHashPriceStat()}
+                {renderLiquidationStat()}
+              </DesktopMarketStats>
+              {renderMobileMarketStat()}
               {contractSpecs?.data && (
                 <>
                   <Divider />
@@ -236,7 +266,7 @@ export const TradingHeader = ({
                   <Divider />
                   <StatItem>
                     <StatValue>{settlementPrice}</StatValue>
-                    <StatLabel>Exit Price (USDC)</StatLabel>
+                    <StatLabel>Exit Price</StatLabel>
                   </StatItem>
                 </>
               )}
@@ -291,6 +321,8 @@ const ModeRow = styled("div")`
   justify-content: space-between;
   gap: 0.5rem;
   flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
 `;
 
 const StatsRow = styled("div")`
@@ -298,12 +330,34 @@ const StatsRow = styled("div")`
   align-items: center;
   gap: 1rem;
   flex: 1;
+
+  @media (max-width: 768px) {
+    flex: 1 1 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+
+    &::after {
+      content: "";
+      width: 100%;
+      height: 1px;
+      background: ${tokens.border.muted03};
+    }
+  }
 `;
 
 const StatItem = styled("div")`
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
+
+  @media (max-width: 768px) {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    width: 100%;
+  }
 `;
 
 /* Deliberately a step under the market selector's label: these are facts about
@@ -314,6 +368,11 @@ const StatValue = styled("span")`
   font-weight: 600;
   color: ${tokens.text.onDark};
   line-height: 1.2;
+
+  @media (max-width: 768px) {
+    font-size: 0.75rem;
+    text-align: right;
+  }
 `;
 
 const PriceChange = styled("span")<{ $up: boolean }>`
@@ -329,6 +388,10 @@ const StatLabel = styled("span")`
   color: ${tokens.text.secondary};
   text-transform: uppercase;
   letter-spacing: 0.04em;
+
+  @media (max-width: 768px) {
+    order: -1;
+  }
 `;
 
 const Divider = styled("div")`
@@ -336,6 +399,27 @@ const Divider = styled("div")`
   height: 28px;
   background: ${tokens.border.muted03};
   flex-shrink: 0;
+
+  @media (max-width: 768px) {
+    width: 100%;
+    height: 1px;
+  }
+`;
+
+const DesktopMarketStats = styled("div")`
+  display: contents;
+
+  @media (max-width: 768px) {
+    display: none;
+  }
+`;
+
+const MobileMarketStat = styled(StatItem)`
+  display: none;
+
+  @media (max-width: 768px) {
+    display: flex;
+  }
 `;
 
 const DetailsLink = styled("a")`
@@ -352,5 +436,9 @@ const DetailsLink = styled("a")`
 
   &:hover {
     color: ${tokens.text.onDark};
+  }
+
+  @media (max-width: 768px) {
+    line-height: 0;
   }
 `;
