@@ -366,7 +366,7 @@ const PerpetualStatistics = () => {
         <SectionTitle>FUNDING</SectionTitle>
         <SpecItem>
           <SpecLabel>Current Funding Rate</SpecLabel>
-          <SpecValue>{fundingRateQuery.data?.formattedRate ?? "0%"}</SpecValue>
+          <SpecValue>{fundingRateQuery.data?.formattedRate ?? "—"}</SpecValue>
         </SpecItem>
 
         {perpsConstants.fundingPeriodSeconds !== null && (
