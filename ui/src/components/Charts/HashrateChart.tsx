@@ -69,6 +69,7 @@ const formatHashrate = (value: number): string => `${value.toFixed(2)} EH/s`;
 
 const PeriodSwitch = styled("div")`
   display: flex;
+  flex-shrink: 0;
   gap: 0;
   border: 1px solid ${tokens.border.default};
   border-radius: 6px;
@@ -80,6 +81,8 @@ const PeriodButton = styled("button")<{ $active: boolean }>`
   background: ${(props) => (props.$active ? tokens.surface.tabActive : "transparent")};
   color: ${tokens.text.onDark};
   border: none;
+  min-height: 2.125rem;
+  font-family: inherit;
   font-size: 0.875rem;
   /* Pinned rather than left at normal so the height does not depend on the
      inherited font's metrics: the icon variant below sizes itself off this. */
@@ -103,7 +106,9 @@ const PeriodButton = styled("button")<{ $active: boolean }>`
 const ModeButton = styled(PeriodButton)`
   display: inline-flex;
   align-items: center;
-  padding: 0.5rem 0.625rem;
+  justify-content: center;
+  width: 2.125rem;
+  padding: 0;
 
   /* Sized via font-size, which resolves against the button, so MUI's own
      width/height of 1em lands on the text buttons' line box. Setting the
@@ -119,6 +124,12 @@ const SwitchGroup = styled("div")`
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+
+  @media (max-width: 768px) {
+    justify-content: center;
+    width: 100%;
+    flex-wrap: nowrap;
+  }
 `;
 
 const ChartTitle = styled("div")`
@@ -140,12 +151,25 @@ const ChartControls = styled("div")`
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 1rem;
+
+  @media (max-width: 768px) {
+    padding-inline: 0.5rem;
+    gap: 0.75rem;
+  }
 `;
 
 const Legend = styled("div")`
   display: flex;
   align-items: center;
   gap: 1rem;
+
+  @media (max-width: 768px) {
+    justify-content: center;
+    width: 100%;
+    column-gap: 0.75rem;
+    row-gap: 0.5rem;
+    flex-wrap: wrap;
+  }
 `;
 
 const LegendItem = styled("div")`
@@ -154,6 +178,7 @@ const LegendItem = styled("div")`
   gap: 6px;
   color: ${tokens.text.primary};
   font-size: 0.8125rem;
+  white-space: nowrap;
 `;
 
 const LegendButton = styled(LegendItem.withComponent("button"))`

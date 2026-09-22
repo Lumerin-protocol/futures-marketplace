@@ -277,21 +277,28 @@ locals {
   marketplace_origin_domain = var.apex_site == "hold" ? one(aws_s3_bucket.apex_hold[*].bucket_regional_domain_name) : one(aws_s3_bucket.marketplace[*].bucket_regional_domain_name)
   marketplace_origin_oac_id = var.apex_site == "hold" ? one(aws_cloudfront_origin_access_control.apex_hold[*].id) : one(aws_cloudfront_origin_access_control.marketplace[*].id)
   marketplace_origin_id     = var.apex_site == "hold" ? "${var.account_shortname}-${local.s3_cf_origin}-hold" : "${var.account_shortname}-${local.s3_cf_origin}"
-  # beta: drop the apex alias here so the beta distribution can take it.
-  marketplace_aliases = var.apex_site == "beta" ? [] : [local.hp_dns["exc"].name]
-  # beta: apex DNS follows the beta distribution. app and hold stay on this one.
+  # app: this distribution owns the apex name.
+  # hold: leave the name on the existing coming-soon distribution.
+  # beta: drop it here so the beta distribution can take it.
+  marketplace_aliases = var.apex_site == "app" ? [local.hp_dns["exc"].name] : []
+  # beta: apex DNS follows the beta distribution. app stays on this one.
+  # hold does not write the apex record (see aws_route53_record.marketplace).
   apex_dns_name    = coalesce(var.apex_site == "beta" ? one(aws_cloudfront_distribution.beta_alias[*].domain_name) : null, one(aws_cloudfront_distribution.marketplace[*].domain_name), "unused.cloudfront.net")
   apex_dns_zone_id = coalesce(var.apex_site == "beta" ? one(aws_cloudfront_distribution.beta_alias[*].hosted_zone_id) : null, one(aws_cloudfront_distribution.marketplace[*].hosted_zone_id), "Z2FDTNDATAQYW2")
 }
 
-########## DNS — apex of the Hashpower zone → CloudFront (same hostname as public URL)
+########## DNS — apex of the Hashpower zone → CloudFront
+# special-dns is the workload account on dev and titanio-net on lmn.
+# hold does not write this record: the apex A/AAAA already point at the
+# coming-soon distribution in the titanio-net zone.
 resource "aws_route53_record" "marketplace" {
-  count      = var.create_core ? 1 : 0
-  provider   = aws.special-dns
-  depends_on = [aws_cloudfront_distribution.beta_alias]
-  zone_id    = local.hp_dns["exc"].zone_id
-  name       = ""
-  type       = "A"
+  count           = var.create_core && var.apex_site != "hold" ? 1 : 0
+  provider        = aws.special-dns
+  allow_overwrite = true
+  depends_on      = [aws_cloudfront_distribution.beta_alias]
+  zone_id         = local.hp_dns["exc"].zone_id
+  name            = ""
+  type            = "A"
   alias {
     name                   = local.apex_dns_name
     zone_id                = local.apex_dns_zone_id
