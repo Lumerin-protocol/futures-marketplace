@@ -67,9 +67,11 @@ resource "aws_secretsmanager_secret_version" "futures" {
     # AWS deployment configuration (auto-populated by Terraform)
     # These values are read by GitHub Actions to prevent manual transcription errors
     deployment = {
-      s3_bucket                  = var.create_core ? aws_s3_bucket.marketplace[0].id : ""
-      cloudfront_distribution_id = var.create_core ? aws_cloudfront_distribution.marketplace[0].id : ""
-      marketplace_url            = var.create_core ? "https://${local.hp_dns["exc"].name}" : ""
+      s3_bucket = var.create_core ? aws_s3_bucket.marketplace[0].id : ""
+      # hold and beta: invalidate the beta distribution (the apex alias lives there after cutover).
+      # app: keep invalidating the apex distribution, including when a beta alias also exists.
+      cloudfront_distribution_id = coalesce(contains(["hold", "beta"], var.apex_site) ? one(aws_cloudfront_distribution.beta_alias[*].id) : null, one(aws_cloudfront_distribution.marketplace[*].id), "")
+      marketplace_url            = var.apex_site == "hold" && var.beta_alias.create ? "https://${var.beta_alias.hostname}" : "https://${local.hp_dns["exc"].name}"
       aws_region                 = var.default_region
       environment                = var.account_lifecycle
     }

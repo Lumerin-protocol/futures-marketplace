@@ -36,7 +36,6 @@ const PERPS_INVENTORY: Row[] = [
   ["collection", "constants"],
   ["book", "market"],
   ["recentTrades", "market"],
-  ["funding", "market"],
   ["myOrders", "account"],
   ["sessions", "account"],
   ["liquidations", "account"],

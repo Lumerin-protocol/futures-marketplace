@@ -131,23 +131,6 @@ export const perpsSlices = defineSlices({
 
   recentTrades: commonSlices.recentTrades,
 
-  /** The newest funding update; the rate shown in the header. */
-  funding: {
-    alias: "funding",
-    group: "market",
-    cacheKey: `["FundingRate"]`,
-    vars: {},
-    field: `
-    funding: fundingUpdates(first: 1, orderBy: timestamp, orderDirection: desc) {
-      blockNumber
-      cumulativeFundingPerUnit
-      fundingRate
-      id
-      timestamp
-      transactionHash
-    }`,
-  },
-
   // --- account -----------------------------------------------------------
 
   myOrders: {
@@ -311,8 +294,6 @@ export const perpsSlices = defineSlices({
 export const PerpsCollectionQuery = buildDocument("PerpsCollection", [perpsSlices.collection]);
 
 export const PerpsOrderBookQuery = buildDocument("PerpsOrderBook", [perpsSlices.book]);
-
-export const FundingUpdatesQuery = buildDocument("FundingUpdates", [perpsSlices.funding]);
 
 export const UserPerpsOrdersByStatusQuery = buildDocument("UserPerpsOrdersByStatus", [
   perpsSlices.myOrders,

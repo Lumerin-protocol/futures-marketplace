@@ -10,7 +10,6 @@ import { POSITION_BOOK_QK } from "./getUserFuturesPositions";
 import { HISTORICAL_ORDERS_QK } from "./useHistoricalOrders";
 import { FUTURES_POSITION_HISTORY_QK } from "./useFuturesPositionHistory";
 import { USER_FUTURES_TRADES_QK } from "./useUserFuturesTrades";
-import { FUNDING_RATE_QK } from "./perps/useFundingRate";
 import { USER_PERPS_ORDERS_QK } from "./perps/useUserPerpsOrders";
 import { USER_POSITION_SESSIONS_QK } from "./perps/useUserPositionSessions";
 import { PERPS_ORDER_HISTORY_QK } from "./perps/usePerpsOrderHistory";
@@ -39,8 +38,6 @@ export async function refreshVenueViews(qc: QueryClient, contractMode: ContractM
   await Promise.all([
     qc.invalidateQueries({ queryKey: [getOrderBookQueryKey(contractMode)] }),
     invalidatePortfolioPnl(qc),
-    // Trading settles funding, so the displayed rate is stale after a perps tx.
-    ...(contractMode === "perpetual" ? [qc.invalidateQueries({ queryKey: [FUNDING_RATE_QK] })] : []),
     ...(address
       ? contractMode === "perpetual"
         ? [

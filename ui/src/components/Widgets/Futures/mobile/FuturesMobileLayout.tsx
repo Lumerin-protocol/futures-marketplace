@@ -84,13 +84,21 @@ const ChartToggleButton = styled.button<{ $active: boolean }>`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.35rem 0.5rem;
+  flex: 0 0 2.25rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
   border: 1px solid ${tokens.border.default};
   border-radius: ${tokens.radius.sm};
   background: ${(props) => (props.$active ? tokens.surface.tabActive : "transparent")};
   color: ${(props) => (props.$active ? tokens.text.onDark : tokens.text.secondary)};
   cursor: pointer;
   line-height: 1;
+
+  &:focus-visible {
+    outline: 2px solid ${tokens.brand.blue};
+    outline-offset: 2px;
+  }
 `;
 
 const MobileChartSlot = styled.div`

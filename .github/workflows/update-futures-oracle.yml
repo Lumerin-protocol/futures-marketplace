@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - dev
-      - stg
       - main
       - "cicd/**"
     paths:
@@ -12,7 +11,7 @@ on:
       - "config/*.env"
       - ".github/workflows/update-futures-oracle.yml"
   # On-demand: run from any branch and choose "dev" to ship that ref to DEV.
-  # stg/main stay locked to their own branches by GitHub Environment policy.
+  # main stays locked to its own branch by GitHub Environment policy.
   workflow_dispatch:
     inputs:
       environment:
@@ -21,7 +20,6 @@ on:
         type: choice
         options:
           - dev
-          - stg
           - main
 
 concurrency:
@@ -40,8 +38,50 @@ env:
   SERVICE_NAME: futures-contract-oracle
 
 jobs:
+  config-scope:
+    name: Config scope
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Skip the other environment's config
+        id: gate
+        run: |
+          # dev does not deploy when the only change is config/prd.env.
+          # main does not deploy when the only change is config/dev.env.
+          # Any other file still deploys. A manual run always deploys.
+          REF="${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags origin "$REF"
+            FILES=$(git diff --name-only "origin/${REF}...HEAD")
+          elif git cat-file -e "${{ github.event.before }}^{commit}" 2>/dev/null; then
+            FILES=$(git diff --name-only "${{ github.event.before }}" HEAD)
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          SKIP="config/prd.env"
+          [ "$REF" = "main" ] && SKIP="config/dev.env"
+          RUN=true
+          if [ -n "$FILES" ] && [ -z "$(printf '%s\n' "$FILES" | grep -vx "$SKIP" || true)" ]; then
+            RUN=false
+          fi
+          echo "run=$RUN" >> "$GITHUB_OUTPUT"
+          echo "ref=$REF skip=$SKIP run=$RUN"
+          printf '%s\n' "$FILES"
+
   setup:
     name: 🔧 Setup
+    needs: config-scope
+    if: needs.config-scope.result == 'success' && needs.config-scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     outputs:
       environment: ${{ steps.gen_tag.outputs.environment }}
@@ -110,30 +150,33 @@ jobs:
           fi
           echo "goldsky_subgraph_name=$GS_NAME" >> $GITHUB_OUTPUT
 
-          # Rolling tag, public endpoint, and the config/<name>.env to load.
-          # Goldsky name/tag/endpoint configure the deployment, not the
-          # container, so they stay as GitHub / org variables.
+          # Rolling tag and which config file to load. The public query URL
+          # is REACT_APP_SUBGRAPH_FUTURES_URL in that file.
           case $ENV in
             dev)
               echo "goldsky_rolling_tag=dev-latest" >> $GITHUB_OUTPUT
-              echo "goldsky_endpoint=${{ vars.DEV_GS_FUTURES }}" >> $GITHUB_OUTPUT
               echo "config_env=dev" >> $GITHUB_OUTPUT
-              ;;
-            stg)
-              echo "goldsky_rolling_tag=stg-latest" >> $GITHUB_OUTPUT
-              echo "goldsky_endpoint=${{ vars.STG_GS_FUTURES }}" >> $GITHUB_OUTPUT
-              echo "config_env=prd" >> $GITHUB_OUTPUT
+              CONFIG_ENV=dev
               ;;
             main)
               echo "goldsky_rolling_tag=lmn-latest" >> $GITHUB_OUTPUT
-              echo "goldsky_endpoint=${{ vars.LMN_GS_FUTURES }}" >> $GITHUB_OUTPUT
               echo "config_env=prd" >> $GITHUB_OUTPUT
+              CONFIG_ENV=prd
               ;;
             *)
-              echo "::error::Unknown environment '$ENV' (expected dev, stg, or main)"
+              echo "::error::Unknown environment '$ENV' (expected dev or main)"
               exit 1
               ;;
           esac
+
+          if [ -n "${CONFIG_ENV:-}" ]; then
+            ENDPOINT=$(grep -E '^REACT_APP_SUBGRAPH_FUTURES_URL=' "config/${CONFIG_ENV}.env" | head -1 | cut -d= -f2-)
+            if [ -z "$ENDPOINT" ]; then
+              echo "::error::REACT_APP_SUBGRAPH_FUTURES_URL is missing from config/${CONFIG_ENV}.env"
+              exit 1
+            fi
+            echo "goldsky_endpoint=$ENDPOINT" >> "$GITHUB_OUTPUT"
+          fi
 
           echo "🎯 Deploying to Goldsky: subgraph=${GS_NAME}, env=${ENV}"
 
@@ -215,7 +258,7 @@ jobs:
         id: goldsky_deploy
         working-directory: ./indexer
         env:
-          GOLDSKY_API_KEY: ${{ needs.build.outputs.environment == 'dev' && secrets.DEV_GOLDSKY_API_KEY || needs.build.outputs.environment == 'stg' && secrets.STG_GOLDSKY_API_KEY || secrets.LMN_GOLDSKY_API_KEY }}
+          GOLDSKY_API_KEY: ${{ needs.build.outputs.environment == 'dev' && secrets.DEV_GOLDSKY_API_KEY || secrets.LMN_GOLDSKY_API_KEY }}
           GOLDSKY_SUBGRAPH_NAME: ${{ needs.build.outputs.goldsky_subgraph_name }}
           SUBGRAPH_VERSION: ${{ needs.build.outputs.version }}
           GOLDSKY_ROLLING_TAG: ${{ needs.build.outputs.goldsky_rolling_tag }}
@@ -342,7 +385,7 @@ jobs:
 
           if [ -z "${GOLDSKY_ENDPOINT}" ]; then
             echo "⚠️ No Goldsky endpoint URL configured — skipping verification"
-            echo "   Set DEV_GS_FUTURES / STG_GS_FUTURES / LMN_GS_FUTURES org variable"
+            echo "   Set REACT_APP_SUBGRAPH_FUTURES_URL in config/dev.env or config/prd.env"
             exit 0
           fi
 
@@ -385,7 +428,7 @@ jobs:
     name: 🧹 Cleanup
     runs-on: ubuntu-latest
     needs: [setup, build, verify]
-    if: always() && needs.setup.outputs.is_cicd_branch != 'true'
+    if: always() && needs.setup.result != 'skipped' && needs.setup.outputs.is_cicd_branch != 'true'
 
     steps:
       - name: Checkout code
@@ -432,7 +475,7 @@ jobs:
     name: 📢 Notify
     runs-on: ubuntu-latest
     needs: [setup, build, deploy, verify, cleanup]
-    if: always()
+    if: always() && needs.setup.result != 'skipped'
 
     steps:
       - name: Checkout (for composite action)
