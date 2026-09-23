@@ -236,7 +236,7 @@ const Root = styled.span<{ $disabled: boolean; $marked: boolean }>`
   cursor: ${(p) => (p.$disabled ? "default" : "pointer")};
 
   @media print {
-    color-adjust: exact;
+    print-color-adjust: exact;
   }
 
   ${(p) =>

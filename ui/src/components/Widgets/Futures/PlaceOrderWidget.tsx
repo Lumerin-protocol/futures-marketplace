@@ -5,7 +5,7 @@ import { SliderMark } from "../../Slider";
 import { Tooltip } from "../../Tooltip";
 import { tokens } from "../../../styles/tokens";
 import { useAccount } from "wagmi";
-import { useAppKit } from "@reown/appkit/react";
+import { useWalletUi } from "../ConnectWidget";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { Spinner } from "../../Spinner.styled";
 import { ModalItem } from "../../Modal";
@@ -128,7 +128,7 @@ export const PlaceOrderWidget = ({
   const accountBalanceQuery = accountBalance ?? { data: undefined, isLoading: false };
   const { feeFor: futuresFeeFor } = useMakerTakerFees();
   const { isConnected, isConnecting, isReconnecting } = useAccount();
-  const { open: openWalletModal } = useAppKit();
+  const { openConnect } = useWalletUi();
 
   // Fee rates are per venue — futures publish theirs on the contract, perps on
   // the collection — so the reserve has to follow the order, not the widget.
@@ -884,7 +884,7 @@ export const PlaceOrderWidget = ({
     // wagmi reports disconnected while it restores a session, and opening the
     // modal then would compete with the reconnect already in flight.
     if (!isConnecting && !isReconnecting) {
-      openWalletModal({ view: "Connect" });
+      openConnect();
     }
     return false;
   };

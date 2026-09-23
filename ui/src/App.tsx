@@ -3,20 +3,21 @@ import { styled } from "next-yak";
 import { Router } from "./Router";
 import { AlertModalHost } from "./components/AlertModal";
 import useAnalytics from "./hooks/useAnalytics";
+import { Web3Provider } from "./Web3Provider";
+import { WalletUiProvider } from "./components/Widgets/ConnectWidget";
 import { tokens } from "./styles/tokens";
 
-// No Web3Provider here on purpose: wagmi/@reown/appkit stays a lazy chunk
-// (see Web3ProviderLazy.ts), mounted only at the specific spots that need
-// wallet/contract data (HeaderConnect, the trading sub-header, the page
-// bodies) — not around the whole app. That keeps the header/shell able to
-// paint immediately without waiting on that bundle at all.
 export const App: FC = () => {
   useAnalytics({ loadOn: "idle" });
   return (
-    <AppRoot>
-      <Router />
-      <AlertModalHost />
-    </AppRoot>
+    <Web3Provider>
+      <WalletUiProvider>
+        <AppRoot>
+          <Router />
+          <AlertModalHost />
+        </AppRoot>
+      </WalletUiProvider>
+    </Web3Provider>
   );
 };
 
