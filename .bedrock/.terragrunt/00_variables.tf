@@ -4,13 +4,11 @@ variable "create_core" {
   default     = false
 }
 
-# Optional human-readable alias hostname (e.g. beta.hashpower.exchange) that mirrors
-# the marketplace site. When enabled, provisions a SECOND CloudFront distribution sharing
-# the existing marketplace S3 origin, a dedicated ACM cert (us-east-1, DNS-validated against
-# the hashpower.exchange root zone in titanio-net), and an A-alias Route53 record in that
-# root zone. Intended for short-lived "press the easy button" hostnames; defaults off.
+# Optional hostname (e.g. beta.hashpower.exchange) with its own CloudFront distribution
+# on the marketplace S3 origin. While apex_site is "hold" or "beta", CI publishes
+# the UI to that distribution. Defaults off.
 variable "beta_alias" {
-  description = "Optional human-readable alias hostname mirroring the marketplace site (e.g. beta.hashpower.exchange)"
+  description = "Optional hostname (e.g. beta.hashpower.exchange) served by a second CloudFront distribution on the app bucket"
   type = object({
     create   = bool
     hostname = string # FQDN, must be a direct child of hashpower.exchange (e.g. beta.hashpower.exchange)
@@ -18,6 +16,20 @@ variable "beta_alias" {
   default = {
     create   = false
     hostname = ""
+  }
+}
+
+# app  — apex distribution serves the app bucket (dev, and any env left as it is today).
+# hold — apex distribution serves the static coming-soon bucket. UI deploys go to beta.
+# beta — cutover. Apex alias and DNS move onto the beta distribution. Requires beta_alias.create.
+variable "apex_site" {
+  description = "Where the zone apex is served from: app (apex distribution, app bucket), hold (static coming-soon page), or beta (apex hostname moves onto the beta distribution)."
+  type        = string
+  default     = "app"
+
+  validation {
+    condition     = contains(["app", "hold", "beta"], var.apex_site)
+    error_message = "apex_site must be app, hold, or beta."
   }
 }
 

@@ -497,17 +497,32 @@ resource "aws_alb_listener" "notifications_int_443_use1" {
   )
 }
 
-# Define Route53 Alias to load balancer (internal zone)
+# Public alias in the Hashpower zone. Dev zones live in the workload account.
+# LMN writes hashpower.exchange in titanio-net (aws.titanio-net).
 resource "aws_route53_record" "notifications_int_use1" {
-  count    = var.notifications_service.create ? 1 : 0
+  count    = var.notifications_service.create && !local.is_lmn ? 1 : 0
   provider = aws.use1
   zone_id  = local.hp_dns["exc"].zone_id
   name     = "${var.notifications_service["alb_name"]}${local.hp_dns["exc"].name}"
   type     = "A"
 
   alias {
-    name                   = aws_alb.notifications_int_use1[count.index].dns_name
-    zone_id                = aws_alb.notifications_int_use1[count.index].zone_id
+    name                   = aws_alb.notifications_int_use1[0].dns_name
+    zone_id                = aws_alb.notifications_int_use1[0].zone_id
+    evaluate_target_health = true
+  }
+}
+
+resource "aws_route53_record" "notifications_int_lmn" {
+  count    = var.notifications_service.create && local.is_lmn ? 1 : 0
+  provider = aws.titanio-net
+  zone_id  = local.hp_dns["exc"].zone_id
+  name     = "${var.notifications_service["alb_name"]}${local.hp_dns["exc"].name}"
+  type     = "A"
+
+  alias {
+    name                   = aws_alb.notifications_int_use1[0].dns_name
+    zone_id                = aws_alb.notifications_int_use1[0].zone_id
     evaluate_target_health = true
   }
 }

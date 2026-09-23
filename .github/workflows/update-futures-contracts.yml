@@ -15,12 +15,11 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: "Target environment (dev=DEV, stg=STG, main=LMN/PROD)"
+        description: "Target environment (dev=DEV, main=LMN/PROD)"
         required: true
         type: choice
         options:
           - dev
-          - stg
           - main
 
 concurrency:
@@ -68,9 +67,9 @@ jobs:
           ENV="${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}"
           case "$ENV" in
             dev) echo "config_env=dev" >> "$GITHUB_OUTPUT" ;;
-            stg|main) echo "config_env=prd" >> "$GITHUB_OUTPUT" ;;
+            main) echo "config_env=prd" >> "$GITHUB_OUTPUT" ;;
             *)
-              echo "::error::Unknown environment '$ENV' (expected dev, stg, or main)"
+              echo "::error::Unknown environment '$ENV' (expected dev or main)"
               exit 1
               ;;
           esac

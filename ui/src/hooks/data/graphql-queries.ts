@@ -166,7 +166,7 @@ export const HashpriceCandlesQuery = gql`
     hashpriceUsdCandles(
       interval: $interval
       first: $first
-      current: include
+      current: exclude
       orderBy: timestamp
       orderDirection: desc
       where: { timestamp_gte: $startTimestamp }
@@ -323,7 +323,7 @@ export const AggregatedBtcPriceIndexQuery = gql`
       interval: $interval
       first: $first
       skip: $skip
-      current: include
+      current: exclude
       orderBy: timestamp
       orderDirection: desc
       where: { timestamp_gte: $startTimestamp }
@@ -366,7 +366,7 @@ export const AggregatedNetworkHashrateIndexQuery = gql`
       interval: $interval
       first: $first
       skip: $skip
-      current: include
+      current: exclude
       orderBy: timestamp
       orderDirection: desc
       where: { timestamp_gte: $startTimestamp }
