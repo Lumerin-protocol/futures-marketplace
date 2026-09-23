@@ -5,6 +5,7 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import { graphqlRequest } from "./graphql";
+import { subgraphRetryOptions } from "./subgraphRetry";
 
 export const DEFAULT_HISTORY_PAGE_SIZE = 10;
 
@@ -46,10 +47,12 @@ interface UsePaginatedHistoryOptions<TRaw, TItem> {
   mapRow: (raw: any) => TItem;
   /// Stable unique id for a mapped row, used to de-duplicate while appending.
   getId: (item: TItem) => string;
+  /// Optional shared fetcher for the newest page, returning the same raw rows
+  /// `selectRows` would have. Lets sibling tables that all load their first page
+  /// at once share a single request; later pages always go through `query`.
+  firstPageBatch?: (pageSize: number) => Promise<unknown[]>;
   pageSize?: number;
   enabled?: boolean;
-  /// Optional background refetch interval (ms) for the currently loaded pages.
-  refetchInterval?: number;
 }
 
 /// Reusable incremental "Load More" pagination for The Graph history tables.
@@ -65,9 +68,9 @@ export const usePaginatedHistory = <TRaw, TItem>({
   selectRows,
   mapRow,
   getId,
+  firstPageBatch,
   pageSize = DEFAULT_HISTORY_PAGE_SIZE,
   enabled = true,
-  refetchInterval,
 }: UsePaginatedHistoryOptions<TRaw, TItem>): PaginatedHistoryResult<TItem> => {
   const queryClient = useQueryClient();
 
@@ -79,9 +82,12 @@ export const usePaginatedHistory = <TRaw, TItem>({
     queryKey: fullKey,
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
+      if (pageParam === 0 && firstPageBatch) {
+        return (await firstPageBatch(pageSize)).map((row) => mapRow(row));
+      }
       const response = await graphqlRequest<TRaw>(
         query,
-        { ...variables, first: pageSize, skip: pageParam },
+        { ...variables, historyFirst: pageSize, historySkip: pageParam },
         subgraphUrl,
       );
       return selectRows(response).map((row) => mapRow(row));
@@ -90,7 +96,11 @@ export const usePaginatedHistory = <TRaw, TItem>({
     getNextPageParam: (lastPage, allPages) =>
       lastPage.length < pageSize ? undefined : allPages.length * pageSize,
     enabled,
-    refetchInterval,
+    ...subgraphRetryOptions,
+    // Deliberately never polled. Refetching an infinite query refetches every
+    // page it holds, so a background interval here costs one request per page
+    // the user has scrolled through. Keep these fresh by invalidating them on
+    // the events that actually change them (see `refreshVenueViews`).
   });
 
   // `getId` is usually passed as an inline arrow by callers, so listing it would

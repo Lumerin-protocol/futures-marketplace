@@ -1,4 +1,5 @@
-import { HistoricalPositionsQuery } from "./graphql-queries";
+import { fetchFuturesHistoryFirstPage } from "./futuresHistoryBatch";
+import { HistoricalPositionsQuery } from "./queries/futures";
 import {
   sessionToHistoricalPosition,
   type HistoricalPosition,
@@ -20,9 +21,13 @@ export const useFuturesPositionHistory = (
     queryKey: [FUTURES_POSITION_HISTORY_QK, address],
     query: HistoricalPositionsQuery,
     variables: { address: address?.toLowerCase() },
-    selectRows: (response) => response.positionSessions,
+    selectRows: (response) => response.historyPositions,
     mapRow: sessionToHistoricalPosition,
     getId: (position) => position.id,
+    firstPageBatch: address
+      ? (pageSize) =>
+          fetchFuturesHistoryFirstPage("historyPositions", address.toLowerCase(), pageSize)
+      : undefined,
     enabled: !!address && enabled,
   });
 };

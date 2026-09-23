@@ -17,9 +17,13 @@ import { useHashrateIndexData, type TimePeriod } from "../../hooks/data/useHashR
 import { useHashpriceCandles } from "../../hooks/data/useHashpriceCandles";
 import { useBtcPriceIndexData } from "../../hooks/data/useBtcPriceIndexData";
 import { useNetworkHashrateIndexData } from "../../hooks/data/useNetworkHashrateIndexData";
+import { useOracleOverlay } from "../../hooks/data/useOracleOverlay";
+import type { OracleSeries } from "../../hooks/data/oracleOverlay";
 import { getUserFuturesOrders } from "../../hooks/data/getUserFuturesOrders";
 import { getUserFuturesPositions } from "../../hooks/data/getUserFuturesPositions";
 import { useFuturesContractSpecs } from "../../hooks/data/useFuturesContractSpecs";
+import { useFuturesSnapshot } from "../../hooks/data/snapshot/futuresSnapshot";
+import { usePerpsSnapshot } from "../../hooks/data/snapshot/perpsSnapshot";
 import { useMarginRisk } from "../../hooks/data/useMarginRisk";
 import { useGetMarketPrice } from "../../hooks/data/useGetMarketPrice";
 import { usePortfolioPnl } from "../../hooks/data/pnl/usePortfolioPnl";
@@ -28,14 +32,17 @@ import { useFuturesPaymentTokenBalance } from "../../hooks/data/usePaymentTokenB
 import { useFundingRate } from "../../hooks/data/perps/useFundingRate";
 import { usePerpsCollection } from "../../hooks/data/perps/usePerpsCollection";
 import { useUserPositionSessions } from "../../hooks/data/perps/useUserPositionSessions";
-import { useUserPerpsOrders } from "../../hooks/data/perps/useUserPerpsOrders";
+import {
+  ACTIVE_PERPS_ORDER_STATUSES,
+  useUserPerpsOrders,
+} from "../../hooks/data/perps/useUserPerpsOrders";
 import { useLiquidationThresholds } from "../../hooks/data/useLiquidationThresholds";
 import { usePointsHookWeights } from "../../hooks/data/usePointsHookWeights";
 import { useTradableExpirations } from "../../hooks/data/useGetExpirationDates";
 import { SmallWidget } from "../../components/Cards/Cards.styled";
 import type { Instrument } from "../../lib/instruments";
 import type { ContractMode } from "../../types/types";
-import styled from "@mui/material/styles/styled";
+import { styled } from "next-yak";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 
 interface TradingPageProps {
@@ -120,34 +127,49 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const candlesQuery = useHashpriceCandles({ timePeriod: chartTimePeriod });
   const btcPriceQuery = useBtcPriceIndexData({ timePeriod: chartTimePeriod });
   const networkHashrateQuery = useNetworkHashrateIndexData({ timePeriod: chartTimePeriod });
+
+  // Which optional index series the chart legend has switched on. Held here
+  // rather than in the chart because it decides what gets fetched below.
+  const [isBtcPriceVisible, setIsBtcPriceVisible] = useState(false);
+  const [isNetworkHashrateVisible, setIsNetworkHashrateVisible] = useState(false);
+  const toggleBtcPrice = useCallback(() => setIsBtcPriceVisible((on) => !on), []);
+  const toggleNetworkHashrate = useCallback(() => setIsNetworkHashrateVisible((on) => !on), []);
+
+  // The queries above fetch the chart's range and then hold it for a whole bar
+  // interval — an hour on 5D — so this keeps the bar in progress current, for
+  // the series on screen only. Hashprice is always drawn, in one mode or the
+  // other; the other two only once ticked.
+  const activeIndexSeries = useMemo<OracleSeries[]>(() => {
+    const series: OracleSeries[] = ["hashprice"];
+    if (isBtcPriceVisible) series.push("btc");
+    if (isNetworkHashrateVisible) series.push("networkHashrate");
+    return series;
+  }, [isBtcPriceVisible, isNetworkHashrateVisible]);
+
+  useOracleOverlay(chartTimePeriod, activeIndexSeries);
+  // Single poll for the whole futures venue: it fetches the specs, book, public
+  // trades, this account's orders, positions and PnL in one request and writes
+  // each into the cache entry the hook below already reads. Those hooks
+  // therefore carry no interval of their own.
+  // Market data — the book, the public trade feed, the funding rate — is only
+  // fetched for the venue actually on screen. The account and portfolio slices
+  // keep ticking for both, since the header states the whole account regardless
+  // of which tab is open.
+  useFuturesSnapshot({
+    address,
+    expirationAt: selectedExpirationAt,
+    isActiveVenue: contractMode === "futures",
+  });
+  usePerpsSnapshot({ address, isActiveVenue: contractMode === "perpetual" });
+
   const contractSpecsQuery = useFuturesContractSpecs();
-  const [hasOpenOrders, setHasOpenOrders] = useState(false);
-  const [hasOpenPerpsOrders, setHasOpenPerpsOrders] = useState(false);
-  const { data: participantData, isLoading: isParticipantLoading } = getUserFuturesOrders(address, {
-    refetch: hasOpenOrders,
-  });
-  const { data: positionBookData, isLoading: isPositionBookLoading } = getUserFuturesPositions(address, {
-    refetch: hasOpenOrders,
-  });
-  // Lifted from PerpsOrdersPositionsTabWidget so we can derive `hasOpenPerpsOrders`
-  // here and gate the perps positions/orders polling cadence (15s while open, 60s
-  // baseline for positions otherwise).
+  const { data: participantData, isLoading: isParticipantLoading } = getUserFuturesOrders(address);
+  const { data: positionBookData, isLoading: isPositionBookLoading } = getUserFuturesPositions(address);
+  // Lifted from PerpsOrdersPositionsTabWidget so the widget and this page read
+  // one cache entry rather than two.
   const perpsOpenOrdersQuery = useUserPerpsOrders(address, {
-    statuses: ["ACTIVE", "PARTIALLY_FILLED"],
-    refetch: hasOpenPerpsOrders,
+    statuses: ACTIVE_PERPS_ORDER_STATUSES,
   });
-  useEffect(() => {
-    setHasOpenOrders((participantData?.data?.orders?.length ?? 0) > 0);
-  }, [participantData?.data?.orders?.length]);
-  useEffect(() => {
-    const orders = perpsOpenOrdersQuery.data?.data?.orders ?? [];
-    const openCount = orders.filter(
-      (order) =>
-        (order.status === "ACTIVE" || order.status === "PARTIALLY_FILLED") &&
-        order.filledQuantity !== order.originalQuantity,
-    ).length;
-    setHasOpenPerpsOrders(openCount > 0);
-  }, [perpsOpenOrdersQuery.data?.data?.orders]);
   // Account-wide PnL, summed over every venue the account trades. Both figures
   // are deliberately independent of `contractMode` — the venues settle against
   // one CollateralVault, so the portfolio header states the whole account
@@ -186,7 +208,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const perpsCollectionQuery = usePerpsCollection();
 
   // Fetch user position sessions for perpetual contracts
-  const positionSessionsQuery = useUserPositionSessions(address, { refetch: hasOpenPerpsOrders });
+  const positionSessionsQuery = useUserPositionSessions(address);
 
   // Poll both products' trade feeds for new liquidations and surface a toast.
   const { notifications: liquidationNotifications, dismiss: dismissLiquidation } =
@@ -389,6 +411,10 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
         liquidationDirection={liqDirection}
         timePeriod={chartTimePeriod}
         onTimePeriodChange={setChartTimePeriod}
+        isBtcPriceVisible={isBtcPriceVisible}
+        isNetworkHashrateVisible={isNetworkHashrateVisible}
+        onToggleBtcPrice={toggleBtcPrice}
+        onToggleNetworkHashrate={toggleNetworkHashrate}
       />
     </SmallWidget>
   );
@@ -527,7 +553,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 // no share; all of it goes to the tables row beneath. The height follows the
 // viewport within the bounds the two widgets were designed for, and the chart
 // canvas fills whatever it gets.
-const FuturesContainer = styled("div")`
+const FuturesContainer = styled.div`
   --market-row: clamp(350px, 58vh, 540px);
 
   display: grid;
@@ -546,13 +572,13 @@ const FuturesContainer = styled("div")`
 `;
 
 // Row 1, all 3 columns
-const TradingHeaderArea = styled("div")`
+const TradingHeaderArea = styled.div`
   grid-column: 1 / -1;
   grid-row: 1;
 `;
 
 // Row 2, Col 1: Chart — fills the market row (see FuturesContainer)
-const ChartArea = styled("div")`
+const ChartArea = styled.div`
   grid-column: 1;
   grid-row: 2;
   min-width: 0;
@@ -579,7 +605,7 @@ const ChartArea = styled("div")`
 // contributes to grid sizing. Without this the tall Trades list and the
 // internally scrolled order book would ask for different heights per tab; with
 // it the book fills the row identically across tabs, modes, and data density.
-const OrderBookArea = styled("div")`
+const OrderBookArea = styled.div`
   grid-column: 2;
   grid-row: 2;
   min-width: 0;
@@ -606,7 +632,7 @@ const OrderBookArea = styled("div")`
 `;
 
 // Col 3, spans rows 2 and 3 — stretches to fill full combined height
-const RightPanelArea = styled("div")`
+const RightPanelArea = styled.div`
   grid-column: 3;
   grid-row: 2 / 4;
   align-self: stretch;
@@ -664,14 +690,14 @@ const RightPanelArea = styled("div")`
 `;
 
 // Order Information block — blank placeholder at bottom of right panel
-const _OrderInfoSection = styled("div")`
+const _OrderInfoSection = styled.div`
   padding: 0.875rem 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
 `;
 
-const _OrderInfoTitle = styled("div")`
+const _OrderInfoTitle = styled.div`
   font-size: 0.7rem;
   font-weight: 600;
   color: ${tokens.text.secondary};
@@ -680,7 +706,7 @@ const _OrderInfoTitle = styled("div")`
 `;
 
 // Row 3, Col 1+2 only (right panel column continues alongside)
-const OrdersPositionsArea = styled("div")`
+const OrdersPositionsArea = styled.div`
   grid-column: 1 / 3;
   grid-row: 3;
   min-width: 0;

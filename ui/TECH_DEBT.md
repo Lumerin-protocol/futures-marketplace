@@ -7,6 +7,11 @@ still in the codebase. Added while bringing `pnpm typecheck` and
 Both commands are green as of this document. If either starts reporting again,
 something below probably regressed.
 
+Most entries here are things that are merely untidy. **§8 is the one that needs
+somebody else: the UI derives position direction because the indexer does not
+expose it, and one field upstream would delete the derivation.** **§9 is the one
+that needs a decision before any work starts.**
+
 ---
 
 ## 1. Two copies of `@wagmi/core` in the tree (v2 and v3)
@@ -114,20 +119,9 @@ in the UI, since that one looks like a missing behaviour rather than a dead prop
 Nothing in `src` imports it. Wallet connection goes through appkit directly. Either
 it was superseded and should be deleted, or a migration to it was never finished.
 
-## 6. `@types/node` is pinned at v12
+## 6. `@types/node` (resolved)
 
-**Where:** `package.json` (`"@types/node": "^12.20.19"`), `vite-plugin-seed-meta.ts`
-
-v12 predates the `node:` module protocol, which `@types/node` only started declaring
-in v16. Rewriting `import ... from "fs"` to `"node:fs"` in the build-tooling files
-therefore fails `tsc --noEmit` with `TS2307: Cannot find module 'node:fs'`, even
-though it is the form Biome (and Node itself) prefers. The rule is suppressed at the
-top of `vite-plugin-seed-meta.ts` instead.
-
-**To resolve:** bump `@types/node` to something matching the Node the project
-actually runs on (the repo requires Node 22), then drop the suppression and use the
-`node:` prefix. Expect the bump to surface unrelated type errors, which is why it was
-left out of this pass.
+Bumped to v24 to match Node 24 LTS. `vite-plugin-seed-meta.ts` now uses the `node:` import protocol.
 
 ## 7. Stale `node_modules/@wagmi/core`
 
@@ -141,6 +135,104 @@ directory any more and a clean `pnpm install` no longer breaks the build.
 
 **To resolve:** it is safe to delete. It will disappear on the next
 `rm -rf node_modules && pnpm install`.
+
+## 8. Position direction is derived, not indexed
+
+**Where:** `src/lib/positionDirection.ts` (`sessionIsLong`), used by the four
+session mappers on both venues.
+
+*Was: "Closed positions all read as Long." That defect is fixed; what is left is
+the derivation that replaced it, which is sound but is doing the indexer's job.*
+
+A `PositionSession` still does not say which way it was opened. Direction used to
+be recovered by pulling **every fill of every session** and taking the sign of
+the earliest one. That worked, and it was ruinously expensive: the fills were 98%
+of the futures position book payload and 87% of the closed-session payload, on a
+query re-fetched every 5 seconds. One live account was pulling ~17 KB of fills
+every tick, about 12 MB an hour, growing with every fill it had ever made.
+
+Sessions now carry **one** fill, selected as `lastFill`, and direction comes from
+`sessionIsLong`:
+
+- while the session is open, its `netQuantity` carries the sign;
+- once it is flat, the fill answers instead. Only the fill that closes a session
+  can leave `netQuantityAfter` at zero, so a zero means this fill traded against
+  the position and the direction is the reverse of its sign; a non-zero is the
+  position itself, which covers a session that expired while still open.
+
+Verified against every session on both subgraphs — 21 closed sessions, futures
+and perps — as well as all 16 open ones, against the old rule. The unit tests in
+`positionDirection.test.ts` pin the cases, including that *any* fill of a session
+yields the same answer, which is what makes it safe that two fills in the same
+block cannot be ordered.
+
+**Why this is still debt.** It is one nested row per session on a 5-second tick,
+to recover a boolean the indexer already knows. It is also load-bearing in a way
+that is easy to break: remove `lastFill` from a session query and direction
+silently falls back to Long rather than failing.
+
+**To resolve:** one field on `PositionSession`, either `isLong: Boolean!` or
+making `maxQuantity` genuinely signed as its schema documentation already claims.
+Then `sessionIsLong` reduces to reading it, `lastFill` comes out of all four
+session queries, and this entry goes away.
+
+> `maxQuantity` looks like it should already rescue this — its doc comment
+> upstream and in `HistoricalPosition` describes it as signed — but it arrives
+> unsigned. Its sign agreed with the session's real direction in 11 of 20 live
+> futures sessions and 0 of 1 perps sessions, i.e. no better than a coin toss.
+> Do not build on it before checking it again. The perps positions tab *was*
+> reading direction off it, and was wrong for closed sessions because of it.
+
+One ambiguity is worth settling when the field is defined: the two futures
+mappers disagreed before any of this — `sessionToPosition` used the sign of the
+*summed* fills, `sessionToHistoricalPosition` the sign of the *earliest* fill.
+They differ only for a session that flips through zero.
+
+**Deliberately not restored:** the row-level `transactionHash` on
+`PositionBookPosition` and `HistoricalPosition`. It was derived from the latest
+fill and nothing rendered it — every tx link in the UI comes from a `Trade` row,
+which carries its own hash. Its one remaining use was a grouping key in
+`FuturesTradesModal`'s perpetual branch, which that branch's own comment notes is
+never reached.
+
+---
+
+## 9. The snapshot driver hand-rolls what React Query 5 already does
+
+**Where:** `src/hooks/data/snapshot/driverRegistry.ts`,
+`src/hooks/data/snapshot/snapshotFed.ts`
+
+*Open decision — nothing here is broken, so this is a question of how much of
+the machinery to keep, not whether to fix it.*
+
+The registry coalesces concurrent callers onto one request, discards a cancelled
+fetch that resolves late, and avoids re-rendering for data that did not change.
+Measured against the installed `@tanstack/query-core 5.101.2`, the library does
+all three: one cache entry per venue, with each consumer taking its slice
+through `select`, would replace `driverRegistry`'s in-flight map and
+`writeIfChanged`'s comparison and `startedAt` guard. The harness and the results
+are in `QUERY_GROUPS.md`, "Could React Query do the fan-out itself?".
+
+One reason survives the switch. A query still on its **first** fetch absorbs an
+invalidation and hands the caller the request that started before it, which is a
+condition in `Query.fetch` rather than a documented default. Applied here, a
+transaction confirmed while a session's very first snapshot is in the air would
+be served pre-transaction data — the one case `dropInFlightSnapshot` covers and
+the library does not. The window is one request wide on a page that has no
+tradeable data loaded yet.
+
+Two pieces are dead regardless of what is decided: `hasSnapshotDriver` has no
+caller outside its own test, and `runSnapshotOnce`'s no-driver path cannot be
+reached on the trade pages, where both drivers mount whichever tab is open.
+
+**To resolve:** pick one.
+
+| Option | What it buys |
+| --- | --- |
+| Prototype the single-key + `select` design on a branch and measure what it deletes | *Recommended.* The case for it is on paper until a branch shows the deletion with the request count unchanged. |
+| Spike only the v5 cancel-on-invalidate behaviour | Settles whether `dropInFlightSnapshot` is redundant, which is the only open question behind the option above, at a fraction of the work. |
+| Remove the dead parts now — `hasSnapshotDriver` and the unreachable no-driver path | Safe on its own and independent of the rest, but leaves the duplication in place. |
+| Leave it as is | It works and it is committed. Costs nothing today; the duplication stays until someone reads the registry and wonders why it exists. |
 
 ---
 
@@ -183,9 +275,3 @@ that way and needed no suppression afterwards.
 | Location | Reason |
 | --- | --- |
 | `lib/formatUnits.test.ts` (file-level) | Table-driven tests; pre-existing. |
-
-### `useNodejsImportProtocol`
-
-| Location | Reason |
-| --- | --- |
-| `vite-plugin-seed-meta.ts` (file-level) | `@types/node` is pinned at v12 and cannot resolve `node:fs` / `node:path`. See section 6. |

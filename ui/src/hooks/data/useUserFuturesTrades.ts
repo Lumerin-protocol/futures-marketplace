@@ -1,20 +1,17 @@
-import { backgroundRefetchOpts } from "./config";
-import { UserFuturesTradesQuery } from "./graphql-queries";
+import { fetchFuturesHistoryFirstPage } from "./futuresHistoryBatch";
+import { UserFuturesTradesQuery } from "./queries/futures";
 import { usePaginatedHistory, type PaginatedHistoryResult } from "./usePaginatedHistory";
 
 export const USER_FUTURES_TRADES_QK = "UserFuturesTrades";
 
 export const useUserFuturesTrades = (
   address: `0x${string}` | undefined,
-  props?: {
-    refetch?: boolean;
-  },
 ): PaginatedHistoryResult<UserFuturesTrade> => {
   return usePaginatedHistory<UserFuturesTradesResponse, UserFuturesTrade>({
     queryKey: [USER_FUTURES_TRADES_QK, address],
     query: UserFuturesTradesQuery,
     variables: { address: address?.toLowerCase() },
-    selectRows: (response) => response.trades,
+    selectRows: (response) => response.historyTrades,
     mapRow: (trade) => ({
       user: {
         id: trade.user.id,
@@ -35,8 +32,10 @@ export const useUserFuturesTrades = (
       liquidationFee: trade.liquidationFee != null ? BigInt(trade.liquidationFee) : null,
     }),
     getId: (trade) => trade.id,
+    firstPageBatch: address
+      ? (pageSize) => fetchFuturesHistoryFirstPage("historyTrades", address.toLowerCase(), pageSize)
+      : undefined,
     enabled: !!address,
-    refetchInterval: props?.refetch ? backgroundRefetchOpts.refetchInterval : undefined,
   });
 };
 
@@ -65,7 +64,7 @@ export type UserFuturesTrade = {
 };
 
 type UserFuturesTradesResponse = {
-  trades: {
+  historyTrades: {
     user: {
       id: string;
     };

@@ -1,0 +1,768 @@
+{
+  "label": "vite8-react19",
+  "measuredAt": "2026-09-11T16:35:49.192Z",
+  "bundle": {
+    "git": "459c738d",
+    "measuredAt": "2026-09-11T16:35:44.679Z",
+    "vite": "8.3.0",
+    "react": "19.3.0",
+    "mui": "6.5.0",
+    "emotionReact": "11.14.0",
+    "nextYak": null,
+    "declared": {
+      "react": "^19.3.0",
+      "vite": "^8.3.0",
+      "mui": "^6.4.11",
+      "emotion": "^11.14.0"
+    },
+    "inventory": {
+      "tsFiles": 220,
+      "styledHtml": 384,
+      "styledComponent": 42,
+      "sx": 18,
+      "muiStyledImportFiles": 48,
+      "emotionReactImportFiles": 4,
+      "yakImportFiles": 0,
+      "muiWidgetImports": {
+        "Tooltip": 9,
+        "Modal": 7,
+        "IconButton": 6,
+        "useMediaQuery": 4,
+        "Box": 2,
+        "Slider": 2,
+        "MenuItem": 2,
+        "Select": 2,
+        "Dialog": 1,
+        "TextField": 1,
+        "Button": 1,
+        "Alert": 1,
+        "Toolbar": 1,
+        "Typography": 1,
+        "Skeleton": 1,
+        "ButtonGroup": 1,
+        "FormControl": 1
+      },
+      "styledTotal": 426
+    },
+    "totals": {
+      "assets": 154,
+      "raw": 6605743,
+      "gzip": 1797708,
+      "kbRaw": 6450.9,
+      "kbGzip": 1755.6,
+      "jsRaw": 6593634,
+      "jsGzip": 1794176,
+      "jsKbRaw": 6439.1,
+      "jsKbGzip": 1752.1,
+      "cssRaw": 12109,
+      "cssGzip": 3532,
+      "cssKbRaw": 11.8,
+      "cssKbGzip": 3.4
+    },
+    "buckets": {
+      "(unmapped)": {
+        "raw": 1812845,
+        "kb": 1770.4,
+        "sharePct": 27.5
+      },
+      "vendor": {
+        "raw": 3949582,
+        "kb": 3857,
+        "sharePct": 59.9
+      },
+      "mui": {
+        "raw": 209849,
+        "kb": 204.9,
+        "sharePct": 3.2
+      },
+      "app": {
+        "raw": 350835,
+        "kb": 342.6,
+        "sharePct": 5.3
+      },
+      "emotion": {
+        "raw": 22697,
+        "kb": 22.2,
+        "sharePct": 0.3
+      },
+      "(other)": {
+        "raw": 27282,
+        "kb": 26.6,
+        "sharePct": 0.4
+      },
+      "react": {
+        "raw": 218757,
+        "kb": 213.6,
+        "sharePct": 3.3
+      }
+    },
+    "styling": {
+      "raw": 252472,
+      "kb": 246.6,
+      "sharePct": 3.8,
+      "packages": [
+        {
+          "name": "@mui/material",
+          "raw": 167829,
+          "kb": 163.9
+        },
+        {
+          "name": "@mui/system",
+          "raw": 33338,
+          "kb": 32.6
+        },
+        {
+          "name": "@popperjs/core",
+          "raw": 19926,
+          "kb": 19.5
+        },
+        {
+          "name": "@mui/utils",
+          "raw": 5778,
+          "kb": 5.6
+        },
+        {
+          "name": "@emotion/cache",
+          "raw": 4431,
+          "kb": 4.3
+        },
+        {
+          "name": "@emotion/is-prop-valid",
+          "raw": 4247,
+          "kb": 4.1
+        },
+        {
+          "name": "stylis",
+          "raw": 4036,
+          "kb": 3.9
+        },
+        {
+          "name": "@emotion/styled",
+          "raw": 2584,
+          "kb": 2.5
+        },
+        {
+          "name": "@emotion/react",
+          "raw": 2470,
+          "kb": 2.4
+        },
+        {
+          "name": "@mui/icons-material",
+          "raw": 2145,
+          "kb": 2.1
+        },
+        {
+          "name": "@emotion/serialize",
+          "raw": 1819,
+          "kb": 1.8
+        },
+        {
+          "name": "@emotion/sheet",
+          "raw": 1289,
+          "kb": 1.3
+        },
+        {
+          "name": "@emotion/unitless",
+          "raw": 669,
+          "kb": 0.7
+        },
+        {
+          "name": "@emotion/hash",
+          "raw": 553,
+          "kb": 0.5
+        },
+        {
+          "name": "@mui/private-theming",
+          "raw": 406,
+          "kb": 0.4
+        },
+        {
+          "name": "@emotion/utils",
+          "raw": 385,
+          "kb": 0.4
+        },
+        {
+          "name": "@mui/styled-engine",
+          "raw": 353,
+          "kb": 0.3
+        },
+        {
+          "name": "@emotion/use-insertion-effect-with-fallbacks",
+          "raw": 114,
+          "kb": 0.1
+        },
+        {
+          "name": "@emotion/memoize",
+          "raw": 100,
+          "kb": 0.1
+        }
+      ]
+    },
+    "topPackages": [
+      {
+        "name": "(unmapped)",
+        "raw": 1812845,
+        "kb": 1770.4,
+        "sharePct": 27.5
+      },
+      {
+        "name": "viem",
+        "raw": 989259,
+        "kb": 966.1,
+        "sharePct": 15
+      },
+      {
+        "name": "app",
+        "raw": 350835,
+        "kb": 342.6,
+        "sharePct": 5.3
+      },
+      {
+        "name": "@reown/appkit-scaffold-ui",
+        "raw": 264573,
+        "kb": 258.4,
+        "sharePct": 4
+      },
+      {
+        "name": "@coinbase/wallet-sdk",
+        "raw": 216836,
+        "kb": 211.8,
+        "sharePct": 3.3
+      },
+      {
+        "name": "react-dom",
+        "raw": 207039,
+        "kb": 202.2,
+        "sharePct": 3.1
+      },
+      {
+        "name": "@base-org/account",
+        "raw": 195124,
+        "kb": 190.6,
+        "sharePct": 3
+      },
+      {
+        "name": "ox",
+        "raw": 168306,
+        "kb": 164.4,
+        "sharePct": 2.6
+      },
+      {
+        "name": "@mui/material",
+        "raw": 167829,
+        "kb": 163.9,
+        "sharePct": 2.5
+      },
+      {
+        "name": "@reown/appkit-controllers",
+        "raw": 164076,
+        "kb": 160.2,
+        "sharePct": 2.5
+      },
+      {
+        "name": "lightweight-charts",
+        "raw": 158479,
+        "kb": 154.8,
+        "sharePct": 2.4
+      },
+      {
+        "name": "@reown/appkit-ui",
+        "raw": 146304,
+        "kb": 142.9,
+        "sharePct": 2.2
+      },
+      {
+        "name": "@phosphor-icons/webcomponents",
+        "raw": 144530,
+        "kb": 141.1,
+        "sharePct": 2.2
+      },
+      {
+        "name": "@walletconnect/utils",
+        "raw": 95897,
+        "kb": 93.6,
+        "sharePct": 1.5
+      },
+      {
+        "name": "@noble/curves",
+        "raw": 93732,
+        "kb": 91.5,
+        "sharePct": 1.4
+      },
+      {
+        "name": "@walletconnect/core",
+        "raw": 89865,
+        "kb": 87.8,
+        "sharePct": 1.4
+      },
+      {
+        "name": "abitype",
+        "raw": 74585,
+        "kb": 72.8,
+        "sharePct": 1.1
+      },
+      {
+        "name": "@walletconnect/sign-client",
+        "raw": 63764,
+        "kb": 62.3,
+        "sharePct": 1
+      },
+      {
+        "name": "@reown/appkit",
+        "raw": 58236,
+        "kb": 56.9,
+        "sharePct": 0.9
+      },
+      {
+        "name": "contracts-js",
+        "raw": 56475,
+        "kb": 55.2,
+        "sharePct": 0.9
+      },
+      {
+        "name": "@noble/hashes",
+        "raw": 56044,
+        "kb": 54.7,
+        "sharePct": 0.8
+      },
+      {
+        "name": "zod",
+        "raw": 52478,
+        "kb": 51.2,
+        "sharePct": 0.8
+      },
+      {
+        "name": "@reown/appkit-pay",
+        "raw": 48820,
+        "kb": 47.7,
+        "sharePct": 0.7
+      },
+      {
+        "name": "graphql",
+        "raw": 41313,
+        "kb": 40.3,
+        "sharePct": 0.6
+      },
+      {
+        "name": "@fortawesome/fontawesome-svg-core",
+        "raw": 41235,
+        "kb": 40.3,
+        "sharePct": 0.6
+      },
+      {
+        "name": "@wagmi/core",
+        "raw": 38537,
+        "kb": 37.6,
+        "sharePct": 0.6
+      },
+      {
+        "name": "react-router",
+        "raw": 37851,
+        "kb": 37,
+        "sharePct": 0.6
+      },
+      {
+        "name": "@tanstack/query-core",
+        "raw": 36212,
+        "kb": 35.4,
+        "sharePct": 0.5
+      },
+      {
+        "name": "@reown/appkit-wallet",
+        "raw": 35276,
+        "kb": 34.4,
+        "sharePct": 0.5
+      },
+      {
+        "name": "@walletconnect/relay-auth",
+        "raw": 35086,
+        "kb": 34.3,
+        "sharePct": 0.5
+      }
+    ],
+    "graphs": {
+      "shellStatic": {
+        "files": 8,
+        "raw": 520013,
+        "gzip": 173061,
+        "kbRaw": 507.8,
+        "kbGzip": 169,
+        "buckets": {
+          "css": {
+            "raw": 12109,
+            "kb": 11.8
+          },
+          "(unmapped)": {
+            "raw": 21653,
+            "kb": 21.1
+          },
+          "vendor": {
+            "raw": 122846,
+            "kb": 120
+          },
+          "mui": {
+            "raw": 98462,
+            "kb": 96.2
+          },
+          "app": {
+            "raw": 23485,
+            "kb": 22.9
+          },
+          "react": {
+            "raw": 218757,
+            "kb": 213.6
+          },
+          "emotion": {
+            "raw": 22697,
+            "kb": 22.2
+          }
+        }
+      },
+      "allReachableFromEntry": {
+        "files": 8,
+        "raw": 520013,
+        "gzip": 173061,
+        "kbRaw": 507.8,
+        "kbGzip": 169,
+        "buckets": {
+          "css": {
+            "raw": 12109,
+            "kb": 11.8
+          },
+          "(unmapped)": {
+            "raw": 21653,
+            "kb": 21.1
+          },
+          "vendor": {
+            "raw": 122846,
+            "kb": 120
+          },
+          "mui": {
+            "raw": 98462,
+            "kb": 96.2
+          },
+          "app": {
+            "raw": 23485,
+            "kb": 22.9
+          },
+          "react": {
+            "raw": 218757,
+            "kb": 213.6
+          },
+          "emotion": {
+            "raw": 22697,
+            "kb": 22.2
+          }
+        }
+      }
+    },
+    "largestChunks": [
+      {
+        "rel": "assets/chunks/Futures-n2OwK1Zf.js",
+        "kind": "js",
+        "kbRaw": 737.8,
+        "kbGzip": 192.3
+      },
+      {
+        "rel": "assets/chunks/hashpriceUsds-D2X62kjS.js",
+        "kind": "js",
+        "kbRaw": 769.7,
+        "kbGzip": 170.6
+      },
+      {
+        "rel": "assets/chunks/dist-D3LdaUXT.js",
+        "kind": "js",
+        "kbRaw": 617.8,
+        "kbGzip": 166.6
+      },
+      {
+        "rel": "assets/chunks/dist-B6eZi9nb.js",
+        "kind": "js",
+        "kbRaw": 576.9,
+        "kbGzip": 146.4
+      },
+      {
+        "rel": "assets/chunks/wui-list-wallet-BxJYtDpR.js",
+        "kind": "js",
+        "kbRaw": 441.4,
+        "kbGzip": 131.3
+      },
+      {
+        "rel": "assets/chunks/btcUsds-BBHd-sg6.js",
+        "kind": "js",
+        "kbRaw": 464,
+        "kbGzip": 104.7
+      },
+      {
+        "rel": "assets/entry/index-C70bBdmr.js",
+        "kind": "js",
+        "kbRaw": 302.3,
+        "kbGzip": 96.1
+      },
+      {
+        "rel": "assets/chunks/dist-C2PhpclA.js",
+        "kind": "js",
+        "kbRaw": 226.7,
+        "kbGzip": 69.2
+      },
+      {
+        "rel": "assets/chunks/exports-CxES1sg0.js",
+        "kind": "js",
+        "kbRaw": 225.3,
+        "kbGzip": 46.1
+      },
+      {
+        "rel": "assets/chunks/ApiController-lyPn8fgD.js",
+        "kind": "js",
+        "kbRaw": 141.4,
+        "kbGzip": 42.1
+      },
+      {
+        "rel": "assets/chunks/_esm-Bn-SwFJ2.js",
+        "kind": "js",
+        "kbRaw": 133.2,
+        "kbGzip": 39.1
+      },
+      {
+        "rel": "assets/chunks/Tooltip-O_bjKYnX.js",
+        "kind": "js",
+        "kbRaw": 104.5,
+        "kbGzip": 36.1
+      }
+    ]
+  },
+  "runtime": {
+    "url": "http://127.0.0.1:4173/trade/futures",
+    "viewport": "1440x900",
+    "wallClockMs": 4187,
+    "paints": [
+      {
+        "name": "first-paint",
+        "startTime": 184
+      },
+      {
+        "name": "first-contentful-paint",
+        "startTime": 184
+      }
+    ],
+    "navigation": {
+      "domContentLoaded": 144.80000001192093,
+      "loadEventEnd": 146,
+      "responseEnd": 1.800000011920929,
+      "domInteractive": 5.800000011920929
+    },
+    "injectedCss": {
+      "emotionTagCount": 2,
+      "yakTagCount": 0,
+      "styleTagCount": 8,
+      "emotionDomTextChars": 0,
+      "emotionRuleCount": 407,
+      "emotionRuleChars": 61131,
+      "emotionRuleKb": 59.7,
+      "allCssomChars": 100418,
+      "allCssomKb": 98.1,
+      "staticCssLinks": [
+        {
+          "href": "http://127.0.0.1:4173/assets/index-2nRnV9p9.css"
+        }
+      ],
+      "note": "Emotion speedy mode inserts CSSOM rules (insertRule). Rule chars are the generated CSS a compiler would emit as a file. After yak, emotionRuleCount should drop and static CSS should grow."
+    },
+    "insertRule": {
+      "count": 423,
+      "chars": 72878,
+      "kb": 71.2,
+      "ms": 3.6,
+      "deleteRuleCount": 0,
+      "createStyleTags": 10,
+      "note": "CSSOM insert time only. Serialization/stylis CPU is in cpu.cssCompileMs."
+    },
+    "cpu": {
+      "sampleIntervalUs": 100,
+      "wallSampledMs": 4184.2,
+      "idleMs": 3995.1,
+      "jsMs": 189.1,
+      "cssCompileMs": 17.9,
+      "cssCompileShareOfJsPct": 9.5,
+      "byKind": {
+        "emotion": {
+          "ms": 14.9,
+          "shareOfJsPct": 7.9
+        },
+        "mui-styled": {
+          "ms": 3.1,
+          "shareOfJsPct": 1.6
+        }
+      },
+      "topPackages": [
+        {
+          "name": "app",
+          "ms": 22.8,
+          "us": 22803
+        },
+        {
+          "name": "react-dom",
+          "ms": 22.6,
+          "us": 22579
+        },
+        {
+          "name": "(unknown)",
+          "ms": 21.8,
+          "us": 21796
+        },
+        {
+          "name": "lightweight-charts",
+          "ms": 20.9,
+          "us": 20883
+        },
+        {
+          "name": "(other)",
+          "ms": 15.2,
+          "us": 15159
+        },
+        {
+          "name": "@tanstack/query-core",
+          "ms": 7.7,
+          "us": 7746
+        },
+        {
+          "name": "@reown/appkit-ui",
+          "ms": 5.7,
+          "us": 5685
+        },
+        {
+          "name": "viem",
+          "ms": 5.2,
+          "us": 5210
+        },
+        {
+          "name": "@mui/material",
+          "ms": 4.7,
+          "us": 4691
+        },
+        {
+          "name": "stylis",
+          "ms": 4,
+          "us": 4043
+        },
+        {
+          "name": "@mui/system",
+          "ms": 3.1,
+          "us": 3060
+        },
+        {
+          "name": "@wagmi/core",
+          "ms": 3.1,
+          "us": 3056
+        },
+        {
+          "name": "@coinbase/wallet-sdk",
+          "ms": 3,
+          "us": 3029
+        },
+        {
+          "name": "@emotion/serialize",
+          "ms": 2.6,
+          "us": 2573
+        },
+        {
+          "name": "@noble/hashes",
+          "ms": 2.5,
+          "us": 2484
+        },
+        {
+          "name": "wagmi",
+          "ms": 2.3,
+          "us": 2340
+        },
+        {
+          "name": "react",
+          "ms": 2.1,
+          "us": 2123
+        },
+        {
+          "name": "@mui/utils",
+          "ms": 2,
+          "us": 1960
+        },
+        {
+          "name": "@emotion/hash",
+          "ms": 2,
+          "us": 1950
+        },
+        {
+          "name": "@emotion/react",
+          "ms": 1.9,
+          "us": 1910
+        },
+        {
+          "name": "fancy-canvas",
+          "ms": 1.8,
+          "us": 1793
+        },
+        {
+          "name": "@emotion/styled",
+          "ms": 1.8,
+          "us": 1787
+        },
+        {
+          "name": "@walletconnect/core",
+          "ms": 1.8,
+          "us": 1770
+        },
+        {
+          "name": "@reown/appkit",
+          "ms": 1.7,
+          "us": 1679
+        }
+      ],
+      "note": "Self-time from a 100µs CPU profile, remapped through production sourcemaps. Idle samples excluded from the JS denominator. cssCompileMs is @emotion/* + stylis + @mui/styled-engine + @mui/system (and next-yak if present)."
+    },
+    "chromeMetrics": {
+      "RecalcStyleCount": 61,
+      "RecalcStyleDurationMs": 9.1,
+      "LayoutCount": 22,
+      "LayoutDurationMs": 31.5,
+      "ScriptDurationMs": 165.1,
+      "TaskDurationMs": 301.2,
+      "JSHeapUsedSizeKb": 23905.4
+    },
+    "timeline": {
+      "recalculateStyles": {
+        "count": 63,
+        "ms": 9.1,
+        "us": 9148
+      },
+      "layout": {
+        "count": 24,
+        "ms": 31.4,
+        "us": 31437
+      },
+      "parseAuthorStyleSheet": {
+        "count": 5,
+        "ms": 0.6,
+        "us": 596
+      },
+      "parseHTML": {
+        "count": 8,
+        "ms": 0.4,
+        "us": 388
+      },
+      "evaluateScript": {
+        "count": 3,
+        "ms": 7.3,
+        "us": 7278
+      },
+      "functionCall": {
+        "count": 243,
+        "ms": 139.7,
+        "us": 139670
+      },
+      "v8Compile": {
+        "count": 87,
+        "ms": 4.7,
+        "us": 4714
+      }
+    }
+  }
+}

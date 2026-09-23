@@ -1,12 +1,9 @@
 import { Suspense } from "react";
-import styled from "@mui/material/styles/styled";
+import { styled } from "next-yak";
 import { Link, useLocation, useNavigate } from "react-router";
 import { tokens } from "../styles/tokens";
-import Toolbar from "@mui/material/Toolbar";
-import Typography from "@mui/material/Typography";
-import Skeleton from "@mui/material/Skeleton";
-import EmojiEventsOutlinedIcon from "@mui/icons-material/EmojiEventsOutlined";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { Skeleton } from "./Skeleton";
+import { ArrowBackIcon, EmojiEventsOutlinedIcon } from "./icons";
 import { safeLazy } from "../utils/safeLazy";
 import { PathName } from "../types/types";
 import HpdxLogomark from "../images/icons/hpdx-logomark.svg?react";
@@ -78,23 +75,25 @@ export const Header = () => {
 
 const ConnectSlotSkeleton = () => (
   <ConnectSlotSkeletonWrapper>
-    <Skeleton variant="rounded" width={140} height={48} sx={{ borderRadius: tokens.radius.md }} />
+    <Skeleton width={140} height={48} />
   </ConnectSlotSkeletonWrapper>
 );
 
-const ConnectSlotSkeletonWrapper = styled("div")`
+const ConnectSlotSkeletonWrapper = styled.div`
   display: flex;
   align-items: center;
 `;
 
-const StyledToolbar = styled(Toolbar)`
+const StyledToolbar = styled.div`
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 1.5rem;
-  padding: 0 !important;
+  padding: 0;
+  min-height: 64px;
 `;
 
-const Nav = styled("nav")`
+const Nav = styled.nav`
   display: flex;
   align-items: center;
   gap: 1.5rem;
@@ -126,7 +125,7 @@ const BackButton = styled(Link)`
   }
 `;
 
-const LeaderboardTitle = styled("span")`
+const LeaderboardTitle = styled.span`
   @media (max-width: 768px) {
     display: none;
   }
@@ -150,13 +149,13 @@ const NavLink = styled(Link)`
   }
 `;
 
-const NavLabel = styled("span")`
+const NavLabel = styled.span`
   @media (max-width: 768px) {
     display: none;
   }
 `;
 
-const NavIcon = styled("span")`
+const NavIcon = styled.span`
   display: none;
   align-items: center;
   justify-content: center;
@@ -166,7 +165,7 @@ const NavIcon = styled("span")`
   }
 `;
 
-const TitleWrapper = styled("div")`
+const TitleWrapper = styled.div`
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -186,7 +185,7 @@ const Logo = styled(HpdxLogomark)`
   }
 `;
 
-const BrandName = styled(Typography)`
+const BrandName = styled.span`
   color: ${tokens.text.onDark};
   font-weight: 700;
   font-family: "Inter", sans-serif;
@@ -205,13 +204,13 @@ const BrandName = styled(Typography)`
 // squeezes the nav and connect controls on narrow desktop windows.
 const BRAND_ABBREVIATION_QUERY = "(max-width: 1140px)";
 
-const FullBrand = styled("span")`
+const FullBrand = styled.span`
   @media ${BRAND_ABBREVIATION_QUERY} {
     display: none;
   }
 `;
 
-const ShortBrand = styled("span")`
+const ShortBrand = styled.span`
   display: none;
 
   @media ${BRAND_ABBREVIATION_QUERY} {

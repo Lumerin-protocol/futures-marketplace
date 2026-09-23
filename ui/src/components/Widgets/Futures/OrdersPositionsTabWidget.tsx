@@ -1,6 +1,6 @@
 import { tokens } from "../../../styles/tokens";
 import { useState, useMemo, useEffect, useRef } from "react";
-import styled from "@mui/material/styles/styled";
+import { styled } from "next-yak";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { TabSwitch } from "../../TabSwitch";
 import { OrdersListWidget } from "./OrdersListWidget";
@@ -90,7 +90,11 @@ export const OrdersPositionsTabWidget = ({
   // is gated on the active tab.
   const historicalOrdersQuery = useHistoricalOrders(participantAddress, true);
   const historicalPositionsQuery = useFuturesPositionHistory(participantAddress, true);
-  const tradesQuery = useUserFuturesTrades(participantAddress, { refetch: activeTab === "TRADES" });
+  // Not polled: refetching an infinite query refetches every page the user has
+  // loaded, so the cost grows with scroll depth. The user's own trades only move
+  // when they trade (covered by `refreshVenueViews` post-tx) or when a keeper
+  // liquidates them (covered by `useLiquidationNotifications`).
+  const tradesQuery = useUserFuturesTrades(participantAddress);
 
   // Open, unmatured positions, one per delivery. Sessions are per (user,
   // expirationAt), so every row of a delivery carries the same signed net
@@ -407,7 +411,7 @@ const TabContainer = styled(SmallWidget)`
   }
 `;
 
-const Header = styled("div")`
+const Header = styled.div`
   padding: 1.5rem 1.5rem 1rem 1.5rem;
   display: flex;
   justify-content: space-between;
@@ -416,7 +420,7 @@ const Header = styled("div")`
   width: 100%;
 `;
 
-const TabSwitchWrapper = styled("div")`
+const TabSwitchWrapper = styled.div`
   width: 100%;
   min-width: 0;
 
@@ -426,12 +430,12 @@ const TabSwitchWrapper = styled("div")`
   }
 `;
 
-const Content = styled("div")`
+const Content = styled.div`
   width: 100%;
   padding: 0 1.5rem 1.5rem 1.5rem;
 `;
 
-const OrdersWrapper = styled("div")`
+const OrdersWrapper = styled.div`
   width: 100%;
 
   &[hidden] {
@@ -444,7 +448,7 @@ const OrdersWrapper = styled("div")`
   }
 `;
 
-const PositionsWrapper = styled("div")`
+const PositionsWrapper = styled.div`
   width: 100%;
 
   /* Hide the widget's header since we have tabs */
@@ -453,11 +457,11 @@ const PositionsWrapper = styled("div")`
   }
 `;
 
-const TradesWrapper = styled("div")`
+const TradesWrapper = styled.div`
   width: 100%;
 `;
 
-const TableContainer = styled("div")`
+const TableContainer = styled.div`
   width: 100%;
   overflow-x: auto;
 
@@ -476,7 +480,7 @@ const TableContainer = styled("div")`
   }
 `;
 
-const Table = styled("table")`
+const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
   min-width: 600px;
@@ -499,7 +503,7 @@ const Table = styled("table")`
   }
 `;
 
-const TableRow = styled("tr")`
+const TableRow = styled.tr`
   &:hover {
     background-color: ${tokens.overlay.white02};
   }
@@ -509,7 +513,7 @@ const TableRow = styled("tr")`
   }
 `;
 
-const TypeBadge = styled("span")<{ $type: string }>`
+const TypeBadge = styled.span<{ $type: string }>`
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
@@ -519,14 +523,14 @@ const TypeBadge = styled("span")<{ $type: string }>`
   color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
-const SideCell = styled("div")`
+const SideCell = styled.div`
   display: flex;
   align-items: center;
   gap: 0.4rem;
   flex-wrap: wrap;
 `;
 
-const EmptyState = styled("div")`
+const EmptyState = styled.div`
   text-align: center;
   padding: 2rem;
   color: ${tokens.text.muted};
@@ -537,7 +541,7 @@ const EmptyState = styled("div")`
   }
 `;
 
-const PnLText = styled("span")<{ $isPositive: boolean; $isZero?: boolean }>`
+const PnLText = styled.span<{ $isPositive: boolean; $isZero?: boolean }>`
   color: ${(props) =>
     props.$isZero
       ? tokens.text.primary
@@ -547,7 +551,7 @@ const PnLText = styled("span")<{ $isPositive: boolean; $isZero?: boolean }>`
   font-weight: 600;
 `;
 
-const TxLink = styled("a")`
+const TxLink = styled.a`
   color: ${tokens.trading.info};
   text-decoration: none;
   font-family: monospace;

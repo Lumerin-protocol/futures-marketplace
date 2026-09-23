@@ -1,4 +1,4 @@
-import { UserPerpsOrdersExcludeStatusQuery } from "./graphql-queries";
+import { UserPerpsOrdersExcludeStatusQuery } from "../queries/perps";
 import type { PerpsOrder } from "./useUserPerpsOrders";
 import {
   usePaginatedHistory,
@@ -26,7 +26,7 @@ type RawOrder = {
 };
 
 type Response = {
-  orders: RawOrder[];
+  historyOrders: RawOrder[];
 };
 
 /// Paginated ("Load More") view of a user's terminal Perps orders (Order
@@ -40,9 +40,9 @@ export const usePerpsOrderHistory = (
   return usePaginatedHistory<Response, PerpsOrder>({
     queryKey: [PERPS_ORDER_HISTORY_QK, address],
     query: UserPerpsOrdersExcludeStatusQuery,
-    variables: { address, statuses: ["ACTIVE", "PARTIALLY_FILLED"] },
+    variables: { address, excludeStatuses: ["ACTIVE", "PARTIALLY_FILLED"] },
     subgraphUrl: process.env.REACT_APP_SUBGRAPH_PERPS_URL,
-    selectRows: (response) => response.orders,
+    selectRows: (response) => response.historyOrders,
     mapRow: (order) => ({
       blockNumber: Number(order.blockNumber),
       closedAt: order.closedAt,
