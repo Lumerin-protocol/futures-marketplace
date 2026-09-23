@@ -1,86 +1,113 @@
-import { graphqlRequest } from "../graphql";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { snapshotFedQueryOptions } from "../snapshot/config";
-import { readViaSnapshot } from "../snapshot/snapshotFed";
-import { FundingUpdatesQuery } from "../queries/perps";
+import { useMemo } from "react";
+import { useReadContract } from "wagmi";
+import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
+import { withErrors } from "../../../lib/withErrors";
+import { usePerpsContractConstants } from "./usePerpsContractConstants";
+import { usePerpsOrderBook } from "./usePerpsOrderBook";
 
-export const FUNDING_RATE_QK = "FundingRate";
+const BPS = 10_000n;
+/// The contract carries the rate at 10^FUNDING_DECIMALS, so the clamp against
+/// `fundingRateMaxBps` has to happen at the same precision to land on the same
+/// value. Only the final display conversion drops to float.
+const FUNDING_SCALE = 10n ** 18n;
 
-/// Kept fresh by `usePerpsSnapshot`, which writes this cache entry directly.
+/**
+ * Current perpetual funding rate, per `fundingPeriod`.
+ *
+ * Mirrors `_getCurrentCumulativeFunding` in HashPowerPerpsDEXBase: the premium
+ * of the order-book mid over the oracle index, clamped to ±`fundingRateMaxBps`.
+ * The contract has no view for this, and the `fundingRate` field on the
+ * `FundingUpdated` event is really the cumulative-accumulator delta (collateral
+ * units × 10^18), not a rate — so it is recomputed here from the same inputs.
+ */
 export const useFundingRate = () => {
-  const qc = useQueryClient();
-  const query = useQuery({
-    queryKey: [FUNDING_RATE_QK],
-    queryFn: () => readViaSnapshot(qc, "perpetual", [FUNDING_RATE_QK], fetchFundingRateAsync),
-    ...snapshotFedQueryOptions,
+  const orderBook = usePerpsOrderBook();
+  const { fundingRateMaxBps, fundingPeriodSeconds } = usePerpsContractConstants();
+
+  const indexPriceQuery = useReadContract({
+    address: process.env.REACT_APP_PERPS_TOKEN_ADDRESS as `0x${string}`,
+    abi: withErrors(HashPowerPerpsDEXAbi),
+    functionName: "getMarketPrice",
+    query: {
+      refetchInterval: 10000,
+      refetchOnWindowFocus: true,
+    },
   });
 
-  return query;
-};
+  const indexPrice = indexPriceQuery.data as bigint | undefined;
 
-const fetchFundingRateAsync = async () => {
-  const response = await graphqlRequest<FundingUpdatesResponse>(
-    FundingUpdatesQuery,
-    {},
-    process.env.REACT_APP_SUBGRAPH_PERPS_URL
-  );
+  const data = useMemo(() => {
+    const { bestBid, bestAsk } = bestPrices(orderBook.data?.data.priceLevels);
 
-  return mapFundingRate(response.funding);
-};
+    // A one-sided book or an unusable oracle means no funding accrues at all,
+    // which is not the same as a 0% rate — leave it undefined so callers can
+    // render a placeholder.
+    if (bestBid === undefined || bestAsk === undefined) return undefined;
+    if (indexPrice === undefined || indexPrice === 0n) return undefined;
+    if (fundingRateMaxBps === undefined) return undefined;
 
-/// Shared with `PerpsSnapshotQuery`'s `funding` alias, which writes this cache
-/// entry directly. Both paths must produce identical shapes.
-export const mapFundingRate = (rows: FundingUpdateRow[] | null) => {
-  if (!rows || rows.length === 0) {
+    const markPrice = (bestBid + bestAsk) / 2n;
+    const maxRateScaled = (fundingRateMaxBps * FUNDING_SCALE) / BPS;
+
+    const uncappedScaled = ((markPrice - indexPrice) * FUNDING_SCALE) / indexPrice;
+    const rateScaled =
+      uncappedScaled > maxRateScaled
+        ? maxRateScaled
+        : uncappedScaled < -maxRateScaled
+          ? -maxRateScaled
+          : uncappedScaled;
+
+    const rate = Number(rateScaled) / Number(FUNDING_SCALE);
+
     return {
-      data: null,
-      formattedRate: "0%",
+      rate,
+      rateScaled,
+      markPrice,
+      indexPrice,
+      isCapped: rateScaled !== uncappedScaled,
+      formattedRate: formatRate(rate),
     };
-  }
-
-  const latestUpdate = rows[0];
-
-  // Apply formula: fundingRate / 10**18
-  const fundingRateBigInt = BigInt(latestUpdate.fundingRate);
-  const divisor = BigInt(10 ** 18);
-  const fundingRateDecimal = Number(fundingRateBigInt) / Number(divisor);
-
-  // Format as percentage (multiply by 100 and add % sign)
-  const formattedRate = `${(fundingRateDecimal * 100).toFixed(4)}%`;
-
-  const data: FundingUpdate = {
-    blockNumber: Number(latestUpdate.blockNumber),
-    cumulativeFundingPerUnit: BigInt(latestUpdate.cumulativeFundingPerUnit),
-    fundingRate: fundingRateBigInt,
-    id: latestUpdate.id,
-    timestamp: Number(latestUpdate.timestamp),
-    transactionHash: latestUpdate.transactionHash,
-  };
+  }, [orderBook.data, indexPrice, fundingRateMaxBps]);
 
   return {
     data,
-    formattedRate,
+    /// The window the rate is quoted over (`fundingPeriod`). The rate is not
+    /// charged in discrete chunks at that cadence — the accumulator accrues
+    /// continuously, pro rata by elapsed time — so this is a unit, not a
+    /// settlement schedule.
+    periodLabel: fundingPeriodSeconds ? formatFundingPeriod(fundingPeriodSeconds) : undefined,
+    isLoading: orderBook.isLoading || indexPriceQuery.isLoading,
+    isError: orderBook.isError || indexPriceQuery.isError,
   };
 };
 
-export type FundingUpdate = {
-  blockNumber: number;
-  cumulativeFundingPerUnit: bigint;
-  fundingRate: bigint;
-  id: string;
-  timestamp: number;
-  transactionHash: string;
+export const formatFundingPeriod = (seconds: number) => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h`;
+  return `${minutes}m`;
 };
 
-export type FundingUpdateRow = {
-  blockNumber: string;
-  cumulativeFundingPerUnit: string;
-  fundingRate: string;
-  id: string;
-  timestamp: string;
-  transactionHash: string;
+/// Highest bid and lowest ask with resting size, matching the contract's
+/// `_bestBidPrice` / `_bestAskPrice` over the active price-level lists.
+const bestPrices = (priceLevels?: { price: bigint; isBid: boolean; totalQuantity: bigint }[]) => {
+  let bestBid: bigint | undefined;
+  let bestAsk: bigint | undefined;
+
+  for (const level of priceLevels ?? []) {
+    if (level.totalQuantity <= 0n) continue;
+    if (level.isBid) {
+      if (bestBid === undefined || level.price > bestBid) bestBid = level.price;
+    } else if (bestAsk === undefined || level.price < bestAsk) {
+      bestAsk = level.price;
+    }
+  }
+
+  return { bestBid, bestAsk };
 };
 
-type FundingUpdatesResponse = {
-  funding: FundingUpdateRow[];
+const formatRate = (rate: number) => {
+  const pct = rate * 100;
+  return `${pct > 0 ? "+" : ""}${pct.toFixed(4)}%`;
 };

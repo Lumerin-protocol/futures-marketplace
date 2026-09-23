@@ -1,5 +1,15 @@
 create_core = true
 
+# After STG released this name (Part 0). Dedicated CF + ACM + root-zone A-record.
+# apex_site = "hold" keeps https://hashpower.exchange on the static page.
+# UI deploys go to beta. Cutover: set apex_site = "beta" and apply.
+beta_alias = {
+  create   = true
+  hostname = "beta.hashpower.exchange"
+}
+
+apex_site = "hold"
+
 ecs_cluster = {
   create  = true
   protect = false
@@ -7,7 +17,7 @@ ecs_cluster = {
 
 # Configure Market Maker Lambda
 market_maker = {
-  create                      = true
+  create                      = false
   # Lambda Configuration
   timeout                     = 60          # 60 seconds (enough for blockchain tx)
   memory_size                 = 1024        # 1GB RAM
@@ -20,7 +30,7 @@ market_maker = {
   risk_aversion               = 15000
   max_position                = 10
   log_level                   = "info"
-  chain_id                    = 42161       # Arbitrum Mainnet
+  chain_id                    = 8453        # Base Mainnet
   # Balance Thresholds (graceful exit when funds low)
   min_eth_balance             = "100000000000000"     # 0.0001 ETH in wei (~1.4 txns - stops before failing)
   min_usdc_balance            = "10000000"            # 10 USDC (10n * 10n ** 6n)
@@ -54,18 +64,21 @@ notifications_service = {
 ########################################
 # Note: ethereum_rpc_url is defined in secret.auto.tfvars (contains API key)
 # Contract addresses for the environment
-# DEV uses Arbitrum Sepolia testnet, STG/LMN use Arbitrum mainnet
-clone_factory_address   = "0x6b690383c0391b0cf7d20b9eb7a783030b1f3f96"
-hashrate_oracle_address = "0x6599ef8e2b4a548a86eb82e2dfbc6ceadfceacbd"
-futures_address         = "0x8464dc5ab80e76e497fad318fe6d444408e5ccda" 
-multicall_address       = "0xcA11bde05977b3631167028862bE2a173976CA11"
+# Base mainnet from config/prd.env. clone_factory / hashrate_oracle have no
+# futures prd.env key; hashrate_oracle matches derivatives PRICE_ORACLE_ADDRESS.
+clone_factory_address   = "0xb5838586b43b50f9a739d1256a067859fe5b3234"
+hashrate_oracle_address = "0x614dCAfa33AF0705C7b4A37667eF511F400F36d0"
+futures_address         = "0xf97a1bbfb5e061ef73dad8ebf25939d93639fb7f" # FUTURES_ADDRESS
+multicall_address       = "0xcA11bde05977b3631167028862bE2a173976CA11" # REACT_APP_MULTICALL_ADDRESS
 
 ########################################
 # Goldsky Subgraph Endpoints (public)
 ########################################
+# Goldsky project STG-Exchange renamed LMN-Exchange (same project ID).
 gs_subgraphs = {
-  futures = "FINDME"
-  oracles = "FINDME"
+  futures     = "https://api.goldsky.com/api/public/project_cmmz5dm4l7ocp01xng61y5nwr/subgraphs/hpow-futures/lmn-latest/gn"     # REACT_APP_SUBGRAPH_FUTURES_URL
+  oracles     = "https://api.goldsky.com/api/public/project_cmmz5dm4l7ocp01xng61y5nwr/subgraphs/hpow-oracles/lmn-latest/gn"     # REACT_APP_SUBGRAPH_ORACLES_URL
+  derivatives = "https://api.goldsky.com/api/public/project_cmmz5dm4l7ocp01xng61y5nwr/subgraphs/hpow-derivatives/lmn-latest/gn" # REACT_APP_SUBGRAPH_PERPS_URL
 }
 
 

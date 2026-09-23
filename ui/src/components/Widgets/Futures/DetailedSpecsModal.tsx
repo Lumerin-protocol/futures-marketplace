@@ -9,7 +9,7 @@ import { useFuturesTokenInfo } from "../../../hooks/data/useFuturesTokenInfo";
 import { usePerpsCollection } from "../../../hooks/data/perps/usePerpsCollection";
 import { usePerpsContractConstants } from "../../../hooks/data/perps/usePerpsContractConstants";
 import { usePerpsTokenInfo } from "../../../hooks/data/perps/usePerpsTokenInfo";
-import { useFundingRate } from "../../../hooks/data/perps/useFundingRate";
+import { formatFundingPeriod, useFundingRate } from "../../../hooks/data/perps/useFundingRate";
 import { useMarginEngineShocks } from "../../../hooks/data/useMarginEngineShocks";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { ContractMode } from "../../../types/types";
@@ -292,14 +292,6 @@ const PerpetualStatistics = () => {
   const tickSize = perpsCollection ? perpsCollection.minimumPriceIncrement / PAYMENT_TOKEN_SCALE_NUM : null;
   const _minMarginPerOrder = perpsCollection ? perpsCollection.minimumMarginPerOrder / PAYMENT_TOKEN_SCALE_NUM : null;
 
-  const formatFundingPeriod = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
-    if (hours > 0) return `${hours}h`;
-    return `${minutes}m`;
-  };
-
   const nextFundingCountdown = useMemo(() => {
     if (!perpsConstants.lastFundingUpdateTime || !perpsConstants.fundingPeriodSeconds) return null;
     const nextFundingTime = perpsConstants.lastFundingUpdateTime + perpsConstants.fundingPeriodSeconds;
@@ -366,7 +358,7 @@ const PerpetualStatistics = () => {
         <SectionTitle>FUNDING</SectionTitle>
         <SpecItem>
           <SpecLabel>Current Funding Rate</SpecLabel>
-          <SpecValue>{fundingRateQuery.data?.formattedRate ?? "0%"}</SpecValue>
+          <SpecValue>{fundingRateQuery.data?.formattedRate ?? "—"}</SpecValue>
         </SpecItem>
 
         {perpsConstants.fundingPeriodSeconds !== null && (

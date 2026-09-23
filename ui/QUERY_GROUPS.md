@@ -109,7 +109,7 @@ through the driver rather than each hook fetching alone.
 | `AggregateOrderBookQuery` | `["AggregateOrderBook",expirationAt]` | futures | per expiration |
 | `PerpsOrderBookQuery` | `["PerpsOrderBook"]` | perps | the perp |
 | `RecentTradesQuery` | `["RecentTrades",venue,50]` | both | per venue |
-| `FundingUpdatesQuery` | `["FundingRate"]` | perps | the perp |
+| funding rate | computed from the book mid and `getMarketPrice()` | — | the perp |
 | `OracleHourCandlesQuery` | shared by the three charts | oracles | per range |
 | `HashrateIndexQuery`, `BtcPriceIndexQuery`, `NetworkHashrateIndexQuery` | `[series,timePeriod]` | oracles | per ticker + range |
 
@@ -205,7 +205,7 @@ naming explicitly because it is the single densest request pattern in the app.
 
 ## Queries missing from the original sketch
 
-- **Funding rate** (`FundingUpdatesQuery`) — market data, group 3.
+- **Funding rate** — computed from the order-book mid and `getMarketPrice()`, not read from `FundingUpdated`. The book it needs is already in group 3.
 - **Public recent trades** (`RecentTradesQuery`) — the venue-wide feed, distinct
   from the user's own trades.
 - **Points and leaderboard** — three queries on a fourth endpoint, a different

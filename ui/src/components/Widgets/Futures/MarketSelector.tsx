@@ -118,7 +118,13 @@ const MarketSelect = styled(Select)`
      so the desktop floor is dropped and the padding tightens rather than pushing
      that toggle off the edge — 350px alone would overflow a phone. */
   @media (max-width: 768px) {
+    /* min-width alone is not enough while desktop flex-shrink remains disabled.
+       Give the selector the flexible part of the row and let its label ellipsize
+       before it can displace the fixed chart button. */
+    flex: 1 1 0;
+    width: 0;
     min-width: 0;
+    max-width: 100%;
 
     .select-trigger {
       padding: 0.3rem 0.5rem;
@@ -145,7 +151,9 @@ const TriggerLogo = styled(HpdxLogomark)`
 const TriggerValue = styled.span`
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
 `;
 
 /* A step above the 1rem/600 the header stats use, so the instrument reads as the
@@ -159,6 +167,8 @@ const TriggerLabel = styled.span`
 
   @media (max-width: 768px) {
     font-size: 0.9375rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 `;
 

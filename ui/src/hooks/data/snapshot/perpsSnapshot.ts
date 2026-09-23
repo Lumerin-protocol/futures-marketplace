@@ -8,11 +8,6 @@ import { perpsSlices } from "../queries/perps";
 import { buildDocument, type Slice } from "../queries/slice";
 import { dueGroups, onTheSchedule, type TickGroup } from "./groupSchedule";
 import {
-  FUNDING_RATE_QK,
-  type FundingUpdateRow,
-  mapFundingRate,
-} from "../perps/useFundingRate";
-import {
   mapPerpsCollection,
   PERPS_COLLECTION_QK,
   type PerpsCollectionRow,
@@ -70,7 +65,6 @@ const VENUE_ID = "perpetual";
 interface PerpsSnapshotResponse {
   _meta: { block: { number: number; timestamp: number } };
   collection?: PerpsCollectionRow[];
-  funding?: FundingUpdateRow[];
   book?: PerpsPriceLevelRow[];
   recentTrades?: RecentTradeRow[];
   myOrders?: PerpsOrderRow[];
@@ -101,7 +95,7 @@ const slicesForTick = (groups: readonly TickGroup[]) => {
 
   if (due.has("constants")) slices.push(perpsSlices.collection);
   if (due.has("market")) {
-    slices.push(perpsSlices.book, perpsSlices.recentTrades, perpsSlices.funding);
+    slices.push(perpsSlices.book, perpsSlices.recentTrades);
   }
   if (due.has("account")) {
     slices.push(
@@ -164,9 +158,6 @@ export const fetchPerpsSnapshot = async (
       { data: mapPerpsCollection(response.collection[0]) },
       startedAt,
     );
-  }
-  if (response.funding) {
-    writeIfChanged(qc, [FUNDING_RATE_QK], mapFundingRate(response.funding), startedAt);
   }
   if (response.recentTrades) {
     writeIfChanged(
