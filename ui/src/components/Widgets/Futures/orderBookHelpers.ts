@@ -7,7 +7,41 @@ export interface OrderBookData {
   isHighlighted?: boolean;
   highlightColor?: "red" | "green";
   isLastHashprice?: boolean;
+  // Synthetic, non-price row marking the middle of the book (between best bid
+  // and best ask). Its `price` is the book mid, not a ladder tick.
+  isCenterRow?: boolean;
 }
+
+export interface BookCenter {
+  mid: number | null;
+  bestAsk: number | null;
+  bestBid: number | null;
+  spread: number | null;
+  spreadPct: number | null;
+  // Mid at/above the hashprice (green, up arrow) vs below it (red, down arrow).
+  isUp: boolean;
+}
+
+/**
+ * Middle of the order book, derived from the book itself rather than the
+ * hashprice: mid of best bid/ask, else the only side present, else hashprice.
+ */
+export const computeBookCenter = (
+  bestAsk: number | null,
+  bestBid: number | null,
+  hashprice: number | null,
+): BookCenter => {
+  const hasBoth = bestAsk != null && bestBid != null;
+  const mid = hasBoth ? (bestAsk + bestBid) / 2 : bestAsk ?? bestBid ?? hashprice;
+  const spread = hasBoth ? bestAsk - bestBid : null;
+  const spreadPct = spread != null && mid ? (spread / mid) * 100 : null;
+  const isUp = mid != null && hashprice != null ? mid >= hashprice : true;
+  return { mid, bestAsk, bestBid, spread, spreadPct, isUp };
+};
+
+/** Formats the book mid with the same precision as ladder prices. */
+export const formatMidPrice = (mid: number): string =>
+  Math.abs(mid) < 1 ? mid.toFixed(4) : mid.toFixed(2);
 
 /**
  * Per-price aggregated row consumed by the order-book renderer. Both futures
@@ -19,8 +53,8 @@ export interface AggregatedOrderBookEntry {
   sellOrdersCount: number;
 }
 
-// The contiguous ladder spans +/- this fraction of the market price so every
-// tick between orders is selectable (e.g. market $10 -> $5..$15). Live levels
+// The contiguous ladder spans +/- this fraction of the book mid so every tick
+// between orders is selectable (e.g. mid $10 -> $5..$15). Live levels
 // outside the band are appended as sparse rows (no gap-fill) so a bad oracle
 // price or a far-away resting order cannot explode into tens of millions of
 // ticks and freeze the tab.
@@ -36,8 +70,10 @@ const MAX_LADDER_TICKS = 10_000;
  * Builds the order book ladder rendered by the volume view. Instead of showing
  * only the price levels that have resting orders (which collapses gaps between
  * e.g. a bid at $3 and $4), this emits a *contiguous* row for every tick in a
- * band around the market price, merging live bid/ask quantities where present
- * and leaving empty (but still selectable) rows everywhere else.
+ * band around the book's spread, merging live bid/ask quantities where present
+ * and leaving empty (but still selectable) rows everywhere else. One synthetic
+ * `isCenterRow` row is inserted between best ask and best bid (or at the market
+ * price for an empty book).
  *
  * All arithmetic is done in integer "tick" units (`round(price / increment)`)
  * to avoid floating point drift when accumulating the increment thousands of
@@ -73,12 +109,12 @@ export const createFinalOrderBookData = (
   const rawMarketPrice =
     marketPrice != null ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
 
-  // Fallback: without a market price or tick size we cannot build a contiguous
-  // band, so render just the live levels (sorted high -> low), as before.
-  if (inc === null || inc <= 0 || rawMarketPrice === null) {
+  // Fallback: without a tick size we cannot build a contiguous band, so render
+  // just the live levels (sorted high -> low), as before.
+  if (inc === null || inc <= 0) {
     return Array.from(liveByTick.entries())
       .map(([tick, live]) => ({
-        price: inc && inc > 0 ? tick * inc : tick,
+        price: tick,
         bidUnits: live.bidUnits,
         askUnits: live.askUnits,
         isLastHashprice: false,
@@ -86,37 +122,81 @@ export const createFinalOrderBookData = (
       .sort((a, b) => b.price - a.price);
   }
 
-  const marketTick = Math.round(rawMarketPrice / inc);
-  let lowTick = Math.round((rawMarketPrice * (1 - LADDER_WINDOW_FRACTION)) / inc);
-  let highTick = Math.round((rawMarketPrice * (1 + LADDER_WINDOW_FRACTION)) / inc);
+  // The ladder is anchored on the book's own spread, not the hashprice: the
+  // oracle mark can drift far from where orders actually rest.
+  let bestAskTick: number | null = null;
+  let bestBidTick: number | null = null;
+  for (const [tick, live] of liveByTick) {
+    if (live.askUnits && (bestAskTick === null || tick < bestAskTick)) bestAskTick = tick;
+    if (live.bidUnits && (bestBidTick === null || tick > bestBidTick)) bestBidTick = tick;
+  }
+
+  // Fractional tick where the center row sits: every ladder tick above it is
+  // rendered above the center row. A one-sided book puts the center just
+  // inside its best level.
+  let centerTickF: number;
+  if (bestAskTick !== null && bestBidTick !== null) {
+    centerTickF = (bestAskTick + bestBidTick) / 2;
+  } else if (bestAskTick !== null) {
+    centerTickF = bestAskTick - 0.5;
+  } else if (bestBidTick !== null) {
+    centerTickF = bestBidTick + 0.5;
+  } else if (rawMarketPrice !== null) {
+    centerTickF = rawMarketPrice / inc;
+  } else {
+    return [];
+  }
+
+  const center = computeBookCenter(
+    bestAskTick !== null ? bestAskTick * inc : null,
+    bestBidTick !== null ? bestBidTick * inc : null,
+    rawMarketPrice,
+  );
+  const centerRow: OrderBookData = {
+    price: center.mid ?? centerTickF * inc,
+    bidUnits: null,
+    askUnits: null,
+    isCenterRow: true,
+  };
+
+  const anchorPrice = centerTickF * inc;
+  const anchorTick = Math.round(centerTickF);
+  let lowTick = Math.round((anchorPrice * (1 - LADDER_WINDOW_FRACTION)) / inc);
+  let highTick = Math.round((anchorPrice * (1 + LADDER_WINDOW_FRACTION)) / inc);
 
   // Prices must stay positive; never generate a $0 (or negative) tick.
   lowTick = Math.max(1, lowTick);
 
-  // Shrink an oversized window around the mark instead of allocating millions
-  // of empty rows (bad/stale oracle prices are the usual trigger).
+  // Shrink an oversized window around the anchor instead of allocating millions
+  // of empty rows (bad/stale prices are the usual trigger).
   if (highTick - lowTick + 1 > MAX_LADDER_TICKS) {
     const half = Math.floor(MAX_LADDER_TICKS / 2);
-    lowTick = Math.max(1, marketTick - half);
-    highTick = marketTick + (MAX_LADDER_TICKS - 1) - (marketTick - lowTick);
+    lowTick = Math.max(1, anchorTick - half);
+    highTick = anchorTick + (MAX_LADDER_TICKS - 1) - (anchorTick - lowTick);
     console.warn(
       `[orderBook] Contiguous ladder capped at ${MAX_LADDER_TICKS} ticks ` +
-        `(market≈${rawMarketPrice}, tick=${inc}). Check getMarketPrice() scale/oracle.`,
+        `(anchor≈${anchorPrice}, tick=${inc}). Check price scale/oracle.`,
     );
   }
 
   const rows: OrderBookData[] = [];
   const ladderTicks = new Set<number>();
+  let centerInserted = false;
   for (let tick = highTick; tick >= lowTick; tick--) {
+    if (!centerInserted && tick <= centerTickF) {
+      rows.push(centerRow);
+      centerInserted = true;
+    }
     ladderTicks.add(tick);
     const live = liveByTick.get(tick);
     rows.push({
       price: tick * inc,
       bidUnits: live?.bidUnits ?? null,
       askUnits: live?.askUnits ?? null,
-      isLastHashprice: tick === marketTick,
+      isLastHashprice: false,
     });
   }
+  if (!centerInserted) rows.push(centerRow);
 
   // Keep out-of-window live levels visible without gap-filling every tick
   // between them and the mark (that path is what used to freeze the UI).
