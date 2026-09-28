@@ -24,6 +24,4 @@ export {
   handlePositionSettled,
 } from "./handlers/orders";
 
-export { handleBadDebt } from "./handlers/liquidation";
-
 export { handleSettlementPriceRecorded } from "./handlers/expirations";

@@ -50,7 +50,6 @@ type Futures @entity(immutable: false) {
   totalLiquidations: Int!
   "Notional closed by force, in the same units as totalVolume: sum of exitPrice * abs(closedQuantity) over every PositionLiquidated."
   totalLiquidatedValue: BigInt!
-  totalBadDebt: BigInt!
 
   # Timestamps
   initializedAt: BigInt!
@@ -110,7 +109,6 @@ type User @entity(immutable: false) {
   positionSessions: [PositionSession!]! @derivedFrom(field: "user")
   "Per-(user, expirationAt) running net qty + open-session pointers, one entry per expiration date the user has touched."
   deliveryPointers: [UserDeliverySessionPointer!]! @derivedFrom(field: "user")
-  badDebts: [BadDebtEvent!]! @derivedFrom(field: "user")
 
   # Timestamps
   createdAt: BigInt!
@@ -279,16 +277,6 @@ enum PositionSessionStatus {
 # existence is the dedup signal.
 type LiquidationTx @entity(immutable: true) {
   id: Bytes! # transaction hash
-}
-
-# Bad debt event when a participant or the insurance fund cannot cover a loss.
-type BadDebtEvent @entity(immutable: true) {
-  id: Bytes! # tx hash + log index
-  user: User!
-  amount: BigInt!
-  timestamp: BigInt!
-  blockNumber: BigInt!
-  transactionHash: Bytes!
 }
 
 # Order book price level aggregation per (expirationAt, price, side).

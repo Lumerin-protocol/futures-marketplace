@@ -196,12 +196,10 @@ export const OrderBookTable = ({
     return { maxBidAmount: maxBid, maxAskAmount: maxAsk };
   }, [finalOrderBookDataWithHighlights]);
 
-  const currentBasePrice = finalOrderBookDataWithHighlights.find((o) => o.isLastHashprice);
+  const currentBasePrice = finalOrderBookDataWithHighlights.find((o) => o.isCenterRow);
 
-  // Market price (in token units) for the Binance-style center row. Falls back
-  // to the ladder's base/hashprice row when the raw market price is unavailable.
-  const marketPriceNumber =
-    marketPrice != null ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : currentBasePrice?.price ?? null;
+  // Hashprice (in token units) shown as info in the Binance-style center row.
+  const marketPriceNumber = marketPrice != null ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
 
   // Only closes over a ref, so it stays stable and can be listed as an effect
   // dependency without retriggering anything. Declared above the effects that
@@ -224,7 +222,7 @@ export const OrderBookTable = ({
     }, 100);
   }, []);
 
-  // Auto-scroll to last hashprice row when basePrice (hashprice) updates
+  // Auto-scroll to the spread (center) row once it first appears
   useEffect(() => {
     if (!tableContainerRef.current) {
       return;
@@ -239,9 +237,8 @@ export const OrderBookTable = ({
     previousBasePriceRef.current = currentBasePrice.price;
 
     setTimeout(() => {
-      // Find the last hashprice row index
-      const lastHashpriceIndex = finalOrderBookDataWithHighlights.findIndex((row) => row.isLastHashprice);
-      scrollToOrder(lastHashpriceIndex);
+      const centerIndex = finalOrderBookDataWithHighlights.findIndex((row) => row.isCenterRow);
+      scrollToOrder(centerIndex);
     }, 100);
   }, [currentBasePrice, finalOrderBookDataWithHighlights, finalOrderBookData.length, scrollToOrder]);
 

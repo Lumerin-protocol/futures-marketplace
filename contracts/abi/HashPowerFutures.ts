@@ -211,6 +211,11 @@ export const HashPowerFuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "TradingHalted",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "UUPSUnauthorizedCallContext",
     "type": "error"
   },
@@ -255,25 +260,6 @@ export const HashPowerFuturesAbi = [
     "inputs": [],
     "name": "ZeroAddress",
     "type": "error"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "user",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "BadDebt",
-    "type": "event"
   },
   {
     "anonymous": false,

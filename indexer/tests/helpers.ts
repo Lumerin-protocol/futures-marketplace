@@ -151,16 +151,10 @@ export function setupFutures(): void {
   f.totalVolume = BigInt.zero();
   f.totalLiquidations = 0;
   f.totalLiquidatedValue = BigInt.zero();
-  f.totalBadDebt = BigInt.zero();
   f.initializedAt = BigInt.zero();
   f.lastUpdatedAt = BigInt.zero();
   f.save();
 }
-
-/// Default tx hash matchstick uses for `newTypedMockEventWithParams<…>`.
-export const MOCK_TX_HASH = Bytes.fromHexString(
-  "0xa16081f360e3847006db660bae1c6d1b2e17ec2a",
-) as Bytes;
 
 /// Bump tx hash + block + logIndex on a mock event so it lands in a fresh
 /// "transaction" — required when chaining handlers that share aggregate IDs
@@ -178,12 +172,6 @@ const ID_SEP: Bytes = Bytes.fromHexString("0xff") as Bytes;
 export function nudgedTxHash(seed: i32): Bytes {
   const hex = padLeft(seed.toString(16), 40, "0");
   return Bytes.fromHexString("0x" + hex) as Bytes;
-}
-
-/// Event id used by BadDebtEvent: txHash.concatI32(logIndex).
-/// Default matchstick logIndex is 1.
-export function eventIdHex(logIndex: i32 = 1): string {
-  return MOCK_TX_HASH.concatI32(logIndex).toHexString();
 }
 
 /// PositionSession id: blockNumber (12) + logIndex (6) + leg (2).
