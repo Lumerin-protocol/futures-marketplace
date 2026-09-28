@@ -31,7 +31,6 @@ dataSources:
         - PriceLevel
         - FuturesExpiration
         - LiquidationTx
-        - BadDebtEvent
         - UserDeliverySessionPointer
       abis:
         - name: HashPowerFutures
@@ -69,8 +68,6 @@ dataSources:
           handler: handleOracleUpdated
         - event: PortfolioMarginUpdated(address)
           handler: handlePortfolioMarginUpdated
-        - event: BadDebt(indexed address,uint256)
-          handler: handleBadDebt
         - event: SettlementPriceRecorded(indexed uint256,uint256,address)
           handler: handleSettlementPriceRecorded
       file: ./src/futures.ts

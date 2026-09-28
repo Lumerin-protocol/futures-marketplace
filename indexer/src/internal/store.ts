@@ -42,7 +42,6 @@ export function getOrCreateFutures(): Futures {
     futures.totalVolume = BigInt.zero();
     futures.totalLiquidations = 0;
     futures.totalLiquidatedValue = BigInt.zero();
-    futures.totalBadDebt = BigInt.zero();
     futures.initializedAt = BigInt.zero();
     futures.lastUpdatedAt = BigInt.zero();
     loadFuturesFromContract(futures);
