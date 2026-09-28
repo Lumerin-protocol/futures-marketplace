@@ -1,9 +1,10 @@
-import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
+import { useWriteContract, usePublicClient } from "wagmi";
 import { getContract } from "viem";
 import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
 import { QUANTITY_SCALE_NUM } from "../../../lib/units";
 import { TimeInForce } from "../../../types/timeInForce";
 import { withErrors } from "../../../lib/withErrors";
+import { requireWalletClient } from "../../../clients/requireWalletClient";
 
 /** One leg of the `_reduces` argument. */
 export interface PerpsReduceIntent {
@@ -28,11 +29,10 @@ interface UpdatePerpsOrdersProps {
 export function useUpdatePerpsOrders() {
   const { writeContractAsync, isPending, isError, error, data: hash } = useWriteContract();
   const publicClient = usePublicClient();
-  const { data: walletClient } = useWalletClient();
 
   const updateOrdersAsync = async (props: UpdatePerpsOrdersProps) => {
-    if (!walletClient) throw new Error("Wallet not ready. Please try again.");
     if (!publicClient) throw new Error("No RPC client available. Please try again.");
+    const walletClient = await requireWalletClient();
 
     const cancelIds = props.cancelIds ?? [];
     const reduces = props.reduces ?? [];
