@@ -584,21 +584,8 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
 
     /// @dev Move a signed trading fee between a participant and the fee pot
     ///      (this contract's vault account — see {collectedFeesBalance}).
-    ///
-    ///      A charge goes through the vault, which pays what the trader has and records the
-    ///      rest as fee bad debt. The hazard is an ordering one inside the fill, not keeper
-    ///      latency: {_executeMatch} applies both parties' fills — realizing PnL against
-    ///      their balances — before it charges either fee. An unclamped debit would let a
-    ///      maker whose balance the same transaction just drained revert a stranger's taker
-    ///      order. Coverage of the fee itself rests on the MM floor (`mmSpotShock` on the
-    ///      full resting notional against a fee bounded by `MAX_FEE_BPS`), so the shortfall
-    ///      only bites for an account already below MM, where it costs the fee pot a few bps
-    ///      rather than blocking the book.
-    ///
-    ///      A rebate is capped at the pot, so rebates can only ever pay out fees already
-    ///      collected — `makerFeeBps + takerFeeBps >= 0` keeps a single match from being a
-    ///      net outflow, and this keeps a run of them from overdrawing the pot. A capped
-    ///      rebate is not bad debt.
+    ///      A rebate is capped at the pot. `makerFeeBps + takerFeeBps >= 0` keeps one match
+    ///      from being a net outflow, and the cap keeps a run of rebates from overdrawing it.
     function _transferFee(address _participant, int256 _fee) internal {
         if (_fee == 0) return;
 
