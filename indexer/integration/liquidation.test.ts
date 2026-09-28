@@ -1,12 +1,11 @@
 /**
- * Integration tests: liquidation + bad-debt events under the permissionless
- * keeper flow.
+ * Integration tests: liquidation events under the permissionless keeper flow.
  *
  * Verifies that `PositionLiquidated` + `OrderLiquidated` populate the
- * PositionSession / Order entities, that `BadDebtEvent` is created when
- * losses exceed coverage, and that `Futures.totalLiquidations` is incremented
- * once per tx via the `LiquidationTx` dedup sentinel (regardless of how many
- * legs the tx contained).
+ * PositionSession / Order entities, and that `Futures.totalLiquidations` is
+ * incremented once per tx via the `LiquidationTx` dedup sentinel (regardless
+ * of how many legs the tx contained). Shortfalls are recorded on the vault,
+ * not on this subgraph.
  */
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
@@ -174,123 +173,6 @@ describe("liquidatePosition: PositionLiquidated, seller netQty=0", () => {
       String(sellerSession.liquidatedQuantity),
       "1",
       "PositionSession.liquidatedQuantity must equal abs(closed qty) = 1",
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Test 2: BadDebt — BadDebtEvent entity when losses exceed coverage
-// ---------------------------------------------------------------------------
-describe("BadDebt: BadDebtEvent when losses exceed participant balance + insurance fund", () => {
-  after(() => matchstick.reset());
-
-  it("BadDebtEvent is created and Futures.totalBadDebt is non-zero", async () => {
-    const { contracts, accounts, config } =
-      await conn.networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault, hashpriceUsd } = contracts;
-    const { seller, buyer, validator, pc } = accounts;
-
-    const price = quantizePrice(await futures.read.getMarketPrice(), config.priceLadderStep);
-    const deliveryDate = config.deliveryDates[0];
-    const margin = parseUnits("1000", 6);
-
-    await collateralVault.write.deposit([margin], { account: seller.account });
-    await collateralVault.write.deposit([margin], { account: buyer.account });
-    matchstick.bind("HashPowerFutures", futures.address, futures.abi);
-    await matchstick.captureViewMocks();
-    await matchstick.anchor();
-
-    await futures.write.createOrder([price, deliveryDate, -1n, TimeInForce.GTC], { account: seller.account });
-    const buyTx = await futures.write.createOrder([price, deliveryDate, 1n, TimeInForce.GTC], {
-      account: buyer.account,
-    });
-    await pc.waitForTransactionReceipt({ hash: buyTx });
-
-    // Spike price 500x — loss exceeds seller (1 000) + insurance fund (10 000)
-    await scaleHashprice(hashpriceUsd, 500n, 1n);
-
-    const liqTx = await futures.write.liquidatePosition(
-      [seller.account.address, deliveryDate, 1n],
-      { account: validator.account },
-    );
-    const liqReceipt = await pc.waitForTransactionReceipt({ hash: liqTx });
-
-    const badDebtEvents = parseEventLogs({
-      logs: liqReceipt.logs,
-      abi: futures.abi,
-      eventName: "BadDebt",
-    });
-    assert.equal(badDebtEvents.length, 1, "must emit exactly 1 BadDebt event");
-    const onChainAmount = badDebtEvents[0].args.amount;
-
-    const sellerAddr = seller.account.address.toLowerCase() as `0x${string}`;
-
-    const snap = await matchstick.indexSnapshot([]);
-
-    const badDebtEntities = snap.saved("BadDebtEvent");
-    assert.equal(badDebtEntities.length, 1, "exactly 1 BadDebtEvent entity");
-    const badDebt = badDebtEntities[0];
-    assert.equal(badDebt.user, sellerAddr, "BadDebtEvent.user must be the seller");
-    assert.equal(
-      badDebt.amount,
-      onChainAmount.toString(),
-      "BadDebtEvent.amount must match on-chain event",
-    );
-
-    // Field-coverage: BadDebtEvent metadata.
-    assert.ok(
-      typeof badDebt.id === "string" && (badDebt.id as string).startsWith("0x"),
-      "BadDebtEvent.id is `tx hash ++ logIndex` (hex Bytes), set by createEventId",
-    );
-    assert.equal(
-      String(badDebt.transactionHash).toLowerCase(),
-      liqTx.toLowerCase(),
-      "BadDebtEvent.transactionHash mirrors the liquidatePosition tx hash",
-    );
-    assert.ok(
-      BigInt(String(badDebt.timestamp)) > 0n,
-      "BadDebtEvent.timestamp is set from event.block.timestamp",
-    );
-    assert.ok(
-      BigInt(String(badDebt.blockNumber)) > 0n,
-      "BadDebtEvent.blockNumber is set from event.block.number",
-    );
-
-    const futuresEntity = snap.entity("Futures", "0");
-    assert.ok(futuresEntity);
-    assert.equal(
-      futuresEntity.totalBadDebt,
-      onChainAmount.toString(),
-      "Futures.totalBadDebt must equal the bad-debt amount",
-    );
-    assert.ok(
-      BigInt(String(futuresEntity.totalBadDebt)) > 0n,
-      "Futures.totalBadDebt must be positive",
-    );
-    assert.equal(
-      String(futuresEntity.totalLiquidations),
-      "1",
-      "totalLiquidations still bumps once for the same tx",
-    );
-
-    const positionLiquidatedEvents = parseEventLogs({
-      logs: liqReceipt.logs,
-      abi: futures.abi,
-      eventName: "PositionLiquidated",
-    });
-    assert.equal(positionLiquidatedEvents.length, 1, "must emit exactly 1 PositionLiquidated");
-    const positionLiquidated = positionLiquidatedEvents[0];
-    const validatorAddr = validator.account.address.toLowerCase() as `0x${string}`;
-
-    const sellerPtr = snap.entity(
-      "UserDeliverySessionPointer",
-      pointerId(seller.account.address, deliveryDate),
-    );
-    assert.ok(sellerPtr);
-    assert.equal(String(sellerPtr.netQuantity), "0");
-    assert.equal(
-      String(positionLiquidated.args.liquidator).toLowerCase(),
-      validatorAddr,
     );
   });
 });

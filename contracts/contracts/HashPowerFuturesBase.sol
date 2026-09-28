@@ -256,7 +256,6 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         uint256 settlementPrice,
         address settledBy
     );
-    event BadDebt(address indexed user, uint256 amount);
     event SettlementPriceRecorded(uint256 indexed expirationAt, uint256 price, address recordedBy);
     event LiquidationMarginPercentUpdated(uint8 newLiquidationMarginPercent);
     event FutureExpirationDatesCountUpdated(uint8 newFutureExpirationDatesCount);
@@ -299,6 +298,8 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     error InvalidTimeInForce();
     error InvalidReduceQuantity();
     error EmptyBatch();
+    /// @notice New order placement is rejected while the vault has halted trading.
+    error TradingHalted();
     /// @notice Fee magnitude above `MAX_FEE_BPS`, or a maker+taker sum below zero (which
     ///         would make every match a net outflow from the insurance fund).
     error InvalidFee();
@@ -584,31 +585,25 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     /// @dev Move a signed trading fee between a participant and the fee pot
     ///      (this contract's vault account — see {collectedFeesBalance}).
     ///
-    ///      Both directions clamp, matching {_transferPnl} and {_chargeLiquidationFee}. The
-    ///      hazard is an ordering one inside the fill, not keeper latency: {_executeMatch}
-    ///      applies both parties' fills — realizing PnL against their balances — before it
-    ///      charges either fee. An unclamped debit would let a maker whose balance the same
-    ///      transaction just drained revert a stranger's taker order. Coverage of the fee
-    ///      itself rests on the MM floor (`mmSpotShock` on the full resting notional against
-    ///      a fee bounded by `MAX_FEE_BPS`), so the clamp only bites for an account already
-    ///      below MM, where it costs the fee pot a few bps rather than blocking the book.
+    ///      A charge goes through the vault, which pays what the trader has and records the
+    ///      rest as fee bad debt. The hazard is an ordering one inside the fill, not keeper
+    ///      latency: {_executeMatch} applies both parties' fills — realizing PnL against
+    ///      their balances — before it charges either fee. An unclamped debit would let a
+    ///      maker whose balance the same transaction just drained revert a stranger's taker
+    ///      order. Coverage of the fee itself rests on the MM floor (`mmSpotShock` on the
+    ///      full resting notional against a fee bounded by `MAX_FEE_BPS`), so the shortfall
+    ///      only bites for an account already below MM, where it costs the fee pot a few bps
+    ///      rather than blocking the book.
     ///
     ///      A rebate is capped at the pot, so rebates can only ever pay out fees already
     ///      collected — `makerFeeBps + takerFeeBps >= 0` keeps a single match from being a
-    ///      net outflow, and this keeps a run of them from overdrawing the pot.
+    ///      net outflow, and this keeps a run of them from overdrawing the pot. A capped
+    ///      rebate is not bad debt.
     function _transferFee(address _participant, int256 _fee) internal {
         if (_fee == 0) return;
 
         if (_fee > 0) {
-            uint256 owed = uint256(_fee);
-            uint256 available = vault.balanceOf(_participant);
-            uint256 paid = M.min(owed, available);
-            if (paid > 0) {
-                _internalTransfer(_participant, address(this), paid);
-            }
-            if (paid < owed) {
-                emit BadDebt(_participant, owed - paid);
-            }
+            vault.settleTransfer(_participant, address(this), uint256(_fee));
             return;
         }
 
@@ -1061,16 +1056,12 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
             amount = uint256(-_pnl);
         }
 
-        uint256 available = vault.balanceOf(payer);
-        if (available >= amount) {
-            vault.internalTransfer(payer, receiver, amount);
-            return;
-        }
+        vault.settleTransfer(payer, receiver, amount);
+    }
 
-        if (available > 0) {
-            vault.internalTransfer(payer, receiver, available);
-        }
-        emit BadDebt(payer, amount - available);
+    /// @dev New orders are the only way a fill starts, so rejecting them stops new exposure.
+    function _requireTradingOpen() internal view {
+        if (vault.halted()) revert TradingHalted();
     }
 
     /// @notice Charge a liquidation fee on the closed notional value, split between

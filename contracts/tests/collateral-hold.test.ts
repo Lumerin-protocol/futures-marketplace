@@ -106,7 +106,7 @@ describe("Futures collateral hold until settlement", () => {
       }),
     });
     assert.equal(
-      parseEventLogs({ logs: buyerReceipt.logs, abi: futures.abi, eventName: "BadDebt" }).length,
+      parseEventLogs({ logs: buyerReceipt.logs, abi: collateralVault.abi, eventName: "BadDebt" }).length,
       0,
     );
     await futures.write.settlePosition([seller.account.address, deliveryDate], {
