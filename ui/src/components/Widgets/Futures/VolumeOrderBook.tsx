@@ -4,6 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { tokens } from "../../../styles/tokens";
 import { useIsMobileTradingLayout } from "./mobile/mobileTradingLayout";
 import type { OrderBookRow } from "./ClassicOrderBook";
+import { computeBookCenter, formatMidPrice } from "./orderBookHelpers";
 import type { ContractMode } from "../../../types/types";
 
 interface VolumeOrderBookProps {
@@ -63,7 +64,7 @@ export const VolumeOrderBook = ({
 
   // Compute cumulative depth per side once per order-book update. Rows arrive as
   // one contiguous, tick-by-tick ladder sorted high -> low (empty rows included),
-  // with exactly one row flagged `isLastHashprice` marking the market price.
+  // with one synthetic `isCenterRow` row between best ask and best bid.
   const {
     askDepth,
     bidDepth,
@@ -76,29 +77,16 @@ export const VolumeOrderBook = ({
     const askDepth = new Map<number, Depth>();
     const bidDepth = new Map<number, Depth>();
 
-    let centerIndex = rows.findIndex((r) => r.isLastHashprice);
-    if (centerIndex < 0 && marketPrice != null && rows.length > 0) {
-      // Fallback: closest row to the market price.
-      let best = 0;
-      let bestDist = Infinity;
-      for (let i = 0; i < rows.length; i++) {
-        const dist = Math.abs(rows[i].price - marketPrice);
-        if (dist < bestDist) {
-          bestDist = dist;
-          best = i;
-        }
-      }
-      centerIndex = best;
-    }
+    const centerIndex = rows.findIndex((r) => r.isCenterRow);
 
-    // Asks sit above the market price. Best ask = lowest ask (closest to market);
-    // cumulative depth grows from the best ask outward to higher prices. Walk the
-    // ladder bottom -> top so the running total accumulates in that direction.
+    // Asks sit above the spread. Best ask = lowest ask; cumulative depth grows
+    // from the best ask outward to higher prices. Walk the ladder bottom -> top
+    // so the running total accumulates in that direction.
     let askRunning = 0;
     let bestAsk: number | null = null;
     for (let i = rows.length - 1; i >= 0; i--) {
       const r = rows[i];
-      if (r.isLastHashprice) continue;
+      if (r.isCenterRow) continue;
       const units = r.askUnits ?? 0;
       if (units > 0) {
         askRunning += units;
@@ -108,13 +96,13 @@ export const VolumeOrderBook = ({
     }
     const maxAskTotal = askRunning;
 
-    // Bids sit below the market price. Best bid = highest bid; cumulative depth
-    // grows downward to lower prices. Walk top -> bottom.
+    // Bids sit below the spread. Best bid = highest bid; cumulative depth grows
+    // downward to lower prices. Walk top -> bottom.
     let bidRunning = 0;
     let bestBid: number | null = null;
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
-      if (r.isLastHashprice) continue;
+      if (r.isCenterRow) continue;
       const units = r.bidUnits ?? 0;
       if (units > 0) {
         bidRunning += units;
@@ -133,7 +121,7 @@ export const VolumeOrderBook = ({
       bestBid,
       centerIndex,
     };
-  }, [rows, marketPrice]);
+  }, [rows]);
 
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
@@ -142,14 +130,14 @@ export const VolumeOrderBook = ({
     overscan: 12,
   });
 
-  // Keep the market-price row centered by default. Row height is fixed, so the
-  // target offset is deterministic (no dependency on the virtualizer having
+  // Keep the spread (center) row centered by default. Row height is fixed, so
+  // the target offset is deterministic (no dependency on the virtualizer having
   // measured yet, which made `scrollToIndex` unreliable on first paint). We keep
-  // re-centering as the market price moves, but stop once the user scrolls so we
+  // re-centering as the spread moves, but stop once the user scrolls so we
   // never fight their navigation.
   const userScrolledRef = useRef(false);
   const lastTargetRef = useRef<number | null>(null);
-  // Overlay "Scroll to Market" button, shown when the market row is scrolled
+  // Overlay "Scroll to Spread" button, shown when the center row is scrolled
   // out of view. `dir` points the user back towards it.
   const [marketButton, setMarketButton] = useState<{
     show: boolean;
@@ -159,7 +147,7 @@ export const VolumeOrderBook = ({
     dir: "down",
   });
 
-  // Toggle the overlay button based on whether the market row is inside the
+  // Toggle the overlay button based on whether the center row is inside the
   // current viewport (with the ladder potentially thousands of rows tall).
   const updateMarketButton = useCallback(
     (scroller: HTMLDivElement) => {
@@ -189,7 +177,7 @@ export const VolumeOrderBook = ({
     const scroller = scrollRef.current;
     if (!scroller || rows.length === 0 || centerIndex < 0) return;
     // Once the user has taken over scrolling we no longer auto-center, but the
-    // market row may have moved in/out of view, so keep the button in sync.
+    // center row may have moved in/out of view, so keep the button in sync.
     if (userScrolledRef.current) {
       updateMarketButton(scroller);
       return;
@@ -233,27 +221,17 @@ export const VolumeOrderBook = ({
     );
   };
 
-  // Best price = the order-book level (best ask or best bid) closest to the
-  // market price. Its color/arrow reflects whether it sits above or below the
-  // market price.
-  let bestPrice: number | null;
-  if (bestAsk != null && bestBid != null && marketPrice != null) {
-    bestPrice =
-      Math.abs(bestAsk - marketPrice) <= Math.abs(bestBid - marketPrice)
-        ? bestAsk
-        : bestBid;
-  } else {
-    bestPrice = bestAsk ?? bestBid ?? marketPrice;
-  }
-  const isUp =
-    bestPrice != null && marketPrice != null ? bestPrice >= marketPrice : true;
+  // Center row shows the book mid; its color/arrow reflects whether the mid
+  // sits above or below the hashprice.
+  const center = computeBookCenter(bestAsk, bestBid, marketPrice);
+  const isUp = center.isUp;
 
   const renderRow = (index: number) => {
     const row = rows[index];
 
-    // Market-price row: rendered as the Binance-style center marker instead of a
-    // regular ladder level.
-    if (row.isLastHashprice) {
+    // Synthetic spread row: rendered as the Binance-style center marker instead
+    // of a regular ladder level.
+    if (row.isCenterRow) {
       return (
         <CenterRow
           onMouseEnter={(e) =>
@@ -265,7 +243,7 @@ export const VolumeOrderBook = ({
           onMouseLeave={() => setCenterTooltip(null)}
         >
           <span className={`best ${isUp ? "up" : "down"}`}>
-            {bestPrice != null ? formatPrice(bestPrice) : "—"}
+            {center.mid != null ? formatMidPrice(center.mid) : "—"}
             <span className="arrow">{isUp ? "↑" : "↓"}</span>
           </span>
           <span className="market">
@@ -276,10 +254,9 @@ export const VolumeOrderBook = ({
     }
 
     // A row belongs to the side that actually has resting quantity at that
-    // price. The oracle/mark price can sit far from the book's own mid (e.g. a
-    // stale or mis-scaled hashrate mark), so deriving the side from the mark
-    // would drop one whole side of the book. Only fall back to position relative
-    // to the mark for empty ladder rows, which carry no quantity of their own.
+    // price (a crossed/touching book can put quantity on the "wrong" side of
+    // the center row). Only fall back to position relative to the center row
+    // for empty ladder rows, which carry no quantity of their own.
     const hasAsk = row.askUnits != null && row.askUnits > 0;
     const hasBid = row.bidUnits != null && row.bidUnits > 0;
     const side: "ask" | "bid" =
@@ -384,7 +361,7 @@ export const VolumeOrderBook = ({
       {marketButton.show && (
         <ScrollToMarketButton type="button" onClick={handleScrollToMarketClick}>
           <span className="arrow">{marketButton.dir === "up" ? "↑" : "↓"}</span>
-          Scroll to Market
+          Scroll to Spread
         </ScrollToMarketButton>
       )}
 
@@ -416,7 +393,7 @@ export const VolumeOrderBook = ({
         </Tooltip>
       )}
 
-      {centerTooltip && !isMobile && marketPrice != null && (
+      {centerTooltip && !isMobile && (
         <Tooltip
           style={{
             left: Math.max(8, centerTooltip.x - 236),
@@ -424,8 +401,34 @@ export const VolumeOrderBook = ({
           }}
         >
           <div className="row">
+            <span className="label">Best Ask</span>
+            <span className="value">
+              {center.bestAsk != null ? formatPrice(center.bestAsk) : "—"}
+            </span>
+          </div>
+          <div className="row">
+            <span className="label">Best Bid</span>
+            <span className="value">
+              {center.bestBid != null ? formatPrice(center.bestBid) : "—"}
+            </span>
+          </div>
+          <div className="row">
+            <span className="label">Spread</span>
+            <span className="value">
+              {center.spread != null
+                ? `${formatPrice(center.spread)}${
+                    center.spreadPct != null
+                      ? ` (${center.spreadPct.toFixed(2)}%)`
+                      : ""
+                  }`
+                : "—"}
+            </span>
+          </div>
+          <div className="row">
             <span className="label">Underlying Hash Price (USDC)</span>
-            <span className="value">{formatPrice(marketPrice)}</span>
+            <span className="value">
+              {marketPrice != null ? formatPrice(marketPrice) : "—"}
+            </span>
           </div>
         </Tooltip>
       )}
@@ -442,8 +445,8 @@ const Container = styled("div")`
   flex-direction: column;
 `;
 
-// Floating pill shown when the market row is scrolled out of view; clicking it
-// re-centers the ladder on the market price and resumes auto-centering.
+// Floating pill shown when the center row is scrolled out of view; clicking it
+// re-centers the ladder on the spread and resumes auto-centering.
 const ScrollToMarketButton = styled("button")`
   position: absolute;
   left: 50%;
