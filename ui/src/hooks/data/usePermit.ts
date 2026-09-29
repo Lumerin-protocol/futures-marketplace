@@ -1,8 +1,9 @@
 import { useCallback } from "react";
 import { erc20Abi, hexToNumber, slice, type Hex } from "viem";
-import { useReadContracts, useWalletClient } from "wagmi";
+import { useAccount, useReadContracts } from "wagmi";
 import { ierc20PermitAbi } from "../../abi/ierc20Permit";
 import { ierc5267Abi } from "../../abi/ierc5267";
+import { requireWalletClient } from "../../clients/requireWalletClient";
 
 export type PermitSignature = {
   r: Hex;
@@ -51,8 +52,7 @@ interface UsePermitProps {
  * (its `nonces()` call reverted), so callers should fall back to approve+deposit.
  */
 export function usePermit({ tokenAddress, spenderAddress, ttlSeconds = 5n * 60n }: UsePermitProps) {
-  const { data: walletClient } = useWalletClient();
-  const owner = walletClient?.account.address;
+  const { address: owner } = useAccount();
 
   const reads = useReadContracts({
     allowFailure: true,
@@ -72,9 +72,13 @@ export function usePermit({ tokenAddress, spenderAddress, ttlSeconds = 5n * 60n 
 
   const signPermit = useCallback(
     async (value: bigint) => {
-      if (!walletClient || !owner || !tokenAddress || !spenderAddress) return undefined;
+      if (!owner || !tokenAddress || !spenderAddress) return undefined;
       if (!nonceResult || nonceResult.status === "failure") {
         throw new Error("Token does not support EIP-2612 permit");
+      }
+      const walletClient = await requireWalletClient();
+      if (walletClient.account.address.toLowerCase() !== owner.toLowerCase()) {
+        throw new Error("Wallet account changed. Please try again.");
       }
 
       let domain: { name: string; version: string; chainId: number; verifyingContract: `0x${string}` };
@@ -112,7 +116,7 @@ export function usePermit({ tokenAddress, spenderAddress, ttlSeconds = 5n * 60n 
 
       return { signature: permitSignature, deadline };
     },
-    [walletClient, owner, tokenAddress, spenderAddress, nonceResult, domainResult, nameResult, versionResult, ttlSeconds],
+    [owner, tokenAddress, spenderAddress, nonceResult, domainResult, nameResult, versionResult, ttlSeconds],
   );
 
   return { signPermit, isSupported };

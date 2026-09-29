@@ -22,7 +22,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev Lives here rather than in {HashPowerFuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `HashPowerFutures.sol` to require a bump.
-    string public constant VERSION = "6.5.0";
+    string public constant VERSION = "6.6.0";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) { }
@@ -54,6 +54,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev Locally reducing legs are accepted below IM only when authoritative portfolio IM
     ///      does not increase, so cross-venue exposure cannot bypass the margin gate.
     function createOrder(uint256 _price, uint256 _expirationAt, int256 _quantity, TimeInForce _tif) external {
+        _requireTradingOpen();
         address sender = _msgSender();
         _validateOrderIntent(_price, _expirationAt, _quantity, _tif);
         uint256 maxAllowedIm;
@@ -72,6 +73,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     ///      Empty input reverts so simulate-before-write callers do not submit
     ///      a no-op transaction.
     function createOrders(OrderIntent[] calldata _intents) external {
+        _requireTradingOpen();
         uint256 len = _intents.length;
         if (len == 0) revert EmptyBatch();
         address sender = _msgSender();
@@ -94,6 +96,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         ReduceIntent[] calldata _reduces,
         OrderIntent[] calldata _intents
     ) external {
+        if (_intents.length != 0) _requireTradingOpen();
         address sender = _msgSender();
         uint256 cancelLen = _cancelIds.length;
         for (uint256 i = 0; i < cancelLen; i++) {

@@ -1,4 +1,4 @@
-import { useWriteContract, useWalletClient } from "wagmi";
+import { useWriteContract } from "wagmi";
 import { getContract } from "viem";
 import { CollateralVaultAbi } from "collateral-margin-abi/CollateralVault.ts";
 import { useApproveERC20 } from "./useApproveERC20";
@@ -7,6 +7,7 @@ import { useFuturesCollateralVault } from "./useFuturesCollateralVault";
 import { usePermit, type PermitSignature } from "./usePermit";
 import { withErrors } from "../../lib/withErrors";
 import { retryUntilBlockAvailable } from "../../lib/retryUntilBlockAvailable";
+import { requireWalletClient } from "../../clients/requireWalletClient";
 
 interface AddMarginProps {
   amount: bigint;
@@ -58,17 +59,16 @@ export function usePermitAddMargin() {
 /// `useFuturesCollateralVault` (same chain as `useGetFutureBalance`).
 export function useAddMargin() {
   const { writeContractAsync, isPending, isError, error, data: hash } = useWriteContract();
-  const { data: walletClient } = useWalletClient();
   const { data: collateralVaultAddress } = useFuturesCollateralVault();
 
   const addMarginAsync = async (props: AddMarginProps) => {
     // Throws rather than returning undefined: callers cannot distinguish an
     // empty return from "nothing needed doing", and the transaction runner
     // used to report the latter as a successful deposit.
-    if (!walletClient) throw new Error("Wallet not ready. Please try again.");
     if (!collateralVaultAddress) {
       throw new Error("Collateral vault address not loaded yet. Please try again.");
     }
+    const walletClient = await requireWalletClient();
 
     const vault = getContract({
       address: collateralVaultAddress,
@@ -102,14 +102,13 @@ export function useAddMargin() {
 /// and a subsequent read/simulate since there's only one on-chain write.
 export function useAddMarginWithPermit() {
   const { writeContractAsync, isPending, isError, error, data: hash } = useWriteContract();
-  const { data: walletClient } = useWalletClient();
   const { data: collateralVaultAddress } = useFuturesCollateralVault();
 
   const addMarginWithPermitAsync = async (props: AddMarginWithPermitProps) => {
-    if (!walletClient) throw new Error("Wallet not ready. Please try again.");
     if (!collateralVaultAddress) {
       throw new Error("Collateral vault address not loaded yet. Please try again.");
     }
+    const walletClient = await requireWalletClient();
 
     const vault = getContract({
       address: collateralVaultAddress,

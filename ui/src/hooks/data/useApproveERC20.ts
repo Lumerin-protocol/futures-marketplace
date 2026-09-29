@@ -1,8 +1,9 @@
-import { useWriteContract, useWalletClient } from "wagmi";
+import { useWriteContract } from "wagmi";
 import { erc20Abi, getContract } from "viem";
 import { useCallback } from "react";
 import { withErrors } from "../../lib/withErrors";
 import { retryUntilBlockAvailable } from "../../lib/retryUntilBlockAvailable";
+import { requireWalletClient } from "../../clients/requireWalletClient";
 
 interface ApproveProps {
   spender: `0x${string}`;
@@ -21,24 +22,23 @@ interface ApproveProps {
 /// "no approval needed" without it doubling as "wallet missing".
 export function useApproveERC20(tokenAddress: `0x${string}` | undefined) {
   const { writeContractAsync, ...rest } = useWriteContract();
-  const { data: wc } = useWalletClient();
 
   const approveAsync = useCallback(
     async (props: ApproveProps) => {
-      if (!wc) throw new Error("Wallet not ready. Please try again.");
       if (!tokenAddress) throw new Error("Token address not loaded yet. Please try again.");
+      const walletClient = await requireWalletClient();
 
       const token = getContract({
         address: tokenAddress,
         abi: withErrors(erc20Abi),
-        client: wc,
+        client: walletClient,
       });
 
       const readOpts = props.minBlockNumber !== undefined ? { blockNumber: props.minBlockNumber } : {};
 
       // Check current allowance
       const currentAllowance = await retryUntilBlockAvailable(() =>
-        token.read.allowance([wc.account.address, props.spender], readOpts),
+        token.read.allowance([walletClient.account.address, props.spender], readOpts),
       );
 
       // If current allowance is sufficient, return undefined
@@ -48,14 +48,14 @@ export function useApproveERC20(tokenAddress: `0x${string}` | undefined) {
 
       const req = await retryUntilBlockAvailable(() =>
         token.simulate.approve([props.spender, props.amount], {
-          account: wc.account.address,
+          account: walletClient.account.address,
           ...readOpts,
         }),
       );
 
       return writeContractAsync(req.request);
     },
-    [writeContractAsync, wc, tokenAddress],
+    [writeContractAsync, tokenAddress],
   );
 
   return {

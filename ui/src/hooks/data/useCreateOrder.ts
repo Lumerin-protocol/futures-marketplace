@@ -1,8 +1,9 @@
-import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
+import { useWriteContract, usePublicClient } from "wagmi";
 import { getContract } from "viem";
 import { HashPowerFuturesAbi } from "futures-marketplace-abi/HashPowerFutures.ts";
 import { contractErrors } from "futures-marketplace-abi/ContractErrors.ts";
 import { TimeInForce, type TimeInForceValue } from "../../types/timeInForce";
+import { requireWalletClient } from "../../clients/requireWalletClient";
 
 interface CreateOrderProps {
   price: bigint;
@@ -16,11 +17,10 @@ interface CreateOrderProps {
 export function useCreateOrder() {
   const { writeContractAsync, isPending, isError, error, data: hash } = useWriteContract();
   const publicClient = usePublicClient();
-  const { data: walletClient } = useWalletClient();
 
   const createOrderAsync = async (props: CreateOrderProps) => {
-    if (!walletClient) throw new Error("Wallet not ready. Please try again.");
     if (!publicClient) throw new Error("No RPC client available. Please try again.");
+    const walletClient = await requireWalletClient();
 
     const futuresContract = getContract({
       address: process.env.REACT_APP_FUTURES_TOKEN_ADDRESS as `0x${string}`,

@@ -1,8 +1,7 @@
-import { faDiscord } from "@fortawesome/free-brands-svg-icons/faDiscord";
-import { faMedium } from "@fortawesome/free-brands-svg-icons/faMedium";
-import { faTelegram } from "@fortawesome/free-brands-svg-icons/faTelegram";
-import { faTiktok } from "@fortawesome/free-brands-svg-icons/faTiktok";
+import { faFacebookF } from "@fortawesome/free-brands-svg-icons/faFacebookF";
+import { faRedditAlien } from "@fortawesome/free-brands-svg-icons/faRedditAlien";
 import { faXTwitter } from "@fortawesome/free-brands-svg-icons/faXTwitter";
+import { faYoutube } from "@fortawesome/free-brands-svg-icons/faYoutube";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import FlagCircleIcon from "@mui/icons-material/FlagCircle";
 import HelpIcon from "@mui/icons-material/Help";
@@ -11,17 +10,16 @@ import styled from "@mui/material/styles/styled";
 import { tokens } from "../styles/tokens";
 
 const socials = [
-  { link: "https://discord.gg/lumerin", icon: faDiscord },
-  { link: "https://titanmining.medium.com", icon: faMedium },
-  { link: "https://t.me/LumerinOfficial", icon: faTelegram },
-  { link: "http://twitter.com/hellolumerin", icon: faXTwitter },
-  { link: "https://www.tiktok.com/@hellolumerin_", icon: faTiktok },
+  { label: "Facebook", link: "https://www.facebook.com/share/1J74GJvw5W/?mibextid=wwXIfr", icon: faFacebookF },
+  { label: "Reddit", link: "https://www.reddit.com/r/HPDX/", icon: faRedditAlien },
+  { label: "X", link: "https://x.com/HashPowerDEX", icon: faXTwitter },
+  { label: "YouTube", link: "https://www.youtube.com/channel/UCSCjcUgrIklzUREpD39z7og", icon: faYoutube },
 ];
 
 const resources = [
   { href: `${process.env.REACT_APP_GITBOOK_URL}`, icon: HelpIcon, label: "Help" },
   { href: "https://github.com/Lumerin-protocol/futures-marketplace/issues", icon: FlagCircleIcon, label: "Report issue" },
-  { href: "https://lumerin.io/privacy-policy", icon: ShieldIcon, label: "Privacy Policy" },
+  { href: "", icon: ShieldIcon, label: "Privacy Policy" },
 ];
 
 export const Footer = () => {
@@ -31,7 +29,15 @@ export const Footer = () => {
         <LeftSection>
           <LinksRow>
             {resources.map((item) => (
-              <ResourceLink href={item.href} target="_blank" rel="noreferrer" key={item.label}>
+              <ResourceLink
+                href={item.href}
+                target={item.href ? "_blank" : undefined}
+                rel={item.href ? "noreferrer" : undefined}
+                aria-disabled={!item.href}
+                $disabled={!item.href}
+                onClick={item.href ? undefined : (event) => event.preventDefault()}
+                key={item.label}
+              >
                 <item.icon style={{ fill: tokens.accent.main, fontSize: "20px" }} />
                 <span>{item.label}</span>
               </ResourceLink>
@@ -43,7 +49,13 @@ export const Footer = () => {
         <RightSection>
           <SocialsRow>
             {socials.map((item) => (
-              <SocialLink href={item.link} target="_blank" rel="noreferrer" key={item.link}>
+              <SocialLink
+                href={item.link}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={item.label}
+                key={item.label}
+              >
                 <FontAwesomeIcon icon={item.icon} />
               </SocialLink>
             ))}
@@ -101,7 +113,7 @@ const LinksRow = styled("div")`
   }
 `;
 
-const ResourceLink = styled("a")`
+const ResourceLink = styled("a")<{ $disabled: boolean }>`
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -109,8 +121,10 @@ const ResourceLink = styled("a")`
   text-decoration: none;
   font-size: 0.875rem;
   transition: color 0.2s ease;
+  opacity: ${(props) => (props.$disabled ? 0.4 : 1)};
+  cursor: ${(props) => (props.$disabled ? "default" : "pointer")};
 
-  &:hover {
+  &:hover:not([aria-disabled="true"]) {
     color: ${tokens.accent.mainLower};
   }
 `;
@@ -122,12 +136,20 @@ const RightSection = styled("div")`
 
   @media (max-width: 768px) {
     align-items: center;
+    width: 100%;
   }
 `;
 
 const SocialsRow = styled("div")`
   display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 1rem;
+  max-width: 100%;
+
+  @media (max-width: 768px) {
+    justify-content: center;
+  }
 `;
 
 const SocialLink = styled("a")`

@@ -287,12 +287,12 @@ describe("Futures - liquidatePositions (batched close-to-IM)", function () {
     const idsAfter = await futures.read.getActiveExpirationDates([buyer.account.address]);
     assert.equal(idsAfter.length, 0, "buyer fully closed");
 
-    const badDebt = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "BadDebt" });
+    const badDebt = parseEventLogs({ logs: receipt.logs, abi: collateralVault.abi, eventName: "BadDebt" });
     assert.ok(badDebt.length >= 1, "expected at least one BadDebt event on the uncovered loss");
     let uncovered = 0n;
     for (const evt of badDebt) {
       assert.equal(
-        getAddress(evt.args.user),
+        getAddress(evt.args.payer),
         getAddress(buyer.account.address),
         "BadDebt should be attributed to the insolvent buyer",
       );
