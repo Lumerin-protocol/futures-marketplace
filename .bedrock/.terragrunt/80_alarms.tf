@@ -23,7 +23,7 @@ resource "aws_cloudwatch_metric_alarm" "futures_ui_5xx" {
   treat_missing_data  = "notBreaching"
 
   dimensions = {
-    DistributionId = local.cloudfront_distribution_id
+    DistributionId = local.exchange_cloudfront_distribution_id
     Region         = "Global"
   }
 
@@ -55,7 +55,7 @@ resource "aws_cloudwatch_metric_alarm" "futures_ui_4xx" {
   treat_missing_data  = "notBreaching"
 
   dimensions = {
-    DistributionId = local.cloudfront_distribution_id
+    DistributionId = local.exchange_cloudfront_distribution_id
     Region         = "Global"
   }
 

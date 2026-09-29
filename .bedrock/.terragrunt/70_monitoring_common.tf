@@ -39,8 +39,18 @@ locals {
   # Resource references (conditional on service creation)
   ecs_cluster_name = var.ecs_cluster.create ? aws_ecs_cluster.futures_marketplace[0].name : ""
 
-  # CloudFront distribution ID (for metrics)
+  # CloudFront distribution ID (for metrics). While the apex is the holding
+  # page, the app is the beta distribution.
   cloudfront_distribution_id = var.create_core ? aws_cloudfront_distribution.marketplace[0].id : ""
+  exchange_cloudfront_distribution_id = var.create_core ? coalesce(
+    contains(["hold", "beta"], var.apex_site) ? one(aws_cloudfront_distribution.beta_alias[*].id) : null,
+    aws_cloudfront_distribution.marketplace[0].id,
+  ) : ""
+
+  # Probe the app. Dev serves it on the apex. Production keeps the apex on the
+  # holding page until cutover, so the check follows beta.hashpower.exchange.
+  exchange_probe_hostname = var.apex_site == "hold" && var.beta_alias.create ? var.beta_alias.hostname : local.hp_dns["exc"].name
+  exchange_probe_url      = "https://${local.exchange_probe_hostname}"
 
   # Service names for metric dimensions
   notifications_service_name = var.notifications_service.create ? "svc-${var.notifications_service["svc_name"]}-${local.env_suffix}" : ""
@@ -71,7 +81,7 @@ locals {
 
 resource "aws_route53_health_check" "futures_ui" {
   count             = var.monitoring.create && var.monitoring.create_alarms && var.create_core ? 1 : 0
-  fqdn              = local.futures_ui_domain
+  fqdn              = local.exchange_probe_hostname
   port              = 443
   type              = "HTTPS"
   resource_path     = "/"
