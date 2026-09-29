@@ -5,9 +5,11 @@
 ################################################################################
 
 locals {
-  futures_subgraph_monitor_name = "futures-subgraph-health-${local.env_suffix}"
+  futures_subgraph_monitor_name  = "futures-subgraph-health-${local.env_suffix}"
   futures_subgraph_check_seconds = 300
   futures_subgraph_stale_seconds = 900
+  # 15 minutes of Base blocks at 2 seconds. Same window as the age alarm.
+  futures_subgraph_behind_blocks = 450
   futures_subgraph_eval_periods  = ceil(var.monitoring_schedule.unhealthy_alarm_period_minutes / 5)
 }
 
@@ -48,8 +50,8 @@ resource "aws_iam_role_policy" "futures_subgraph_monitor" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
         Resource = "arn:aws:logs:${var.default_region}:${var.account_number}:*"
       },
       {
@@ -82,6 +84,7 @@ resource "aws_lambda_function" "futures_subgraph_monitor" {
       ENVIRONMENT   = local.env_suffix
       SUBGRAPH_NAME = "futures"
       ENTITY_KIND   = "orders"
+      CHAIN_ID      = tostring(var.market_maker.chain_id)
     }
   }
 
@@ -176,6 +179,27 @@ resource "aws_cloudwatch_metric_alarm" "futures_subgraph_stale" {
   ok_actions    = []
 }
 
+resource "aws_cloudwatch_metric_alarm" "futures_subgraph_behind" {
+  count               = var.monitoring.create && var.monitoring.create_alarms ? 1 : 0
+  provider            = aws.use1
+  alarm_name          = "futures-subgraph-behind-${local.env_suffix}"
+  alarm_description   = "Futures subgraph is more than 15 minutes of blocks behind the chain head. The tag is still indexing or stalled, so the book the app reads is not current."
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = local.futures_subgraph_eval_periods
+  metric_name         = "subgraph_blocks_behind"
+  namespace           = local.monitoring_namespace
+  period              = local.futures_subgraph_check_seconds
+  statistic           = "Maximum"
+  threshold           = local.futures_subgraph_behind_blocks
+  treat_missing_data  = "notBreaching"
+  dimensions = {
+    Environment = local.env_suffix
+    Subgraph    = "futures"
+  }
+  alarm_actions = []
+  ok_actions    = []
+}
+
 resource "aws_cloudwatch_metric_alarm" "futures_subgraph_empty" {
   count               = var.monitoring.create && var.monitoring.create_alarms ? 1 : 0
   provider            = aws.use1
@@ -201,12 +225,13 @@ resource "aws_cloudwatch_composite_alarm" "futures_subgraph_unhealthy" {
   count             = var.monitoring.create && var.monitoring.create_alarms ? 1 : 0
   provider          = aws.use1
   alarm_name        = "futures-subgraph-${local.env_suffix}"
-  alarm_description = "Futures index is down, erroring, stale, or empty"
+  alarm_description = "Futures index is down, erroring, stale, behind the chain, or empty"
 
   alarm_rule = join(" OR ", [
     "ALARM(${aws_cloudwatch_metric_alarm.futures_subgraph_unavailable[0].alarm_name})",
     "ALARM(${aws_cloudwatch_metric_alarm.futures_subgraph_errors[0].alarm_name})",
     "ALARM(${aws_cloudwatch_metric_alarm.futures_subgraph_stale[0].alarm_name})",
+    "ALARM(${aws_cloudwatch_metric_alarm.futures_subgraph_behind[0].alarm_name})",
     "ALARM(${aws_cloudwatch_metric_alarm.futures_subgraph_empty[0].alarm_name})",
   ])
 
