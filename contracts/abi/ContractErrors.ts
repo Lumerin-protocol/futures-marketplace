@@ -6,6 +6,11 @@ export const contractErrors = [
   },
   {
     "inputs": [],
+    "name": "BackstopParamOutOfBounds",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "OracleStale",
     "type": "error"
   },
@@ -257,6 +262,11 @@ export const contractErrors = [
   },
   {
     "inputs": [],
+    "name": "BackstopAccount",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "FunctionDisabled",
     "type": "error"
   },
@@ -273,6 +283,11 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "InsuranceFundNotConfigured",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PositionMatured",
     "type": "error"
   },
   {
