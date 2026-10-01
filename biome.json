@@ -3,20 +3,19 @@
   "files": {
     "includes": [
       "**",
-      "!**/node_modules/**",
-      "!**/build/**",
-      "!**/dist/**",
-      "!**/coverage/**",
-      "!**/artifacts/**",
-      "!**/cache/**",
-      "!**/typechain-types/**"
+      "!**/node_modules",
+      "!**/generated",
+      "!**/build",
+      "!**/dist",
+      "!**/coverage",
+      "!**/artifacts",
+      "!**/cache",
+      "!**/typechain-types"
     ]
   },
   "overrides": [
     {
-      "includes": [
-        "./indexer/**"
-      ],
+      "includes": ["./indexer/**"],
       "linter": {
         "enabled": true,
         "rules": {
