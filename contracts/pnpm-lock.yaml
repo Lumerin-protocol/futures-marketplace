@@ -33,8 +33,8 @@ importers:
         specifier: ^4.0.1
         version: 4.0.1(typescript@5.9.3)(zod@3.25.76)
       collateral-margin:
-        specifier: github:Lumerin-protocol/collateral-margin#f8b9ed3a1209bae2dfb64c2dedd6ff1982e818fe
-        version: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/f8b9ed3a1209bae2dfb64c2dedd6ff1982e818fe
+        specifier: github:Lumerin-protocol/collateral-margin#d427c7332b928a7ed24d646717cff30459a1b6fc
+        version: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/d427c7332b928a7ed24d646717cff30459a1b6fc
       multicall3:
         specifier: github:mds1/multicall3
         version: https://codeload.github.com/mds1/multicall3/tar.gz/b667d67ecfa5361a81e8f110234ce242613b0012(patch_hash=f161cbee6da2788494364d99cafb2d9c802738f56fb89426eebbc0a14a4f4a8f)
@@ -1016,8 +1016,8 @@ packages:
   ci-info@2.0.0:
     resolution: {integrity: sha512-5tK7EtrZ0N+OLFMthtqOj4fI2Jeb88C4CAZPu25LDVUgXJ0A3Js4PMGqrn0JU1W0Mh1/Z8wZzYPxqUrXeBboCQ==}
 
-  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/f8b9ed3a1209bae2dfb64c2dedd6ff1982e818fe:
-    resolution: {gitHosted: true, integrity: sha512-URmmVOWqEOcPlTHnRH1c4y+ZggQVulgv0EC/vECG5eiCHsx7QiVGlyZAqa0i7p43OCw6wUwYvHQxZT4mav7T0Q==, tarball: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/f8b9ed3a1209bae2dfb64c2dedd6ff1982e818fe}
+  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/d427c7332b928a7ed24d646717cff30459a1b6fc:
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/d427c7332b928a7ed24d646717cff30459a1b6fc}
     version: 1.0.0
 
   color-convert@2.0.1:
@@ -2977,7 +2977,7 @@ snapshots:
 
   ci-info@2.0.0: {}
 
-  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/f8b9ed3a1209bae2dfb64c2dedd6ff1982e818fe: {}
+  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/d427c7332b928a7ed24d646717cff30459a1b6fc: {}
 
   color-convert@2.0.1:
     dependencies:

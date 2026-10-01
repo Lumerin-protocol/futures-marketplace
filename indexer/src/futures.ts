@@ -22,6 +22,8 @@ export {
   handleOrderUpdated,
   handlePositionLiquidated,
   handlePositionSettled,
+  handleBackstopAssigned,
+  handleBackstopUnwound,
 } from "./handlers/orders";
 
 export { handleSettlementPriceRecorded } from "./handlers/expirations";

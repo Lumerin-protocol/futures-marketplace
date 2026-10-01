@@ -296,6 +296,11 @@ export const RecentTradesQuery = gql`
       tradeQuantity
       timestamp
       transactionHash
+      isLiquidation
+      isBackstopAssignment
+      user {
+        id
+      }
     }
   }
 `;

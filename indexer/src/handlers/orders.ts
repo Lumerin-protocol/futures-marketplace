@@ -1,5 +1,7 @@
 import { Address, BigInt, Bytes, log } from "@graphprotocol/graph-ts";
 import {
+  BackstopAssigned,
+  BackstopUnwound,
   OrderCancelled,
   OrderCreated,
   OrderLiquidated,
@@ -8,7 +10,7 @@ import {
   PositionLiquidated,
   PositionSettled,
 } from "../../generated/HashPowerFutures/HashPowerFutures";
-import { Order, PositionSession, Trade, User } from "../../generated/schema";
+import { BackstopUnwind, Order, PositionSession, Trade, User } from "../../generated/schema";
 import { FillSide, OrderStatus } from "../enums";
 import {
   closeOrder,
@@ -17,6 +19,7 @@ import {
   syncCancelledQuantity,
 } from "../internal/orders";
 import {
+  applyBackstopFill,
   applyExitFill,
   applyMatchFill,
   FillContext,
@@ -32,7 +35,7 @@ import {
   markLiquidationTx,
 } from "../internal/store";
 import { stringifyParameters } from "../internal/utils";
-import { absBigInt } from "../lib";
+import { absBigInt, BACKSTOP_ADDR } from "../lib";
 
 /// One Order per on-chain orderId, so `Order.id` is the handle cancelOrder /
 /// liquidateOrders take. `createOrder` emits OrderCreated with the requested
@@ -315,6 +318,53 @@ export function handlePositionLiquidated(event: PositionLiquidated): void {
   );
   futures.lastUpdatedAt = event.block.timestamp;
   futures.save();
+}
+
+/// The protocol backstop (vault `BACKSTOP_ADDR`) inherits the liquidated quantity
+/// at the liquidation mark. `quantity` carries the *liquidated user's* sign, so
+/// it is applied to the backstop as-is: per-expiry nets keep summing to zero.
+/// The user's own side is already covered by `PositionLiquidated`.
+export function handleBackstopAssigned(event: BackstopAssigned): void {
+  log.debug("backstop assigned event {}", [stringifyParameters(event)]);
+
+  const backstop = getOrCreateUser(BACKSTOP_ADDR, event.block.timestamp);
+  const tradeId = applyBackstopFill(
+    backstop,
+    event.params.quantity,
+    event.params.price,
+    event.params.expirationAt,
+    new FillContext(
+      event.transaction.hash,
+      event.block.number,
+      event.block.timestamp,
+      event.logIndex,
+    ),
+    1,
+  );
+
+  const trade = Trade.load(tradeId);
+  if (trade != null) {
+    trade.isBackstopAssignment = true;
+    trade.backstopFromUser = event.params.user;
+    trade.save();
+  }
+}
+
+/// Caller-facing record of an unwind. The backstop's position change is already
+/// indexed from the accompanying `OrderMatched` (backstop as taker).
+export function handleBackstopUnwound(event: BackstopUnwound): void {
+  log.debug("backstop unwound event {}", [stringifyParameters(event)]);
+
+  const id = event.transaction.hash.concatI32(event.logIndex.toI32());
+  const unwind = new BackstopUnwind(id);
+  unwind.caller = event.params.caller;
+  unwind.expirationAt = event.params.expirationAt;
+  unwind.filledQuantity = event.params.filledQuantity;
+  unwind.fee = event.params.fee;
+  unwind.timestamp = event.block.timestamp;
+  unwind.blockNumber = event.block.number;
+  unwind.transactionHash = event.transaction.hash;
+  unwind.save();
 }
 
 export function handlePositionSettled(event: PositionSettled): void {

@@ -54,6 +54,10 @@ dataSources:
           handler: handlePositionLiquidated
         - event: PositionSettled(indexed address,indexed uint256,int256,int256,uint256,address)
           handler: handlePositionSettled
+        - event: BackstopAssigned(indexed address,indexed uint256,int256,uint256)
+          handler: handleBackstopAssigned
+        - event: BackstopUnwound(indexed address,indexed uint256,int256,uint256)
+          handler: handleBackstopUnwound
         - event: FutureExpirationDatesCountUpdated(uint8)
           handler: handleFutureExpirationDatesCountUpdated
         - event: MakerFeeBpsUpdated(int16)
