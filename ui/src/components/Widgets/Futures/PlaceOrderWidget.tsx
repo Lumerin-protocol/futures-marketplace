@@ -102,6 +102,37 @@ interface PlaceOrderWidgetProps {
   quantityUnit?: string;
 }
 
+const amountModeKey = (contractMode: ContractMode) => `placeOrder.amountMode.${contractMode}`;
+
+/** The user's last Size/Quantity pick on this venue; the venue default until they make one. */
+const readStoredAmountMode = (contractMode: ContractMode): AmountMode => {
+  try {
+    const stored = localStorage.getItem(amountModeKey(contractMode));
+    if (stored === "size" || stored === "quantity") return stored;
+  } catch {
+    // Fall through to the venue default.
+  }
+  return contractMode === "perpetual" ? "size" : "quantity";
+};
+
+const TIME_IN_FORCE_KEY = "placeOrder.timeInForce";
+
+/**
+ * The user's last time-in-force pick, shared by both venues. Market orders
+ * must not rest, so a stored GTC reads as IOC for them; it is still kept for
+ * the next limit order.
+ */
+const readStoredTimeInForce = (orderType: "limit" | "market"): TimeInForceValue => {
+  let stored: TimeInForceValue = TimeInForce.GTC;
+  try {
+    const raw = Number(localStorage.getItem(TIME_IN_FORCE_KEY));
+    if (raw === TimeInForce.GTC || raw === TimeInForce.IOC || raw === TimeInForce.FOK) stored = raw;
+  } catch {
+    // Fall through to the default.
+  }
+  return orderType === "market" && stored === TimeInForce.GTC ? TimeInForce.IOC : stored;
+};
+
 // Slippage applied to market orders so the order crosses the spread.
 // Buy orders are priced this much above market; sell orders this much below.
 const MARKET_SLIPPAGE = 0.05;
@@ -155,13 +186,12 @@ export const PlaceOrderWidget = ({
   const newestItemPrice = marketPrice ? Number(marketPrice) / PAYMENT_TOKEN_SCALE_NUM : null;
 
   const [orderType, setOrderType] = useState<"limit" | "market">("limit");
-  const [timeInForce, setTimeInForce] = useState<TimeInForceValue>(TimeInForce.GTC);
+  const [timeInForce, setTimeInForce] = useState<TimeInForceValue>(() => readStoredTimeInForce("limit"));
   const [price, setPrice] = useState("5.00"); // Will be updated when hashrate data loads
   const [priceInitialized, setPriceInitialized] = useState(false); // Track if price has been initialized from hashrate
   const [amount, setAmount] = useState<number | string>(5); // Can be number or string to support decimals in perpetuals
-  const [amountMode, setAmountMode] = useState<AmountMode>(
-    contractMode === "perpetual" ? "size" : "quantity",
-  ); // "size" = USDC notional, "quantity" = raw contracts
+  // "size" = USDC notional, "quantity" = raw contracts
+  const [amountMode, setAmountMode] = useState<AmountMode>(() => readStoredAmountMode(contractMode));
   const [sliderValue, setSliderValue] = useState(0); // Slider value 0-100
   // Set when the slider writes `amount`, so the amount→slider effect skips one run.
   const sliderWroteAmountRef = useRef(false);
@@ -234,13 +264,21 @@ export const PlaceOrderWidget = ({
   }, [externalAmount]);
 
   useEffect(() => {
-    setAmountMode(contractMode === "perpetual" ? "size" : "quantity");
+    setAmountMode(readStoredAmountMode(contractMode));
   }, [contractMode]);
 
   const handleOrderTypeChange = (type: "limit" | "market") => {
     setOrderType(type);
-    // Market orders should not rest: default IOC. Limit defaults to GTC.
-    setTimeInForce(type === "market" ? TimeInForce.IOC : TimeInForce.GTC);
+    setTimeInForce(readStoredTimeInForce(type));
+  };
+
+  const handleTimeInForceChange = (value: TimeInForceValue) => {
+    setTimeInForce(value);
+    try {
+      localStorage.setItem(TIME_IN_FORCE_KEY, String(value));
+    } catch {
+      // Persistence is best-effort; the selection still works for this session.
+    }
   };
 
   // Update slider when price or balance changes.
@@ -295,6 +333,11 @@ export const PlaceOrderWidget = ({
     const numAmt = getNumericAmount();
     const priceNum = parseFloat(price) || 0;
     setAmountMode(mode);
+    try {
+      localStorage.setItem(amountModeKey(contractMode), mode);
+    } catch {
+      // Persistence is best-effort; the dropdown still works for this session.
+    }
     if (mode === "size") {
       setAmount((numAmt * priceNum).toFixed(2));
     } else if (contractMode === "perpetual") {
@@ -1270,7 +1313,7 @@ export const PlaceOrderWidget = ({
                   <TifDropdown
                     aria-label="Time in force"
                     value={timeInForce}
-                    onChange={(e) => setTimeInForce(Number(e.target.value) as TimeInForceValue)}
+                    onChange={(e) => handleTimeInForceChange(Number(e.target.value) as TimeInForceValue)}
                     disabled={showOrderForm}
                   >
                     {orderType === "limit" && <option value={TimeInForce.GTC}>GTC</option>}
@@ -1285,7 +1328,7 @@ export const PlaceOrderWidget = ({
                       <span style={{ display: "inline-flex" }}>
                         <ModeButton
                           $active={timeInForce === TimeInForce.GTC}
-                          onClick={() => setTimeInForce(TimeInForce.GTC)}
+                          onClick={() => handleTimeInForceChange(TimeInForce.GTC)}
                           disabled={showOrderForm}
                         >
                           GTC
@@ -1297,7 +1340,7 @@ export const PlaceOrderWidget = ({
                     <span style={{ display: "inline-flex" }}>
                       <ModeButton
                         $active={timeInForce === TimeInForce.IOC}
-                        onClick={() => setTimeInForce(TimeInForce.IOC)}
+                        onClick={() => handleTimeInForceChange(TimeInForce.IOC)}
                         disabled={showOrderForm}
                       >
                         IOC
@@ -1308,7 +1351,7 @@ export const PlaceOrderWidget = ({
                     <span style={{ display: "inline-flex" }}>
                       <ModeButton
                         $active={timeInForce === TimeInForce.FOK}
-                        onClick={() => setTimeInForce(TimeInForce.FOK)}
+                        onClick={() => handleTimeInForceChange(TimeInForce.FOK)}
                         disabled={showOrderForm}
                       >
                         FOK
