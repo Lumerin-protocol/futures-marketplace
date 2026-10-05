@@ -9,6 +9,8 @@ import { truncateAddress } from "../../utils/formatters";
 import { getTxUrl } from "../../lib/indexer";
 import { AddressLength } from "../../types/types";
 import { usePointsHookWeights } from "../../hooks/data/usePointsHookWeights";
+import { useIndexerOutageToast } from "../../hooks/data/indexerErrors";
+import { RiskToast } from "../../components/Widgets/Futures/RiskToast";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
 import {
   usePointsLeaderboard,
@@ -47,6 +49,7 @@ export const Leaderboard: FC = () => {
   const { address, isConnected } = useAccount();
   const isMobile = useMediaQuery("(max-width: 600px)", { noSsr: true });
   const { wMaker, wTaker, weightScale } = usePointsHookWeights();
+  const indexerOutage = useIndexerOutageToast();
 
   const { data: rawLeaderboard = [], isLoading: isLeaderboardLoading } = usePointsLeaderboard(20);
   const { data: userPoints, isLoading: isUserPointsLoading } = useUserPoints(address);
@@ -71,6 +74,7 @@ export const Leaderboard: FC = () => {
 
   return (
     <PageContainer>
+      <RiskToast items={indexerOutage.toasts} onDismiss={indexerOutage.dismiss} />
       {/* <PageHeader>
         <PageTitle>Leaderboard</PageTitle>
         <PageSubtitle>Earn points for trading on HPDX and climb the ranks.</PageSubtitle>

@@ -1,5 +1,6 @@
 import { ClientError } from "graphql-request";
-import { showAlert } from "../../components/AlertModal.store";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
+import type { RiskToastItem } from "../../components/Widgets/Futures/RiskToast";
 
 export type IndexerErrorKind = "rate_limit" | "outage" | "other";
 
@@ -24,16 +25,43 @@ export const classifyIndexerError = (error: unknown): IndexerErrorKind => {
   return "other";
 };
 
-let outageNotified = false;
+export const INDEXER_TOAST_PREFIX = "indexer:";
+const INDEXER_TOAST_ID = `${INDEXER_TOAST_PREFIX}outage`;
+const INDEXER_TOAST_MESSAGE =
+  "We're experiencing issues with our data indexer. Some data may be missing or outdated. Please try again later.";
 
-/** Shows the outage popup at most once per page load. */
+let outageNotified = false;
+let toastVisible = false;
+const listeners = new Set<() => void>();
+
+const setToastVisible = (visible: boolean) => {
+  toastVisible = visible;
+  for (const listener of listeners) listener();
+};
+
+const subscribe = (listener: () => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+
+const getToastVisible = () => toastVisible;
+
+/** Shows the outage toast at most once per page load; a dismissed toast stays dismissed. */
 export const notifyIndexerOutage = (): void => {
   if (outageNotified) return;
   outageNotified = true;
-  void showAlert({
-    variant: "warning",
-    title: "Service temporarily unavailable",
-    message:
-      "We're experiencing issues with our data indexer. Some data may be missing or outdated. Please try again later.",
-  });
+  setToastVisible(true);
+};
+
+/** Indexer outage notice in the `RiskToast` item shape, ready to merge into a toast stack. */
+export const useIndexerOutageToast = () => {
+  const visible = useSyncExternalStore(subscribe, getToastVisible, getToastVisible);
+  const toasts = useMemo<RiskToastItem[]>(
+    () => (visible ? [{ id: INDEXER_TOAST_ID, message: INDEXER_TOAST_MESSAGE, variant: "warning" }] : []),
+    [visible],
+  );
+  const dismiss = useCallback(() => setToastVisible(false), []);
+  return { toasts, dismiss };
 };
