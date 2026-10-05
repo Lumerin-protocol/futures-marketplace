@@ -250,7 +250,7 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
     walletClient,
     pc,
     "../artifacts/collateral-margin/contracts/contracts/PortfolioMarginEngine.sol/PortfolioMarginEngine.json",
-    [],
+    [collateralVault.address],
   );
   const portfolioMarginEngineProxy = await deployContract<"ERC1967Proxy">(
     walletClient,
@@ -271,7 +271,6 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
     client: { public: pc, wallet: walletClient },
   });
 
-  await portfolioMarginEngine.write.setVault([collateralVault.address]);
   // Point the PME's own spot source at the same hashprice feed the futures
   // contract uses — oracle moves then flow into PME stress math automatically.
   // The perps mock is NOT registered on the PME by default — tests that need a
