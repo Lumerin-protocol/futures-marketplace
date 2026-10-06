@@ -72,11 +72,16 @@ async function main() {
     readOptionalAddress("POINTS_HOOK_ADDRESS") ??
     readOptionalAddress("HOOK_ADDRESS");
 
-  const [deployer, proposer] = await viem.getWalletClients();
+  // The network config holds a single key, so the deployer proposes unless a
+  // second account is configured.
+  const [deployer, proposer = deployer] = await viem.getWalletClients();
   const pc = await viem.getPublicClient();
   logInfo("deployer", { Address: addrUrl(pc, deployer.account.address) });
   if (SAFE_OWNER_ADDRESS) {
-    logInfo("safe owner", { Address: SAFE_OWNER_ADDRESS });
+    logInfo("safe owner", {
+      Address: SAFE_OWNER_ADDRESS,
+      Proposer: proposer.account.address,
+    });
   }
 
   const futuresProxy = await viem.getContractAt(
@@ -101,12 +106,6 @@ async function main() {
       `Configured upgrade caller ${upgradeCaller} is not HashPowerFutures owner ${owner}`,
     );
   }
-  if (SAFE_OWNER_ADDRESS && !proposer) {
-    throw new Error(
-      "PROPOSER_PRIVATEKEY is required when SAFE_OWNER_ADDRESS is set",
-    );
-  }
-
   const wiredEngine = getAddress(
     await futuresProxy.read.portfolioMargin().catch(() => zeroAddress),
   );
