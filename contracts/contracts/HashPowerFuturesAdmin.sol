@@ -72,7 +72,7 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
     /// @notice Withdraw accrued trading and liquidation revenue to the venue owner.
     /// @dev Drains the venue's vault account (the fee pot). No separate accumulator.
     function withdrawCollectedFees() external onlyOwner {
-        vault.withdrawTo(owner(), vault.balanceOf(address(this)));
+        vault.withdrawTo(owner(), _vaultBalance(address(this)));
     }
 
     // ── Wiring ────────────────────────────────────────────────────────────────
@@ -125,7 +125,7 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
             if (block.timestamp >= expirationAt) revert PositionMatured();
             int256 netQty = participantExpirationAtNetDelta[user][expirationAt];
             if (netQty == 0) continue;
-            int256 pnl = _applyFill(user, -netQty, mark, expirationAt);
+            int256 pnl = _applyFill(user, -netQty, mark, expirationAt, false);
             emit PositionLiquidated(user, _msgSender(), expirationAt, netQty, pnl, 0);
         }
     }

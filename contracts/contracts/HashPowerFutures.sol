@@ -22,7 +22,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev Lives here rather than in {HashPowerFuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `HashPowerFutures.sol` to require a bump.
-    string public constant VERSION = "6.7.0";
+    string public constant VERSION = "6.8.0";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) { }
@@ -52,17 +52,20 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @notice Place a limit order with explicit time-in-force (GTC / IOC / FOK).
     ///         `quantity` > 0 = buy/long, < 0 = sell/short.
     /// @dev Locally reducing legs are accepted below IM only when authoritative portfolio IM
-    ///      does not increase, so cross-venue exposure cannot bypass the margin gate.
+    ///      does not increase, so cross-venue exposure cannot bypass the margin gate, and the
+    ///      MM deficit does not grow (the engine's `reduceLimits` / `meetsTradeMargin`). The
+    ///      taker must pay any realized loss in full.
     function createOrder(uint256 _price, uint256 _expirationAt, int256 _quantity, TimeInForce _tif) external {
         _requireTradingOpen();
         address sender = _msgSender();
         _validateOrderIntent(_price, _expirationAt, _quantity, _tif);
         uint256 maxAllowedIm;
+        uint256 maxAllowedMmDeficit;
         if (_isLocallyReducing(sender, _expirationAt, _quantity)) {
-            maxAllowedIm = portfolioMargin.computePortfolioIM(sender);
+            (maxAllowedIm, maxAllowedMmDeficit) = portfolioMargin.reduceLimits(sender);
         }
         _createOrder(sender, _price, _expirationAt, _quantity, _tif);
-        _ensureNoCollateralDeficit(sender, maxAllowedIm);
+        _ensureNoCollateralDeficit(sender, maxAllowedIm, maxAllowedMmDeficit);
     }
 
     /// @notice Batched placement with per-leg time-in-force — IM check once at the end.
@@ -78,7 +81,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         if (len == 0) revert EmptyBatch();
         address sender = _msgSender();
         _placeIntents(sender, _intents);
-        _ensureNoCollateralDeficit(sender, 0);
+        _ensureNoCollateralDeficit(sender, 0, 0);
     }
 
     /// @dev Validate and place each intent for `_sender`; shared by the two batch entry points.
@@ -114,7 +117,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         }
         if (_intents.length != 0) {
             _placeIntents(sender, _intents);
-            _ensureNoCollateralDeficit(sender, 0);
+            _ensureNoCollateralDeficit(sender, 0, 0);
         }
     }
 
@@ -271,7 +274,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     }
 
     function _underwater(address _participant) internal view returns (bool) {
-        return vault.balanceOf(_participant) < portfolioMargin.computePortfolioMM(_participant);
+        return _vaultBalance(_participant) < portfolioMargin.computePortfolioMM(_participant);
     }
 
     function _doLiquidateOrder(address _user, bytes32 _orderId, Order memory _order) internal {
@@ -352,7 +355,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         // Full and partial closes share `_applyFill`: it realizes the exact entry-value slice
         // against the fund and zeroes the leg when `closeAbs == |net|`.
         int256 signedClose = M.toSigned(_netQty > 0, closeAbs);
-        int256 pnl = _applyFill(_user, -signedClose, _mark, _expirationAt);
+        int256 pnl = _applyFill(_user, -signedClose, _mark, _expirationAt, false);
         _handOffToBackstop(_user, _expirationAt, signedClose, _mark);
         uint256 liqFee = _chargeLiquidationFee(_user, _mark * closeAbs);
 
@@ -394,7 +397,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         emit OrderUpdated(orderId, BACKSTOP, 0);
         uint256 filledAbs = closeAbs - M.abs(remaining);
 
-        uint256 fee = M.min(mark * filledAbs * feeBps / BPS, vault.balanceOf(address(this)));
+        uint256 fee = M.min(mark * filledAbs * feeBps / BPS, _vaultBalance(address(this)));
         if (fee != 0) _internalTransfer(address(this), _msgSender(), fee);
 
         emit BackstopUnwound(_msgSender(), _expirationAt, M.toSigned(isBuy, filledAbs), fee);
@@ -403,7 +406,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev With remaining portfolio risk and a real IM>MM buffer, balance must be ≤ IM.
     function _revertIfOverLiquidated(address _user) internal view {
         (uint256 im, uint256 mm) = portfolioMargin.computePortfolioMargins(_user);
-        if (im > mm && vault.balanceOf(_user) > im) revert OverLiquidation();
+        if (im > mm && _vaultBalance(_user) > im) revert OverLiquidation();
     }
 
     // ── Settlement ────────────────────────────────────────────────────────────
@@ -423,7 +426,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         uint256 price = _ensureSettlementPrice(_expirationAt);
         // A full opposite fill at the pinned price: realizes `price * net - entry` against the fund
         // and zeroes the leg, the same arithmetic this function used to spell out.
-        int256 pnl = _applyFill(_user, -netQty, price, _expirationAt);
+        int256 pnl = _applyFill(_user, -netQty, price, _expirationAt, false);
 
         emit PositionSettled(_user, _expirationAt, netQty, pnl, price, _msgSender());
     }

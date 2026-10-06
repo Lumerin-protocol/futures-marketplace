@@ -1,5 +1,12 @@
 import hre from "hardhat";
-import { encodeFunctionData, getAddress } from "viem";
+import {
+  type Address,
+  type PublicClient,
+  encodeFunctionData,
+  getAddress,
+  parseAbi,
+  zeroAddress,
+} from "viem";
 import { estimateContractGas, simulateContract } from "viem/actions";
 import { OperationType } from "@safe-global/types-kit";
 import {
@@ -20,8 +27,37 @@ import {
 import { SafeWallet } from "../lib/safe.ts";
 
 const DEFAULT_SAFE_GAS_OVERHEAD = 150_000n;
-const TARGET_CODE_VERSION = "6.7.0";
+const TARGET_CODE_VERSION = "6.8.0";
 const UPGRADE_CONFIRMATIONS = 5;
+// 6.8.0 calls the engine's `reduceLimits` / `meetsTradeMargin` on every order. Against an
+// older engine every order reverts, so the engine has to be upgraded first.
+const MIN_ENGINE_VERSION = "2.2.0";
+const VERSION_ABI = parseAbi(["function VERSION() view returns (string)"]);
+
+/** Dotted-version comparison; an unreadable version never passes. */
+function versionAtLeast(version: string, min: string): boolean {
+  const have = version.split(".").map(Number);
+  const want = min.split(".").map(Number);
+  for (let i = 0; i < want.length; i++) {
+    const part = have[i] ?? 0;
+    if (part !== want[i]) return part > want[i];
+  }
+  return true;
+}
+
+async function requireEngineVersion(
+  pc: PublicClient,
+  engine: Address,
+): Promise<void> {
+  const version = await pc
+    .readContract({ address: engine, abi: VERSION_ABI, functionName: "VERSION" })
+    .catch(() => "unknown");
+  if (!versionAtLeast(version, MIN_ENGINE_VERSION)) {
+    throw new Error(
+      `PortfolioMarginEngine ${engine} is at ${version}; upgrade it to ${MIN_ENGINE_VERSION} or later before this venue`,
+    );
+  }
+}
 
 async function main() {
   logTitle("HashPowerFutures Upgrade");
@@ -36,11 +72,16 @@ async function main() {
     readOptionalAddress("POINTS_HOOK_ADDRESS") ??
     readOptionalAddress("HOOK_ADDRESS");
 
-  const [deployer, proposer] = await viem.getWalletClients();
+  // The network config holds a single key, so the deployer proposes unless a
+  // second account is configured.
+  const [deployer, proposer = deployer] = await viem.getWalletClients();
   const pc = await viem.getPublicClient();
   logInfo("deployer", { Address: addrUrl(pc, deployer.account.address) });
   if (SAFE_OWNER_ADDRESS) {
-    logInfo("safe owner", { Address: SAFE_OWNER_ADDRESS });
+    logInfo("safe owner", {
+      Address: SAFE_OWNER_ADDRESS,
+      Proposer: proposer.account.address,
+    });
   }
 
   const futuresProxy = await viem.getContractAt(
@@ -65,10 +106,16 @@ async function main() {
       `Configured upgrade caller ${upgradeCaller} is not HashPowerFutures owner ${owner}`,
     );
   }
-  if (SAFE_OWNER_ADDRESS && !proposer) {
-    throw new Error(
-      "PROPOSER_PRIVATEKEY is required when SAFE_OWNER_ADDRESS is set",
-    );
+  const wiredEngine = getAddress(
+    await futuresProxy.read.portfolioMargin().catch(() => zeroAddress),
+  );
+  const engines = new Set([
+    wiredEngine,
+    getAddress(marginEngineAddress ?? zeroAddress),
+  ]);
+  engines.delete(zeroAddress);
+  for (const engine of engines) {
+    await requireEngineVersion(pc, engine);
   }
 
   // 3.x cutover: order/position semantics change; 3.1+ also breaks Order storage layout

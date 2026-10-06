@@ -521,8 +521,12 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         uint256 fill = M.min(makerAbs, remainingAbs);
         int256 takerFillQty = M.toSigned(_isBuy, fill);
 
-        _applyFill(makerParticipant, -takerFillQty, _price, _expirationAt);
-        _applyFill(_taker, takerFillQty, _price, _expirationAt);
+        // A trader taker must pay its realized loss in full: the fill price is the taker's
+        // choice, so an unpaid remainder would let a colluding maker collect it from the fund.
+        // The maker and the backstop keep the bad-debt path; a maker that could not pay would
+        // otherwise block every taker at its level.
+        _applyFill(makerParticipant, -takerFillQty, _price, _expirationAt, false);
+        _applyFill(_taker, takerFillQty, _price, _expirationAt, _taker != BACKSTOP);
 
         uint256 notional = _price * fill;
         int256 makerFeeAmt = int256(notional) * int256(makerFeeBps) / int256(BPS);
@@ -599,7 +603,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
 
     /// @notice Fee pot size: the venue's vault balance (match + liquidation exchange share).
     function collectedFeesBalance() public view returns (uint256) {
-        return vault.balanceOf(address(this));
+        return _vaultBalance(address(this));
     }
 
     /// @dev Move a signed trading fee between a participant and the fee pot
@@ -614,7 +618,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
             return;
         }
 
-        uint256 rebate = M.min(uint256(-_fee), vault.balanceOf(address(this)));
+        uint256 rebate = M.min(uint256(-_fee), _vaultBalance(address(this)));
         if (rebate > 0) {
             _internalTransfer(address(this), _participant, rebate);
         }
@@ -632,8 +636,9 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     /// @notice Apply a signed fill to a user's aggregate at `expirationAt`.
     /// @dev Scale-in / reduce / flip with exact `netEntryValue` accounting; realizes PnL via insurance fund.
     ///      Liquidation and force-close reuse this for the user's close, so one function owns the math.
+    /// @param _mustPay Revert instead of recording bad debt when the user cannot pay a realized loss
     /// @return pnl Realized PnL on the reduced part (0 when the fill only opens or scales in).
-    function _applyFill(address _user, int256 _signedQty, uint256 _tradePrice, uint256 _expirationAt)
+    function _applyFill(address _user, int256 _signedQty, uint256 _tradePrice, uint256 _expirationAt, bool _mustPay)
         internal
         returns (int256 pnl)
     {
@@ -668,7 +673,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
             remainingEntryValue = netEntry * int256(absNet - closedAbs) / int256(absNet);
         }
         pnl = int256(_tradePrice) * signedClosed - (netEntry - remainingEntryValue);
-        _transferPnl(_insuranceFundAccount(), _user, pnl);
+        if (!_transferPnl(_insuranceFundAccount(), _user, pnl) && _mustPay) revert InsufficientMarginBalance();
 
         if (absDq < absNet) {
             // Partial reduce
@@ -839,7 +844,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     ///      realizes against the fund; what it cannot pay is recorded as `BadDebt` by the vault.
     ///      No margin check: the backstop is a ledger for protocol exposure, not a margined trader.
     function _handOffToBackstop(address _user, uint256 _expirationAt, int256 _signedClose, uint256 _mark) internal {
-        _applyFill(BACKSTOP, _signedClose, _mark, _expirationAt);
+        _applyFill(BACKSTOP, _signedClose, _mark, _expirationAt, false);
         emit BackstopAssigned(_user, _expirationAt, _signedClose, _mark);
     }
 
@@ -1015,17 +1020,29 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         if (!_isListedExpirationAt(_expirationAt)) revert ExpirationDateNotAvailable();
     }
 
-    function _ensureNoCollateralDeficit(address _participant, uint256 _maxAllowedIm) internal view {
-        uint256 required = portfolioMargin.computePortfolioIM(_participant);
-        if (vault.balanceOf(_participant) < required && required > _maxAllowedIm) {
+    /// @notice Ensure the account is not short of portfolio IM. A reducing single order may
+    ///         finish below IM within the limits the engine's `reduceLimits` returned before
+    ///         it; strict callers pass zero for both.
+    function _ensureNoCollateralDeficit(address _participant, uint256 _maxAllowedIm, uint256 _maxAllowedMmDeficit)
+        internal
+        view
+    {
+        if (!portfolioMargin.meetsTradeMargin(_participant, _maxAllowedIm, _maxAllowedMmDeficit)) {
             revert InsufficientMarginBalance();
         }
     }
 
+    /// @dev Every vault balance read goes through here: each external call site costs runtime
+    ///      bytecode, and this contract sits near the EIP-170 limit.
+    function _vaultBalance(address _account) internal view returns (uint256) {
+        return vault.balanceOf(_account);
+    }
+
     // ── Internal helpers: collateral movement ─────────────────────────────────
 
-    function _transferPnl(address _from, address _to, int256 _pnl) internal {
-        if (_pnl == 0) return;
+    /// @return paidInFull False when the vault recorded part of the amount as bad debt
+    function _transferPnl(address _from, address _to, int256 _pnl) internal returns (bool paidInFull) {
+        if (_pnl == 0) return true;
         address payer;
         address receiver;
         uint256 amount;
@@ -1039,7 +1056,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
             amount = uint256(-_pnl);
         }
 
-        vault.settleTransfer(payer, receiver, amount);
+        return vault.settleTransfer(payer, receiver, amount) == amount;
     }
 
     /// @dev New orders are the only way a fill starts, so rejecting them stops new exposure.
@@ -1062,7 +1079,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         uint256 computedFee = _notionalValue * uint256(feeBps) / BPS;
         if (computedFee == 0) return 0;
 
-        uint256 userBal = vault.balanceOf(_user);
+        uint256 userBal = _vaultBalance(_user);
         totalFee = M.min(computedFee, userBal);
         if (totalFee == 0) return 0;
 
