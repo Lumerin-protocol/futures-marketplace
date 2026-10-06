@@ -187,6 +187,7 @@ async function benchmarkViews() {
   const [sellerOrder] = await getUserOrders(futures, seller.account.address);
 
   const calls: Array<[string, string, (readonly unknown[])?]> = [
+    ["BACKSTOP()", "BACKSTOP"],
     ["CONTRACT_SIZE_HPS_DAY()", "CONTRACT_SIZE_HPS_DAY"],
     ["EXPIRATION_INTERVAL_DAYS()", "EXPIRATION_INTERVAL_DAYS"],
     ["MAX_ORACLE_STALENESS()", "MAX_ORACLE_STALENESS"],
@@ -762,21 +763,9 @@ async function benchmarkAdminAndLifecycle() {
 
     await recordTransaction(
       pc,
-      "setLiquidationMarginPercent(uint8)",
-      "20-to-25",
-      futures.write.setLiquidationMarginPercent([25], { account: owner.account }),
-    );
-    await recordTransaction(
-      pc,
       "setFutureExpirationDatesCount(uint8)",
       "10-to-8",
       futures.write.setFutureExpirationDatesCount([8], { account: owner.account }),
-    );
-    await recordTransaction(
-      pc,
-      "dropActiveOrders(address[])",
-      "empty post-upgrade cutover",
-      futures.write.dropActiveOrders([[]], { account: owner.account }),
     );
     await recordTransaction(
       pc,
@@ -871,6 +860,45 @@ async function benchmarkAdminAndLifecycle() {
   }
   {
     const data = await fresh();
+    const { futures, collateralVault } = data.contracts;
+    const { owner, seller, buyer, pc } = data.accounts;
+    const price = await futures.read.getMarketPrice();
+    const expirationAt = data.config.deliveryDates[0];
+    await fund(data, [seller, buyer]);
+    await openPosition(data, expirationAt, 1n, price);
+    await collateralVault.write.halt({ account: owner.account });
+    await recordTransaction(
+      pc,
+      "forceClosePositions(address[],uint256[])",
+      "two legs at the mark while halted",
+      futures.write.forceClosePositions(
+        [[seller.account.address, buyer.account.address], [expirationAt, expirationAt]],
+        { account: owner.account },
+      ),
+    );
+  }
+  {
+    // Liquidate the buyer so the backstop holds the long, then a resting seller bid lets the
+    // backstop unwind as a taker inside the band.
+    const data = await setupPositionLiquidation();
+    const { futures, collateralVault } = data.contracts;
+    const { owner, seller, buyer, buyer2, pc } = data.accounts;
+    const { expirationAt, quantity } = data.liquidation;
+    await futures.write.liquidatePosition([buyer.account.address, expirationAt, quantity], {
+      account: buyer2.account,
+    });
+    await collateralVault.write.setBackstopParams([100, 10], { account: owner.account });
+    const mark = await futures.read.getMarketPrice();
+    await futures.write.createOrder([mark, expirationAt, 2n, TimeInForce.GTC], { account: seller.account });
+    await recordTransaction(
+      pc,
+      "unwindBackstop(uint256,uint256)",
+      "sell 2 into one resting bid",
+      futures.write.unwindBackstop([expirationAt, 2n], { account: buyer2.account }),
+    );
+  }
+  {
+    const data = await fresh();
     const { futures } = data.contracts;
     const { owner, seller, buyer, pc } = data.accounts;
     const price = await futures.read.getMarketPrice();
@@ -936,7 +964,7 @@ describe("Futures gas benchmark", () => {
 
     const snapshot = gas.snapshot();
     const coverage = assertAbiFunctionCoverage(HashPowerFuturesAbi, snapshot, exclusions);
-    assert.equal(coverage.covered.length, 65);
+    assert.equal(coverage.covered.length, 66);
     assert.deepEqual(coverage.excluded, [
       "initialize(address,uint8,uint8,uint256)",
       "proxiableUUID()",

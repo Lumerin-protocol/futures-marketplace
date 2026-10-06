@@ -18,10 +18,15 @@ function valueToString(value: ethereum.Value): string {
 }
 
 export function stringifyParameters(event: ethereum.Event): string {
-  return (
-    "\n" +
-    event.parameters
-      .map<string>((param) => param.name + ": " + valueToString(param.value))
-      .join("\n")
-  );
+  // Plain loop, no Array#map closure: the closure compiled to a `call_indirect`
+  // whose table slot the graph-node runtime never initialised, so the futures
+  // mapping trapped with "wasm trap: uninitialized element" on the first
+  // OrderCreated after the backstop redeploy.
+  const params = event.parameters;
+  const lines = new Array<string>(params.length);
+  for (let i = 0; i < params.length; i++) {
+    const param = params[i];
+    lines[i] = param.name + ": " + valueToString(param.value);
+  }
+  return "\n" + lines.join("\n");
 }

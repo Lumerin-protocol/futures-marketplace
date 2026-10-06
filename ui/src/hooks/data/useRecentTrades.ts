@@ -4,6 +4,7 @@ import { graphqlRequest } from "./graphql";
 import { RecentTradesQuery } from "./graphql-queries";
 import type { ContractMode } from "../../types/types";
 import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE_NUM } from "../../lib/units";
+import { isBackstopAddress } from "./useProtocolBackstop";
 
 export const RECENT_TRADES_QK = "RecentTrades";
 
@@ -21,6 +22,9 @@ export type RecentTrade = {
   transactionHash: `0x${string}`;
   // Unix timestamp in seconds.
   timestamp: number;
+  // Non-market prints: a forced liquidation close, or the protocol backstop's
+  // side of one (hand-off at the mark, or a later unwind fill).
+  tag?: "liquidation" | "backstop";
 };
 
 export const useRecentTrades = (
@@ -55,6 +59,12 @@ export const useRecentTrades = (
         // Some rows carry a signed tradePrice; the fill price for display is
         // always positive, side is derived from the signed quantity instead.
         const price = Math.abs(Number(trade.tradePrice)) / PAYMENT_TOKEN_SCALE_NUM;
+        const tag: RecentTrade["tag"] =
+          trade.isBackstopAssignment || isBackstopAddress(trade.user?.id)
+            ? "backstop"
+            : trade.isLiquidation
+              ? "liquidation"
+              : undefined;
         return {
           id: trade.id,
           side: signedQuantity >= 0 ? "buy" : "sell",
@@ -63,6 +73,7 @@ export const useRecentTrades = (
           size: quantity * price,
           transactionHash: trade.transactionHash as `0x${string}`,
           timestamp: Number(trade.timestamp),
+          ...(tag ? { tag } : {}),
         };
       });
     },
@@ -77,5 +88,8 @@ type RecentTradesResponse = {
     tradeQuantity: string;
     timestamp: string;
     transactionHash: string;
+    isLiquidation?: boolean;
+    isBackstopAssignment?: boolean;
+    user?: { id: string } | null;
   }[];
 };

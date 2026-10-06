@@ -1,3 +1,4 @@
+import { ensureWalletConnectDb } from "./utils/ensureWalletConnectDb";
 import { safeLazy } from "./utils/safeLazy";
 
 /**
@@ -14,5 +15,7 @@ import { safeLazy } from "./utils/safeLazy";
  * chunk is only ever fetched once no matter how many places render it.
  */
 export const Web3ProviderLazy = safeLazy(() =>
-  import("./Web3Provider").then((module) => ({ default: module.Web3Provider })),
+  ensureWalletConnectDb()
+    .then(() => import("./Web3Provider"))
+    .then((module) => ({ default: module.Web3Provider })),
 );
