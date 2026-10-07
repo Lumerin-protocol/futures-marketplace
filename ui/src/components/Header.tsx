@@ -21,15 +21,8 @@ export const Header = () => {
   const navigate = useNavigate();
   const isLeaderboardActive = location.pathname === PathName.Leaderboard;
 
-  // On the leaderboard the logo doubles as a "back to trading" control so users
-  // can leave the page even when the brand text fills the available width;
-  // elsewhere it links out to the Lumerin site.
   const handleLogoClick = () => {
-    if (isLeaderboardActive) {
-      navigate(PathName.Landing);
-      return;
-    }
-    window.open("http://lumerin.io/", "_blank", "noopener,noreferrer");
+    navigate("/");
   };
 
   return (
