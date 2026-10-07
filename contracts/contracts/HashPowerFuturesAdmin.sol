@@ -21,7 +21,6 @@ import { HashPowerFuturesBase } from "./HashPowerFuturesBase.sol";
 ///      Keep it stateless. If admin-only state is ever needed, declare it in
 ///      {HashPowerFuturesBase} at the end alongside the existing gap slots.
 abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
-    using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableSet for EnumerableSet.Bytes32Set;
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner { }
@@ -114,7 +113,7 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
     /// @dev Only while the vault is halted, so no fill can land between legs. Reverts
     ///      `PositionMatured` on a matured leg: those are worth their settlement price and must go
     ///      through `settlePositions`. Empty legs are skipped. Resting orders are left alone; they
-    ///      carry no exposure until they fill.
+    ///      carry no exposure until they fill, and {forceCancelOrders} removes them.
     function forceClosePositions(address[] calldata _users, uint256[] calldata _expirationAts) external onlyOwner {
         if (!vault.halted()) revert NotHalted();
         if (_users.length != _expirationAts.length) revert ArrayLengthMismatch();
@@ -130,37 +129,19 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
         }
     }
 
-    /// @notice Admin escape hatch: clear active orders + aggregate positions for the given participants.
-    /// @dev Expired v4.3+ orders are already inert and remain available to optional permissionless
-    ///      cleanup. Does not walk legacy lots for economics — zeros `netDelta` / `netEntryValue` /
-    ///      `activeExpirationAts` directly. Pre-v3 lot indexes and the pre-v4.3 global order index
-    ///      are no longer purged here: nothing has written them for several releases, and the
-    ///      bytecode they cost pushed the venue over EIP-170.
-    function resetState(address[] calldata _participants) external onlyOwner {
-        for (uint256 p = 0; p < _participants.length; p++) {
-            address participant = _participants[p];
-            (uint256[] memory orderExpirationAts, uint256 orderExpirationCount) =
-                _activeOrderExpirations(participant);
-
-            for (uint256 d = 0; d < orderExpirationCount; d++) {
-                EnumerableSet.Bytes32Set storage deliveryOrders =
-                    participantExpirationAtOrderIdsIndex[participant][orderExpirationAts[d]];
-                while (deliveryOrders.length() > 0) {
-                    bytes32 orderId = deliveryOrders.at(deliveryOrders.length() - 1);
-                    Order storage order = orders[orderId];
-                    bool isBuy = order.quantity > 0;
-                    _removeRestingOrder(orderId, order.expirationAt, order.price, participant, isBuy, true);
-                    emit OrderCancelled(orderId, participant);
-                }
-            }
-
-            // Clear aggregates + active dates directly (no lot iteration for economics).
-            EnumerableSet.UintSet storage dates = participantActiveExpirationAts[participant];
-            while (dates.length() > 0) {
-                uint256 date = dates.at(0);
-                delete participantExpirationAtNetDelta[participant][date];
-                delete participantExpirationAtNetEntryValue[participant][date];
-                dates.remove(date);
+    /// @notice Cancel every resting order on the given (user, expiry) legs. Emits `OrderCancelled`
+    ///         per order, like a user's own cancel, so indexers need nothing new.
+    /// @dev Only while the vault is halted, so the users cannot place orders again before the
+    ///      batch ends. Any expiry is accepted: matured ones, whose orders sit inert, and dates
+    ///      that left the trading window after `futureExpirationDatesCount` shrank. Legs without
+    ///      orders are skipped.
+    function forceCancelOrders(address[] calldata _users, uint256[] calldata _expirationAts) external onlyOwner {
+        if (!vault.halted()) revert NotHalted();
+        if (_users.length != _expirationAts.length) revert ArrayLengthMismatch();
+        for (uint256 i = 0; i < _users.length; i++) {
+            bytes32[] memory orderIds = participantExpirationAtOrderIdsIndex[_users[i]][_expirationAts[i]].values();
+            for (uint256 j = 0; j < orderIds.length; j++) {
+                _dropRestingOrder(orderIds[j], orders[orderIds[j]]);
             }
         }
     }

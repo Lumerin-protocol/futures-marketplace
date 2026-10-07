@@ -717,6 +717,15 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         delete orders[orderId];
     }
 
+    /// @dev Unindex a resting order and announce it cancelled. Callers own the authorization
+    ///      decision; this only performs the removal.
+    function _dropRestingOrder(bytes32 _orderId, Order memory _order) internal {
+        _removeRestingOrder(
+            _orderId, _order.expirationAt, _order.price, _order.participant, _order.quantity > 0, true
+        );
+        emit OrderCancelled(_orderId, _order.participant);
+    }
+
     function _addOrderToQueue(
         StructuredLinkedList.List storage orderIndexId,
         bytes32 _orderId,

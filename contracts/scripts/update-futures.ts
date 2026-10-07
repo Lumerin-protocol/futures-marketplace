@@ -27,7 +27,7 @@ import {
 import { SafeWallet } from "../lib/safe.ts";
 
 const DEFAULT_SAFE_GAS_OVERHEAD = 150_000n;
-const TARGET_CODE_VERSION = "6.8.0";
+const TARGET_CODE_VERSION = "6.9.0";
 const UPGRADE_CONFIRMATIONS = 5;
 // 6.8.0 calls the engine's `reduceLimits` / `meetsTradeMargin` on every order. Against an
 // older engine every order reverts, so the engine has to be upgraded first.
@@ -116,19 +116,6 @@ async function main() {
   engines.delete(zeroAddress);
   for (const engine of engines) {
     await requireEngineVersion(pc, engine);
-  }
-
-  // 3.x cutover: order/position semantics change; 3.1+ also breaks Order storage layout
-  // (safe after resetState). Required order: pause MM/keeper → futures-reset-state →
-  // this upgrade → new subgraph from upgrade block → cut over keeper/MM/UI ABI.
-  if (typeof currentVersion === "string" && currentVersion.startsWith("2.")) {
-    logInfo("3.x cutover reminder", {
-      BeforeUpgrade:
-        "run scripts/futures-reset-state.ts (clear orders + positions)",
-      AfterUpgrade:
-        "redeploy indexer from upgrade block; point keeper ABI at 3.x",
-      Docs: "docs/06.Event-Desing-Spec.md § Cutover notes",
-    });
   }
 
   await logPrompt("Review the configuration above. Proceed with upgrade?");
