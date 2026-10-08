@@ -839,21 +839,23 @@ async function benchmarkAdminAndLifecycle() {
   }
   {
     const data = await fresh();
-    const { futures } = data.contracts;
-    const { owner, seller, buyer, pc } = data.accounts;
+    const { futures, collateralVault } = data.contracts;
+    const { owner, seller, pc } = data.accounts;
     const price = await futures.read.getMarketPrice();
     const expirationAt = data.config.deliveryDates[0];
-    await fund(data, [seller, buyer]);
-    await openPosition(data, expirationAt, 1n, price);
-    await futures.write.createOrder(
-      [price + data.config.priceLadderStep, expirationAt, -1n, TimeInForce.GTC],
-      { account: seller.account },
-    );
+    await fund(data, [seller]);
+    for (const steps of [1n, 2n]) {
+      await futures.write.createOrder(
+        [price + steps * data.config.priceLadderStep, expirationAt, -1n, TimeInForce.GTC],
+        { account: seller.account },
+      );
+    }
+    await collateralVault.write.halt({ account: owner.account });
     await recordTransaction(
       pc,
-      "resetState(address[])",
-      "two participants with order-and-position state",
-      futures.write.resetState([[seller.account.address, buyer.account.address]], {
+      "forceCancelOrders(address[],uint256[])",
+      "two resting orders on one leg while halted",
+      futures.write.forceCancelOrders([[seller.account.address], [expirationAt]], {
         account: owner.account,
       }),
     );

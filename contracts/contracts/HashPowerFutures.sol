@@ -22,7 +22,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev Lives here rather than in {HashPowerFuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `HashPowerFutures.sol` to require a bump.
-    string public constant VERSION = "6.8.0";
+    string public constant VERSION = "6.9.0";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) { }
@@ -204,15 +204,6 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         if (order.participant != _participant) revert OrderNotBelongToSender();
         if (order.quantity == 0) revert OrderNotExists();
         _dropRestingOrder(_orderId, order);
-    }
-
-    /// @dev Unindex a resting order and announce it cancelled. Callers own the authorization
-    ///      decision; this only performs the removal.
-    function _dropRestingOrder(bytes32 _orderId, Order memory _order) private {
-        _removeRestingOrder(
-            _orderId, _order.expirationAt, _order.price, _order.participant, _order.quantity > 0, true
-        );
-        emit OrderCancelled(_orderId, _order.participant);
     }
 
     /// @dev In-place size shrink. Keeps the order id in its price/expiry queue slot.
