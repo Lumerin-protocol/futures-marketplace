@@ -50,7 +50,6 @@ type Futures @entity(immutable: false) {
   totalLiquidations: Int!
   "Notional closed by force, in the same units as totalVolume: sum of exitPrice * abs(closedQuantity) over every PositionLiquidated."
   totalLiquidatedValue: BigInt!
-  totalBadDebt: BigInt!
 
   # Timestamps
   initializedAt: BigInt!
@@ -110,7 +109,6 @@ type User @entity(immutable: false) {
   positionSessions: [PositionSession!]! @derivedFrom(field: "user")
   "Per-(user, expirationAt) running net qty + open-session pointers, one entry per expiration date the user has touched."
   deliveryPointers: [UserDeliverySessionPointer!]! @derivedFrom(field: "user")
-  badDebts: [BadDebtEvent!]! @derivedFrom(field: "user")
 
   # Timestamps
   createdAt: BigInt!
@@ -197,6 +195,10 @@ type Trade @entity(immutable: false) {
   liquidator: Bytes # nullable
   "Fee paid to the liquidator; set only when isLiquidation."
   liquidationFee: BigInt # nullable
+  "True when this Trade is the protocol backstop inheriting a liquidated quantity (BackstopAssigned)."
+  isBackstopAssignment: Boolean! # default false
+  "The liquidated user whose quantity the backstop inherited; set only when isBackstopAssignment."
+  backstopFromUser: Bytes # nullable
 
   fills: [Fill!]! @derivedFrom(field: "trade")
 
@@ -281,11 +283,18 @@ type LiquidationTx @entity(immutable: true) {
   id: Bytes! # transaction hash
 }
 
-# Bad debt event when a participant or the insurance fund cannot cover a loss.
-type BadDebtEvent @entity(immutable: true) {
+# One per `BackstopUnwound`: a permissionless caller reduced the protocol
+# backstop's leg at `expirationAt` as a taker inside the vault's band and was
+# paid `fee` from the venue fee pot. The fill itself is an ordinary
+# `OrderMatched` with the backstop (`0xbB…bB`) as taker, so the backstop's
+# position and Trade/Fill rows are already produced by that handler.
+type BackstopUnwind @entity(immutable: true) {
   id: Bytes! # tx hash + log index
-  user: User!
-  amount: BigInt!
+  caller: Bytes!
+  expirationAt: BigInt!
+  "Signed quantity the backstop traded (its taker side): positive = bought to cover a short."
+  filledQuantity: BigInt!
+  fee: BigInt!
   timestamp: BigInt!
   blockNumber: BigInt!
   transactionHash: Bytes!

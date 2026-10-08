@@ -22,8 +22,8 @@ export {
   handleOrderUpdated,
   handlePositionLiquidated,
   handlePositionSettled,
+  handleBackstopAssigned,
+  handleBackstopUnwound,
 } from "./handlers/orders";
-
-export { handleBadDebt } from "./handlers/liquidation";
 
 export { handleSettlementPriceRecorded } from "./handlers/expirations";

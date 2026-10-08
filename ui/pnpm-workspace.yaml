@@ -2,8 +2,14 @@
 # that breaks `tsc --noEmit`, since it is a .ts source file and therefore not
 # covered by skipLibCheck. 0.14.33 fixes it. Scoped to viem 2.54.0 so that older
 # viem copies in the tree keep their own ox major. See ui/TECH_DEBT.md.
+#
+# @walletconnect/ethereum-provider is auto-installed as an optional peer of
+# @wagmi/connectors and would otherwise pull a second AppKit/WalletConnect
+# stack (1.7.8 / 2.21.x) that shares WALLET_CONNECT_V2_INDEXED_DB with the one
+# used by @reown/appkit. Keep it aligned with @reown/appkit's universal-provider.
 overrides:
   viem@2.54.0>ox: 0.14.33
+  '@walletconnect/ethereum-provider': 2.23.7
 
 allowBuilds:
   '@reown/appkit': true

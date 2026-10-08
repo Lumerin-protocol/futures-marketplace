@@ -1,4 +1,5 @@
 import { styled } from "next-yak";
+import { Tooltip } from "../../Tooltip";
 import { tokens } from "../../../styles/tokens";
 import { useRecentTrades } from "../../../hooks/data/useRecentTrades";
 import { useFuturesTokenInfo } from "../../../hooks/data/useFuturesTokenInfo";
@@ -24,6 +25,12 @@ const formatQuantity = (value: number): string =>
 // Local wall-clock time (HH:MM:SS) for the Time column.
 const formatTime = (timestampSeconds: number): string =>
   new Date(timestampSeconds * 1000).toLocaleTimeString("en-US", { hour12: false });
+
+const TAG_LABEL = { liquidation: "L", backstop: "B" } as const;
+const TAG_TITLE = {
+  liquidation: "Liquidation: forced close at the mark",
+  backstop: "Protocol backstop: inherited a liquidated position or was unwound against the book",
+} as const;
 
 export const TradesList = ({ contractMode = "futures" }: TradesListProps) => {
   const { data: trades, isLoading } = useRecentTrades(contractMode);
@@ -51,7 +58,14 @@ export const TradesList = ({ contractMode = "futures" }: TradesListProps) => {
       ) : (
         trades.map((trade) => (
           <Row key={trade.id}>
-            <PriceCol $side={trade.side}>{trade.price.toFixed(trade.price < 1 ? 5 : 2)}</PriceCol>
+            <PriceCol $side={trade.side}>
+              {trade.price.toFixed(trade.price < 1 ? 5 : 2)}
+              {trade.tag && (
+                <Tooltip title={TAG_TITLE[trade.tag]} arrow>
+                  <TagChip>{TAG_LABEL[trade.tag]}</TagChip>
+                </Tooltip>
+              )}
+            </PriceCol>
             <AmountCol>{isFutures ? formatQuantity(trade.quantity) : formatSize(trade.size)}</AmountCol>
             <TimeCol>
               <span>{formatTime(trade.timestamp)}</span>
@@ -140,6 +154,20 @@ const Row = styled.div`
 const PriceCol = styled.span<{ $side: "buy" | "sell" }>`
   text-align: left;
   color: ${(props) => (props.$side === "buy" ? tokens.trading.long : tokens.trading.short)};
+`;
+
+const TagChip = styled.span`
+  display: inline-block;
+  margin-left: 0.3rem;
+  padding: 0 0.25rem;
+  border-radius: 3px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 1.3;
+  background-color: ${tokens.overlay.white10};
+  color: ${tokens.text.secondary};
+  vertical-align: middle;
+  cursor: default;
 `;
 
 const AmountCol = styled.span`

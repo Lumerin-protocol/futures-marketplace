@@ -22,7 +22,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev Lives here rather than in {HashPowerFuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `HashPowerFutures.sol` to require a bump.
-    string public constant VERSION = "6.5.0";
+    string public constant VERSION = "6.8.0";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) { }
@@ -52,16 +52,20 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @notice Place a limit order with explicit time-in-force (GTC / IOC / FOK).
     ///         `quantity` > 0 = buy/long, < 0 = sell/short.
     /// @dev Locally reducing legs are accepted below IM only when authoritative portfolio IM
-    ///      does not increase, so cross-venue exposure cannot bypass the margin gate.
+    ///      does not increase, so cross-venue exposure cannot bypass the margin gate, and the
+    ///      MM deficit does not grow (the engine's `reduceLimits` / `meetsTradeMargin`). The
+    ///      taker must pay any realized loss in full.
     function createOrder(uint256 _price, uint256 _expirationAt, int256 _quantity, TimeInForce _tif) external {
+        _requireTradingOpen();
         address sender = _msgSender();
         _validateOrderIntent(_price, _expirationAt, _quantity, _tif);
         uint256 maxAllowedIm;
+        uint256 maxAllowedMmDeficit;
         if (_isLocallyReducing(sender, _expirationAt, _quantity)) {
-            maxAllowedIm = portfolioMargin.computePortfolioIM(sender);
+            (maxAllowedIm, maxAllowedMmDeficit) = portfolioMargin.reduceLimits(sender);
         }
         _createOrder(sender, _price, _expirationAt, _quantity, _tif);
-        _ensureNoCollateralDeficit(sender, maxAllowedIm);
+        _ensureNoCollateralDeficit(sender, maxAllowedIm, maxAllowedMmDeficit);
     }
 
     /// @notice Batched placement with per-leg time-in-force — IM check once at the end.
@@ -72,15 +76,22 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     ///      Empty input reverts so simulate-before-write callers do not submit
     ///      a no-op transaction.
     function createOrders(OrderIntent[] calldata _intents) external {
+        _requireTradingOpen();
         uint256 len = _intents.length;
         if (len == 0) revert EmptyBatch();
         address sender = _msgSender();
+        _placeIntents(sender, _intents);
+        _ensureNoCollateralDeficit(sender, 0, 0);
+    }
+
+    /// @dev Validate and place each intent for `_sender`; shared by the two batch entry points.
+    function _placeIntents(address _sender, OrderIntent[] calldata _intents) internal {
+        uint256 len = _intents.length;
         for (uint256 i = 0; i < len; i++) {
             OrderIntent calldata intent = _intents[i];
             _validateOrderIntent(intent.price, intent.expirationAt, intent.quantity, intent.timeInForce);
-            _createOrder(sender, intent.price, intent.expirationAt, intent.quantity, intent.timeInForce);
+            _createOrder(_sender, intent.price, intent.expirationAt, intent.quantity, intent.timeInForce);
         }
-        _ensureNoCollateralDeficit(sender, 0);
     }
 
     /// @notice Cancel, reduce-in-place, then place orders — IM check once at the end.
@@ -94,6 +105,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         ReduceIntent[] calldata _reduces,
         OrderIntent[] calldata _intents
     ) external {
+        if (_intents.length != 0) _requireTradingOpen();
         address sender = _msgSender();
         uint256 cancelLen = _cancelIds.length;
         for (uint256 i = 0; i < cancelLen; i++) {
@@ -103,13 +115,10 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         for (uint256 r = 0; r < reduceLen; r++) {
             _reduceOrderSize(sender, _reduces[r].orderId, _reduces[r].newQuantity);
         }
-        uint256 createLen = _intents.length;
-        for (uint256 j = 0; j < createLen; j++) {
-            OrderIntent calldata intent = _intents[j];
-            _validateOrderIntent(intent.price, intent.expirationAt, intent.quantity, intent.timeInForce);
-            _createOrder(sender, intent.price, intent.expirationAt, intent.quantity, intent.timeInForce);
+        if (_intents.length != 0) {
+            _placeIntents(sender, _intents);
+            _ensureNoCollateralDeficit(sender, 0, 0);
         }
-        if (createLen != 0) _ensureNoCollateralDeficit(sender, 0);
     }
 
     /// @notice Shrink a resting order owned by the caller without losing FIFO priority.
@@ -238,6 +247,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
 
     /// @notice Cancel one resting order of an underwater participant, charging the liquidation fee.
     function liquidateOrder(address _user, bytes32 _orderId) external {
+        if (_user == BACKSTOP) revert BackstopAccount();
         if (!_underwater(_user)) revert NotLiquidatable();
         Order memory order = orders[_orderId];
         if (order.participant != _user) revert OrderNotBelongToUser();
@@ -248,6 +258,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @notice Cancel keeper-chosen resting orders. Keeps prior cancels; skips
     ///         raced/stale ids; stops when the user is healthy.
     function liquidateOrders(address _user, bytes32[] calldata _orderIds) external {
+        if (_user == BACKSTOP) revert BackstopAccount();
         uint256 cancelled = 0;
         uint256 len = _orderIds.length;
         for (uint256 i = 0; i < len; i++) {
@@ -263,7 +274,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     }
 
     function _underwater(address _participant) internal view returns (bool) {
-        return vault.balanceOf(_participant) < portfolioMargin.computePortfolioMM(_participant);
+        return _vaultBalance(_participant) < portfolioMargin.computePortfolioMM(_participant);
     }
 
     function _doLiquidateOrder(address _user, bytes32 _orderId, Order memory _order) internal {
@@ -288,39 +299,47 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     ///      expiry is still a partial close of the portfolio — but it is vacuous once no
     ///      portfolio risk remains (IM == MM == 0), which is the bad-debt / deep-underwater path.
     function liquidatePosition(address _user, uint256 _expirationAt, uint256 _closeQty) external {
-        if (portfolioMargin.hasRestingOrderDelta(_user)) revert OrdersStillOpen();
-        if (!_underwater(_user)) revert NotLiquidatable();
+        uint256 mark = _liquidationPreflight(_user);
         if (_closeQty == 0) revert InvalidQty();
+        // A matured leg is worth its settlement price, not the live mark; `settlePosition` closes it.
+        if (block.timestamp >= _expirationAt) revert PositionMatured();
 
         int256 netQty = participantExpirationAtNetDelta[_user][_expirationAt];
         if (netQty == 0) revert NotLiquidatable();
 
-        uint256 mark = _getMarketPrice(_getPrice());
         if (!_closePosition(_user, _expirationAt, netQty, _closeQty, mark)) revert NotLiquidatable();
     }
 
     /// @notice Batch liquidate across expiries. Keeper chooses legs; keeps prior closes.
-    /// @dev Skips empty legs; stops when healthy. End-of-tx `OverLiquidation` if oversize.
+    /// @dev Skips empty and matured legs; stops when healthy. End-of-tx `OverLiquidation` if oversize.
     function liquidatePositions(address _user, uint256[] calldata _expirationAts, uint256[] calldata _closeQtys)
         external
     {
         if (_expirationAts.length != _closeQtys.length) revert ArrayLengthMismatch();
-        if (portfolioMargin.hasRestingOrderDelta(_user)) revert OrdersStillOpen();
+        uint256 mark = _liquidationPreflight(_user);
 
         uint256 closed = 0;
-        uint256 mark = _getMarketPrice(_getPrice());
         for (uint256 i = 0; i < _expirationAts.length; i++) {
             if (!_underwater(_user)) break;
             uint256 expirationAt = _expirationAts[i];
             uint256 closeQty = _closeQtys[i];
             int256 netQty = participantExpirationAtNetDelta[_user][expirationAt];
-            // Skip empty/stale legs; stop only once healthy.
-            if (netQty == 0 || closeQty == 0) continue;
+            // Skip empty/stale/matured legs; stop only once healthy.
+            if (netQty == 0 || closeQty == 0 || block.timestamp >= expirationAt) continue;
             if (!_closePosition(_user, expirationAt, netQty, closeQty, mark)) continue;
             closed++;
         }
 
         if (closed == 0) revert NotLiquidatable();
+    }
+
+    /// @dev Shared gate for position liquidation: not the backstop, orders-first, underwater.
+    ///      Returns the live mark so callers read the oracle once.
+    function _liquidationPreflight(address _user) internal view returns (uint256 mark) {
+        if (_user == BACKSTOP) revert BackstopAccount();
+        if (portfolioMargin.hasRestingOrderDelta(_user)) revert OrdersStillOpen();
+        if (!_underwater(_user)) revert NotLiquidatable();
+        mark = _getMarketPrice(_getPrice());
     }
 
     /// @dev Close up to `_closeQty` at `_expirationAt`. Returns false when no positive close.
@@ -330,23 +349,15 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         internal
         returns (bool)
     {
-        uint256 absNet = M.abs(_netQty);
-        uint256 closeAbs = M.min(_closeQty, absNet);
+        uint256 closeAbs = M.min(_closeQty, M.abs(_netQty));
         if (closeAbs == 0) return false;
 
-        if (closeAbs == absNet) {
-            (int256 pnl, uint256 liqFee) = _doLiquidateFullPosition(_user, _expirationAt, _netQty, _mark);
-            _revertIfOverLiquidated(_user);
-            emit PositionLiquidated(_user, _msgSender(), _expirationAt, _netQty, pnl, liqFee);
-            _notifyLiquidation(_msgSender(), liqFee);
-            return true;
-        }
-
-        (int256 pnl, int256 signedClose) =
-            _doPartialLiquidatePosition(_user, _expirationAt, _netQty, closeAbs, _mark);
-
-        uint256 closedNotional = _mark * closeAbs;
-        uint256 liqFee = _chargeLiquidationFee(_user, closedNotional);
+        // Full and partial closes share `_applyFill`: it realizes the exact entry-value slice
+        // against the fund and zeroes the leg when `closeAbs == |net|`.
+        int256 signedClose = M.toSigned(_netQty > 0, closeAbs);
+        int256 pnl = _applyFill(_user, -signedClose, _mark, _expirationAt, false);
+        _handOffToBackstop(_user, _expirationAt, signedClose, _mark);
+        uint256 liqFee = _chargeLiquidationFee(_user, _mark * closeAbs);
 
         _revertIfOverLiquidated(_user);
         emit PositionLiquidated(_user, _msgSender(), _expirationAt, signedClose, pnl, liqFee);
@@ -354,10 +365,48 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         return true;
     }
 
+    // ── Backstop unwind ───────────────────────────────────────────────────────
+
+    /// @notice Reduce the protocol backstop's leg at `_expirationAt` by up to `_qty` contracts as a
+    ///         taker, inside `mark ± backstopUnwindBandBps`, and pay the caller
+    ///         `backstopUnwindFeeBps` of the filled notional at the mark from the fee pot.
+    /// @dev Permissionless and allowed while the vault is halted: unwinding only shrinks protocol
+    ///      exposure. Reduce-only by construction. Reverts `TimeInForceNotFilled` when nothing
+    ///      inside the band fills, so callers can simulate before sending. The fee is capped at
+    ///      the fee pot balance. Matured backstop legs go through `settlePosition` instead.
+    function unwindBackstop(uint256 _expirationAt, uint256 _qty) external {
+        if (!_isActiveExpirationAt(_expirationAt)) revert ExpirationDateNotAvailable();
+        if (_qty == 0) revert InvalidQty();
+        int256 net = participantExpirationAtNetDelta[BACKSTOP][_expirationAt];
+        if (net == 0) revert PositionNotExists();
+
+        bool isBuy = net < 0;
+        uint256 closeAbs = M.min(_qty, M.abs(net));
+        uint256 mark = _getMarketPrice(_getPrice());
+        (uint16 bandBps, uint16 feeBps) = vault.backstopParams();
+        uint256 limit = _bandPrice(mark, isBuy, bandBps);
+        if (limit == 0) revert InvalidPrice();
+
+        // Same log sequence as an IOC through `_createOrder`, without routing through it: the IR
+        // inliner would specialize a whole copy of `_createOrder` for the constant TIF (~550 bytes).
+        bytes32 orderId = _nextOrderId();
+        int256 qty = M.toSigned(isBuy, closeAbs);
+        emit OrderCreated(orderId, BACKSTOP, limit, qty, _expirationAt);
+        int256 remaining = _matchWithOppositeOrders(BACKSTOP, limit, _expirationAt, qty);
+        if (remaining == qty) revert TimeInForceNotFilled();
+        emit OrderUpdated(orderId, BACKSTOP, 0);
+        uint256 filledAbs = closeAbs - M.abs(remaining);
+
+        uint256 fee = M.min(mark * filledAbs * feeBps / BPS, _vaultBalance(address(this)));
+        if (fee != 0) _internalTransfer(address(this), _msgSender(), fee);
+
+        emit BackstopUnwound(_msgSender(), _expirationAt, M.toSigned(isBuy, filledAbs), fee);
+    }
+
     /// @dev With remaining portfolio risk and a real IM>MM buffer, balance must be ≤ IM.
     function _revertIfOverLiquidated(address _user) internal view {
         (uint256 im, uint256 mm) = portfolioMargin.computePortfolioMargins(_user);
-        if (im > mm && vault.balanceOf(_user) > im) revert OverLiquidation();
+        if (im > mm && _vaultBalance(_user) > im) revert OverLiquidation();
     }
 
     // ── Settlement ────────────────────────────────────────────────────────────
@@ -375,14 +424,9 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         if (netQty == 0) revert PositionNotExists();
 
         uint256 price = _ensureSettlementPrice(_expirationAt);
-        int256 netEntry = participantExpirationAtNetEntryValue[_user][_expirationAt];
-        int256 pnl = int256(price) * netQty - netEntry;
-
-        _transferPnl(_insuranceFundAccount(), _user, pnl);
-
-        participantExpirationAtNetDelta[_user][_expirationAt] = 0;
-        participantExpirationAtNetEntryValue[_user][_expirationAt] = 0;
-        participantActiveExpirationAts[_user].remove(_expirationAt);
+        // A full opposite fill at the pinned price: realizes `price * net - entry` against the fund
+        // and zeroes the leg, the same arithmetic this function used to spell out.
+        int256 pnl = _applyFill(_user, -netQty, price, _expirationAt, false);
 
         emit PositionSettled(_user, _expirationAt, netQty, pnl, price, _msgSender());
     }

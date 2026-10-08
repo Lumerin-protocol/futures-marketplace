@@ -3,6 +3,7 @@ import { styled } from "next-yak";
 import { tokens } from "../../../styles/tokens";
 import { useIsMobileTradingLayout } from "./mobile/mobileTradingLayout";
 import type { OrderBookRow } from "./ClassicOrderBook";
+import { computeBookCenter, formatMidPrice } from "./orderBookHelpers";
 import type { ContractMode } from "../../../types/types";
 
 interface PerpsVolumeOrderBookProps {
@@ -248,21 +249,10 @@ export const PerpsVolumeOrderBook = ({
     );
   };
 
-  // Best price = the order-book level (best ask or best bid) closest to the
-  // market price. Its color/arrow reflects whether it sits above or below the
-  // market price.
-  let bestPrice: number | null;
-  if (bestAsk != null && bestBid != null && marketPrice != null) {
-    bestPrice =
-      Math.abs(bestAsk - marketPrice) <= Math.abs(bestBid - marketPrice)
-        ? bestAsk
-        : bestBid;
-  } else {
-    bestPrice = bestAsk ?? bestBid ?? marketPrice;
-  }
-
-  const isUp =
-    bestPrice != null && marketPrice != null ? bestPrice >= marketPrice : true;
+  // Center row shows the book mid; its color/arrow reflects whether the mid
+  // sits above or below the hashprice.
+  const center = computeBookCenter(bestAsk, bestBid, marketPrice);
+  const isUp = center.isUp;
 
   // Center the spread on first load so asks scroll to their bottom (best ask)
   // and bids to their top (best bid), keeping the market-price row in view.
@@ -324,7 +314,7 @@ export const PerpsVolumeOrderBook = ({
         onMouseLeave={() => setCenterTooltip(null)}
       >
         <span className={`best ${isUp ? "up" : "down"}`}>
-          {bestPrice != null ? formatPrice(bestPrice) : "—"}
+          {center.mid != null ? formatMidPrice(center.mid) : "—"}
           <span className="arrow">{isUp ? "↑" : "↓"}</span>
         </span>
         <span className="market">
@@ -364,7 +354,7 @@ export const PerpsVolumeOrderBook = ({
         </Tooltip>
       )}
 
-      {centerTooltip && marketPrice != null && (
+      {centerTooltip && (
         <Tooltip
           style={{
             left: Math.max(8, centerTooltip.x - 236),
@@ -372,8 +362,34 @@ export const PerpsVolumeOrderBook = ({
           }}
         >
           <div className="row">
+            <span className="label">Best Ask</span>
+            <span className="value">
+              {center.bestAsk != null ? formatPrice(center.bestAsk) : "—"}
+            </span>
+          </div>
+          <div className="row">
+            <span className="label">Best Bid</span>
+            <span className="value">
+              {center.bestBid != null ? formatPrice(center.bestBid) : "—"}
+            </span>
+          </div>
+          <div className="row">
+            <span className="label">Spread</span>
+            <span className="value">
+              {center.spread != null
+                ? `${formatPrice(center.spread)}${
+                    center.spreadPct != null
+                      ? ` (${center.spreadPct.toFixed(2)}%)`
+                      : ""
+                  }`
+                : "—"}
+            </span>
+          </div>
+          <div className="row">
             <span className="label">Underlying Hash Price (USDC)</span>
-            <span className="value">{formatPrice(marketPrice)}</span>
+            <span className="value">
+              {marketPrice != null ? formatPrice(marketPrice) : "—"}
+            </span>
           </div>
         </Tooltip>
       )}

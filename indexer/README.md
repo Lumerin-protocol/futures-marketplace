@@ -22,7 +22,6 @@ The schema is deliberately kept in step with the [perps indexer](../../perps/ind
 | **PositionSession** | mutable | One continuous position from open to flat, scoped to a (user, expiration) pair. Carries entry price, realized PnL, and liquidated quantity; ends when net quantity returns to zero. A user can hold several concurrently — one per expiration date. |
 | **FuturesExpiration** | mutable | One expiration date and its cash-settlement metadata. Created lazily the first time anything at that date is indexed; `settlementPrice` stays null until `SettlementPriceRecorded` pins it, and its presence is the "settled" signal. Back-links to the orders, sessions, trades, and price levels at that date. |
 | **PriceLevel** | mutable | Aggregated order book level: total quantity and order count per (expiration, price, side). |
-| **BadDebtEvent** | immutable | Bad debt socialized when a participant or the insurance fund cannot cover a loss. |
 | **LiquidationTx** | immutable | Per-tx sentinel keyed by tx hash. Carries no data; its existence lets `Futures.totalLiquidations` count liquidation transactions rather than legs. |
 | **UserDeliverySessionPointer** | mutable | Internal lookup, not meant for UI queries: the open session, running net quantity, and entry price for a (user, expiration) pair. Exists because GraphQL has no map type to hang this off `User`. |
 
@@ -34,7 +33,6 @@ The subgraph listens to all `HashPowerFutures` contract events:
 - **Position events** — `PositionLiquidated`, `PositionSettled`
 - **Settlement events** — `SettlementPriceRecorded`
 - **Config events** — `MakerFeeBpsUpdated`, `TakerFeeBpsUpdated`, `LiquidationFeeBpsUpdated`, `LiquidatorShareBpsUpdated`, `OracleUpdated`, `PortfolioMarginUpdated`, `FutureExpirationDatesCountUpdated`
-- **Credit events** — `BadDebt`
 - **Lifecycle events** — `Initialized`, `Upgraded`
 
 On initialization, the handler also reads current contract state via `try_*` calls to populate the `Futures` singleton, including the `priceOracle()`, `portfolioMargin()`, and `vault()` addresses.

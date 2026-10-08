@@ -1,16 +1,63 @@
 import hre from "hardhat";
-import { encodeFunctionData, getAddress } from "viem";
+import {
+  type Address,
+  type PublicClient,
+  encodeFunctionData,
+  getAddress,
+  parseAbi,
+  zeroAddress,
+} from "viem";
 import { estimateContractGas, simulateContract } from "viem/actions";
 import { OperationType } from "@safe-global/types-kit";
-import { readOptionalAddress, readOptionalBigInt, requireAddress, requireEnvsSet } from "../lib/env.ts";
+import {
+  readOptionalAddress,
+  readOptionalBigInt,
+  requireAddress,
+  requireEnvsSet,
+} from "../lib/env.ts";
 import { verifyContract } from "../lib/verify.ts";
 import { addrUrl, txUrl } from "../lib/explorer.ts";
-import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts";
+import {
+  logInfo,
+  logPrompt,
+  logStep,
+  logSuccess,
+  logTitle,
+} from "../lib/log.ts";
 import { SafeWallet } from "../lib/safe.ts";
 
 const DEFAULT_SAFE_GAS_OVERHEAD = 150_000n;
-const TARGET_CODE_VERSION = "6.5.0";
+const TARGET_CODE_VERSION = "6.8.0";
 const UPGRADE_CONFIRMATIONS = 5;
+// 6.8.0 calls the engine's `reduceLimits` / `meetsTradeMargin` on every order. Against an
+// older engine every order reverts, so the engine has to be upgraded first.
+const MIN_ENGINE_VERSION = "2.2.0";
+const VERSION_ABI = parseAbi(["function VERSION() view returns (string)"]);
+
+/** Dotted-version comparison; an unreadable version never passes. */
+function versionAtLeast(version: string, min: string): boolean {
+  const have = version.split(".").map(Number);
+  const want = min.split(".").map(Number);
+  for (let i = 0; i < want.length; i++) {
+    const part = have[i] ?? 0;
+    if (part !== want[i]) return part > want[i];
+  }
+  return true;
+}
+
+async function requireEngineVersion(
+  pc: PublicClient,
+  engine: Address,
+): Promise<void> {
+  const version = await pc
+    .readContract({ address: engine, abi: VERSION_ABI, functionName: "VERSION" })
+    .catch(() => "unknown");
+  if (!versionAtLeast(version, MIN_ENGINE_VERSION)) {
+    throw new Error(
+      `PortfolioMarginEngine ${engine} is at ${version}; upgrade it to ${MIN_ENGINE_VERSION} or later before this venue`,
+    );
+  }
+}
 
 async function main() {
   logTitle("HashPowerFutures Upgrade");
@@ -22,19 +69,32 @@ async function main() {
   const vaultAddress = requireAddress("VAULT_ADDRESS");
   const marginEngineAddress = readOptionalAddress("MARGIN_ENGINE_ADDRESS");
   const pointsHookAddress =
-    readOptionalAddress("POINTS_HOOK_ADDRESS") ?? readOptionalAddress("HOOK_ADDRESS");
+    readOptionalAddress("POINTS_HOOK_ADDRESS") ??
+    readOptionalAddress("HOOK_ADDRESS");
 
-  const [deployer, proposer] = await viem.getWalletClients();
+  // The network config holds a single key, so the deployer proposes unless a
+  // second account is configured.
+  const [deployer, proposer = deployer] = await viem.getWalletClients();
   const pc = await viem.getPublicClient();
   logInfo("deployer", { Address: addrUrl(pc, deployer.account.address) });
   if (SAFE_OWNER_ADDRESS) {
-    logInfo("safe owner", { Address: SAFE_OWNER_ADDRESS });
+    logInfo("safe owner", {
+      Address: SAFE_OWNER_ADDRESS,
+      Proposer: proposer.account.address,
+    });
   }
 
-  const futuresProxy = await viem.getContractAt("HashPowerFutures", futuresAddress);
-  const currentVersion = await futuresProxy.read.VERSION().catch(() => "unknown");
+  const futuresProxy = await viem.getContractAt(
+    "HashPowerFutures",
+    futuresAddress,
+  );
+  const currentVersion = await futuresProxy.read
+    .VERSION()
+    .catch(() => "unknown");
   const owner = getAddress(await futuresProxy.read.owner());
-  const upgradeCaller = getAddress(SAFE_OWNER_ADDRESS ?? deployer.account.address);
+  const upgradeCaller = getAddress(
+    SAFE_OWNER_ADDRESS ?? deployer.account.address,
+  );
   logInfo("current futures", {
     Address: addrUrl(pc, futuresProxy.address),
     Owner: owner,
@@ -42,10 +102,20 @@ async function main() {
     HASHPRICE_USD: await futuresProxy.read.priceOracle(),
   });
   if (upgradeCaller !== owner) {
-    throw new Error(`Configured upgrade caller ${upgradeCaller} is not HashPowerFutures owner ${owner}`);
+    throw new Error(
+      `Configured upgrade caller ${upgradeCaller} is not HashPowerFutures owner ${owner}`,
+    );
   }
-  if (SAFE_OWNER_ADDRESS && !proposer) {
-    throw new Error("PROPOSER_PRIVATEKEY is required when SAFE_OWNER_ADDRESS is set");
+  const wiredEngine = getAddress(
+    await futuresProxy.read.portfolioMargin().catch(() => zeroAddress),
+  );
+  const engines = new Set([
+    wiredEngine,
+    getAddress(marginEngineAddress ?? zeroAddress),
+  ]);
+  engines.delete(zeroAddress);
+  for (const engine of engines) {
+    await requireEngineVersion(pc, engine);
   }
 
   // 3.x cutover: order/position semantics change; 3.1+ also breaks Order storage layout
@@ -53,8 +123,10 @@ async function main() {
   // this upgrade → new subgraph from upgrade block → cut over keeper/MM/UI ABI.
   if (typeof currentVersion === "string" && currentVersion.startsWith("2.")) {
     logInfo("3.x cutover reminder", {
-      BeforeUpgrade: "run scripts/futures-reset-state.ts (clear orders + positions)",
-      AfterUpgrade: "redeploy indexer from upgrade block; point keeper ABI at 3.x",
+      BeforeUpgrade:
+        "run scripts/futures-reset-state.ts (clear orders + positions)",
+      AfterUpgrade:
+        "redeploy indexer from upgrade block; point keeper ABI at 3.x",
       Docs: "docs/06.Event-Desing-Spec.md § Cutover notes",
     });
   }
@@ -62,11 +134,17 @@ async function main() {
   await logPrompt("Review the configuration above. Proceed with upgrade?");
 
   // ── 1. Deploy new implementation ────────────────────────────────────────
-  logInfo("Deploy new HashPowerFutures implementation", { contract: "HashPowerFutures" });
-  await logPrompt("Proceed?");
-  const futuresImpl = await viem.deployContract("HashPowerFutures", [vaultAddress], {
-    confirmations: UPGRADE_CONFIRMATIONS,
+  logInfo("Deploy new HashPowerFutures implementation", {
+    contract: "HashPowerFutures",
   });
+  await logPrompt("Proceed?");
+  const futuresImpl = await viem.deployContract(
+    "HashPowerFutures",
+    [vaultAddress],
+    {
+      confirmations: UPGRADE_CONFIRMATIONS,
+    },
+  );
 
   logStep("Deployed", addrUrl(pc, futuresImpl.address));
   await verifyContract(futuresImpl.address, [vaultAddress], undefined, {
@@ -77,10 +155,14 @@ async function main() {
   const newVersion = await futuresImpl.read.VERSION();
   logInfo("version", { current: currentVersion, new: newVersion });
   if (newVersion !== TARGET_CODE_VERSION) {
-    throw new Error(`Implementation VERSION is ${newVersion}, expected ${TARGET_CODE_VERSION}`);
+    throw new Error(
+      `Implementation VERSION is ${newVersion}, expected ${TARGET_CODE_VERSION}`,
+    );
   }
   if (newVersion === currentVersion) {
-    throw new Error("New version is the same as the current version. Aborting.");
+    throw new Error(
+      "New version is the same as the current version. Aborting.",
+    );
   }
   // Simulate the exact upgrade call from the actual owner and prove it fits
   // before either sending the direct upgrade or creating a Safe proposal.
@@ -105,11 +187,13 @@ async function main() {
     throw new Error("MAX_ATOMIC_UPGRADE_GAS must not be negative");
   }
   const maxAtomicUpgradeGas =
-    configuredMaxAtomicGas !== undefined && configuredMaxAtomicGas < latestBlock.gasLimit
+    configuredMaxAtomicGas !== undefined &&
+    configuredMaxAtomicGas < latestBlock.gasLimit
       ? configuredMaxAtomicGas
       : latestBlock.gasLimit;
   const safeGasOverhead = SAFE_OWNER_ADDRESS
-    ? readOptionalBigInt("SAFE_EXECUTION_GAS_OVERHEAD") ?? DEFAULT_SAFE_GAS_OVERHEAD
+    ? (readOptionalBigInt("SAFE_EXECUTION_GAS_OVERHEAD") ??
+      DEFAULT_SAFE_GAS_OVERHEAD)
     : 0n;
   const requiredBlockGas = estimatedUpgradeGas + safeGasOverhead;
   if (requiredBlockGas > maxAtomicUpgradeGas) {
@@ -148,7 +232,9 @@ async function main() {
     logStep("Safe UI URL", safe.getSafeUITxUrl(txHash));
 
     if (marginEngineAddress) {
-      logInfo("Propose setMarginEngine via Safe", { marginEngine: marginEngineAddress });
+      logInfo("Propose setMarginEngine via Safe", {
+        marginEngine: marginEngineAddress,
+      });
       await logPrompt("Proceed?");
       const setMarginEngineData = encodeFunctionData({
         abi: futuresProxy.abi,
@@ -191,14 +277,22 @@ async function main() {
       confirmations: UPGRADE_CONFIRMATIONS,
     });
     if (receipt.status !== "success") {
-      throw new Error(`Upgrade tx reverted: ${txUrl(pc, receipt.transactionHash)}`);
+      throw new Error(
+        `Upgrade tx reverted: ${txUrl(pc, receipt.transactionHash)}`,
+      );
     }
-    logStep("Upgraded", `${txUrl(pc, receipt.transactionHash)}  block ${receipt.blockNumber}`);
+    logStep(
+      "Upgraded",
+      `${txUrl(pc, receipt.transactionHash)}  block ${receipt.blockNumber}`,
+    );
 
     // Read post-upgrade state at the receipt block — "latest" can still be the
     // pre-upgrade tip on some RPCs right after waitForTransactionReceipt.
     const atUpgradeBlock = { blockNumber: receipt.blockNumber } as const;
-    const upgraded = await viem.getContractAt("HashPowerFutures", futuresAddress);
+    const upgraded = await viem.getContractAt(
+      "HashPowerFutures",
+      futuresAddress,
+    );
     const upgradedVersion = await upgraded.read.VERSION(atUpgradeBlock);
     logInfo("upgraded futures", {
       Vault: await upgraded.read.vault(atUpgradeBlock),
@@ -217,12 +311,22 @@ async function main() {
     // ── 3. Post-upgrade config ──────────────────────────────────────────
     if (marginEngineAddress) {
       const currentMarginEngine = await upgraded.read.portfolioMargin();
-      if (currentMarginEngine.toLowerCase() === marginEngineAddress.toLowerCase()) {
-        logStep("setMarginEngine", `skipped (already set to ${marginEngineAddress})`);
+      if (
+        currentMarginEngine.toLowerCase() === marginEngineAddress.toLowerCase()
+      ) {
+        logStep(
+          "setMarginEngine",
+          `skipped (already set to ${marginEngineAddress})`,
+        );
       } else {
-        logInfo("setMarginEngine", { current: currentMarginEngine, new: marginEngineAddress });
+        logInfo("setMarginEngine", {
+          current: currentMarginEngine,
+          new: marginEngineAddress,
+        });
         await logPrompt("Proceed?");
-        const setTx = await upgraded.write.setPortfolioMargin([marginEngineAddress]);
+        const setTx = await upgraded.write.setPortfolioMargin([
+          marginEngineAddress,
+        ]);
         const setReceipt = await pc.waitForTransactionReceipt({ hash: setTx });
         logStep("setMarginEngine", txUrl(pc, setReceipt.transactionHash));
         logStep("MarginEngine", await upgraded.read.portfolioMargin());
@@ -244,7 +348,9 @@ async function main() {
     }
   }
 
-  logSuccess(`HashPowerFutures upgraded ${futuresAddress} → impl ${futuresImpl.address}`);
+  logSuccess(
+    `HashPowerFutures upgraded ${futuresAddress} → impl ${futuresImpl.address}`,
+  );
 }
 
 main().catch((error) => {

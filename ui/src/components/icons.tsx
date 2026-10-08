@@ -3,6 +3,7 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   ArrowTopRightOnSquareIcon,
+  BuildingOfficeIcon,
   FlagIcon,
   ForwardIcon,
   QuestionMarkCircleIcon,
@@ -98,4 +99,5 @@ export const SkipNext = wrap(ForwardIcon, "SkipNext");
 export const ErrorIcon = wrap(ExclamationCircleIcon, "ErrorIcon");
 export const FlagCircleIcon = wrap(FlagIcon, "FlagCircleIcon");
 export const ShieldIcon = wrap(ShieldCheckIcon, "ShieldIcon");
+export const BusinessIcon = wrap(BuildingOfficeIcon, "BusinessIcon");
 export const CandlestickChartIcon = wrap(CandlestickChart, "CandlestickChartIcon");

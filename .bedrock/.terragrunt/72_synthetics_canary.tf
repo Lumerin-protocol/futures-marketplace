@@ -23,7 +23,7 @@ resource "aws_synthetics_canary" "futures_ui" {
     active_tracing     = false
   }
 
-  # Inline canary script - checks page loads successfully
+  # Path includes the script hash so a URL or assertion change replaces the canary.
   zip_file = data.archive_file.canary_script[0].output_path
 
   tags = merge(
@@ -41,67 +41,51 @@ resource "aws_synthetics_canary" "futures_ui" {
   ]
 }
 
-# Create canary script archive
-data "archive_file" "canary_script" {
-  count       = var.monitoring.create && var.monitoring.create_synthetics_canary ? 1 : 0
-  type        = "zip"
-  output_path = "${path.module}/canary_script.zip"
-
-  source {
-    content  = <<-PYTHON
+locals {
+  # Rendered before the archive so the zip path changes when the URL or the
+  # assertions change. A fixed path never shows up in a plan.
+  exchange_canary_script = <<-PYTHON
 import time
 from aws_synthetics.selenium import synthetics_webdriver as webdriver
 from aws_synthetics.common import synthetics_logger as logger
 
-URL = "${local.futures_ui_url}"
+URL = "${local.exchange_probe_url}"
 
 def verify_page_loads():
-    """Verify the Futures UI page loads correctly."""
+    """The exchange app is up. A holding page must not pass."""
     logger.info(f"Starting canary check for: {URL}")
-    
-    # Launch browser
+
     browser = webdriver.Chrome()
     browser.set_viewport_size(1920, 1080)
-    
+
     try:
-        # Navigate to the page
         browser.get(URL)
-        logger.info("Page navigation initiated")
-        
-        # Wait for SPA to hydrate (React/Vue apps need time to render)
         time.sleep(5)
-        
-        # Verify page title exists
+
         title = browser.title
         logger.info(f"Page title: {title}")
-        if not title:
-            raise Exception("Page has no title")
-        
-        # SPA-friendly content check: verify root element has children
-        has_content = browser.execute_script("""
-            const root = document.getElementById('root') || 
-                         document.getElementById('app') || 
-                         document.body;
-            return root && root.children.length > 0;
+        if title != "HPDX":
+            raise Exception(f"Expected the HPDX app, got title {title!r}")
+
+        marker = browser.execute_script("""
+            const text = document.body ? document.body.innerText : "";
+            return {
+              comingSoon: text.includes("COMING SOON"),
+              hasRoot: !!document.getElementById("root")
+            };
         """)
-        
-        if not has_content:
-            raise Exception("Page appears to have no rendered content")
-        
-        logger.info("Page content verification passed")
-        
-        # Take screenshot for debugging
+        if marker.get("comingSoon"):
+            raise Exception("Holding page is being served")
+        if not marker.get("hasRoot"):
+            raise Exception("App root is missing")
+
         browser.save_screenshot("page_loaded.png")
-        logger.info("Screenshot saved")
-        
         logger.info("Canary completed successfully")
         return "Success"
-        
     except Exception as e:
-        # Take screenshot on failure for debugging
         try:
             browser.save_screenshot("failure.png")
-        except:
+        except Exception:
             pass
         logger.error(f"Canary failed: {str(e)}")
         raise
@@ -109,6 +93,15 @@ def verify_page_loads():
 def handler(event, context):
     return verify_page_loads()
 PYTHON
+}
+
+data "archive_file" "canary_script" {
+  count       = var.monitoring.create && var.monitoring.create_synthetics_canary ? 1 : 0
+  type        = "zip"
+  output_path = "${path.module}/canary_${md5(local.exchange_canary_script)}.zip"
+
+  source {
+    content  = local.exchange_canary_script
     filename = "python/canary.py"
   }
 }

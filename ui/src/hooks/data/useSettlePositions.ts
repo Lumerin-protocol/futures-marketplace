@@ -1,4 +1,4 @@
-import { usePublicClient, useWalletClient, useWriteContract } from "wagmi";
+import { usePublicClient, useWriteContract } from "wagmi";
 import { getContract } from "viem";
 import { useQueryClient } from "@tanstack/react-query";
 import { HashPowerFuturesAbi } from "futures-marketplace-abi/HashPowerFutures.ts";
@@ -7,6 +7,7 @@ import { FUTURES_POSITION_HISTORY_QK } from "./useFuturesPositionHistory";
 import { POSITION_BOOK_QK } from "./getUserFuturesPositions";
 import { invalidatePortfolioPnl } from "./pnl/invalidate";
 import { withErrors } from "../../lib/withErrors";
+import { requireWalletClient } from "../../clients/requireWalletClient";
 
 interface SettlePositionsProps {
   /// Expiration (expirationAt) whose matured aggregate position should be settled.
@@ -23,13 +24,13 @@ interface SettlePositionsProps {
 export function useSettlePositions() {
   const { writeContractAsync, isPending } = useWriteContract();
   const publicClient = usePublicClient();
-  const { data: walletClient } = useWalletClient();
   const queryClient = useQueryClient();
 
   const settlePositionsAsync = async ({ expirationAt, participant }: SettlePositionsProps) => {
-    if (!writeContractAsync || !publicClient || !walletClient) {
+    if (!publicClient) {
       throw new Error("Wallet not ready");
     }
+    const walletClient = await requireWalletClient();
 
     const account = participant ?? walletClient.account.address;
 

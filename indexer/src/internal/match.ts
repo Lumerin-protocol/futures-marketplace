@@ -250,6 +250,56 @@ function processUserMatch(
   return id;
 }
 
+/// Apply a fill that has no counterparty order *and* no contract-reported
+/// post-state: the protocol backstop inheriting `signedQty` at `price` from a
+/// liquidation (`BackstopAssigned`). Post-state is derived here the same way the
+/// contract's `_applyFill` does it — scale-in averages the entry, an opposite
+/// quantity realizes against the pointer's entry and reduces / closes / flips.
+export function applyBackstopFill(
+  user: User,
+  signedQty: BigInt,
+  price: BigInt,
+  expirationAt: BigInt,
+  ctx: FillContext,
+  sideIndex: i32,
+): Bytes {
+  const pointer = getOrCreatePointer(changetype<Address>(user.id), expirationAt);
+  const oldNet = pointer.netQuantity;
+  const oldEntry = pointer.aggregatedEntryPrice;
+  const newNet = oldNet.plus(signedQty);
+
+  let pnl = BigInt.zero();
+  let newEntry: BigInt;
+  if (oldNet.isZero()) {
+    newEntry = price;
+  } else if (isSameSign(oldNet, signedQty)) {
+    const absOld = absBigInt(oldNet);
+    const absQty = absBigInt(signedQty);
+    newEntry = oldEntry.times(absOld).plus(price.times(absQty)).div(absOld.plus(absQty));
+  } else {
+    const settledAbs = minBigInt(absBigInt(oldNet), absBigInt(signedQty));
+    const signedClosed = oldNet.gt(BigInt.zero()) ? settledAbs : settledAbs.neg();
+    pnl = price.minus(oldEntry).times(signedClosed);
+    if (newNet.isZero()) newEntry = BigInt.zero();
+    else if (isSameSign(oldNet, newNet)) newEntry = oldEntry;
+    else newEntry = price; // flip: remainder opens at the assignment price
+  }
+
+  return processUserMatch(
+    user,
+    null,
+    signedQty,
+    price,
+    pnl,
+    BigInt.zero(),
+    newNet,
+    newEntry,
+    expirationAt,
+    ctx,
+    sideIndex,
+  );
+}
+
 // ============================================================================
 // Session lifecycle
 // ============================================================================
@@ -552,6 +602,7 @@ function recordLeg(
     trade.aggregatedEntryPriceAfter = BigInt.zero();
     trade.fillCount = 0;
     trade.isLiquidation = false;
+    trade.isBackstopAssignment = false;
     trade.timestamp = ctx.timestamp;
     trade.blockNumber = ctx.blockNumber;
     trade.transactionHash = ctx.txHash;

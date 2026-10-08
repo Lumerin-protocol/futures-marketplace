@@ -11,6 +11,8 @@ import { usePerpsContractConstants } from "../../../hooks/data/perps/usePerpsCon
 import { usePerpsTokenInfo } from "../../../hooks/data/perps/usePerpsTokenInfo";
 import { formatFundingPeriod, useFundingRate } from "../../../hooks/data/perps/useFundingRate";
 import { useMarginEngineShocks } from "../../../hooks/data/useMarginEngineShocks";
+import { BACKSTOP_ADDR, useProtocolBackstop } from "../../../hooks/data/useProtocolBackstop";
+import { formatExpirationShort } from "../../../lib/instruments";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { ContractMode } from "../../../types/types";
 
@@ -44,6 +46,73 @@ const RiskParametersSection = () => {
       <SpecItem>
         <SpecLabel>Maintenance Margin (Vol)</SpecLabel>
         <SpecValue>{formatVolShock(shocks.mmVolShock)}</SpecValue>
+      </SpecItem>
+    </SpecSection>
+  );
+};
+
+const BACKSTOP_TOOLTIP =
+  "Liquidations close the trader at the mark and hand the closed quantity to this keyless protocol ledger. " +
+  "Anyone can call unwindBackstop to reduce it against the book within the band and earn the fee.";
+
+// Shared PROTOCOL BACKSTOP section: open exposure the backstop ledger carries
+// on this venue plus the vault-wide unwind band / caller fee.
+const ProtocolBackstopSection = ({ contractMode, tokenSymbol }: { contractMode: ContractMode; tokenSymbol: string }) => {
+  const { data } = useProtocolBackstop(contractMode);
+  const isPerps = contractMode === "perpetual";
+  const quantityScale = isPerps ? PAYMENT_TOKEN_SCALE_NUM : 1;
+
+  const formatLeg = (netQuantity: bigint, netEntryValue: bigint) => {
+    const qty = Number(netQuantity) / quantityScale;
+    const absQty = Math.abs(qty);
+    const side = qty > 0 ? "Long" : "Short";
+    const entry = absQty > 0 ? Math.abs(Number(netEntryValue)) / PAYMENT_TOKEN_SCALE_NUM / absQty : 0;
+    const qtyStr = absQty.toLocaleString("en-US", { maximumFractionDigits: isPerps ? 4 : 0 });
+    return `${side} ${qtyStr} @ ${entry.toFixed(2)} ${tokenSymbol}`;
+  };
+
+  return (
+    <SpecSection>
+      <Tooltip title={BACKSTOP_TOOLTIP} arrow placement="top">
+        <SectionTitle>PROTOCOL BACKSTOP</SectionTitle>
+      </Tooltip>
+      <SpecItem>
+        <SpecLabel>Ledger Address</SpecLabel>
+        <AddressDisplay address={BACKSTOP_ADDR} />
+      </SpecItem>
+      {data === undefined ? (
+        <SpecItem>
+          <SpecLabel>Open Exposure</SpecLabel>
+          <SpecValue>...</SpecValue>
+        </SpecItem>
+      ) : data.legs.length === 0 ? (
+        <SpecItem>
+          <SpecLabel>Open Exposure</SpecLabel>
+          <SpecValue>Flat</SpecValue>
+        </SpecItem>
+      ) : (
+        data.legs.map((leg) => (
+          <SpecItem key={leg.expirationAt?.toString() ?? "perps"}>
+            <SpecLabel>
+              {leg.expirationAt !== undefined ? formatExpirationShort(Number(leg.expirationAt)) : "Open Exposure"}
+            </SpecLabel>
+            <SpecValue>{formatLeg(leg.netQuantity, leg.netEntryValue)}</SpecValue>
+          </SpecItem>
+        ))
+      )}
+      <SpecItem>
+        <SpecLabel>Ledger Balance</SpecLabel>
+        <SpecValue>
+          {data?.balance === undefined ? "..." : `${(Number(data.balance) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} ${tokenSymbol}`}
+        </SpecValue>
+      </SpecItem>
+      <SpecItem>
+        <SpecLabel>Unwind Band</SpecLabel>
+        <SpecValue>{data?.unwindBandBps ?? "..."} bps around mark</SpecValue>
+      </SpecItem>
+      <SpecItem>
+        <SpecLabel>Unwind Caller Fee</SpecLabel>
+        <SpecValue>{data?.unwindFeeBps ?? "..."} bps of filled notional</SpecValue>
       </SpecItem>
     </SpecSection>
   );
@@ -199,6 +268,9 @@ export const DetailedSpecsModal = ({ contractSpecs, contractMode = "futures" }: 
 
       {/* RISK PARAMETERS */}
       <RiskParametersSection />
+
+      {/* PROTOCOL BACKSTOP */}
+      <ProtocolBackstopSection contractMode="futures" tokenSymbol={tokenSymbol} />
 
       {/* MORE DETAILS */}
       <SpecSection>
@@ -424,6 +496,9 @@ const PerpetualStatistics = () => {
 
       {/* RISK PARAMETERS */}
       <RiskParametersSection />
+
+      {/* PROTOCOL BACKSTOP */}
+      <ProtocolBackstopSection contractMode="perpetual" tokenSymbol={tokenSymbol} />
 
       {/* MORE DETAILS */}
       {docsUrl && (

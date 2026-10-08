@@ -14,27 +14,21 @@ that needs a decision before any work starts.**
 
 ---
 
-## 1. Two copies of `@wagmi/core` in the tree (v2 and v3)
+## 1. AppKit and wagmi must remain on one dependency stack
 
-**Where:** `src/Web3Provider.tsx`
+**Where:** `package.json`
 
-`@reown/appkit-adapter-wagmi@1.8.21` builds its config against `@wagmi/core@3.5.5`,
-while the direct `wagmi@2.19.5` dependency brings `@wagmi/core@2.22.1`. The two
-`Config` types are structurally incompatible, so the config object produced by
-appkit cannot be handed to wagmi's `WagmiProvider` without a cast:
+AppKit `1.8.21` originally auto-resolved `@wagmi/core@3.5.5` and
+`@wagmi/connectors@8.0.20` while the application itself used wagmi v2/core v2.
+That split could make `useAccount` report a restored session while
+`useWalletClient` could not resolve its connector.
 
-```tsx
-<WagmiProvider config={config as unknown as Config}>
-```
+The app now pins `wagmi@3.6.21`, whose exact core and connector dependencies
+match AppKit's. Keep AppKit and wagmi upgrades coordinated so the tree does not
+split again. Downgrading only connectors to v6 also regresses AppKit's automatic
+MetaMask-extension handoff.
 
-Runtime behaviour is unchanged — it is one object, and both packages read the same
-fields. But the cast hides any real drift between the two majors.
-
-**To resolve:** align the versions, most likely by upgrading the app to `wagmi@3`
-so that only `@wagmi/core@3` remains, then delete the cast.
-
-**Must be retested manually after any change here**, because none of it is covered
-by types once the cast is in place:
+**Must be retested manually after any change here:**
 
 - connecting and disconnecting a wallet through the appkit modal
 - switching chains

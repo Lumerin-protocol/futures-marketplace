@@ -15,6 +15,11 @@ const RECENT_TRADE_FIELDS = `
   tradeQuantity
   timestamp
   transactionHash
+  isLiquidation
+  isBackstopAssignment
+  user {
+    id
+  }
 `;
 
 export const commonSlices = defineSlices({

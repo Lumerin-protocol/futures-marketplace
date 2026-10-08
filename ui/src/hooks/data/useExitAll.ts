@@ -1,4 +1,4 @@
-import { useWriteContract, usePublicClient, useWalletClient } from "wagmi";
+import { useWriteContract, usePublicClient } from "wagmi";
 import { getContract } from "viem";
 import { HashPowerFuturesAbi } from "futures-marketplace-abi/HashPowerFutures.ts";
 import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
@@ -7,6 +7,7 @@ import { TimeInForce } from "../../types/timeInForce";
 import type { ContractMode } from "../../types/types";
 import { partitionRestingOrderIds } from "./useCancelOrders";
 import { closingIntent, type ExitAllClose, type ExitAllIntent } from "../../lib/exitAll";
+import { requireWalletClient } from "../../clients/requireWalletClient";
 
 export type { ExitAllClose, ExitAllIntent };
 
@@ -44,10 +45,11 @@ export type ExitAllResult =
 export function useExitAll(contractMode: ContractMode = "futures") {
   const { writeContractAsync, isPending, isError, error, data: hash } = useWriteContract();
   const publicClient = usePublicClient();
-  const { data: walletClient } = useWalletClient();
 
   const exitAllAsync = async (props: ExitAllProps): Promise<ExitAllResult> => {
-    if (!writeContractAsync || !publicClient || !walletClient) return { status: "not-ready" };
+    if (!publicClient) return { status: "not-ready" };
+    const walletClient = await requireWalletClient().catch(() => undefined);
+    if (!walletClient) return { status: "not-ready" };
 
     const account = walletClient.account.address;
     const isPerps = contractMode === "perpetual";

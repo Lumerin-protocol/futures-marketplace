@@ -6,6 +6,11 @@ export const contractErrors = [
   },
   {
     "inputs": [],
+    "name": "BackstopParamOutOfBounds",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "OracleStale",
     "type": "error"
   },
@@ -59,7 +64,17 @@ export const contractErrors = [
   },
   {
     "inputs": [],
+    "name": "Halted",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "ZeroAmount",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "DebtAboveCap",
     "type": "error"
   },
   {
@@ -118,6 +133,16 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "InvalidFee",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotHalted",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TradingHalted",
     "type": "error"
   },
   {
@@ -237,6 +262,11 @@ export const contractErrors = [
   },
   {
     "inputs": [],
+    "name": "BackstopAccount",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "FunctionDisabled",
     "type": "error"
   },
@@ -253,6 +283,11 @@ export const contractErrors = [
   {
     "inputs": [],
     "name": "InsuranceFundNotConfigured",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PositionMatured",
     "type": "error"
   },
   {

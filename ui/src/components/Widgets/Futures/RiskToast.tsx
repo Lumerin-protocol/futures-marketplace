@@ -6,7 +6,7 @@ export type RiskToastVariant = "warning" | "danger";
 
 export interface RiskToastItem {
   /**
-   * Namespaced by producer (`liq:` / `margin:`) so one dismiss handler can route
+   * Namespaced by producer (`liq:` / `margin:` / `indexer:`) so one dismiss handler can route
    * back to whichever hook owns the item.
    */
   id: string;

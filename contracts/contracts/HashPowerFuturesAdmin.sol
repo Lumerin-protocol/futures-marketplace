@@ -28,12 +28,8 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
 
     // ── Risk parameters ───────────────────────────────────────────────────────
 
-    /// @dev Vestigial — see {HashPowerFuturesBase-liquidationMarginPercent}. Setting this changes no
-    ///      on-chain behaviour; margin comes from the portfolio margin engine.
-    function setLiquidationMarginPercent(uint8 _liquidationMarginPercent) external onlyOwner {
-        liquidationMarginPercent = _liquidationMarginPercent;
-        emit LiquidationMarginPercentUpdated(_liquidationMarginPercent);
-    }
+    // `liquidationMarginPercent` has no setter: it is vestigial (see {HashPowerFuturesBase}) and the
+    // setter's bytecode was reclaimed to keep the venue under EIP-170.
 
     function setFutureExpirationDatesCount(uint8 _futureExpirationDatesCount) public onlyOwner {
         if (_futureExpirationDatesCount < 1) {
@@ -76,7 +72,7 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
     /// @notice Withdraw accrued trading and liquidation revenue to the venue owner.
     /// @dev Drains the venue's vault account (the fee pot). No separate accumulator.
     function withdrawCollectedFees() external onlyOwner {
-        vault.withdrawTo(owner(), vault.balanceOf(address(this)));
+        vault.withdrawTo(owner(), _vaultBalance(address(this)));
     }
 
     // ── Wiring ────────────────────────────────────────────────────────────────
@@ -112,43 +108,40 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
 
     // ── Escape hatch ──────────────────────────────────────────────────────────
 
-    /// @notice Drop pre-v4.3 resting orders at currently tradable delivery dates.
-    /// @dev Intended for the one-transaction post-upgrade cutover. Historical expired
-    ///      orders and all positions remain untouched. Repeated calls are harmless.
-    function dropActiveOrders(address[] calldata _participants) external onlyOwner {
-        for (uint256 p = 0; p < _participants.length; p++) {
-            address participant = _participants[p];
-            EnumerableSet.Bytes32Set storage legacyIds = participantOrderIdsIndex[participant];
-            for (uint256 i = legacyIds.length(); i > 0; i--) {
-                bytes32 orderId = legacyIds.at(i - 1);
-                Order storage order = orders[orderId];
-                if (!_isActiveExpirationAt(order.expirationAt)) continue;
-
-                bool isBuy = order.quantity > 0;
-                _removeRestingOrder(orderId, order.expirationAt, order.price, participant, isBuy, true);
-                emit OrderCancelled(orderId, participant);
-            }
+    /// @notice Close the given (user, expiry) legs at the current mark, realizing PnL against the
+    ///         insurance fund. No fee, no backstop hand-off: the fund's implicit position closes
+    ///         with the users'. Emits `PositionLiquidated` so indexers need nothing new.
+    /// @dev Only while the vault is halted, so no fill can land between legs. Reverts
+    ///      `PositionMatured` on a matured leg: those are worth their settlement price and must go
+    ///      through `settlePositions`. Empty legs are skipped. Resting orders are left alone; they
+    ///      carry no exposure until they fill.
+    function forceClosePositions(address[] calldata _users, uint256[] calldata _expirationAts) external onlyOwner {
+        if (!vault.halted()) revert NotHalted();
+        if (_users.length != _expirationAts.length) revert ArrayLengthMismatch();
+        uint256 mark = _getMarketPrice(_getPrice());
+        for (uint256 i = 0; i < _users.length; i++) {
+            address user = _users[i];
+            uint256 expirationAt = _expirationAts[i];
+            if (block.timestamp >= expirationAt) revert PositionMatured();
+            int256 netQty = participantExpirationAtNetDelta[user][expirationAt];
+            if (netQty == 0) continue;
+            int256 pnl = _applyFill(user, -netQty, mark, expirationAt, false);
+            emit PositionLiquidated(user, _msgSender(), expirationAt, netQty, pnl, 0);
         }
     }
 
     /// @notice Admin escape hatch: clear active orders + aggregate positions for the given participants.
     /// @dev Expired v4.3+ orders are already inert and remain available to optional permissionless
     ///      cleanup. Does not walk legacy lots for economics — zeros `netDelta` / `netEntryValue` /
-    ///      `activeExpirationAts` directly. Also purges dead lot indexes and active order queues.
+    ///      `activeExpirationAts` directly. Pre-v3 lot indexes and the pre-v4.3 global order index
+    ///      are no longer purged here: nothing has written them for several releases, and the
+    ///      bytecode they cost pushed the venue over EIP-170.
     function resetState(address[] calldata _participants) external onlyOwner {
         for (uint256 p = 0; p < _participants.length; p++) {
             address participant = _participants[p];
             (uint256[] memory orderExpirationAts, uint256 orderExpirationCount) =
                 _activeOrderExpirations(participant);
 
-            EnumerableSet.Bytes32Set storage legacyOrders = participantOrderIdsIndex[participant];
-            for (uint256 i = legacyOrders.length(); i > 0; i--) {
-                bytes32 orderId = legacyOrders.at(i - 1);
-                Order storage order = orders[orderId];
-                bool isBuy = order.quantity > 0;
-                _removeRestingOrder(orderId, order.expirationAt, order.price, order.participant, isBuy, true);
-                emit OrderCancelled(orderId, participant);
-            }
             for (uint256 d = 0; d < orderExpirationCount; d++) {
                 EnumerableSet.Bytes32Set storage deliveryOrders =
                     participantExpirationAtOrderIdsIndex[participant][orderExpirationAts[d]];
@@ -167,21 +160,7 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
                 uint256 date = dates.at(0);
                 delete participantExpirationAtNetDelta[participant][date];
                 delete participantExpirationAtNetEntryValue[participant][date];
-
-                // Purge dead per-date lot index entries.
-                EnumerableSet.Bytes32Set storage dateLots = participantExpirationAtPositionIdsIndex[participant][date];
-                while (dateLots.length() > 0) {
-                    dateLots.remove(dateLots.at(0));
-                }
                 dates.remove(date);
-            }
-
-            // Purge dead global lot index + LegacyLot storage.
-            EnumerableSet.Bytes32Set storage _positions = participantPositionIdsIndex[participant];
-            while (_positions.length() > 0) {
-                bytes32 positionId = _positions.at(0);
-                delete positions[positionId];
-                _positions.remove(positionId);
             }
         }
     }

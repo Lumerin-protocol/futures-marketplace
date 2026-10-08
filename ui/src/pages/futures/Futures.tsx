@@ -13,6 +13,7 @@ import { RiskToast, type RiskToastItem } from "../../components/Widgets/Futures/
 import { FuturesMobileLayout } from "../../components/Widgets/Futures/mobile/FuturesMobileLayout";
 import { useIsMobileTradingLayout } from "../../components/Widgets/Futures/mobile/mobileTradingLayout";
 import { useLiquidationNotifications } from "../../hooks/data/useLiquidationNotifications";
+import { INDEXER_TOAST_PREFIX, useIndexerOutageToast } from "../../hooks/data/indexerErrors";
 import { useHashrateIndexData, type TimePeriod } from "../../hooks/data/useHashRateIndexData";
 import { useHashpriceCandles } from "../../hooks/data/useHashpriceCandles";
 import { useBtcPriceIndexData } from "../../hooks/data/useBtcPriceIndexData";
@@ -235,8 +236,10 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // Liquidations that already happened and margin tiers the account has just
   // crossed into share one stack. Ids are namespaced by producer so a single
   // dismiss handler can route back to whichever hook owns the item.
+  const indexerOutage = useIndexerOutageToast();
   const riskToasts = useMemo<RiskToastItem[]>(
     () => [
+      ...indexerOutage.toasts,
       ...marginRisk.toasts,
       ...liquidationNotifications.map((notification) => ({
         id: `liq:${notification.id}`,
@@ -244,18 +247,22 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
         variant: "warning" as const,
       })),
     ],
-    [marginRisk.toasts, liquidationNotifications],
+    [indexerOutage.toasts, marginRisk.toasts, liquidationNotifications],
   );
 
   const dismissRiskToast = useCallback(
     (id: string) => {
+      if (id.startsWith(INDEXER_TOAST_PREFIX)) {
+        indexerOutage.dismiss();
+        return;
+      }
       if (id.startsWith("liq:")) {
         dismissLiquidation(id.slice("liq:".length));
         return;
       }
       marginRisk.dismissToast(id);
     },
-    [dismissLiquidation, marginRisk.dismissToast],
+    [indexerOutage.dismiss, dismissLiquidation, marginRisk.dismissToast],
   );
 
   // Signed net open position in contract units: whole contracts for futures at

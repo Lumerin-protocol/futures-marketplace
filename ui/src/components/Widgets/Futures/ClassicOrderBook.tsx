@@ -33,7 +33,7 @@ export const ClassicOrderBook = ({
         </tr>
       </thead>
       <tbody>
-        {rows.map((row) => {
+        {rows.filter((row) => !row.isCenterRow).map((row) => {
           // Shared scale across sides so thin asks don't stretch to full column
           // width when the bid book is much deeper.
           const maxAmount = Math.max(maxBidAmount, maxAskAmount);

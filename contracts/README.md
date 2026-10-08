@@ -1,28 +1,36 @@
 # Futures contracts
 
-## Futures 4.3 order-index cutover
+## Bytecode budget
 
-Futures 4.3 replaces the global per-participant order index with an index
-bounded independently for each delivery date. Pause order writers, run the
-normal `upgrade:futures`, then execute:
+`HashPowerFutures` deploys to Base, so its runtime bytecode must stay under the
+EIP-170 limit of 24 576 bytes. The compiler warns when it is exceeded. The 6.7.0
+backstop work reclaimed space by removing the finished 4.3 order-index cutover
+(`dropActiveOrders` and its script) and the no-op `setLiquidationMarginPercent`,
+and by routing liquidation, settlement and force-close through `_applyFill`.
+Check the size after any change to the venue:
 
 ```sh
-pnpm drop:active-orders --network <network>
+node -e "const a=require('./artifacts/contracts/HashPowerFutures.sol/HashPowerFutures.json');console.log((a.deployedBytecode.length-2)/2)"
 ```
 
-The script discovers every participant from the indexer (with an event-scan
-fallback) and calls `dropActiveOrders(users)` once. That owner-only operation
-cancels legacy orders at currently tradable delivery dates while preserving
-positions and expired historical orders. It estimates the complete transaction
-and aborts if it cannot fit the configured/block gas limit; it never silently
-splits the cutover.
+## Liquidation and the protocol backstop
 
-Set `FUTURES_INDEXER_URL` (or `SUBGRAPH_URL`) for indexer discovery. Event
-discovery requires `START_BLOCK_FUTURES` (or the deprecated `FUTURES_START_BLOCK` alias) or `ETHERSCAN_API_KEY`;
-`EVENT_SCAN_CHUNK_SIZE` defaults to `100000`.
-`DRY_RUN=true` performs discovery and gas preflight without writing. Safe
-operation uses `SAFE_OWNER_ADDRESS`, `PROPOSER_PRIVATEKEY`, and optionally
-`SAFE_EXECUTION_GAS_OVERHEAD`.
+`liquidatePosition(user, expirationAt)` / `liquidatePositions(user, expirationAts)`
+close at the mark against the insurance fund as before, then hand the closed
+signed quantity to the protocol backstop ledger (`BACKSTOP`, read from
+`vault.BACKSTOP_ADDR()`) at the same price (`BackstopAssigned`). Matured legs are
+refused (`PositionMatured`; the batch form skips them) and settle through
+`settlePosition` instead. The backstop cannot be liquidated or traded as a user
+(`BackstopAccount`).
+
+`unwindBackstop(expirationAt, qty)` is permissionless: an IOC that only reduces
+the backstop's leg, limited to `mark ± vault.backstopParams().unwindBandBps`,
+reverting `TimeInForceNotFilled` on a zero fill, paying the caller
+`unwindFeeBps` of the filled notional from the fee pot (`BackstopUnwound`). The
+backstop pays no taker fee. `forceClosePositions(users, expirationAts)` is an
+owner-only, halted-only close at the mark with no hand-off, for clearing
+residual exposure. Design and operations:
+`collateral-margin/docs/protocol-liquidation-exposure.md`.
 
 ## Gas benchmark
 
