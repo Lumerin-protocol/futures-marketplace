@@ -3,6 +3,7 @@ import { faRedditAlien } from "@fortawesome/free-brands-svg-icons/faRedditAlien"
 import { faXTwitter } from "@fortawesome/free-brands-svg-icons/faXTwitter";
 import { faYoutube } from "@fortawesome/free-brands-svg-icons/faYoutube";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import BusinessIcon from "@mui/icons-material/Business";
 import FlagCircleIcon from "@mui/icons-material/FlagCircle";
 import HelpIcon from "@mui/icons-material/Help";
 import ShieldIcon from "@mui/icons-material/Shield";
@@ -20,6 +21,7 @@ const resources = [
   { href: `${process.env.REACT_APP_GITBOOK_URL}`, icon: HelpIcon, label: "Help" },
   { href: "https://github.com/Lumerin-protocol/futures-marketplace/issues", icon: FlagCircleIcon, label: "Report issue" },
   { href: "", icon: ShieldIcon, label: "Privacy Policy" },
+  { href: "https://hashpower.io/", icon: BusinessIcon, label: "Commercial" },
 ];
 
 export const Footer = () => {
