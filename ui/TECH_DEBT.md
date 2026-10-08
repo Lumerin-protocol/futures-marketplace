@@ -4,13 +4,17 @@ Known issues that were deliberately deferred, and every lint suppression that is
 still in the codebase. Added while bringing `pnpm typecheck` and
 `pnpm exec biome lint src` to zero diagnostics.
 
-Both commands are green as of this document. If either starts reporting again,
-something below probably regressed.
+`pnpm typecheck` is green and `biome lint src` is green. The repo-wide `pnpm lint`
+is not: `scripts/measure-bundle.mjs` carries four `noAssignInExpressions` errors
+(§24). If `typecheck` or `biome lint src` starts reporting, something below
+probably regressed.
 
 Most entries here are things that are merely untidy. **§8 is the one that needs
 somebody else: the UI derives position direction because the indexer does not
 expose it, and one field upstream would delete the derivation.** **§9 is the one
-that needs a decision before any work starts.**
+that needs a decision before any work starts.** §10 onwards came out of a review
+of the branch against `dev` before merge; each names what was checked and what
+was deliberately left.
 
 ---
 
@@ -182,6 +186,14 @@ mappers disagreed before any of this — `sessionToPosition` used the sign of th
 *summed* fills, `sessionToHistoricalPosition` the sign of the *earliest* fill.
 They differ only for a session that flips through zero.
 
+**Known edge the rule cannot answer:** a session opened and closed inside one
+transaction. The indexer folds a user's fills per `(tx, user, session)` into one
+`Trade`, so two opposite legs in one tx leave `tradeQuantity = 0` and
+`netQuantityAfter = 0`, and `sessionIsLong` returns Long whichever way it was
+opened. Dev's sum-of-fills rule gave the same answer, so this is not a
+regression, and whether the contract can produce the case at all (a self-match)
+was not established. The indexer field above settles it either way.
+
 **Deliberately not restored:** the row-level `transactionHash` on
 `PositionBookPosition` and `HistoricalPosition`. It was derived from the latest
 fill and nothing rendered it — every tx link in the UI comes from a `Trade` row,
@@ -227,6 +239,299 @@ reached on the trade pages, where both drivers mount whichever tab is open.
 | Spike only the v5 cancel-on-invalidate behaviour | Settles whether `dropInFlightSnapshot` is redundant, which is the only open question behind the option above, at a fraction of the work. |
 | Remove the dead parts now — `hasSnapshotDriver` and the unreachable no-driver path | Safe on its own and independent of the rest, but leaves the duplication in place. |
 | Leave it as is | It works and it is committed. Costs nothing today; the duplication stays until someone reads the registry and wonders why it exists. |
+
+## 10. Snapshot schedule: timing edges that cost a tick
+
+**Where:** `src/hooks/data/snapshot/groupSchedule.ts`,
+`src/hooks/data/snapshot/snapshotFed.ts`, `src/hooks/data/useSettlePositions.ts`,
+`src/hooks/data/useLiquidationNotifications.ts`
+
+None of these show wrong data for longer than one tick, which is why they were
+left. Each is a one-line fix once someone is in the file.
+
+- **A forced read re-phases the schedule.** A fed hook with an empty cache calls
+  `runSnapshotOnce(venue, true)`, and `markRequested` stamps the group at that
+  moment, while the driver's `refetchInterval` keeps its own phase. Driver ticks
+  at t=5, 10, 15; a forced read at t=7 means that at t=10 `elapsed` is 3s, the
+  document is empty and nothing is sent; the next data is at t=15. The slack in
+  `TIMER_SLACK_MS` was meant to prevent exactly this gap, but only covers timer
+  jitter. *Fix:* re-anchor the driver's interval to the forced read, or compute
+  `elapsed` against the driver's last tick rather than any caller's.
+- **The fallback path has no `startedAt` guard.** `writeIfChanged` discards a
+  snapshot that lands after a newer one, but when `readViaSnapshot` falls back
+  to the hook's own `fetchX`, React Query writes that result itself. A fallback
+  started at T0 can overwrite a tick started at T1 > T0 and hold the older rows
+  until the next tick. *Fix:* route fallback results through `writeIfChanged`,
+  or drop the fallback on the trade pages (see §9, the no-driver path).
+- **`useSettlePositions` invalidates without expiring the schedule.** After
+  `waitForIndexedBlock` it calls `invalidateQueries([POSITION_BOOK_QK, account])`
+  but not `dropInFlightSnapshot` / `expireVenueGroups`, unlike `refreshVenueViews`.
+  The refetch can join a tick issued before the block was indexed and read the
+  settled position back for one more tick. *Fix:* call `refreshVenueViews` or
+  the two helpers.
+- **Liquidation watermark primes per venue.** Priming waits on
+  `perps.isPending || futures.isPending`; a venue whose whole tick failed (the
+  cold-load rate limit) is in `error`, so the watermark is primed from the other
+  venue only. When that venue heals a tick later, every historical liquidation
+  on it is "fresh": a burst of toasts and a `refreshVenueViews` for old events.
+  *Fix:* prime only once both venues have returned data at least once, or
+  persist the watermark per venue.
+- **Schedule stamps are keyed by venue, not address.** `lastRequested` is
+  `${venue}:${group}`; if the address changed within one interval the account
+  group would not be due, and every address-keyed fed hook would fall back on
+  its own. `Futures.tsx` reloads the page on any address-to-address change, so
+  this cannot happen today; it becomes real the day that reload is removed.
+  *Fix when that happens:* include the address in the stamp, or call
+  `expireVenueGroups` when the runner's address changes.
+- **Leftovers.** `snapshot/waitForIndexedBlock.ts` carries a session comment
+  ("user changed this to 2000, please keep it") where a reason should be;
+  `QUERY_GROUPS.md` still says the indexed-block poll runs "every second";
+  `FuturesSnapshotResult.groups` is read only by tests.
+
+## 11. Overlay writes keep the chart range query permanently fresh
+
+**Where:** `src/hooks/data/oracleOverlay.ts`, `src/hooks/data/useHashRateIndexData.ts`,
+`src/hooks/data/useBtcPriceIndexData.ts`
+
+The in-progress bar is spliced over the cached range with `qc.setQueryData`,
+which bumps `dataUpdatedAt`. On 5D the range query has `staleTime` of an hour,
+so while the oracle keeps posting it never goes stale. Two consequences in a long
+session: the window's left edge never slides, and the last *closed* bar freezes
+as of the final overlay tick before the hour boundary, so a post indexed a few
+seconds into the next hour is never folded into the previous bar. Self-limiting
+and gone on reload.
+
+**To resolve:** write the splice with `updatedAt` preserved
+(`setQueryData(key, updater, { updatedAt })`), or drive the range refetch from a
+bucket-boundary timer instead of `staleTime`.
+
+## 12. Price charts include the in-progress hour again (reverses #309)
+
+**Where:** `src/hooks/data/oracleCurrentBucket.ts`, `src/hooks/data/queries/oracles.ts`
+
+Dev commit `320206a2` (#309) set `current: exclude` on the aggregated range
+queries because graph-node emits an empty current bucket with null non-null
+fields (graphprotocol/graph-node#6719) and the whole response fails. This branch
+makes `$current` a variable and asks for `include` first, so the newest bar is
+live, falling back to `exclude` only on that one error. A deliberate product
+change — the overlay reads the bar in progress every few seconds, which is
+pointless if the bar is excluded — but it undoes a dev fix without saying so in
+the PR, and in the minutes after each hour boundary, before the oracle's first
+post, every overlay tick costs two requests on the oracles endpoint.
+
+**To resolve:** nothing, if the live bar is wanted. If the double request
+matters, remember the `exclude` fallback until the next bucket boundary instead
+of retrying `include` on every tick.
+
+## 13. `Tooltip`: behaviour deltas from the MUI component it replaced
+
+**Where:** `src/components/Tooltip.tsx`
+
+The port covers hover and focus, the enter delay, Grow timing, flip and viewport
+clamping. These are the places where it still differs, none of them in a flow
+that places or closes an order:
+
+- **Re-hover within the 200ms exit is invisible.** `hide()` sets `entered=false`
+  and schedules the unmount; `show()` inside that window cancels the unmount but
+  `entered` is only set by the effect keyed on `[mounted]`, which does not re-run.
+  The bubble stays mounted at `opacity: 0` until the next full leave.
+- **No re-measure on `title` change.** The layout effect depends on
+  `[mounted, placement, arrow]`, so "Copy to clipboard" → "Copied!"
+  (`DetailedSpecsModal`) shrinks anchored to the left instead of staying centred.
+- **Only the four cardinal placements.** `top-start` etc. are not supported;
+  `DetailedSpecsModal`'s backstop tooltip was changed from `top-start` to `top`
+  in the dev merge for that reason.
+- `disableHoverListener` also suppresses the focus trigger (MUI disables hover
+  only); there is no Escape dismissal; on touch a tap shows the tooltip at once
+  (MUI required a long-press) and it stays until a tap elsewhere.
+- `cloneElement(children, { "aria-describedby": … })` overwrites a child's own
+  `aria-describedby` with `undefined` while closed. No current caller passes one.
+
+**To resolve:** set `entered` from `show()` directly, add `title` to the layout
+effect's deps, and decide whether `-start`/`-end` placements are worth the
+arrow arithmetic. The rest is a judgement call against MUI parity.
+
+## 14. `Modal`: missing dialog semantics and two close-on-mousedown edges
+
+**Where:** `src/components/Modal.tsx`
+
+Focus trap, return-focus, scroll lock with scrollbar-gap compensation and the
+fade timing are all in place. What is not:
+
+- **No `role="dialog"` / `aria-modal="true"` on the container.** Only
+  `AlertModal` adds `role="alertdialog"` itself; every `ModalItem` / `Modal`
+  caller (deposit, withdraw, close position, modify order, trades) is an
+  unlabelled region to assistive technology. MUI's Dialog set both.
+- **Grabbing the overlay scrollbar closes the modal.** `onMouseDown` on the
+  scrolling `Container` closes when `target === currentTarget`; a mousedown on
+  the container's own scrollbar satisfies that. MUI paired a mousedown-origin
+  check with `click`, which scrollbars do not produce. Affects any card taller
+  than the viewport. *Fix:* require a matching `mouseup`/`click` on the same
+  target, or ignore mousedowns whose `clientX` is inside the scrollbar gutter.
+- **First focus lands on the Close button**, not on the dialog itself as MUI
+  did, so a screen reader announces "Close, button" before the title. Needs an
+  AT pass to decide whether it matters.
+
+## 15. `Select`: closes on any scroll, and dropped MUI menu behaviour
+
+**Where:** `src/components/Select.tsx`, `src/components/Widgets/Futures/MarketSelector.tsx`
+
+- **Closes on any scroll.** A capture-phase `scroll` listener on `window` calls
+  `close()`. Capture-phase listeners fire for scroll events on *any* element,
+  including the menu's own `Paper` (`overflow-y: auto`), so scrolling a long
+  option list, or a wheel event that chains to the page, snaps the menu shut.
+  MUI locked page scroll and never closed on scroll. *Fix:* ignore events whose
+  target is inside the paper, or lock scroll while open as the modal does.
+- **`displayEmpty` is accepted and ignored** (`renderValue` is always called);
+  `MenuItemProps.className` is dropped; there is no typeahead; closing by
+  outside click does not restore focus to the trigger.
+- **`MarketSelector` lost its menu styling.** The MUI `MenuProps.PaperProps.sx`
+  (`maxHeight: 360`, `border`, `marginTop: .25rem`) and the `0.875rem` item font
+  had no equivalent in the new `Paper`, which has no border or offset and
+  `1rem` options. The new trigger also gains a hover border that the file's own
+  comment says the header should not show.
+
+## 16. Small widget leftovers from the MUI removal
+
+| Where | What | Fix |
+| --- | --- | --- |
+| `Widgets/Futures/PerpsOrderFormFields.tsx` | `.MuiSlider-marked { margin-bottom: 12px }` became `[role="slider"] { … }`, but the new `Slider` sets no `role` (the hidden `<input type="range">` has an implicit one only), so the override matches nothing and the compact perps form keeps the 20px gutter. | Target the slider's root class or expose a class on `Root`. |
+| `components/Spinner.styled.tsx` | `styled.div<{ fontSize?: string }>` — next-yak strips only `$`-prefixed props, Emotion's `isPropValid` used to drop this one. Unknown-prop warning in dev, a junk `fontsize` attribute in prod. Callers: `PlaceOrderWidget`, `HashrateChart`. | Rename to `$fontSize`. |
+| `components/TextField.tsx` | `{...inputProps}{...rest}` is followed by the component's own `onFocus` / `onBlur` / `onChange`, so any handler passed in `inputProps` is silently discarded. Only caller passes `min` / `step`. | Compose the handlers or drop `inputProps` from the type. |
+| `components/icons.tsx` | `sx` is still part of `IconProps`; no caller passes it. | Delete. |
+| `components/Alert.tsx` | No longer imported anywhere. Its vertical placement also changed (centred Dialog → `margin: 3rem auto`). | Delete. |
+| `components/Slider.tsx` | `@media (hover: none) { box-shadow: none }` precedes `@media (max-width: 768px) { box-shadow: 0 0 0 4px }`, so on a touch phone the later rule wins and the hover halo sticks after a tap. Same order as before the migration, so probably not a regression; confirm on a device. | Merge into one query or reorder. |
+
+## 17. Icon substitutions that changed meaning or weight
+
+**Where:** `src/components/icons.tsx`
+
+Heroicons stand in for Material glyphs. The mappings that are not like-for-like:
+`HelpIcon` (filled) and `HelpOutlineIcon` now render the same outline glyph;
+`FlagCircleIcon` → `FlagIcon` (no circle); `ShieldIcon` → `ShieldCheckIcon`
+(adds a check); `SkipNext` → `ForwardIcon`. Heroicons outline paths are 1.5px
+strokes at 24px, so at `fontSize: 13` (`TradesList`) and `0.75rem`
+(`TradingHeader`) they draw at under 1px and look far lighter than the filled
+Material icons they replace. The chart toggle already inlines Material's own
+paths for this reason.
+
+**To resolve:** inline the Material paths for the small-size uses too, or use
+the heroicons `20/solid` set where a filled glyph was replaced.
+
+## 18. Hidden sourcemaps are deployed to the public bucket
+
+**Where:** `vite.config.ts` (`sourcemap: "hidden"`),
+`.github/workflows/deploy-futures-ui.yml` (`aws s3 sync build/ … --delete`)
+
+`hidden` omits the `//# sourceMappingURL` comment but still writes the `.map`
+files — 141 of them, 18 MB against 6.4 MB of JS and CSS — and the deploy syncs
+the whole `build/` directory. Anyone who requests `<chunk>.js.map` gets the
+original TypeScript. Pre-existing on `dev`; this branch's measurement scripts now
+*depend* on the maps being emitted, which locks the setting in.
+
+**To resolve:** `aws s3 sync --exclude "*.map"`, or delete the maps after
+`measure:bundle` has read them.
+
+## 19. The browser floor rose with Vite 8's default target
+
+**Where:** `vite.config.ts` (no `build.target`)
+
+Vite 6 defaulted to `modules` (Chrome 87, Safari 14). Vite 8 defaults to
+`baseline-widely-available` (Chrome 111, Edge 111, Firefox 114, Safari 16.4,
+iOS 16.4). The `browserslist` in `package.json` is read by autoprefixer only.
+Nothing in the PR states the new floor. For a wallet-facing app the in-app
+browsers on older iOS are the population to think about.
+
+**To resolve:** pin `build.target` explicitly, whichever floor is chosen, so
+the next Vite major cannot move it silently again.
+
+## 20. `viem` is bundled twice
+
+**Where:** `build/assets/chunks/dist-*.js` (see `pnpm measure:bundle`)
+
+A full CJS copy of viem (334 `viem/_cjs/**` sources, ~590 KB raw / 149 KB gzip)
+rides in with `@safe-global/safe-apps-sdk` → `@safe-global/safe-apps-provider`,
+next to the ESM copy the app uses. It is lazy — loaded with the Safe connector —
+so it does not touch first paint, but it is the fourth-largest chunk. Same lock
+entries exist on `dev`, so not introduced here. `measure-bundle.mjs`'s
+`packageOf()` keys by package name regardless of `_cjs` / `_esm`, so the README's
+"viem 966 KB" undercounts it.
+
+**To resolve:** check whether a newer `safe-apps-sdk` ships ESM, or alias
+`viem/_cjs` to the ESM build in Rolldown; split `packageOf()` by `_cjs` so the
+duplication shows up in the report.
+
+## 21. The `@walletconnect/ethereum-provider` override never fires
+
+**Where:** `pnpm-workspace.yaml`
+
+The override exists to stop `@wagmi/connectors` from pulling a second
+WalletConnect stack that shares `WALLET_CONNECT_V2_INDEXED_DB` with
+`@reown/appkit`. In the current tree `pnpm why @walletconnect/ethereum-provider`
+prints nothing: it is an *optional* peer of `@wagmi/connectors`, and pnpm's
+`autoInstallPeers` does not install optional peers, so no second stack exists
+and the override has nothing to act on. The comment above it ("is auto-installed
+as an optional peer") describes a mechanism that does not run. The real
+protection is that nothing declares it as a hard dependency.
+
+**To resolve:** keep the override as a guard, correct the comment, and add a
+`pnpm why` check to §1's retest list.
+
+## 22. Measurement scripts and the baseline snapshots
+
+**Where:** `scripts/measure-*.mjs`, `scripts/baseline/`
+
+- `measure:baseline` without `--out` writes `scripts/baseline/latest.json`,
+  which is not ignored, so running the documented command dirties the tree.
+- `emotion-before.json`, `vite8-react19.json` and `no-mui.json` all record
+  `git: 459c738d` for three different stacks: they were taken on dirty working
+  trees and the script records only `rev-parse --short HEAD`. Add a dirty flag
+  and a lockfile hash.
+- 29% of raw JS is `(unmapped)` (the seed-JSON chunks have no mappings), so every
+  bucket percentage in the README is a share of *mapped* bytes; the README does
+  not say so.
+- The yak step's table reports the first-load shell at −14 KB gzip, which is
+  right, but the entry chunk itself grew 89 → 107 KB gzip in the same step.
+  Not wrong, but selective.
+- `measure-runtime.mjs` needs Playwright's Chromium (`playwright install
+  chromium`); the README does not say so.
+
+## 23. Dependencies: unused, mis-declared, and the audit summary
+
+- **Unused on both `dev` and this branch** (0 imports in `src`):
+  `react-circular-progressbar`, `react-minimal-pie-chart`, `react-timer-hook`,
+  `react-fast-compare`, `ecies-geth`, `buffer`, `pretty-ms`,
+  `@tanstack/react-table`. `build:analyze` references `vite-bundle-analyzer`,
+  which is not installed.
+- `react-safe-lazy@0.1.0` declares `peer react ^18`; it only imports `lazy`, so
+  it works on 19, but shows as unmet on every non-frozen install.
+- `TextField.tsx` still uses `forwardRef`; fine on React 19, ref-as-prop would
+  shorten it.
+- `pnpm audit --prod`: 1 critical (`elliptic` via `contracts-js` → `ethers`),
+  9 high (`axios` via `@base-org/account`, `hono` via `porto`, `source-map-js`
+  via `postcss`, `react-router` server-mode CSRF). None of `elliptic`, `ethers`,
+  `axios`, `hono`, `source-map-js` appear in any production sourcemap, and the
+  `react-router` advisory is RSC/server-only; `ws` (via `viem` → `isows`) is in
+  the bundle but is a Node DoS. Re-check after each lockfile change.
+
+## 24. Lint and tests are not enforced in CI
+
+- `pnpm lint` is red: `scripts/measure-bundle.mjs` has four
+  `lint/suspicious/noAssignInExpressions` (`while ((m = re.exec(text)))`). Lint
+  is not run in CI, so nothing caught it. `dev` already had two
+  `useNodejsImportProtocol` errors in `load-env.ts` under the same config.
+- The 26 Vitest files (382 tests) only run with the full app env
+  (`APP_ENV=dev REACT_APP_WALLET_CONNECT_ID=… ALCHEMY_API_KEY=…`) because
+  `vite.config.ts` validates env at load; there is no `test` script and CI never
+  runs them. The Vitest 3 → 5 and React 19 bumps therefore have no CI coverage.
+- `deploy-futures-ui.yml` uses `actions/checkout@v4`, `actions/setup-node@v4`
+  and `pnpm/action-setup@v4`, which GitHub now forces onto the Node 24 runtime
+  with a deprecation warning.
+- `prepare: husky` runs from `ui/` where there is no `.git`, so the hooks are
+  never installed and `.husky/pre-commit` (`npm run format`) is dead.
+
+**To resolve:** add `biome lint` and `vitest run` (with a CI env file) to the
+UI workflow; bump the actions; move husky to the repo root or drop it.
 
 ---
 
