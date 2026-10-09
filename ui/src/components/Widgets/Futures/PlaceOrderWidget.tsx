@@ -1482,30 +1482,26 @@ export const PlaceOrderWidget = ({
               const sellBlocker = sideBlocker(false);
               return (
                 <>
-                  <Tooltip title={buyBlocker ?? ""} arrow disableHoverListener={!buyBlocker}>
-                    <ButtonSlot>
-                      <BuyButton
-                        onClick={handleBuy}
-                        disabled={showOrderForm}
-                        $isHighlighted={highlightedButton === "buy"}
-                        $isCapped={buyBlocker !== undefined}
-                      >
-                        Bid
-                      </BuyButton>
-                    </ButtonSlot>
-                  </Tooltip>
-                  <Tooltip title={sellBlocker ?? ""} arrow disableHoverListener={!sellBlocker}>
-                    <ButtonSlot>
-                      <SellButton
-                        onClick={handleSell}
-                        disabled={showOrderForm}
-                        $isHighlighted={highlightedButton === "sell"}
-                        $isCapped={sellBlocker !== undefined}
-                      >
-                        Ask
-                      </SellButton>
-                    </ButtonSlot>
-                  </Tooltip>
+                  <ButtonSlot title={buyBlocker ?? ""} arrow disableHoverListener={!buyBlocker}>
+                    <BuyButton
+                      onClick={handleBuy}
+                      disabled={showOrderForm}
+                      $isHighlighted={highlightedButton === "buy"}
+                      $isCapped={buyBlocker !== undefined}
+                    >
+                      Bid
+                    </BuyButton>
+                  </ButtonSlot>
+                  <ButtonSlot title={sellBlocker ?? ""} arrow disableHoverListener={!sellBlocker}>
+                    <SellButton
+                      onClick={handleSell}
+                      disabled={showOrderForm}
+                      $isHighlighted={highlightedButton === "sell"}
+                      $isCapped={sellBlocker !== undefined}
+                    >
+                      Ask
+                    </SellButton>
+                  </ButtonSlot>
                 </>
               );
             })()}
@@ -1912,8 +1908,10 @@ const _ExpectedQuantityLabel = styled.div`
 
 
 /** Tooltip anchor: a disabled button fires no pointer events, so the wrapper takes them. */
-const ButtonSlot = styled.span`
-  display: flex;
+// The tooltip's wrapper span is the flex item in ButtonSection, so it is the
+// thing that has to grow; a `flex: 1` span *inside* it would only fill a
+// shrink-to-fit box and leave Bid/Ask at their 120px minimum.
+const ButtonSlot = styled(Tooltip)`
   flex: 1;
   min-width: 0;
 `;

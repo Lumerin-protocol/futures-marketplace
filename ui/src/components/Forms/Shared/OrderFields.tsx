@@ -292,7 +292,10 @@ export const OrderTypeRow = styled.div`
 
     button,
     select {
-      ${MOBILE_TOGGLE_METRICS}
+      padding: ${MOBILE_TOGGLE_METRICS.padding};
+      font-size: ${MOBILE_TOGGLE_METRICS.fontSize};
+      line-height: ${MOBILE_TOGGLE_METRICS.lineHeight};
+      white-space: nowrap;
     }
   }
 `;

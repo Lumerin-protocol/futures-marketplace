@@ -49,6 +49,7 @@ import { PORTFOLIO_OPEN_EXPOSURE_QK } from "../pnl/usePortfolioUnrealizedPnl";
 import { PORTFOLIO_REALIZED_PNL_QK } from "../pnl/usePortfolioRealizedPnl";
 import { SNAPSHOT_TICK_MS, snapshotQueryOptions } from "./config";
 import { isDeepEqual, writeIfChanged, writeResponseIfChanged } from "./writeIfChanged";
+import { resetVenueHistory } from "../refreshVenueViews";
 
 export const PERPS_SNAPSHOT_QK = "PerpsSnapshot";
 
@@ -184,6 +185,11 @@ export const fetchPerpsSnapshot = async (
 
   // Account slices.
   if (address) {
+    // Orders and sessions move only when a fill, cancel or liquidation is
+    // indexed. A change between two ticks that this account did not cause with
+    // a transaction of its own is the one event the histories (which never
+    // poll) would otherwise miss.
+    let accountMoved = false;
     if (response.myOrders) {
       // This entry carries a block timestamp alongside the usual `GetResponse`
       // fields, so it is written by hand rather than via the shared helper.
@@ -194,16 +200,19 @@ export const fetchPerpsSnapshot = async (
       const prev = qc.getQueryData<{ data: typeof data }>(key);
       if (!superseded && (!prev || !isDeepEqual(prev.data, data))) {
         qc.setQueryData(key, { data, blockNumber, timestamp });
+        accountMoved = prev !== undefined;
       }
     }
     if (response.sessions) {
-      writeIfChanged(
-        qc,
-        [USER_POSITION_SESSIONS_QK, address],
-        mapUserPositionSessions(response.sessions),
-        startedAt,
-      );
+      accountMoved =
+        writeIfChanged(
+          qc,
+          [USER_POSITION_SESSIONS_QK, address],
+          mapUserPositionSessions(response.sessions),
+          startedAt,
+        ) || accountMoved;
     }
+    if (accountMoved) void resetVenueHistory(qc, VENUE_ID, address);
     if (response.liquidations) {
       writeIfChanged(
         qc,

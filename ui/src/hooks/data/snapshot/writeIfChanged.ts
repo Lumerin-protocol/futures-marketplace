@@ -53,17 +53,24 @@ function supersededSince(qc: QueryClient, key: QueryKey, startedAt: number): boo
  *
  * `startedAt` is when the snapshot request was issued, used to avoid clobbering
  * an entry that was refreshed while it was in flight.
+ *
+ * Returns true only when an entry that already held a value was replaced by a
+ * different one — the first write of a session and a no-op both return false.
+ * That is the signal the drivers use to notice that something happened to the
+ * account between two ticks (a resting order filled, a position liquidated)
+ * without the account having sent a transaction of its own.
  */
 export function writeIfChanged<T>(
   qc: QueryClient,
   key: QueryKey,
   next: T,
   startedAt: number,
-): void {
-  if (supersededSince(qc, key, startedAt)) return;
+): boolean {
+  if (supersededSince(qc, key, startedAt)) return false;
   const prev = qc.getQueryData<T>(key);
-  if (prev !== undefined && isDeepEqual(prev, next)) return;
+  if (prev !== undefined && isDeepEqual(prev, next)) return false;
   qc.setQueryData(key, next);
+  return prev !== undefined;
 }
 
 /**
@@ -82,9 +89,10 @@ export function writeResponseIfChanged<T>(
   data: T,
   blockNumber: number,
   startedAt: number,
-): void {
-  if (supersededSince(qc, key, startedAt)) return;
+): boolean {
+  if (supersededSince(qc, key, startedAt)) return false;
   const prev = qc.getQueryData<GetResponse<T>>(key);
-  if (prev !== undefined && isDeepEqual(prev.data, data)) return;
+  if (prev !== undefined && isDeepEqual(prev.data, data)) return false;
   qc.setQueryData<GetResponse<T>>(key, { data, blockNumber });
+  return prev !== undefined;
 }

@@ -21,6 +21,13 @@ interface TooltipProps {
   arrow?: boolean;
   placement?: Placement;
   disableHoverListener?: boolean;
+  /**
+   * Styles the wrapper span. MUI attached its listeners to the child itself, so
+   * a child that was a flex item stayed one; here the wrapper is the flex item,
+   * and a caller whose child must grow (`flex: 1`) sizes the wrapper through
+   * `styled(Tooltip)` instead.
+   */
+  className?: string;
 }
 
 /** `transitions.duration.shorter`, the timeout MUI's Tooltip hands Grow. */
@@ -71,6 +78,7 @@ export const Tooltip = ({
   arrow = false,
   placement = "bottom",
   disableHoverListener = false,
+  className,
 }: TooltipProps) => {
   const wrapRef = useRef<HTMLSpanElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
@@ -190,7 +198,14 @@ export const Tooltip = ({
 
   return (
     <>
-      <Wrap ref={wrapRef} onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide}>
+      <Wrap
+        ref={wrapRef}
+        className={className}
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onFocus={show}
+        onBlur={hide}
+      >
         {child}
       </Wrap>
       {mounted &&

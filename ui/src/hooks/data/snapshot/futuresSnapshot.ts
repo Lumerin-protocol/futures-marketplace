@@ -49,6 +49,7 @@ import { PORTFOLIO_OPEN_EXPOSURE_QK } from "../pnl/usePortfolioUnrealizedPnl";
 import { PORTFOLIO_REALIZED_PNL_QK } from "../pnl/usePortfolioRealizedPnl";
 import { SNAPSHOT_TICK_MS, snapshotQueryOptions } from "./config";
 import { writeIfChanged, writeResponseIfChanged } from "./writeIfChanged";
+import { resetVenueHistory } from "../refreshVenueViews";
 
 export const FUTURES_SNAPSHOT_QK = "FuturesSnapshot";
 
@@ -215,24 +216,32 @@ export const fetchFuturesSnapshot = async (
 
   // Account slices.
   if (address) {
+    // Orders and positions move only when a fill, cancel, liquidation or
+    // settlement is indexed. A change between two ticks that this account did
+    // not cause with a transaction of its own is the one event the histories
+    // (which never poll) would otherwise miss.
+    let accountMoved = false;
     if (response.myOrders) {
-      writeResponseIfChanged(
-        qc,
-        [PARTICIPANT_QK, address],
-        mapParticipant(response.myOrders, address),
-        blockNumber,
-        startedAt,
-      );
+      accountMoved =
+        writeResponseIfChanged(
+          qc,
+          [PARTICIPANT_QK, address],
+          mapParticipant(response.myOrders, address),
+          blockNumber,
+          startedAt,
+        ) || accountMoved;
     }
     if (response.positions) {
-      writeResponseIfChanged(
-        qc,
-        [POSITION_BOOK_QK, address],
-        mapPositionBook(response.positions),
-        blockNumber,
-        startedAt,
-      );
+      accountMoved =
+        writeResponseIfChanged(
+          qc,
+          [POSITION_BOOK_QK, address],
+          mapPositionBook(response.positions),
+          blockNumber,
+          startedAt,
+        ) || accountMoved;
     }
+    if (accountMoved) void resetVenueHistory(qc, VENUE_ID, address);
     if (response.exposure) {
       writeIfChanged(
         qc,

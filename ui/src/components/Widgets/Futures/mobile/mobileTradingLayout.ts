@@ -14,9 +14,14 @@ export const useIsMobileTradingLayout = (): boolean =>
 // mobile layout: the order book's Order Book / Trades switcher and the
 // place-order form's Limit/Market, time-in-force and leverage toggles. Keeping
 // them in one place is what makes the two columns line up.
-export const MOBILE_TOGGLE_METRICS = `
-  padding: 0.15rem 0.4rem;
-  font-size: 0.62rem;
-  line-height: 1.6;
-  white-space: nowrap;
-`;
+//
+// Values, not a `css` mixin. next-yak resolves imported constants in place,
+// like `tokens.*`, but splices an imported mixin in after the block has been
+// parsed: inside `@media` it was hoisted to the root rule, inside a nested
+// selector it landed on the parent. Each caller writes the four declarations
+// itself from these.
+export const MOBILE_TOGGLE_METRICS = {
+  padding: "0.15rem 0.4rem",
+  fontSize: "0.62rem",
+  lineHeight: "1.6",
+} as const;

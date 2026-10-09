@@ -73,9 +73,9 @@ const ProtocolBackstopSection = ({ contractMode, tokenSymbol }: { contractMode: 
 
   return (
     <SpecSection>
-      <Tooltip title={BACKSTOP_TOOLTIP} arrow placement="top">
+      <SectionTitleTooltip title={BACKSTOP_TOOLTIP} arrow placement="top">
         <SectionTitle>PROTOCOL BACKSTOP</SectionTitle>
-      </Tooltip>
+      </SectionTitleTooltip>
       <SpecItem>
         <SpecLabel>Ledger Address</SpecLabel>
         <AddressDisplay address={BACKSTOP_ADDR} />
@@ -563,6 +563,12 @@ const SpecSection = styled.div`
   &:last-child {
     margin-bottom: 0;
   }
+`;
+
+// Block, not the tooltip's default inline-flex, so the title's bottom border
+// spans the section like its siblings' instead of hugging the text.
+const SectionTitleTooltip = styled(Tooltip)`
+  display: block;
 `;
 
 const SectionTitle = styled.h3`

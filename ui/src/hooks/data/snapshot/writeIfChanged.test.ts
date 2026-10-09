@@ -92,6 +92,20 @@ describe("writeIfChanged", () => {
 
     expect(qc.getQueryData(["k"])).toEqual([{ id: "new-order" }]);
   });
+
+  it("reports a change only when an existing value was replaced", () => {
+    const qc = new QueryClient();
+
+    // First write of a session: nothing to compare against, so not a change.
+    expect(writeIfChanged(qc, ["k"], [{ id: "1" }], laterTick())).toBe(false);
+    // Same rows again: a no-op.
+    expect(writeIfChanged(qc, ["k"], [{ id: "1" }], laterTick())).toBe(false);
+    // A resting order filled between ticks: the entry moved.
+    expect(writeIfChanged(qc, ["k"], [], laterTick())).toBe(true);
+    // Superseded by a fresher write: discarded, so not a change either.
+    qc.setQueryData(["k"], [{ id: "2" }]);
+    expect(writeIfChanged(qc, ["k"], [{ id: "3" }], earlierTick())).toBe(false);
+  });
 });
 
 describe("writeResponseIfChanged", () => {

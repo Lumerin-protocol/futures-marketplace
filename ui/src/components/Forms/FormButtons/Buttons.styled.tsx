@@ -115,8 +115,10 @@ const PrimaryButtonComponent = styled(Button)<{ $hoverText?: string }>`
     opacity: 0.5;
   }
 
+  /* "content: none" generates no box at all, so without a hover text there is
+     nothing to show on hover; an empty string would still paint the backdrop. */
   &:after {
-    content: ${({ $hoverText }) => ($hoverText ? `"${$hoverText}"` : '""')};
+    content: ${({ $hoverText }) => ($hoverText ? `"${$hoverText}"` : "none")};
     position: absolute;
     bottom: calc(100% + 0.5em);
     width: max-content;

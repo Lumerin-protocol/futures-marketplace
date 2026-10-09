@@ -25,6 +25,14 @@ let restoreOverflow = "";
 let restorePaddingRight = "";
 
 /**
+ * Open overlays, bottom to top. Only the top one acts on Escape — MUI's
+ * ModalManager did the same — so an alert raised over a form closes on its own
+ * terms and does not take the form underneath it with it.
+ */
+const openStack: object[] = [];
+const isTopmost = (token: object) => openStack[openStack.length - 1] === token;
+
+/**
  * Hiding the page's scrollbar widens the viewport, which would shove the whole
  * layout sideways behind the backdrop. MUI pads the body by the width it just
  * took away; so do we.
@@ -67,6 +75,7 @@ export const Modal = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const restoreFocusTo = useRef<HTMLElement | null>(null);
   const exitTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const stackToken = useRef({});
 
   // `mounted` keeps the overlay in the tree through its fade out.
   const [mounted, setMounted] = useState(open);
@@ -89,10 +98,25 @@ export const Modal = ({
     return unlockScroll;
   }, [mounted]);
 
+  // Stack membership depends on `open` alone. Tying it to `onClose` as well
+  // would re-push this overlay on every re-render that passes a new callback,
+  // and move it above an alert that opened later.
+  useEffect(() => {
+    if (!open) return;
+    const token = stackToken.current;
+    openStack.push(token);
+    return () => {
+      const index = openStack.lastIndexOf(token);
+      if (index !== -1) openStack.splice(index, 1);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape" && !disableEscapeKeyDown) onClose?.();
+      if (event.key !== "Escape" || disableEscapeKeyDown) return;
+      if (!isTopmost(stackToken.current)) return;
+      onClose?.();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);

@@ -455,7 +455,10 @@ const ToggleButton = styled.button<{ $active?: boolean }>`
   /* MOBILE-ONLY: keep both tabs on one line inside the half-width column, using
      the metrics the place-order toggles also follow so the two columns align. */
   @media (max-width: 768px) {
-    ${MOBILE_TOGGLE_METRICS}
+    padding: ${MOBILE_TOGGLE_METRICS.padding};
+    font-size: ${MOBILE_TOGGLE_METRICS.fontSize};
+    line-height: ${MOBILE_TOGGLE_METRICS.lineHeight};
+    white-space: nowrap;
   }
 `;
 
