@@ -1,5 +1,6 @@
 import { graphqlRequest } from "../graphql";
-import { FuturesOpenExposureQuery, PerpsOpenExposureQuery } from "./queries";
+import { FuturesOpenExposureQuery } from "../queries/futures";
+import { PerpsOpenExposureQuery } from "../queries/perps";
 
 /**
  * Per-venue readers for the account's open exposure.
@@ -37,26 +38,23 @@ export type FetchOpenExposure = (ctx: ExposureContext) => Promise<OpenPositionLe
  */
 const OPEN_SESSIONS_LIMIT = 200;
 
-interface FuturesOpenExposureResponse {
-  positionSessions: {
-    netQuantity: string;
-    entryPrice: string;
-    expiration: { settlementPrice: string | null } | null;
-  }[];
+export interface FuturesExposureRow {
+  netQuantity: string;
+  entryPrice: string;
+  expiration: { settlementPrice: string | null } | null;
 }
 
-export const fetchFuturesOpenExposure: FetchOpenExposure = async ({
-  address,
-  subgraphUrl,
-  quantityScale,
-}) => {
-  const response = await graphqlRequest<FuturesOpenExposureResponse>(
-    FuturesOpenExposureQuery,
-    { address: address.toLowerCase(), first: OPEN_SESSIONS_LIMIT },
-    subgraphUrl,
-  );
+interface FuturesOpenExposureResponse {
+  exposure: FuturesExposureRow[];
+}
 
-  return response.positionSessions.map((session) => {
+/// Fed by the `exposure` slice, whether it arrived batched into a venue tick or
+/// through the standalone document built from that same slice.
+export const mapFuturesExposure = (
+  sessions: FuturesExposureRow[],
+  quantityScale: bigint,
+): OpenPositionLeg[] =>
+  sessions.map((session) => {
     // `expiration` is a nullable add-on, and its settlement price stays null
     // until SettlementPriceRecorded fires for that maturity.
     const settlementPrice = session.expiration?.settlementPrice ?? null;
@@ -67,11 +65,46 @@ export const fetchFuturesOpenExposure: FetchOpenExposure = async ({
       quantityScale,
     };
   });
+
+export const fetchFuturesOpenExposure: FetchOpenExposure = async ({
+  address,
+  subgraphUrl,
+  quantityScale,
+}) => {
+  const response = await graphqlRequest<FuturesOpenExposureResponse>(
+    FuturesOpenExposureQuery,
+    { address: address.toLowerCase(), exposureFirst: OPEN_SESSIONS_LIMIT },
+    subgraphUrl,
+  );
+
+  return mapFuturesExposure(response.exposure, quantityScale);
 };
 
+export type PerpsExposureRow = { netQuantity: string; aggregatedEntryPrice: string };
+
 interface PerpsOpenExposureResponse {
-  user: { netQuantity: string; aggregatedEntryPrice: string } | null;
+  me: PerpsExposureRow | null;
 }
+
+/// Fed by the perps `me` slice, batched or standalone.
+export const mapPerpsExposure = (
+  user: PerpsExposureRow | null,
+  quantityScale: bigint,
+): OpenPositionLeg[] => {
+  // Null for an account that has never traded perps; `netQuantity` goes back to
+  // zero once it closes out. Either way there is nothing to mark.
+  if (!user) return [];
+
+  return [
+    {
+      netQuantity: BigInt(user.netQuantity),
+      entryPrice: BigInt(user.aggregatedEntryPrice),
+      // Perps never settle, so the leg always marks against the live price.
+      settlementPrice: null,
+      quantityScale,
+    },
+  ];
+};
 
 export const fetchPerpsOpenExposure: FetchOpenExposure = async ({
   address,
@@ -84,17 +117,5 @@ export const fetchPerpsOpenExposure: FetchOpenExposure = async ({
     subgraphUrl,
   );
 
-  // Null for an account that has never traded perps; `netQuantity` goes back to
-  // zero once it closes out. Either way there is nothing to mark.
-  if (!response.user) return [];
-
-  return [
-    {
-      netQuantity: BigInt(response.user.netQuantity),
-      entryPrice: BigInt(response.user.aggregatedEntryPrice),
-      // Perps never settle, so the leg always marks against the live price.
-      settlementPrice: null,
-      quantityScale,
-    },
-  ];
+  return mapPerpsExposure(response.me, quantityScale);
 };

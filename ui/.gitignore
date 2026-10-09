@@ -11,6 +11,9 @@
 # production
 /build
 
+# next-yak / SWC transform cache
+/.swc
+
 # misc
 .DS_Store
 .env

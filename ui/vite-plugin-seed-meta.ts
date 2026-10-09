@@ -1,14 +1,10 @@
 /// <reference types="node" />
 
-// The `node:` protocol form would be preferable, but `@types/node` is pinned at
-// v12 here and only started declaring those module names in v16, so it breaks
-// `tsc --noEmit`. Revisit when `@types/node` is bumped — see ui/TECH_DEBT.md.
-// biome-ignore-all lint/style/useNodejsImportProtocol: see comment above.
-import { readFileSync, writeFileSync } from "fs";
-import { resolve } from "path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { Plugin } from "vite";
 
-const SEED_DIR = resolve(__dirname, "src/seed");
+const SEED_DIR = resolve(import.meta.dirname, "src/seed");
 const META_PATH = resolve(SEED_DIR, "meta.ts");
 
 const SEED_FILES = [

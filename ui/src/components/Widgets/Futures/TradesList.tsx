@@ -1,12 +1,12 @@
-import styled from "@mui/material/styles/styled";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
-import Tooltip from "@mui/material/Tooltip";
+import { styled } from "next-yak";
+import { Tooltip } from "../../Tooltip";
 import { tokens } from "../../../styles/tokens";
 import { useRecentTrades } from "../../../hooks/data/useRecentTrades";
 import { useFuturesTokenInfo } from "../../../hooks/data/useFuturesTokenInfo";
 import { usePerpsTokenInfo } from "../../../hooks/data/perps/usePerpsTokenInfo";
 import { getTxUrl } from "../../../lib/indexer";
 import type { ContractMode } from "../../../types/types";
+import { OpenInNewIcon } from "../../icons";
 
 interface TradesListProps {
   contractMode?: ContractMode;
@@ -33,7 +33,7 @@ const TAG_TITLE = {
 } as const;
 
 export const TradesList = ({ contractMode = "futures" }: TradesListProps) => {
-  const { data: trades, isLoading } = useRecentTrades(contractMode, { refetch: true });
+  const { data: trades, isLoading } = useRecentTrades(contractMode);
 
   const futuresTokenInfo = useFuturesTokenInfo();
   const perpsTokenInfo = usePerpsTokenInfo();
@@ -75,7 +75,7 @@ export const TradesList = ({ contractMode = "futures" }: TradesListProps) => {
                 rel="noopener noreferrer"
                 aria-label="View transaction"
               >
-                <OpenInNewIcon sx={{ fontSize: 13 }} />
+                <OpenInNewIcon style={{ fontSize: 13 }} />
               </TxLink>
             </TimeCol>
           </Row>
@@ -85,13 +85,13 @@ export const TradesList = ({ contractMode = "futures" }: TradesListProps) => {
   );
 };
 
-const Container = styled("div")`
+const Container = styled.div`
   width: 100%;
   display: flex;
   flex-direction: column;
 `;
 
-const ColumnHeader = styled("div")`
+const ColumnHeader = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   position: sticky;
@@ -129,7 +129,7 @@ const ColumnHeader = styled("div")`
   }
 `;
 
-const Row = styled("div")`
+const Row = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   align-items: center;
@@ -151,12 +151,12 @@ const Row = styled("div")`
   }
 `;
 
-const PriceCol = styled("span")<{ $side: "buy" | "sell" }>`
+const PriceCol = styled.span<{ $side: "buy" | "sell" }>`
   text-align: left;
   color: ${(props) => (props.$side === "buy" ? tokens.trading.long : tokens.trading.short)};
 `;
 
-const TagChip = styled("span")`
+const TagChip = styled.span`
   display: inline-block;
   margin-left: 0.3rem;
   padding: 0 0.25rem;
@@ -170,12 +170,12 @@ const TagChip = styled("span")`
   cursor: default;
 `;
 
-const AmountCol = styled("span")`
+const AmountCol = styled.span`
   text-align: right;
   color: ${tokens.text.onDark};
 `;
 
-const TimeCol = styled("div")`
+const TimeCol = styled.div`
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -183,7 +183,7 @@ const TimeCol = styled("div")`
   color: ${tokens.text.secondary};
 `;
 
-const TxLink = styled("a")`
+const TxLink = styled.a`
   display: inline-flex;
   align-items: center;
   color: ${tokens.trading.info};
@@ -194,7 +194,7 @@ const TxLink = styled("a")`
   }
 `;
 
-const StateRow = styled("div")`
+const StateRow = styled.div`
   text-align: center;
   padding: 2rem 0.5rem;
   color: ${tokens.text.muted};

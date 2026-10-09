@@ -1,7 +1,8 @@
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { sumUnrealizedPnl, type UnrealizedLeg } from "../../../lib/portfolioPnl";
-import { backgroundRefetchOpts } from "../config";
+import { snapshotFedQueryOptions } from "../snapshot/config";
+import { readViaSnapshot } from "../snapshot/snapshotFed";
 import { useGetMarketPrice } from "../useGetMarketPrice";
 import { aggregateVenuePnl, type VenuePnlAggregate } from "./aggregate";
 import type { OpenPositionLeg } from "./exposure";
@@ -28,20 +29,27 @@ export function usePortfolioUnrealizedPnl(
   address: `0x${string}` | undefined,
 ): VenuePnlAggregate {
   const { data: markPrice } = useGetMarketPrice();
+  const qc = useQueryClient();
 
   const results = useQueries({
     queries: PNL_VENUES.map((venue) => ({
       queryKey: [PORTFOLIO_OPEN_EXPOSURE_QK, venue.id, address],
       queryFn: () => {
         if (!address) throw new Error("usePortfolioUnrealizedPnl: address is required");
-        return venue.fetchOpenExposure({
-          address,
-          subgraphUrl: venue.subgraphUrl,
-          quantityScale: venue.quantityScale,
-        });
+        return readViaSnapshot(
+          qc,
+          venue.id,
+          [PORTFOLIO_OPEN_EXPOSURE_QK, venue.id, address],
+          () =>
+            venue.fetchOpenExposure({
+              address,
+              subgraphUrl: venue.subgraphUrl,
+              quantityScale: venue.quantityScale,
+            }),
+        );
       },
       enabled: !!address,
-      ...backgroundRefetchOpts,
+      ...snapshotFedQueryOptions,
     })),
   });
 

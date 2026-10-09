@@ -1,11 +1,10 @@
 import { tokens } from "../../../styles/tokens";
+import { usePerpsSessionTrades } from "../../../hooks/data/perps/usePerpsSessionTrades";
 import { useState, useMemo, useEffect } from "react";
-import styled from "@mui/material/styles/styled";
-import Modal from "@mui/material/Modal";
-import CloseIcon from "@mui/icons-material/Close";
-import IconButton from "@mui/material/IconButton";
+import { styled } from "next-yak";
 import { SmallWidget } from "../../Cards/Cards.styled";
-import { ModalCard } from "../../Modal.styled";
+import { Modal } from "../../Modal";
+import { ModalCard, ModalCloseButton, ModalCloseIcon } from "../../Modal.styled";
 import { TabSwitch } from "../../TabSwitch";
 import { useCancelPerpsOrder } from "../../../hooks/data/perps/useCancelPerpsOrder";
 import { useQueryClient } from "@tanstack/react-query";
@@ -85,11 +84,12 @@ export const PerpsOrdersPositionsTabWidget = ({
   // Paginated ("Load More") Position History — closed perps position sessions.
   const positionHistoryQuery = usePerpsPositionHistory(participantAddress);
 
-  // Paginated ("Load More") Trades tab.
-  const tradesQuery = useUserTrades(
-    participantAddress,
-    { refetch: activeTab === "TRADES" }
-  );
+  // Paginated ("Load More") Trades tab. Not polled: refetching an infinite query
+  // refetches every page the user has loaded, so the cost grows with scroll
+  // depth. The user's own trades only move when they trade (covered by
+  // `refreshVenueViews` post-tx) or when a keeper liquidates them (covered by
+  // `useLiquidationNotifications`).
+  const tradesQuery = useUserTrades(participantAddress);
 
   const refreshPerpsHistory = () => {
     orderHistoryQuery.refresh();
@@ -471,9 +471,9 @@ const CancelOrderConfirmModal = ({ open, order, participantAddress, onClose, onC
   return (
     <Modal open={open} onClose={onClose}>
       <PerpsModalCard>
-        <IconButton className="close" sx={{ color: "white" }} onClick={onClose}>
-          <CloseIcon />
-        </IconButton>
+        <ModalCloseButton className="close" onClick={onClose}>
+          <ModalCloseIcon />
+        </ModalCloseButton>
 
         <TransactionForm
           onClose={onClose}
@@ -774,7 +774,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
           <tbody>
             {openPositions.map((session) => {
               const displayQuantity = session.netQuantity;
-              const isLong = displayQuantity > 0n || (displayQuantity === 0n && session.maxQuantity > 0n);
+              const isLong = session.isLong;
               const realizedPnlValue = Number(session.realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
               const unrealizedPnl = calculateUnrealizedPnL(session.entryPrice, displayQuantity);
               const unrealizedPnlValue = Number(unrealizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
@@ -937,7 +937,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, hasMore = fals
           </thead>
           <tbody>
             {displayedPositions.map((session) => {
-              const isLong = session.maxQuantity > 0n;
+              const isLong = session.isLong;
               const realizedPnlValue = Number(session.realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
               const wasLiquidated = session.liquidatedQuantity > 0n;
 
@@ -1143,11 +1143,15 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
     return `${value >= 0 ? "+" : ""}${value.toFixed(2)} USDC`;
   };
 
-  const sortedTrades = [...session.trades].sort((a, b) => 
-    Number(b.timestamp) - Number(a.timestamp)
+  // The only place in the perps UI that renders fills, so the only place that
+  // fetches them: the sessions on the 5s tick carry one fill, for direction.
+  const tradesQuery = usePerpsSessionTrades(session.id);
+  const sortedTrades = useMemo(
+    () => [...(tradesQuery.data ?? [])].sort((a, b) => Number(b.timestamp) - Number(a.timestamp)),
+    [tradesQuery.data],
   );
 
-  // Client-side "Load More" paging (the session's trades are already in memory).
+  // Client-side "Load More" paging, over the page already fetched.
   const PAGE_SIZE = 10;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const displayedTrades = sortedTrades.slice(0, visibleCount);
@@ -1158,15 +1162,11 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
       onClose={onClose}
     >
       <TradesModalCard>
-        <IconButton 
-          className="close" 
-          sx={{ color: "white" }} 
-          onClick={onClose}
-        >
-          <CloseIcon />
-        </IconButton>
+        <ModalCloseButton className="close" onClick={onClose}>
+          <ModalCloseIcon />
+        </ModalCloseButton>
         
-        <h2>Trades ({sortedTrades.length})</h2>
+        <h2>Trades {tradesQuery.isPending ? "" : `(${sortedTrades.length})`}</h2>
         
         <TradesTableContainer>
           <TradesTable>
@@ -1244,7 +1244,7 @@ const TabContainer = styled(SmallWidget)`
   }
 `;
 
-const Header = styled("div")`
+const Header = styled.div`
   padding: 1.5rem 1.5rem 1rem 1.5rem;
   display: flex;
   justify-content: space-between;
@@ -1253,7 +1253,7 @@ const Header = styled("div")`
   width: 100%;
 `;
 
-const TabSwitchWrapper = styled("div")`
+const TabSwitchWrapper = styled.div`
   width: 100%;
   min-width: 0;
 
@@ -1263,12 +1263,12 @@ const TabSwitchWrapper = styled("div")`
   }
 `;
 
-const Content = styled("div")`
+const Content = styled.div`
   width: 100%;
   padding: 0 1.5rem 1.5rem 1.5rem;
 `;
 
-const OrdersWrapper = styled("div")`
+const OrdersWrapper = styled.div`
   width: 100%;
   
   /* Hide the widget's header since we have tabs */
@@ -1277,7 +1277,7 @@ const OrdersWrapper = styled("div")`
   }
 `;
 
-const PositionsWrapper = styled("div")`
+const PositionsWrapper = styled.div`
   width: 100%;
   
   /* Hide the widget's header since we have tabs */
@@ -1286,18 +1286,18 @@ const PositionsWrapper = styled("div")`
   }
 `;
 
-const TradesWrapper = styled("div")`
+const TradesWrapper = styled.div`
   width: 100%;
 `;
 
-const _PlaceholderText = styled("div")`
+const _PlaceholderText = styled.div`
   padding: 2rem;
   text-align: center;
   color: ${tokens.overlay.white50};
   font-size: 0.875rem;
 `;
 
-const TableContainer = styled("div")`
+const TableContainer = styled.div`
   width: 100%;
   overflow-x: auto;
   
@@ -1316,7 +1316,7 @@ const TableContainer = styled("div")`
   }
 `;
 
-const Table = styled("table")`
+const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
   min-width: 600px;
@@ -1339,7 +1339,7 @@ const Table = styled("table")`
   }
 `;
 
-const TableRow = styled("tr")`
+const TableRow = styled.tr`
   &:hover {
     background-color: ${tokens.overlay.white02};
   }
@@ -1349,7 +1349,7 @@ const TableRow = styled("tr")`
   }
 `;
 
-const TypeBadge = styled("span")<{ $type: string }>`
+const TypeBadge = styled.span<{ $type: string }>`
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
@@ -1359,14 +1359,14 @@ const TypeBadge = styled("span")<{ $type: string }>`
   color: ${(props) => (props.$type === "Long" ? tokens.trading.long : tokens.trading.short)};
 `;
 
-const SideCell = styled("div")`
+const SideCell = styled.div`
   display: flex;
   align-items: center;
   gap: 0.4rem;
   flex-wrap: wrap;
 `;
 
-const StatusBadge = styled("span")<{ $status: string; $color: string }>`
+const StatusBadge = styled.span<{ $status: string; $color: string }>`
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
@@ -1376,13 +1376,13 @@ const StatusBadge = styled("span")<{ $status: string; $color: string }>`
   color: ${(props) => props.$color};
 `;
 
-const ActionButtons = styled("div")`
+const ActionButtons = styled.div`
   display: flex;
   gap: 0.5rem;
   align-items: center;
 `;
 
-const ModifyButton = styled("button")`
+const ModifyButton = styled.button`
   padding: 0.5rem 0.875rem;
   background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};
@@ -1409,7 +1409,7 @@ const ModifyButton = styled("button")`
   }
 `;
 
-const CancelButton = styled("button")`
+const CancelButton = styled.button`
   padding: 0.5rem 0.875rem;
   background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};
@@ -1436,7 +1436,7 @@ const CancelButton = styled("button")`
   }
 `;
 
-const EmptyState = styled("div")`
+const EmptyState = styled.div`
   text-align: center;
   padding: 2rem;
   color: ${tokens.text.muted};
@@ -1447,7 +1447,7 @@ const EmptyState = styled("div")`
   }
 `;
 
-const PnLText = styled("span")<{ $isPositive: boolean; $isZero?: boolean }>`
+const PnLText = styled.span<{ $isPositive: boolean; $isZero?: boolean }>`
   color: ${(props) =>
     props.$isZero
       ? tokens.text.primary
@@ -1457,7 +1457,7 @@ const PnLText = styled("span")<{ $isPositive: boolean; $isZero?: boolean }>`
   font-weight: 600;
 `;
 
-const TxLink = styled("a")`
+const TxLink = styled.a`
   color: ${tokens.trading.info};
   text-decoration: none;
   font-family: monospace;
@@ -1468,7 +1468,7 @@ const TxLink = styled("a")`
   }
 `;
 
-const DetailsButton = styled("button")`
+const DetailsButton = styled.button`
   padding: 0.5rem 0.875rem;
   background: ${tokens.neutralButton.bg};
   color: ${tokens.text.onDark};
@@ -1510,7 +1510,7 @@ const TradesModalCard = styled(ModalCard)`
   }
 `;
 
-const TradesTableContainer = styled("div")`
+const TradesTableContainer = styled.div`
   width: 100%;
   overflow-x: auto;
   margin-top: 1rem;
@@ -1530,7 +1530,7 @@ const TradesTableContainer = styled("div")`
   }
 `;
 
-const TradesTable = styled("table")`
+const TradesTable = styled.table`
   width: 100%;
   border-collapse: collapse;
   min-width: 800px;
@@ -1561,20 +1561,20 @@ const TradesTable = styled("table")`
   }
 `;
 
-const _ErrorText = styled("p")`
+const _ErrorText = styled.p`
   color: ${tokens.trading.short};
   font-size: 0.8125rem;
   margin: 0 0 1rem 0;
 `;
 
-const _SimulatingText = styled("p")`
+const _SimulatingText = styled.p`
   color: ${tokens.text.secondary};
   font-size: 0.875rem;
   margin: 0;
   text-align: center;
 `;
 
-const _SimResultsContainer = styled("div")`
+const _SimResultsContainer = styled.div`
   width: 100%;
   overflow-x: auto;
   margin-top: 0.5rem;

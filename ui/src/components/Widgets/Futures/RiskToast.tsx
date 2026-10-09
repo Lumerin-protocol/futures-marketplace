@@ -1,6 +1,6 @@
-import styled from "@mui/material/styles/styled";
-import CloseIcon from "@mui/icons-material/Close";
+import { styled } from "next-yak";
 import { tokens } from "../../../styles/tokens";
+import { CloseIcon } from "../../icons";
 
 export type RiskToastVariant = "warning" | "danger";
 
@@ -52,7 +52,7 @@ export const RiskToast = ({ items, onDismiss }: RiskToastProps) => {
 const accent = (variant: RiskToastVariant) =>
   variant === "danger" ? tokens.trading.short : tokens.trading.highlight;
 
-const ToastStack = styled("div")`
+const ToastStack = styled.div`
   position: fixed;
   top: 1rem;
   right: 1rem;
@@ -63,7 +63,7 @@ const ToastStack = styled("div")`
   max-width: min(360px, calc(100vw - 2rem));
 `;
 
-const Toast = styled("button")<{ $variant: RiskToastVariant }>`
+const Toast = styled.button<{ $variant: RiskToastVariant }>`
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -84,11 +84,11 @@ const Toast = styled("button")<{ $variant: RiskToastVariant }>`
   }
 `;
 
-const ToastText = styled("span")`
+const ToastText = styled.span`
   flex: 1;
 `;
 
-const DismissIcon = styled("span")`
+const DismissIcon = styled.span`
   display: inline-flex;
   align-items: center;
   justify-content: center;

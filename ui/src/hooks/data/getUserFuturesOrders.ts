@@ -1,22 +1,29 @@
-import { backgroundRefetchOpts } from "./config";
 import { graphqlRequest } from "./graphql";
-import { useQuery } from "@tanstack/react-query";
-import { UserFuturesOrdersByStatusQuery } from "./graphql-queries";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { UserFuturesOrdersByStatusQuery } from "./queries/futures";
+import { snapshotFedQueryOptions } from "./snapshot/config";
+import { readViaSnapshot } from "./snapshot/snapshotFed";
 
 export const PARTICIPANT_QK = "Participant";
 
 /// Statuses that count as "open" on the order book — i.e. orders the UI shows
 /// in the active list and uses for conflict detection in PlaceOrder/ModifyOrder.
-const ACTIVE_STATUSES = ["ACTIVE", "PARTIALLY_FILLED"] as const;
+export const ACTIVE_ORDER_STATUSES = ["ACTIVE", "PARTIALLY_FILLED"] as const;
 
+/// Default page size for the active-orders read, shared with the venue snapshot.
+export const ORDER_PAGE_SIZE = 100;
+
+/// Kept fresh by `useFuturesSnapshot`, which writes this cache entry directly.
+/// The query function remains for the initial fetch and for explicit
+/// invalidation after a transaction.
 export const getUserFuturesOrders = (
   participantAddress: `0x${string}` | undefined,
   props?: {
-    refetch?: boolean;
     orderOffset?: number;
     orderLimit?: number;
   },
 ) => {
+  const qc = useQueryClient();
   const query = useQuery({
     // The address belongs in the key: without it every account shares one cache
     // entry, so switching wallets serves the previous account's order ids to
@@ -24,10 +31,12 @@ export const getUserFuturesOrders = (
     queryKey: [PARTICIPANT_QK, participantAddress],
     queryFn: () => {
       if (!participantAddress) throw new Error("getUserFuturesOrders: participantAddress is required");
-      return fetchParticipantAsync(participantAddress, props);
+      return readViaSnapshot(qc, "futures", [PARTICIPANT_QK, participantAddress], () =>
+        fetchParticipantAsync(participantAddress, props),
+      );
     },
     enabled: !!participantAddress,
-    ...(props?.refetch ? backgroundRefetchOpts : {}),
+    ...snapshotFedQueryOptions,
   });
 
   return query;
@@ -43,10 +52,10 @@ const fetchParticipantAsync = async (
   const now = Math.floor(Date.now() / 1000);
   const variables = {
     address: participantAddress.toLowerCase(),
-    statuses: [...ACTIVE_STATUSES],
+    statuses: [...ACTIVE_ORDER_STATUSES],
     now,
-    first: props?.orderLimit ?? 100,
-    skip: props?.orderOffset ?? 0,
+    orderFirst: props?.orderLimit ?? ORDER_PAGE_SIZE,
+    orderSkip: props?.orderOffset ?? 0,
   };
 
   const response = await graphqlRequest<UserFuturesOrdersResponse>(
@@ -54,7 +63,19 @@ const fetchParticipantAsync = async (
     variables,
   );
 
-  const orders: ParticipantOrder[] = response.orders.map((order) => ({
+  return {
+    data: mapParticipant(response.myOrders, participantAddress),
+    blockNumber: response._meta.block.number,
+  };
+};
+
+/// Shared with `FuturesSnapshotQuery`'s `myOrders` alias, which writes this cache
+/// entry directly. Both paths must produce identical shapes.
+export const mapParticipant = (
+  rows: FuturesOrderRow[],
+  participantAddress: `0x${string}`,
+): Participant => {
+  const orders: ParticipantOrder[] = rows.map((order) => ({
     id: order.id,
     isBuy: order.isBuy,
     isActive: isActiveStatus(order.status),
@@ -74,40 +95,16 @@ const fetchParticipantAsync = async (
     },
   }));
 
-  const data: Participant = {
+  return {
     address: participantAddress,
     orderCount: orders.length,
     totalVolume: 0n,
     orders,
   };
-
-  return {
-    data,
-    blockNumber: response._meta.block.number,
-  };
 };
 
 const isActiveStatus = (status: string): boolean =>
   status === "ACTIVE" || status === "PARTIALLY_FILLED";
-
-export const waitForBlockNumber = async (blockNumber: bigint, participantAddress: `0x${string}`) => {
-  const delay = 1000;
-  const maxAttempts = 30; // 30 attempts with 1s delay = max 30 seconds wait
-
-  let attempts = 0;
-  while (attempts < maxAttempts) {
-    await new Promise((resolve) => setTimeout(resolve, delay));
-    const data = await fetchParticipantAsync(participantAddress);
-    const currentBlock = data?.blockNumber;
-
-    if (currentBlock !== undefined && currentBlock >= Number(blockNumber)) {
-      return;
-    }
-    attempts++;
-  }
-
-  throw new Error(`Timeout waiting for block number ${blockNumber}`);
-};
 
 export type Participant = {
   address: `0x${string}`;
@@ -139,6 +136,26 @@ export type ParticipantOrder = {
   timestamp: string;
 };
 
+export type FuturesOrderRow = {
+  user: {
+    id: string;
+  };
+  blockNumber: string;
+  cancelledQuantity: string;
+  closedAt: string | null;
+  expirationAt: string;
+  createdAt: string;
+  filledQuantity: string;
+  id: string;
+  isBuy: boolean;
+  originalQuantity: string;
+  quantity: string;
+  price: string;
+  status: string;
+  transactionHash: `0x${string}`;
+  updatedAt: string;
+};
+
 type UserFuturesOrdersResponse = {
   _meta: {
     block: {
@@ -146,23 +163,5 @@ type UserFuturesOrdersResponse = {
       timestamp: string;
     };
   };
-  orders: {
-    user: {
-      id: string;
-    };
-    blockNumber: string;
-    cancelledQuantity: string;
-    closedAt: string | null;
-    expirationAt: string;
-    createdAt: string;
-    filledQuantity: string;
-    id: string;
-    isBuy: boolean;
-    originalQuantity: string;
-    quantity: string;
-    price: string;
-    status: string;
-    transactionHash: `0x${string}`;
-    updatedAt: string;
-  }[];
+  myOrders: FuturesOrderRow[];
 };

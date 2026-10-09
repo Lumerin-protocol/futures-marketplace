@@ -1,12 +1,16 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { backgroundRefetchOpts, indexGcTimeMs } from "./config";
-import { AggregatedBtcPriceIndexQuery, BtcPriceIndexQuery } from "./graphql-queries";
+import { subgraphRetryOptions } from "./subgraphRetry";
+import { BtcPriceIndexQuery } from "./queries/oracles";
 import type { TimePeriod } from "./useHashRateIndexData";
 import { prefetchSeed, withSeedFallback } from "./seed-utils";
 import { paginateOracleTicks } from "./paginateOracleTicks";
-import { fetchOracleHourAggRows, hourAggToAverageTick } from "./fetchOracleHourAverages";
+import {
+  fetchOracleHourAggRows,
+  hourAggToAverageTick,
+  oracleTickToAverage,
+} from "./fetchOracleHourAverages";
 import { chartRangeSpec, rollupAverageTicks, startMicrosForRange, type AverageTick } from "../../lib/chartBars";
-import { subgraphTimestampToMs } from "../../lib/chartCandles";
 
 const loadBtcUsdsSeed = () =>
   import(/* webpackChunkName: "seed-btc-usds" */ "../../seed/btcUsds.json").then((m) => m.default);
@@ -35,6 +39,7 @@ export const useBtcPriceIndexData = (props?: { refetch?: boolean; timePeriod?: T
     placeholderData: keepPreviousData,
     staleTime: chartRangeSpec(timePeriod).intervalMs,
     gcTime: indexGcTimeMs,
+    ...subgraphRetryOptions,
     ...(props?.refetch ? backgroundRefetchOpts : {}),
   });
 };
@@ -49,23 +54,22 @@ async function fetchBtcPriceIndexData(timePeriod: TimePeriod) {
     let allIndexes = await paginateOracleTicks<BtcPriceIndexItem>(BtcPriceIndexQuery, "btcUsds", startMicros);
     allIndexes = await withSeedFallback(allIndexes, seedPromise, BigInt(startMicros));
     allIndexes = allIndexes.filter((item) => BigInt(item.timestamp) >= BigInt(startMicros));
-    ticks = allIndexes.map((item) => ({
-      id: String(item.id),
-      timeMs: subgraphTimestampToMs(item.timestamp),
-      sum: Number(item.price),
-      count: !item.price || item.price === "0" ? 0 : 1,
-    }));
+    ticks = allIndexes.map((item) => oracleTickToAverage(item, item.price));
   } else {
     const seedPromise = prefetchSeed("btcUsdCandlesHour", loadBtcUsdCandlesHourSeed);
-    let rows = await fetchOracleHourAggRows(AggregatedBtcPriceIndexQuery, "btcUsdCandles", startMicros);
+    let rows = await fetchOracleHourAggRows("btcUsdCandles", startMicros);
     rows = await withSeedFallback(rows, seedPromise, BigInt(startMicros));
     ticks = rows.map(hourAggToAverageTick);
   }
 
-  return rollupAverageTicks(ticks, spec.intervalMs).map((bucket) => ({
+  return btcLineFromAverages(ticks, spec.intervalMs);
+}
+
+/** See `hashpriceLineFromAverages`; the overlay builds its bar with this. */
+export const btcLineFromAverages = (rows: AverageTick[], intervalMs: number) =>
+  rollupAverageTicks(rows, intervalMs).map((bucket) => ({
     updatedAt: bucket.timeMs,
     updatedAtDate: new Date(bucket.timeMs),
     id: bucket.id,
     price: bucket.sum / bucket.count / PRICE_SCALE,
   }));
-}

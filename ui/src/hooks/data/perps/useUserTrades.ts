@@ -1,5 +1,4 @@
-import { backgroundRefetchOpts } from "../config";
-import { UserTradesQuery } from "./graphql-queries";
+import { UserTradesQuery } from "../queries/perps";
 import {
   usePaginatedHistory,
   type PaginatedHistoryResult,
@@ -9,16 +8,13 @@ export const USER_TRADES_QK = "UserTrades";
 
 export const useUserTrades = (
   address: `0x${string}` | undefined,
-  props?: {
-    refetch?: boolean;
-  },
 ): PaginatedHistoryResult<UserTrade> => {
   return usePaginatedHistory<UserTradesResponse, UserTrade>({
     queryKey: [USER_TRADES_QK, address],
     query: UserTradesQuery,
     variables: { address },
     subgraphUrl: process.env.REACT_APP_SUBGRAPH_PERPS_URL,
-    selectRows: (response) => response.trades,
+    selectRows: (response) => response.historyTrades,
     mapRow: (trade) => ({
       user: {
         id: trade.user.id,
@@ -39,7 +35,6 @@ export const useUserTrades = (
     }),
     getId: (trade) => trade.id,
     enabled: !!address,
-    refetchInterval: props?.refetch ? backgroundRefetchOpts.refetchInterval : undefined,
   });
 };
 
@@ -63,7 +58,7 @@ export type UserTrade = {
 };
 
 type UserTradesResponse = {
-  trades: {
+  historyTrades: {
     user: {
       id: string;
     };

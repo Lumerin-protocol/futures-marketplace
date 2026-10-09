@@ -25,6 +25,13 @@ const wagmiAdapter = new WagmiAdapter({
   transports: {
     [chain.id]: http(process.env.REACT_APP_READ_ONLY_ETH_NODE_URL, { retryCount: 0 }),
   },
+  // wagmi already aggregates contract reads through Multicall3, but its default
+  // window is one microtask, so reads that resolve a few milliseconds apart each
+  // get their own request: a cold load was measured sending 11 multicalls for 33
+  // reads, none of them anywhere near the size cap. A window wide enough to span
+  // the hooks settling collapses those into a handful, at the cost of up to
+  // `wait` milliseconds of latency on a read that would otherwise go alone.
+  batch: { multicall: { wait: 50 } },
   projectId,
   ssr: false,
 });
