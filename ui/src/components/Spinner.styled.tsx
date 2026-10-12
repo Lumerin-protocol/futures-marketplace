@@ -68,3 +68,16 @@ export const Spinner = styled.div<{ fontSize?: string }>`
 `;
 
 Spinner.displayName = "Spinner";
+
+export const PageSpinner = () => (
+  <PageSpinnerWrapper role="status" aria-label="Loading">
+    <Spinner fontSize="0.4em" />
+  </PageSpinnerWrapper>
+);
+
+const PageSpinnerWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+`;
