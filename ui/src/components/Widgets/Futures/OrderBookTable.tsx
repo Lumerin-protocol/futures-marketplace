@@ -320,6 +320,7 @@ export const OrderBookTable = ({
           contractMode={contractMode}
           onRowClick={onRowClick}
           marketPrice={marketPriceNumber}
+          minimumPriceIncrement={minimumPriceIncrement}
         />
       )
     ) : (

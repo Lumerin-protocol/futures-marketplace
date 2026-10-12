@@ -65,7 +65,9 @@ export const TabSwitch = <T extends string>(props: Props<T>) => {
       ))}
 
       {numTabs === 2 && <span className="glider" />}
-      {numTabs > 2 && <span className="multi-glider" style={{ left: `calc(${activeIndex * (100 / numTabs)}% + 3px)` }} />}
+      {numTabs > 2 && (
+        <span className="multi-glider" style={{ left: `calc(3px + (100% - 6px) * ${activeIndex} / ${numTabs})` }} />
+      )}
     </TabSwitchStyled>
   );
 };
@@ -122,10 +124,10 @@ const MobileCountBadge = styled.span`
 export const TabSwitchStyled = styled.div<{ $numTabs: number }>`
   display: inline-grid;
   grid-template-columns: ${(props) => `repeat(${props.$numTabs}, 1fr)`};
-  align-items: center;
+  align-items: stretch;
   border: 1px solid ${tokens.border.default};
   color: ${tokens.text.onDark};
-  padding: 0.7rem 0.25rem;
+  padding: 3px;
   border-radius: ${tokens.radius.md};
   position: relative;
 
@@ -135,11 +137,16 @@ export const TabSwitchStyled = styled.div<{ $numTabs: number }>`
     justify-content: center;
     font-size: 0.875rem;
     font-weight: 500;
-    border-radius: ${tokens.radius.full};
+    border-radius: ${tokens.radius.sm};
     cursor: pointer;
     transition: color 0.15s ease-in;
     z-index: 2;
-    padding: 0.1em 0.7em;
+    padding: calc(0.7rem - 3px + 0.1em) 0.7em;
+    outline: none;
+
+    &:focus-visible {
+      box-shadow: inset 0 0 0 2px ${tokens.brand.blue};
+    }
 
     @media (max-width: 500px) {
       font-size: 0.75rem;
@@ -171,7 +178,7 @@ export const TabSwitchStyled = styled.div<{ $numTabs: number }>`
   }
 
   .entry:last-of-type.active + .glider {
-    transform: translateX(calc(100% + 6px));
+    transform: translateX(100%);
   }
 
   .active > span {
@@ -185,7 +192,7 @@ export const TabSwitchStyled = styled.div<{ $numTabs: number }>`
     top: 3px;
     left: 3px;
     bottom: 3px;
-    width: calc(50% - 6px);
+    width: calc(50% - 3px);
     background-color: ${tokens.surface.tabActive};
     z-index: 1;
     border-radius: ${tokens.radius.sm};
@@ -197,7 +204,7 @@ export const TabSwitchStyled = styled.div<{ $numTabs: number }>`
     display: flex;
     top: 3px;
     bottom: 3px;
-    width: calc(${(props) => 100 / props.$numTabs}% - 6px);
+    width: calc((100% - 6px) / ${(props) => props.$numTabs});
     background-color: ${tokens.surface.tabActive};
     z-index: 1;
     border-radius: ${tokens.radius.sm};
