@@ -8,6 +8,7 @@ import { safeLazy } from "./utils/safeLazy";
 // loading state.
 import { DefaultLayout } from "./components/Layouts/DefaultLayout";
 import { Web3ProviderLazy } from "./Web3ProviderLazy";
+import { PageSpinner } from "./components/Spinner.styled";
 
 const Futures = safeLazy(() => import("./pages/futures/Futures").then((module) => ({ default: module.Futures })));
 const Leaderboard = safeLazy(() =>
@@ -19,10 +20,10 @@ export const Router: FC = () => {
     // DefaultLayout (header/footer chrome) wraps everything *outside* the
     // Suspense boundary, so it paints immediately on mount and is never part
     // of any fallback. Only the route body below — Futures/Leaderboard,
-    // which pull in wagmi/charts/forms — is what suspends, and (no fallback
-    // given) just renders nothing in that one spot until its chunk loads.
+    // which pull in wagmi/charts/forms — is what suspends, showing a spinner
+    // in that one spot until its chunk loads.
     <DefaultLayout>
-      <Suspense>
+      <Suspense fallback={<PageSpinner />}>
         <Routes>
           {/* One trading element for both modes so futures↔perps only updates the
               URL param — remounting used to recreate Wagmi Hydrate mid-tree.
