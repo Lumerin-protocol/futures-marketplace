@@ -1,17 +1,18 @@
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { realizedPnlSinceBaseline, windowCutoffSeconds } from "../../../lib/portfolioPnl";
-import { backgroundRefetchOpts } from "../config";
+import { snapshotFedQueryOptions } from "../snapshot/config";
+import { readViaSnapshot } from "../snapshot/snapshotFed";
 import { graphqlRequest } from "../graphql";
 import { aggregateVenuePnl, type VenuePnlAggregate } from "./aggregate";
-import { VenueRealizedPnlQuery } from "./queries";
+import { VenueRealizedPnlQuery } from "../queries/futures";
 import { PNL_VENUES, type ConfiguredPnlVenue } from "./venues";
 
 export const PORTFOLIO_REALIZED_PNL_QK = "PortfolioRealizedPnl";
 
 interface VenueRealizedPnlResponse {
-  user: { realizedPnl: string } | null;
-  trades: { cumulativeRealizedPnl: string }[];
+  me: { realizedPnl: string } | null;
+  realizedBaseline: { cumulativeRealizedPnl: string }[];
 }
 
 const fetchVenueRealizedPnl = async (
@@ -26,12 +27,14 @@ const fetchVenueRealizedPnl = async (
   );
 
   // No `User` row means the account has never traded this venue.
-  if (!response.user) return 0n;
+  if (!response.me) return 0n;
 
   const baseline =
-    response.trades.length > 0 ? BigInt(response.trades[0].cumulativeRealizedPnl) : null;
+    response.realizedBaseline.length > 0
+      ? BigInt(response.realizedBaseline[0].cumulativeRealizedPnl)
+      : null;
 
-  return realizedPnlSinceBaseline(BigInt(response.user.realizedPnl), baseline);
+  return realizedPnlSinceBaseline(BigInt(response.me.realizedPnl), baseline);
 };
 
 /**
@@ -48,15 +51,22 @@ export function usePortfolioRealizedPnl(
   // Stable within the hour, so it can sit in the query key without churning.
   const cutoff = windowCutoffSeconds();
 
+  const qc = useQueryClient();
+
   const results = useQueries({
     queries: PNL_VENUES.map((venue) => ({
       queryKey: [PORTFOLIO_REALIZED_PNL_QK, venue.id, address, cutoff],
       queryFn: () => {
         if (!address) throw new Error("usePortfolioRealizedPnl: address is required");
-        return fetchVenueRealizedPnl(venue, address, cutoff);
+        return readViaSnapshot(
+          qc,
+          venue.id,
+          [PORTFOLIO_REALIZED_PNL_QK, venue.id, address, cutoff],
+          () => fetchVenueRealizedPnl(venue, address, cutoff),
+        );
       },
       enabled: !!address,
-      ...backgroundRefetchOpts,
+      ...snapshotFedQueryOptions,
     })),
   });
 

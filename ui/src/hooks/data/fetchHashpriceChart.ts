@@ -4,7 +4,6 @@ import {
   rollupHashpriceCandles,
   subgraphTimestampToMs,
   type HashpriceCandle,
-  type SubgraphHashpriceCandle,
 } from "../../lib/chartCandles";
 import {
   chartRangeSpec,
@@ -13,14 +12,16 @@ import {
   type AverageTick,
   type TimePeriod,
 } from "../../lib/chartBars";
-import { graphqlRequest } from "./graphql";
-import { HashpriceCandlesQuery, HashrateIndexQuery } from "./graphql-queries";
+import { HashrateIndexQuery } from "./queries/oracles";
 import { paginateOracleTicks } from "./paginateOracleTicks";
 import { prefetchSeed, withSeedFallback } from "./seed-utils";
-import { hourAggToAverageTick, type HourAggRow } from "./fetchOracleHourAverages";
+import {
+  fetchOracleHourCandles,
+  hourAggToAverageTick,
+  oracleTickToAverage,
+} from "./fetchOracleHourAverages";
 
 const PRICE_SCALE = 10 ** 8;
-const HOUR_PAGE_SIZE = 1000;
 
 const loadHashpriceUsdsSeed = () =>
   import(/* webpackChunkName: "seed-hashprice-usds" */ "../../seed/hashpriceUsds.json").then((m) => m.default);
@@ -46,9 +47,20 @@ type HashrateIndexItem = {
   id: string | number;
 };
 
-type HourOhlcRow = SubgraphHashpriceCandle & HourAggRow;
+/** One tick as a point on the candlestick series. */
+export const hashpriceTickToPrice = (item: { id: string | number; price: string; timestamp: string }) => ({
+  id: item.id,
+  timeMs: subgraphTimestampToMs(item.timestamp),
+  price: Number(item.price) / PRICE_SCALE,
+});
 
-const lineFromAverages = (rows: AverageTick[], intervalMs: number): HashrateIndexPoint[] =>
+/**
+ * Bucket samples into the chart's bars.
+ *
+ * Exported, like its two counterparts on the other series, so the overlay that
+ * keeps the newest bar current builds it exactly as the range behind it does.
+ */
+export const hashpriceLineFromAverages = (rows: AverageTick[], intervalMs: number): HashrateIndexPoint[] =>
   rollupAverageTicks(rows, intervalMs).map((bucket) => ({
     updatedAt: bucket.timeMs,
     updatedAtDate: new Date(bucket.timeMs),
@@ -70,36 +82,21 @@ export async function fetchHashpriceChart(timePeriod: TimePeriod): Promise<Hashp
     ticks = await withSeedFallback(ticks, seedPromise, BigInt(startMicros));
     ticks = ticks.filter((item) => BigInt(item.timestamp) >= BigInt(startMicros));
 
-    const averages: AverageTick[] = ticks.map((item) => ({
-      id: String(item.id),
-      timeMs: subgraphTimestampToMs(item.timestamp),
-      sum: Number(item.price),
-      count: item.price === "0" ? 0 : 1,
-    }));
-
     return {
-      line: lineFromAverages(averages, spec.intervalMs),
-      candles: candlesFromTicks(
-        ticks.map((item) => ({
-          id: item.id,
-          timeMs: subgraphTimestampToMs(item.timestamp),
-          price: Number(item.price) / PRICE_SCALE,
-        })),
+      line: hashpriceLineFromAverages(
+        ticks.map((item) => oracleTickToAverage(item, item.price)),
         spec.intervalMs,
       ),
+      candles: candlesFromTicks(ticks.map(hashpriceTickToPrice), spec.intervalMs),
     };
   }
 
-  const req = await graphqlRequest<{ hashpriceUsdCandles: HourOhlcRow[] }>(
-    HashpriceCandlesQuery,
-    { interval: "hour", first: HOUR_PAGE_SIZE, startTimestamp: startMicros },
-    process.env.REACT_APP_SUBGRAPH_ORACLES_URL,
-  );
+  const req = await fetchOracleHourCandles(startMicros);
   const start = BigInt(startMicros);
   const rows = (req.hashpriceUsdCandles ?? []).filter((row) => BigInt(row.timestamp) >= start);
 
   return {
-    line: lineFromAverages(rows.map(hourAggToAverageTick), spec.intervalMs),
+    line: hashpriceLineFromAverages(rows.map(hourAggToAverageTick), spec.intervalMs),
     candles: rollupHashpriceCandles(mapHashpriceCandles(rows), spec.intervalMs),
   };
 }

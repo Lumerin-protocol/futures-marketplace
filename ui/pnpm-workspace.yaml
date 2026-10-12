@@ -13,6 +13,7 @@ overrides:
 
 allowBuilds:
   '@reown/appkit': true
+  '@swc/core': true
   bufferutil: true
   esbuild: true
   keccak: true

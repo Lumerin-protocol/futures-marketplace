@@ -1,9 +1,8 @@
-import styled from "@mui/material/styles/styled";
-import { css } from "@emotion/react";
+import { styled, css } from "next-yak";
 import { SmallWidget } from "../../Cards/Cards.styled";
 import { type ComponentProps, type CSSProperties, useState, useEffect, useId, useMemo, useRef } from "react";
-import { SliderMark } from "@mui/material/Slider";
-import Tooltip from "@mui/material/Tooltip";
+import { SliderMark } from "../../Slider";
+import { Tooltip } from "../../Tooltip";
 import { tokens } from "../../../styles/tokens";
 import { useAccount } from "wagmi";
 import { useAppKit } from "@reown/appkit/react";
@@ -42,7 +41,7 @@ import {
   OrderTypeRow,
   PriceButton,
   PriceInputContainer,
-  pulseHighlight,
+  highlightedPulse,
   SliderContainer,
   TifDropdown,
 } from "../../Forms/Shared/OrderFields";
@@ -1483,30 +1482,26 @@ export const PlaceOrderWidget = ({
               const sellBlocker = sideBlocker(false);
               return (
                 <>
-                  <Tooltip title={buyBlocker ?? ""} arrow disableHoverListener={!buyBlocker}>
-                    <ButtonSlot>
-                      <BuyButton
-                        onClick={handleBuy}
-                        disabled={showOrderForm}
-                        $isHighlighted={highlightedButton === "buy"}
-                        $isCapped={buyBlocker !== undefined}
-                      >
-                        Bid
-                      </BuyButton>
-                    </ButtonSlot>
-                  </Tooltip>
-                  <Tooltip title={sellBlocker ?? ""} arrow disableHoverListener={!sellBlocker}>
-                    <ButtonSlot>
-                      <SellButton
-                        onClick={handleSell}
-                        disabled={showOrderForm}
-                        $isHighlighted={highlightedButton === "sell"}
-                        $isCapped={sellBlocker !== undefined}
-                      >
-                        Ask
-                      </SellButton>
-                    </ButtonSlot>
-                  </Tooltip>
+                  <ButtonSlot title={buyBlocker ?? ""} arrow disableHoverListener={!buyBlocker}>
+                    <BuyButton
+                      onClick={handleBuy}
+                      disabled={showOrderForm}
+                      $isHighlighted={highlightedButton === "buy"}
+                      $isCapped={buyBlocker !== undefined}
+                    >
+                      Bid
+                    </BuyButton>
+                  </ButtonSlot>
+                  <ButtonSlot title={sellBlocker ?? ""} arrow disableHoverListener={!sellBlocker}>
+                    <SellButton
+                      onClick={handleSell}
+                      disabled={showOrderForm}
+                      $isHighlighted={highlightedButton === "sell"}
+                      $isCapped={sellBlocker !== undefined}
+                    >
+                      Ask
+                    </SellButton>
+                  </ButtonSlot>
                 </>
               );
             })()}
@@ -1875,7 +1870,7 @@ const PlaceOrderContainer = styled(SmallWidget)`
   }
 `;
 
-const MainSection = styled("div")`
+const MainSection = styled.div`
   display: flex;
   width: 100%;
   flex-direction: column;
@@ -1888,7 +1883,7 @@ const MainSection = styled("div")`
   }
 `;
 
-const InputSection = styled("div")`
+const InputSection = styled.div`
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -1896,14 +1891,14 @@ const InputSection = styled("div")`
   width: 100%;
 `;
 
-const _MinMarginLabel = styled("div")`
+const _MinMarginLabel = styled.div`
   font-size: 0.75rem;
   color: ${tokens.text.secondary};
   margin-top: 0.25rem;
   text-align: center;
 `;
 
-const _ExpectedQuantityLabel = styled("div")`
+const _ExpectedQuantityLabel = styled.div`
   font-size: 0.75rem;
   color: ${tokens.accent.main};
   margin-top: 0.25rem;
@@ -1913,13 +1908,15 @@ const _ExpectedQuantityLabel = styled("div")`
 
 
 /** Tooltip anchor: a disabled button fires no pointer events, so the wrapper takes them. */
-const ButtonSlot = styled("span")`
-  display: flex;
+// The tooltip's wrapper span is the flex item in ButtonSection, so it is the
+// thing that has to grow; a `flex: 1` span *inside* it would only fill a
+// shrink-to-fit box and leave Bid/Ask at their 120px minimum.
+const ButtonSlot = styled(Tooltip)`
   flex: 1;
   min-width: 0;
 `;
 
-const ButtonSection = styled("div")`
+const ButtonSection = styled.div`
   gap: 0.75rem;
   flex-shrink: 0;
   align-self: end;
@@ -1949,7 +1946,7 @@ const ButtonSection = styled("div")`
   }
 `;
 
-const BuyButton = styled("button")<{ $isHighlighted?: boolean; $isCapped?: boolean }>`
+const BuyButton = styled.button<{ $isHighlighted?: boolean; $isCapped?: boolean }>`
   width: 100%;
   padding: 0.875rem 1rem;
   background: ${tokens.trading.long};
@@ -1961,7 +1958,7 @@ const BuyButton = styled("button")<{ $isHighlighted?: boolean; $isCapped?: boole
   cursor: pointer;
   transition: transform 0.1s ease;
   min-width: 120px;
-  animation: ${(props) => (props.$isHighlighted ? css`${pulseHighlight} 1.5s ease-in-out infinite` : "none")};
+  ${(props) => props.$isHighlighted && highlightedPulse};
   &:hover:not(:disabled) {
     background: ${tokens.trading.longHover};
     transform: translateY(-1px);
@@ -1991,7 +1988,7 @@ const BuyButton = styled("button")<{ $isHighlighted?: boolean; $isCapped?: boole
     `}
 `;
 
-const SellButton = styled("button")<{ $isHighlighted?: boolean; $isCapped?: boolean }>`
+const SellButton = styled.button<{ $isHighlighted?: boolean; $isCapped?: boolean }>`
   width: 100%;
   padding: 0.875rem 1rem;
   background: ${tokens.trading.short};
@@ -2003,7 +2000,7 @@ const SellButton = styled("button")<{ $isHighlighted?: boolean; $isCapped?: bool
   cursor: pointer;
   transition: transform 0.1s ease;
   min-width: 120px;
-  animation: ${(props) => (props.$isHighlighted ? css`${pulseHighlight} 1.5s ease-in-out infinite` : "none")};
+  ${(props) => props.$isHighlighted && highlightedPulse};
   &:hover:not(:disabled) {
     background: ${tokens.trading.shortHover};
     transform: translateY(-1px);
@@ -2033,7 +2030,7 @@ const SellButton = styled("button")<{ $isHighlighted?: boolean; $isCapped?: bool
     `}
 `;
 
-const OrderSummary = styled("div")`
+const OrderSummary = styled.div`
   width: 100%;
   border: 1px solid ${tokens.border.default};
   border-radius: ${tokens.radius.md};
@@ -2044,7 +2041,7 @@ const OrderSummary = styled("div")`
   background: ${tokens.surface.inputIsland};
 `;
 
-const OrderSummaryRow = styled("div")`
+const OrderSummaryRow = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -2096,7 +2093,7 @@ const CapAwareMark = (props: Record<string, unknown>) => {
 };
 
 /** Same tick as the quarter marks, just coloured for the side it caps. */
-const CapMark = styled("span")<{ $color: string }>`
+const CapMark = styled.span<{ $color: string }>`
   position: absolute;
   top: 50%;
   /* Wider than the visible tick so it can actually be hovered for the tooltip. */
@@ -2119,14 +2116,14 @@ const CapMark = styled("span")<{ $color: string }>`
   }
 `;
 
-const _SliderInfoContainer = styled("div")`
+const _SliderInfoContainer = styled.div`
   display: flex;
   justify-content: center;
   align-items: center;
   margin-top: 0.25rem;
 `;
 
-const _SliderInfo = styled("span")`
+const _SliderInfo = styled.span`
   color: ${tokens.text.primary};
   font-weight: 500;
   text-align: center;

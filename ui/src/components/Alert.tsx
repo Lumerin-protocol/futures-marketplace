@@ -1,6 +1,6 @@
-import Dialog from "@mui/material/Dialog";
 import { tokens } from "../styles/tokens";
 import { ModalBox } from "./Modal.styled";
+import { Modal } from "./Modal";
 
 interface AlertProps {
   message: string;
@@ -11,8 +11,15 @@ interface AlertProps {
 
 export const Alert: React.FC<AlertProps> = ({ message, isOpen, onClose, onClick }) => {
   return (
-    <Dialog open={isOpen} onClose={onClose} PaperProps={{ style: { borderRadius: 8, backgroundColor: tokens.modal.bg, border: `1px solid ${tokens.border.default}` } }}>
-      <ModalBox>
+    <Modal open={isOpen} onClose={() => onClose(false)}>
+      <ModalBox
+        style={{
+          margin: "3rem auto",
+          borderRadius: 8,
+          backgroundColor: tokens.modal.bg,
+          border: `1px solid ${tokens.border.default}`,
+        }}
+      >
         <div className="modal-card">
           <button
             type="button"
@@ -24,7 +31,7 @@ export const Alert: React.FC<AlertProps> = ({ message, isOpen, onClose, onClick 
           </button>
         </div>
       </ModalBox>
-    </Dialog>
+    </Modal>
   );
 };
 

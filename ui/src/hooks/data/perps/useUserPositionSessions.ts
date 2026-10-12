@@ -1,22 +1,28 @@
 import { graphqlRequest } from "../graphql";
-import { useQuery } from "@tanstack/react-query";
-import { UserPositionSessionsQuery } from "./graphql-queries";
+import { sessionIsLong } from "../../../lib/positionDirection";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { UserPositionSessionsQuery } from "../queries/perps";
+import { snapshotFedQueryOptions } from "../snapshot/config";
+import { readViaSnapshot } from "../snapshot/snapshotFed";
 
 export const USER_POSITION_SESSIONS_QK = "UserPositionSessions";
 
-export const useUserPositionSessions = (
-  address: `0x${string}` | undefined,
-  props?: { refetch?: boolean },
-) => {
+/// Also used by `usePerpsSnapshot`, which writes this entry from the same slice.
+export const SESSION_PAGE_SIZE = 100;
+
+/// Kept fresh by `usePerpsSnapshot`, which writes this cache entry directly.
+export const useUserPositionSessions = (address: `0x${string}` | undefined) => {
+  const qc = useQueryClient();
   const query = useQuery({
     queryKey: [USER_POSITION_SESSIONS_QK, address],
     queryFn: () => {
       if (!address) throw new Error("useUserPositionSessions: address is required");
-      return fetchUserPositionSessionsAsync(address);
+      return readViaSnapshot(qc, "perpetual", [USER_POSITION_SESSIONS_QK, address], () =>
+        fetchUserPositionSessionsAsync(address),
+      );
     },
     enabled: !!address,
-    refetchInterval: props?.refetch ? 15_000 : 60_000,
-    refetchOnMount: false,
+    ...snapshotFedQueryOptions,
   });
 
   return query;
@@ -25,9 +31,7 @@ export const useUserPositionSessions = (
 const fetchUserPositionSessionsAsync = async (
   address: `0x${string}`,
 ) => {
-  const variables = {
-    address
-  };
+  const variables = { address, sessionFirst: SESSION_PAGE_SIZE };
 
   const response = await graphqlRequest<UserPositionSessionsResponse>(
     UserPositionSessionsQuery,
@@ -35,41 +39,33 @@ const fetchUserPositionSessionsAsync = async (
     process.env.REACT_APP_SUBGRAPH_PERPS_URL
   );
 
-  const data: UserPositionSessions = {
-    positionSessions: response.positionSessions.map((session) => ({
-      closePrice: session.closePrice ? BigInt(session.closePrice) : null,
-      entryPrice: BigInt(session.entryPrice),
-      closedQuantity: BigInt(session.closedQuantity),
-      liquidatedQuantity: BigInt(session.liquidatedQuantity),
-      fundingFees: BigInt(session.fundingFees),
-      id: session.id,
-      lastTradeAt: session.lastTradeAt,
-      maxQuantity: BigInt(session.maxQuantity),
-      netQuantity: BigInt(session.netQuantity),
-      openedAt: session.openedAt,
-      realizedPnl: BigInt(session.realizedPnl),
-      status: session.status,
-      tradingFees: BigInt(session.tradingFees),
-      user: {
-        id: session.user.id,
-      },
-      trades: session.trades.map((trade) => ({
-        aggregatedEntryPriceAfter: BigInt(trade.aggregatedEntryPriceAfter),
-        blockNumber: Number(trade.blockNumber),
-        id: trade.id,
-        netQuantityAfter: BigInt(trade.netQuantityAfter),
-        realizedPnl: BigInt(trade.realizedPnl),
-        timestamp: trade.timestamp,
-        tradePrice: BigInt(trade.tradePrice),
-        tradeQuantity: BigInt(trade.tradeQuantity),
-        tradingFee: BigInt(trade.tradingFee),
-        transactionHash: trade.transactionHash,
-      })),
-    })),
-  };
-
-  return data;
+  return mapUserPositionSessions(response.sessions);
 };
+
+/// Fed by the `sessions` slice, batched into a venue tick or fetched standalone.
+export const mapUserPositionSessions = (
+  rows: PositionSessionRow[],
+): UserPositionSessions => ({
+  positionSessions: rows.map((session) => ({
+    closePrice: session.closePrice ? BigInt(session.closePrice) : null,
+    entryPrice: BigInt(session.entryPrice),
+    closedQuantity: BigInt(session.closedQuantity),
+    liquidatedQuantity: BigInt(session.liquidatedQuantity),
+    fundingFees: BigInt(session.fundingFees),
+    id: session.id,
+    lastTradeAt: session.lastTradeAt,
+    maxQuantity: BigInt(session.maxQuantity),
+    netQuantity: BigInt(session.netQuantity),
+    openedAt: session.openedAt,
+    realizedPnl: BigInt(session.realizedPnl),
+    status: session.status,
+    tradingFees: BigInt(session.tradingFees),
+    user: {
+      id: session.user.id,
+    },
+    isLong: sessionIsLong(session.netQuantity, session.lastFill[0]),
+  })),
+});
 
 export type UserPositionSessions = {
   positionSessions: PositionSession[];
@@ -93,7 +89,10 @@ export type PositionSession = {
   user: {
     id: string;
   };
-  trades: Trade[];
+  /// Direction of the session, from `sessionIsLong`. `netQuantity` answers this
+  /// while the session is open but is zero once it closes, and `maxQuantity`
+  /// arrives unsigned, so neither can be read for direction on its own.
+  isLong: boolean;
 };
 
 export type Trade = {
@@ -109,35 +108,28 @@ export type Trade = {
   transactionHash: string;
 };
 
-type UserPositionSessionsResponse = {
-  positionSessions: {
-    closePrice: string | null;
-    entryPrice: string;
-    closedQuantity: string;
-    liquidatedQuantity: string;
-    fundingFees: string;
+export type PositionSessionRow = {
+  closePrice: string | null;
+  entryPrice: string;
+  closedQuantity: string;
+  liquidatedQuantity: string;
+  fundingFees: string;
+  id: string;
+  lastTradeAt: string;
+  maxQuantity: string;
+  netQuantity: string;
+  openedAt: string;
+  realizedPnl: string;
+  status: string;
+  tradingFees: string;
+  user: {
     id: string;
-    lastTradeAt: string;
-    maxQuantity: string;
-    netQuantity: string;
-    openedAt: string;
-    realizedPnl: string;
-    status: string;
-    tradingFees: string;
-    user: {
-      id: string;
-    };
-    trades: {
-      aggregatedEntryPriceAfter: string;
-      blockNumber: string;
-      id: string;
-      netQuantityAfter: string;
-      realizedPnl: string;
-      timestamp: string;
-      tradePrice: string;
-      tradeQuantity: string;
-      tradingFee: string;
-      transactionHash: string;
-    }[];
-  }[];
+  };
+  /// One fill, for `sessionIsLong`. The full list is fetched on demand by
+  /// `usePerpsSessionTrades` when the trade-details modal opens.
+  lastFill: { netQuantityAfter: string; tradeQuantity: string }[];
+};
+
+type UserPositionSessionsResponse = {
+  sessions: PositionSessionRow[];
 };

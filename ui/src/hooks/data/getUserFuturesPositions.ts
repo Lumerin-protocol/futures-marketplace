@@ -1,25 +1,29 @@
-import { backgroundRefetchOpts } from "./config";
+import { snapshotFedQueryOptions } from "./snapshot/config";
 import { graphqlRequest } from "./graphql";
-import { type QueryClient, useQuery } from "@tanstack/react-query";
-import type { GetResponse } from "../../gateway/interfaces";
-import { PositionsBookQuery } from "./graphql-queries";
+import { sessionIsLong } from "../../lib/positionDirection";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { PositionsBookQuery } from "./queries/futures";
+import { readViaSnapshot } from "./snapshot/snapshotFed";
 
 export const POSITION_BOOK_QK = "PositionBook";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
-const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`;
 
-export const getUserFuturesPositions = (address: `0x${string}` | undefined, props?: { refetch?: boolean }) => {
+/// Kept fresh by `useFuturesSnapshot`, which writes this cache entry directly.
+export const getUserFuturesPositions = (address: `0x${string}` | undefined) => {
+  const qc = useQueryClient();
   const query = useQuery({
     // Keyed by address so switching wallets cannot serve the previous
     // account's positions out of the cache.
     queryKey: [POSITION_BOOK_QK, address],
     queryFn: () => {
       if (!address) throw new Error("getUserFuturesPositions: address is required");
-      return fetchPositionBookAsync(address);
+      return readViaSnapshot(qc, "futures", [POSITION_BOOK_QK, address], () =>
+        fetchPositionBookAsync(address),
+      );
     },
     enabled: !!address,
-    ...(props?.refetch ? backgroundRefetchOpts : {}),
+    ...snapshotFedQueryOptions,
   });
 
   return query;
@@ -30,44 +34,35 @@ const fetchPositionBookAsync = async (address: `0x${string}`) => {
 
   const response = await graphqlRequest<PositionsBookResponse>(PositionsBookQuery, variables);
 
-  const data: PositionBook = {
-    positions: response.positionSessions.map(sessionToPosition),
-  };
-
   return {
-    data,
+    data: mapPositionBook(response.positions),
     blockNumber: response._meta.block.number,
   };
 };
 
+/// Fed by the `positions` slice, whether it arrived batched into a venue tick
+/// or through the standalone document built from that same slice.
+export const mapPositionBook = (
+  sessions: PositionsBookResponse["positions"],
+): PositionBook => ({
+  positions: sessions.map(sessionToPosition),
+});
+
 /// Collapse one PositionSession into the legacy PositionBookPosition shape so that
 /// existing consumers (PositionsListWidget, Futures.tsx, FuturesTradesModal, …) can
-/// keep treating each row as a buyer/seller pair. Direction is inferred from the
-/// signed sum of trade quantities; the user goes on the matching side and the
-/// counterparty slot is filled with the zero address (sessions don't expose it).
-/// The session's underlying Trade entities are attached as-is so the trades modal
-/// can render real fill rows instead of synthesising them per position.
+/// keep treating each row as a buyer/seller pair. The user goes on the side matching
+/// the direction and the counterparty slot is filled with the zero address (sessions
+/// don't expose it).
+///
+/// Direction comes from `sessionIsLong`. This book only queries open sessions
+/// (`netQuantity_not: 0`), so it always resolves off the net quantity, but it
+/// goes through the shared rule so that the four session mappers cannot disagree.
 const sessionToPosition = (
-  session: PositionsBookResponse["positionSessions"][number],
+  session: PositionsBookResponse["positions"][number],
 ): PositionBookPosition => {
-  const tradeQuantitySum = session.trades.reduce(
-    (acc, t) => acc + Number(t.tradeQuantity),
-    0,
-  );
-  const directionFromTrades =
-    tradeQuantitySum !== 0
-      ? tradeQuantitySum
-      : Number(session.trades[0]?.tradeQuantity ?? 0);
-  const isLong = directionFromTrades >= 0;
+  const isLong = sessionIsLong(session.netQuantity, session.lastFill[0]);
 
   const entryPrice = BigInt(session.entryPrice);
-
-  // Latest trade by timestamp drives the row-level transactionHash so consumers
-  // that key by tx (e.g. FuturesTradesModal grouping) stay deterministic.
-  const latestTrade = session.trades.reduce<PositionsBookResponse["positionSessions"][number]["trades"][number] | undefined>(
-    (latest, t) => (!latest || Number(t.timestamp) > Number(latest.timestamp) ? t : latest),
-    undefined,
-  );
 
   const isActive = session.status === "OPEN";
 
@@ -90,20 +85,17 @@ const sessionToPosition = (
     settledAt,
     closedAt: isActive ? null : session.lastTradeAt,
     closedBy: null,
-    transactionHash: (latestTrade?.transactionHash as `0x${string}`) ?? ZERO_HASH,
     buyer: {
       address: isLong ? (session.user.id as `0x${string}`) : ZERO_ADDRESS,
     },
     seller: {
       address: isLong ? ZERO_ADDRESS : (session.user.id as `0x${string}`),
     },
-    trades: session.trades.map(toFuturesSessionTrade),
   };
 };
 
-/// One Trade row from a PositionSession.trades — the actual on-chain fill events.
-/// Surfaced through PositionBookPosition.trades and HistoricalPosition.trades so
-/// the FuturesTradesModal can render real per-fill rows.
+/// One on-chain fill. Reaches the UI only through `useSessionTrades`, which the
+/// trades modal calls when it opens; no session query carries fills any more.
 export type FuturesSessionTrade = {
   id: string;
   blockNumber: number;
@@ -117,9 +109,21 @@ export type FuturesSessionTrade = {
   transactionHash: `0x${string}`;
 };
 
-export const toFuturesSessionTrade = (
-  trade: PositionsBookResponse["positionSessions"][number]["trades"][number],
-): FuturesSessionTrade => ({
+export type RawSessionTrade = {
+  id: string;
+  blockNumber: string;
+  expirationAt: string;
+  fillCount: number;
+  netQuantityAfter: number;
+  realizedPnl: string;
+  timestamp: string;
+  tradePrice: string;
+  tradeQuantity: number;
+  tradingFee: string;
+  transactionHash: `0x${string}`;
+};
+
+export const toFuturesSessionTrade = (trade: RawSessionTrade): FuturesSessionTrade => ({
   id: trade.id,
   blockNumber: Number(trade.blockNumber),
   fillCount: trade.fillCount,
@@ -132,38 +136,11 @@ export const toFuturesSessionTrade = (
   transactionHash: trade.transactionHash,
 });
 
-export const waitForBlockNumberPositionBook = async (
-  blockNumber: bigint,
-  qc: QueryClient,
-  address: `0x${string}`,
-) => {
-  const delay = 1000;
-  const maxAttempts = 30; // 30 attempts with 1s delay = max 30 seconds wait
-
-  let attempts = 0;
-  while (attempts < maxAttempts) {
-    await new Promise((resolve) => setTimeout(resolve, delay));
-    // Force a fresh fetch of the data
-    await qc.refetchQueries({ queryKey: [POSITION_BOOK_QK, address] });
-
-    const data = qc.getQueryData<GetResponse<PositionBook>>([POSITION_BOOK_QK, address]);
-    const currentBlock = data?.blockNumber;
-
-    if (currentBlock !== undefined && currentBlock >= Number(blockNumber)) {
-      return;
-    }
-    attempts++;
-  }
-
-  throw new Error(`Timeout waiting for block number ${blockNumber}`);
-};
-
 export type PositionBook = {
   positions: PositionBookPosition[];
 };
 
 export type PositionBookPosition = {
-  transactionHash: `0x${string}`;
   timestamp: string;
   expirationAt: string;
   sellPricePerDay: bigint;
@@ -190,9 +167,32 @@ export type PositionBookPosition = {
   seller: {
     address: `0x${string}`;
   };
-  // Underlying on-chain Trade rows from the source PositionSession.
-  // Used by FuturesTradesModal to render real per-fill rows.
-  trades: FuturesSessionTrade[];
+};
+
+export type PositionSessionRow = {
+  id: string;
+  status: string;
+  expirationAt: string;
+  entryPrice: string;
+  closePrice: string;
+  closedQuantity: number;
+  liquidatedQuantity: number;
+  maxQuantity: number;
+  netQuantity: number;
+  openedAt: string;
+  lastTradeAt: string;
+  realizedPnl: string;
+  tradingFees: string;
+  expiration: {
+    settlementPrice: string | null;
+    settledAt: string | null;
+  } | null;
+  /// One fill, for `sessionIsLong`. Always length 1 unless the session has no
+  /// fills at all, which the indexer does not produce.
+  lastFill: { netQuantityAfter: number; tradeQuantity: number }[];
+  user: {
+    id: string;
+  };
 };
 
 type PositionsBookResponse = {
@@ -202,39 +202,5 @@ type PositionsBookResponse = {
       timestamp: string;
     };
   };
-  positionSessions: {
-    id: string;
-    status: string;
-    expirationAt: string;
-    entryPrice: string;
-    closePrice: string;
-    closedQuantity: number;
-    liquidatedQuantity: number;
-    maxQuantity: number;
-    netQuantity: number;
-    openedAt: string;
-    lastTradeAt: string;
-    realizedPnl: string;
-    tradingFees: string;
-    expiration: {
-      settlementPrice: string | null;
-      settledAt: string | null;
-    } | null;
-    user: {
-      id: string;
-    };
-    trades: {
-      id: string;
-      blockNumber: string;
-      expirationAt: string;
-      fillCount: number;
-      netQuantityAfter: number;
-      realizedPnl: string;
-      timestamp: string;
-      tradePrice: string;
-      tradeQuantity: number;
-      tradingFee: string;
-      transactionHash: `0x${string}`;
-    }[];
-  }[];
+  positions: PositionSessionRow[];
 };

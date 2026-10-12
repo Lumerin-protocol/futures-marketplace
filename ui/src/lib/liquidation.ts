@@ -1,4 +1,4 @@
-import styled from "@mui/material/styles/styled";
+import { styled } from "next-yak";
 import { tokens } from "../styles/tokens";
 import type { LiquidationDirection } from "./portfolioMargin";
 import { PAYMENT_TOKEN_SCALE_NUM } from "./units";
@@ -16,7 +16,7 @@ import { PAYMENT_TOKEN_SCALE_NUM } from "./units";
 export const LIQUIDATION_ROW_BG = tokens.trading.shortRowBg;
 
 /** Small red chip flagging a liquidated row/order. Consumer supplies the label. */
-export const LiquidationChip = styled("span")`
+export const LiquidationChip = styled.span`
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
@@ -32,7 +32,7 @@ const ACCOUNT_WIDE_NOTE =
 
 /**
  * Spells out the level from `pickLiquidationLevel` for the header stat and the
- * positions-table column. Returns a plain string, so it works equally in a MUI
+ * positions-table column. Returns a plain string, so it works equally in a
  * `Tooltip` and a native `title` attribute.
  *
  * Wording is "can be liquidated" rather than "is liquidated": crossing the

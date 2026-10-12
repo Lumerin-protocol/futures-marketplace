@@ -1,7 +1,4 @@
 import { useCallback, useEffect } from "react";
-import Modal from "@mui/material/Modal";
-import CloseIcon from "@mui/icons-material/Close";
-import IconButton from "@mui/material/IconButton";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
 import type { TransactionReceipt } from "viem";
@@ -24,6 +21,8 @@ import type { AccountBalance, ContractMode } from "../../../types/types";
 import { TransactionFormV2 as TransactionForm } from "../../Forms/Shared/MultistepForm";
 import { showAlert, showConfirm } from "../../AlertModal";
 import { usePerpsOrderForm, PerpsOrderFormFields, PerpsModalCard } from "./PerpsOrderFormFields";
+import { Modal } from "../../Modal";
+import { ModalCloseButton, ModalCloseIcon } from "../../Modal.styled";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -286,9 +285,9 @@ export const ModifyFuturesOrderModal = ({
   return (
     <Modal open={open} onClose={handleClose}>
       <PerpsModalCard>
-        <IconButton className="close" sx={{ color: "white" }} onClick={handleClose}>
-          <CloseIcon />
-        </IconButton>
+        <ModalCloseButton className="close" onClick={handleClose}>
+          <ModalCloseIcon />
+        </ModalCloseButton>
 
         <TransactionForm
           onClose={handleClose}

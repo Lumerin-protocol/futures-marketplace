@@ -1,5 +1,6 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { backgroundRefetchOpts, indexGcTimeMs } from "./config";
+import { subgraphRetryOptions } from "./subgraphRetry";
 import { fetchHashpriceChart, HASHPRICE_CHART_QK } from "./fetchHashpriceChart";
 import { chartRangeSpec, type TimePeriod } from "../../lib/chartBars";
 
@@ -19,6 +20,7 @@ export const useHashrateIndexData = (props?: { refetch?: boolean; timePeriod?: T
     placeholderData: keepPreviousData,
     staleTime: chartRangeSpec(timePeriod).intervalMs,
     gcTime: indexGcTimeMs,
+    ...subgraphRetryOptions,
     ...(props?.refetch ? backgroundRefetchOpts : {}),
   });
 };
