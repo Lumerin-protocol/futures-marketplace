@@ -4,7 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { tokens } from "../../../styles/tokens";
 import { useIsMobileTradingLayout } from "./mobile/mobileTradingLayout";
 import type { OrderBookRow } from "./ClassicOrderBook";
-import { computeBookCenter, formatMidPrice } from "./orderBookHelpers";
+import { computeBookCenter, formatMidOrderPrice, formatMidPrice } from "./orderBookHelpers";
 import type { ContractMode } from "../../../types/types";
 
 interface VolumeOrderBookProps {
@@ -12,6 +12,7 @@ interface VolumeOrderBookProps {
   contractMode?: ContractMode;
   onRowClick?: (price: string, amount: number | null) => void;
   marketPrice: number | null;
+  minimumPriceIncrement?: number | null;
 }
 
 // Fixed row height (px). Used both for the styled rows and as the virtualizer's
@@ -47,6 +48,7 @@ export const VolumeOrderBook = ({
   rows,
   onRowClick,
   marketPrice,
+  minimumPriceIncrement,
 }: VolumeOrderBookProps) => {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   // Separate hover tooltip for the center (market-price) row.
@@ -234,6 +236,12 @@ export const VolumeOrderBook = ({
     if (row.isCenterRow) {
       return (
         <CenterRow
+          $clickable={center.mid != null}
+          onClick={() => {
+            if (center.mid != null) {
+              onRowClick?.(formatMidOrderPrice(center.mid, minimumPriceIncrement), null);
+            }
+          }}
           onMouseEnter={(e) =>
             !isMobile && setCenterTooltip({ x: e.clientX, y: e.clientY })
           }
@@ -668,7 +676,7 @@ const Tooltip = styled("div")`
   }
 `;
 
-const CenterRow = styled("div")`
+const CenterRow = styled("div")<{ $clickable?: boolean }>`
   display: flex;
   align-items: center;
   gap: 0.6rem;
@@ -677,6 +685,11 @@ const CenterRow = styled("div")`
   background-color: ${tokens.surface.inputIsland};
   border-top: 1px solid ${tokens.overlay.white10};
   border-bottom: 1px solid ${tokens.overlay.white10};
+  cursor: ${(props) => (props.$clickable ? "pointer" : "default")};
+
+  &:hover {
+    background-color: ${(props) => (props.$clickable ? tokens.overlay.white10 : tokens.surface.inputIsland)};
+  }
 
   .best {
     display: inline-flex;

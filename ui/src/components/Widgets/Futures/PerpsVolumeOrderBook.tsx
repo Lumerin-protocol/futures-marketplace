@@ -3,7 +3,7 @@ import styled from "@mui/material/styles/styled";
 import { tokens } from "../../../styles/tokens";
 import { useIsMobileTradingLayout } from "./mobile/mobileTradingLayout";
 import type { OrderBookRow } from "./ClassicOrderBook";
-import { computeBookCenter, formatMidPrice } from "./orderBookHelpers";
+import { computeBookCenter, formatMidOrderPrice, formatMidPrice } from "./orderBookHelpers";
 import type { ContractMode } from "../../../types/types";
 
 interface PerpsVolumeOrderBookProps {
@@ -305,6 +305,12 @@ export const PerpsVolumeOrderBook = ({
 
       <CenterRow
         ref={centerRef}
+        $clickable={center.mid != null}
+        onClick={() => {
+          if (center.mid != null) {
+            onRowClick?.(formatMidOrderPrice(center.mid, minimumPriceIncrement), null);
+          }
+        }}
         onMouseEnter={(e) =>
           !isMobile && setCenterTooltip({ x: e.clientX, y: e.clientY })
         }
@@ -572,7 +578,7 @@ const Tooltip = styled("div")`
   }
 `;
 
-const CenterRow = styled("div")`
+const CenterRow = styled("div")<{ $clickable?: boolean }>`
   display: flex;
   align-items: center;
   gap: 0.6rem;
@@ -581,6 +587,11 @@ const CenterRow = styled("div")`
   background-color: ${tokens.surface.inputIsland};
   border-top: 1px solid ${tokens.overlay.white10};
   border-bottom: 1px solid ${tokens.overlay.white10};
+  cursor: ${(props) => (props.$clickable ? "pointer" : "default")};
+
+  &:hover {
+    background-color: ${(props) => (props.$clickable ? tokens.overlay.white10 : tokens.surface.inputIsland)};
+  }
 
   .best {
     display: inline-flex;

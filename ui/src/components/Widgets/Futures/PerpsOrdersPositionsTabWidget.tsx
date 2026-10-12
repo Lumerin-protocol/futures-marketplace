@@ -1259,7 +1259,7 @@ const TabSwitchWrapper = styled("div")`
 
   button {
     font-size: 0.875rem;
-    padding: 0.1em 0.5em;
+    padding-inline: 0.5em;
   }
 `;
 
