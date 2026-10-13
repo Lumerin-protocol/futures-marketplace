@@ -25,7 +25,7 @@ describe("indexer outage grace period", () => {
   it("does not show the toast when a request succeeds within the grace period", async () => {
     const { reportIndexerFailure, reportIndexerSuccess, toastShown } = await loadModule();
     reportIndexerFailure();
-    vi.advanceTimersByTime(10_000);
+    vi.advanceTimersByTime(5_000);
     reportIndexerSuccess();
     vi.advanceTimersByTime(60_000);
     expect(toastShown()).toBe(false);
@@ -34,7 +34,7 @@ describe("indexer outage grace period", () => {
   it("shows the toast once the outage lasts the full grace period", async () => {
     const { reportIndexerFailure, toastShown } = await loadModule();
     reportIndexerFailure();
-    vi.advanceTimersByTime(29_999);
+    vi.advanceTimersByTime(14_999);
     expect(toastShown()).toBe(false);
     vi.advanceTimersByTime(1);
     expect(toastShown()).toBe(true);
@@ -43,9 +43,9 @@ describe("indexer outage grace period", () => {
   it("does not restart the timer on repeated failures", async () => {
     const { reportIndexerFailure, toastShown } = await loadModule();
     reportIndexerFailure();
-    vi.advanceTimersByTime(20_000);
-    reportIndexerFailure();
     vi.advanceTimersByTime(10_000);
+    reportIndexerFailure();
+    vi.advanceTimersByTime(5_000);
     expect(toastShown()).toBe(true);
   });
 });

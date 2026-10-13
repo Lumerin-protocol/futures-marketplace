@@ -55,7 +55,7 @@ export const notifyIndexerOutage = (): void => {
   setToastVisible(true);
 };
 
-const OUTAGE_GRACE_MS = 30_000;
+const OUTAGE_GRACE_MS = 15_000;
 let outageTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Shows the outage toast only if no indexer request succeeds within `OUTAGE_GRACE_MS` of the first failure. */
