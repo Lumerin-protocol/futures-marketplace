@@ -131,19 +131,20 @@ export const fetchPerpsSnapshot = async (
   const slices = slicesForTick(groups);
   if (slices.length === 0) return { blockNumber: 0, groups };
 
+  const variables = {
+    address: address?.toLowerCase() ?? "",
+    statuses: ACTIVE_PERPS_ORDER_STATUSES,
+    bookFirst: BOOK_PAGE_SIZE,
+    bookLastId: "",
+    sessionFirst: SESSION_PAGE_SIZE,
+    tradesFirst: RECENT_TRADES_DEFAULT_FIRST,
+    liquidationsFirst: LIQUIDATIONS_FIRST,
+    cutoff,
+  };
   const response = await onTheSchedule("perpetual", groups, startedAt, () =>
     graphqlRequest<PerpsSnapshotResponse>(
       buildDocument("PerpsTick", slices),
-      {
-        address: address?.toLowerCase() ?? "",
-        statuses: ACTIVE_PERPS_ORDER_STATUSES,
-        bookFirst: BOOK_PAGE_SIZE,
-        bookLastId: "",
-        sessionFirst: SESSION_PAGE_SIZE,
-        tradesFirst: RECENT_TRADES_DEFAULT_FIRST,
-        liquidationsFirst: LIQUIDATIONS_FIRST,
-        cutoff,
-      },
+      variables,
       process.env.REACT_APP_SUBGRAPH_PERPS_URL,
     ),
   );

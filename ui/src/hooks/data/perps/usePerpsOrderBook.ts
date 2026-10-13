@@ -38,23 +38,39 @@ export const mapPerpsPriceLevels = (rows: PerpsPriceLevelRow[]): PerpsPriceLevel
 /// snapshot response.
 export const fetchPerpsOrderBookAsync = async () => {
   const priceLevels: PerpsPriceLevel[] = [];
+  const rawRows: PerpsPriceLevelRow[] = [];
+  const requestParams: { bookFirst: number; bookLastId: string }[] = [];
   let lastId = "";
   let blockNumber = 0;
+  let pages = 0;
 
   while (true) {
+    const params = { bookFirst: PAGE_SIZE, bookLastId: lastId };
+    requestParams.push(params);
     const response = await graphqlRequest<PerpsOrderBookResponse>(
       PerpsOrderBookQuery,
-      { bookFirst: PAGE_SIZE, bookLastId: lastId },
+      params,
       process.env.REACT_APP_SUBGRAPH_PERPS_URL,
     );
 
     blockNumber = response._meta.block.number;
+    pages++;
 
+    rawRows.push(...response.book);
     priceLevels.push(...mapPerpsPriceLevels(response.book));
 
     if (response.book.length < PAGE_SIZE) break;
     lastId = response.book[response.book.length - 1].id;
   }
+
+  console.debug("[PerpsOrderBook] indexer (paginated)", {
+    url: process.env.REACT_APP_SUBGRAPH_PERPS_URL,
+    params: requestParams,
+    blockNumber,
+    pages,
+    count: rawRows.length,
+    rows: rawRows,
+  });
 
   const data: PerpsOrderBook = { priceLevels };
 

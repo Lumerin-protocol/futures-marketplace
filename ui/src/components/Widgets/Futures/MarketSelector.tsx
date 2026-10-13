@@ -137,6 +137,7 @@ const MarketSelect = styled(Select)`
 const TriggerLogo = styled(HpdxLogomark)`
   display: block;
   flex-shrink: 0;
+  margin-right: 10px;
   height: 30px;
   width: 30px;
 
