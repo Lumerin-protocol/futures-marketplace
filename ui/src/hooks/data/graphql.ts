@@ -1,5 +1,5 @@
 import { request } from "graphql-request";
-import { classifyIndexerError, notifyIndexerOutage } from "./indexerErrors";
+import { classifyIndexerError, reportIndexerFailure, reportIndexerSuccess } from "./indexerErrors";
 
 export const graphqlRequest = async <T>(
   query: string,
@@ -7,11 +7,13 @@ export const graphqlRequest = async <T>(
   url: string = process.env.REACT_APP_SUBGRAPH_FUTURES_URL,
 ): Promise<T> => {
   try {
-    return await request<T>(url, query, { ...variables });
+    const result = await request<T>(url, query, { ...variables });
+    reportIndexerSuccess();
+    return result;
   } catch (error) {
     if (classifyIndexerError(error) === "outage") {
       console.error(`[indexer] request to ${url} failed:`, error);
-      notifyIndexerOutage();
+      reportIndexerFailure();
     }
     throw error;
   }

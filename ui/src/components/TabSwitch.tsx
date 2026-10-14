@@ -1,8 +1,6 @@
-import FormControl from "@mui/material/FormControl";
-import MenuItem from "@mui/material/MenuItem";
-import Select from "@mui/material/Select";
-import styled from "@mui/material/styles/styled";
-import useMediaQuery from "@mui/material/useMediaQuery";
+import { styled } from "next-yak";
+import { MenuItem, Select } from "./Select";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { tokens } from "../styles/tokens";
 
 type Props<T> = {
@@ -21,47 +19,34 @@ export const TabSwitch = <T extends string>(props: Props<T>) => {
   const { values, value, setValue } = props;
   const numTabs = values.length;
   const activeIndex = values.findIndex((v) => v.value === value);
-  const isMobile = useMediaQuery("(max-width: 768px)", { noSsr: true });
+  const isMobile = useMediaQuery("(max-width: 768px)");
 
   if (isMobile) {
     return (
-      <MobileTabSelectWrap fullWidth size="small">
-        <MobileTabSelect
-          value={value}
-          onChange={(e) => setValue(e.target.value as T)}
-          displayEmpty
-          renderValue={(selected) => {
-            const v = values.find((x) => x.value === selected);
-            if (!v) return null;
-            return (
-              <MobileTabSelectValue>
-                <span>{v.text}</span>
-                <MobileCountBadge>{v.count}</MobileCountBadge>
-              </MobileTabSelectValue>
-            );
-          }}
-          MenuProps={{
-            PaperProps: {
-              sx: {
-                bgcolor: tokens.surface.card,
-                color: tokens.text.onDark,
-                border: `1px solid ${tokens.border.default}`,
-                borderRadius: tokens.radius.md,
-                maxHeight: 320,
-              },
-            },
-          }}
-        >
-          {values.map((val) => (
-            <MenuItem value={val.value} key={val.value} sx={{ fontSize: "0.875rem" }}>
-              <MobileMenuItemInner>
-                <span>{val.text}</span>
-                <MobileCountBadge>{val.count}</MobileCountBadge>
-              </MobileMenuItemInner>
-            </MenuItem>
-          ))}
-        </MobileTabSelect>
-      </MobileTabSelectWrap>
+      <MobileTabSelect
+        fullWidth
+        value={value}
+        onChange={(e) => setValue(e.target.value as T)}
+        renderValue={(selected) => {
+          const v = values.find((x) => x.value === selected);
+          if (!v) return null;
+          return (
+            <MobileTabSelectValue>
+              <span>{v.text}</span>
+              <MobileCountBadge>{v.count}</MobileCountBadge>
+            </MobileTabSelectValue>
+          );
+        }}
+      >
+        {values.map((val) => (
+          <MenuItem value={val.value} key={val.value}>
+            <MobileMenuItemInner>
+              <span>{val.text}</span>
+              <MobileCountBadge>{val.count}</MobileCountBadge>
+            </MobileMenuItemInner>
+          </MenuItem>
+        ))}
+      </MobileTabSelect>
     );
   }
 
@@ -80,52 +65,32 @@ export const TabSwitch = <T extends string>(props: Props<T>) => {
       ))}
 
       {numTabs === 2 && <span className="glider" />}
-      {numTabs > 2 && <span className="multi-glider" style={{ left: `calc(${activeIndex * (100 / numTabs)}% + 3px)` }} />}
+      {numTabs > 2 && (
+        <span className="multi-glider" style={{ left: `calc(3px + (100% - 6px) * ${activeIndex} / ${numTabs})` }} />
+      )}
     </TabSwitchStyled>
   );
 };
 
-const MobileTabSelectWrap = styled(FormControl)`
+const MobileTabSelect = styled(Select)`
   width: 100%;
   min-width: 0;
-`;
 
-const MobileTabSelect = styled(Select)`
-  border-radius: ${tokens.radius.md};
-
-  & .MuiOutlinedInput-root {
+  .select-trigger {
     border-radius: ${tokens.radius.md};
     background-color: ${tokens.surface.mobileTabBgAlpha};
-  }
-
-  & .MuiOutlinedInput-notchedOutline {
     border-color: ${tokens.border.default};
-  }
-
-  &:hover .MuiOutlinedInput-notchedOutline {
-    border-color: ${tokens.brand.blue};
-  }
-
-  &.Mui-focused .MuiOutlinedInput-notchedOutline {
-    border-color: ${tokens.brand.blue};
-    border-width: 2px;
-  }
-
-  & .MuiSelect-select {
-    display: flex;
-    align-items: center;
     padding-top: 0.65rem;
     padding-bottom: 0.65rem;
-    color: ${tokens.text.onDark};
     font-weight: 500;
-  }
 
-  & .MuiSvgIcon-root {
-    color: ${tokens.text.onDarkMuted};
+    &:hover:not(:disabled) {
+      border-color: ${tokens.brand.blue};
+    }
   }
 `;
 
-const MobileTabSelectValue = styled("span")`
+const MobileTabSelectValue = styled.span`
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -134,7 +99,7 @@ const MobileTabSelectValue = styled("span")`
   padding-right: 0.25rem;
 `;
 
-const MobileMenuItemInner = styled("span")`
+const MobileMenuItemInner = styled.span`
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -142,7 +107,7 @@ const MobileMenuItemInner = styled("span")`
   gap: 0.75rem;
 `;
 
-const MobileCountBadge = styled("span")`
+const MobileCountBadge = styled.span`
   display: flex;
   align-items: center;
   justify-content: center;
@@ -156,13 +121,13 @@ const MobileCountBadge = styled("span")`
   flex-shrink: 0;
 `;
 
-export const TabSwitchStyled = styled("div")<{ $numTabs: number }>`
+export const TabSwitchStyled = styled.div<{ $numTabs: number }>`
   display: inline-grid;
   grid-template-columns: ${(props) => `repeat(${props.$numTabs}, 1fr)`};
-  align-items: center;
+  align-items: stretch;
   border: 1px solid ${tokens.border.default};
   color: ${tokens.text.onDark};
-  padding: 0.7rem 0.25rem;
+  padding: 3px;
   border-radius: ${tokens.radius.md};
   position: relative;
 
@@ -172,11 +137,16 @@ export const TabSwitchStyled = styled("div")<{ $numTabs: number }>`
     justify-content: center;
     font-size: 0.875rem;
     font-weight: 500;
-    border-radius: ${tokens.radius.full};
+    border-radius: ${tokens.radius.sm};
     cursor: pointer;
     transition: color 0.15s ease-in;
     z-index: 2;
-    padding: 0.1em 0.7em;
+    padding: calc(0.7rem - 3px + 0.1em) 0.7em;
+    outline: none;
+
+    &:focus-visible {
+      box-shadow: inset 0 0 0 2px ${tokens.brand.blue};
+    }
 
     @media (max-width: 500px) {
       font-size: 0.75rem;
@@ -208,7 +178,7 @@ export const TabSwitchStyled = styled("div")<{ $numTabs: number }>`
   }
 
   .entry:last-of-type.active + .glider {
-    transform: translateX(calc(100% + 6px));
+    transform: translateX(100%);
   }
 
   .active > span {
@@ -222,7 +192,7 @@ export const TabSwitchStyled = styled("div")<{ $numTabs: number }>`
     top: 3px;
     left: 3px;
     bottom: 3px;
-    width: calc(50% - 6px);
+    width: calc(50% - 3px);
     background-color: ${tokens.surface.tabActive};
     z-index: 1;
     border-radius: ${tokens.radius.sm};
@@ -234,7 +204,7 @@ export const TabSwitchStyled = styled("div")<{ $numTabs: number }>`
     display: flex;
     top: 3px;
     bottom: 3px;
-    width: calc(${(props) => 100 / props.$numTabs}% - 6px);
+    width: calc((100% - 6px) / ${(props) => props.$numTabs});
     background-color: ${tokens.surface.tabActive};
     z-index: 1;
     border-radius: ${tokens.radius.sm};

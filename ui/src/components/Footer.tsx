@@ -3,12 +3,9 @@ import { faRedditAlien } from "@fortawesome/free-brands-svg-icons/faRedditAlien"
 import { faXTwitter } from "@fortawesome/free-brands-svg-icons/faXTwitter";
 import { faYoutube } from "@fortawesome/free-brands-svg-icons/faYoutube";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import BusinessIcon from "@mui/icons-material/Business";
-import FlagCircleIcon from "@mui/icons-material/FlagCircle";
-import HelpIcon from "@mui/icons-material/Help";
-import ShieldIcon from "@mui/icons-material/Shield";
-import styled from "@mui/material/styles/styled";
+import { styled } from "next-yak";
 import { tokens } from "../styles/tokens";
+import { BusinessIcon, FlagCircleIcon, HelpIcon, ShieldIcon } from "./icons";
 
 const socials = [
   { label: "Facebook", link: "https://www.facebook.com/share/1J74GJvw5W/?mibextid=wwXIfr", icon: faFacebookF },
@@ -40,7 +37,7 @@ export const Footer = () => {
                 onClick={item.href ? undefined : (event) => event.preventDefault()}
                 key={item.label}
               >
-                <item.icon style={{ fill: tokens.accent.main, fontSize: "20px" }} />
+                <item.icon style={{ color: tokens.accent.main, fontSize: "20px" }} />
                 <span>{item.label}</span>
               </ResourceLink>
             ))}
@@ -68,13 +65,13 @@ export const Footer = () => {
   );
 };
 
-const FooterWrapper = styled("footer")`
+const FooterWrapper = styled.footer`
   width: 100%;
   margin-top: auto;
   padding: 2rem 0;
 `;
 
-const FooterContent = styled("div")`
+const FooterContent = styled.div`
   max-width: 1920px;
   margin: 0 auto;
   padding: 0 1.5rem;
@@ -91,7 +88,7 @@ const FooterContent = styled("div")`
   }
 `;
 
-const _SectionTitle = styled("h3")`
+const _SectionTitle = styled.h3`
   color: ${tokens.text.onDark};
   font-size: 0.875rem;
   font-weight: 600;
@@ -100,12 +97,12 @@ const _SectionTitle = styled("h3")`
   letter-spacing: 0.05em;
 `;
 
-const LeftSection = styled("div")`
+const LeftSection = styled.div`
   display: flex;
   flex-direction: column;
 `;
 
-const LinksRow = styled("div")`
+const LinksRow = styled.div`
   display: flex;
   gap: 1.5rem;
   flex-wrap: wrap;
@@ -115,7 +112,7 @@ const LinksRow = styled("div")`
   }
 `;
 
-const ResourceLink = styled("a")<{ $disabled: boolean }>`
+const ResourceLink = styled.a<{ $disabled: boolean }>`
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -131,7 +128,7 @@ const ResourceLink = styled("a")<{ $disabled: boolean }>`
   }
 `;
 
-const RightSection = styled("div")`
+const RightSection = styled.div`
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -142,7 +139,7 @@ const RightSection = styled("div")`
   }
 `;
 
-const SocialsRow = styled("div")`
+const SocialsRow = styled.div`
   display: flex;
   justify-content: flex-end;
   flex-wrap: wrap;
@@ -154,7 +151,7 @@ const SocialsRow = styled("div")`
   }
 `;
 
-const SocialLink = styled("a")`
+const SocialLink = styled.a`
   display: flex;
   align-items: center;
   justify-content: center;
@@ -172,7 +169,7 @@ const SocialLink = styled("a")`
   }
 `;
 
-const VersionText = styled("div")`
+const VersionText = styled.div`
   font-size: 0.75rem;
   color: ${tokens.text.footerSubtle};
   margin-top: 1rem;

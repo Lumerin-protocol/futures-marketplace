@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import styled from "@mui/material/styles/styled";
+import { styled } from "next-yak";
 import { tokens } from "../../../styles/tokens";
 import { useIsMobileTradingLayout } from "./mobile/mobileTradingLayout";
 import type { OrderBookRow } from "./ClassicOrderBook";
-import { computeBookCenter, formatMidPrice } from "./orderBookHelpers";
+import { computeBookCenter, formatMidOrderPrice, formatMidPrice } from "./orderBookHelpers";
 import type { ContractMode } from "../../../types/types";
 
 interface PerpsVolumeOrderBookProps {
@@ -305,6 +305,12 @@ export const PerpsVolumeOrderBook = ({
 
       <CenterRow
         ref={centerRef}
+        $clickable={center.mid != null}
+        onClick={() => {
+          if (center.mid != null) {
+            onRowClick?.(formatMidOrderPrice(center.mid, minimumPriceIncrement), null);
+          }
+        }}
         onMouseEnter={(e) =>
           !isMobile && setCenterTooltip({ x: e.clientX, y: e.clientY })
         }
@@ -399,7 +405,7 @@ export const PerpsVolumeOrderBook = ({
 
 // The 437px floor matches the desktop OrderBookArea. The mobile layout sizes the
 // book from its own slot, so the floor is dropped there to avoid overflowing it.
-const Container = styled("div")<{ $compact?: boolean }>`
+const Container = styled.div<{ $compact?: boolean }>`
   width: 100%;
   height: 100%;
   display: flex;
@@ -407,7 +413,7 @@ const Container = styled("div")<{ $compact?: boolean }>`
 `;
 
 // `$compact` is the mobile-only two-column variant (Price / Size, no Total).
-const ColumnHeader = styled("div")<{ $compact?: boolean }>`
+const ColumnHeader = styled.div<{ $compact?: boolean }>`
   display: grid;
   grid-template-columns: ${(props) =>
     props.$compact ? "1.2fr 1fr" : "1fr 1fr 1fr"};
@@ -437,7 +443,7 @@ const ColumnHeader = styled("div")<{ $compact?: boolean }>`
 
 // Asks fill the space above the center row, stacked so the best (lowest) ask
 // sits just above the market-price row even when there are only a few levels.
-const AskSection = styled("div")`
+const AskSection = styled.div`
   flex: 1 0 auto;
   display: flex;
   flex-direction: column;
@@ -446,14 +452,14 @@ const AskSection = styled("div")`
 
 // Bids fill the space below the center row, anchored to the top so the best
 // (highest) bid sits just below the market-price row.
-const BidSection = styled("div")`
+const BidSection = styled.div`
   flex: 1 0 auto;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
 `;
 
-const Row = styled("div")<{
+const Row = styled.div<{
   $side: "ask" | "bid";
   $highlight?: boolean;
   $empty?: boolean;
@@ -476,13 +482,14 @@ const Row = styled("div")<{
   border-bottom: 1px solid transparent;
   opacity: ${(props) => (props.$empty ? 0.35 : 1)};
 
-  ${(props) =>
-    props.$highlight &&
-    `box-shadow: inset 0 0 8px ${
-      props.$side === "ask"
-        ? tokens.trading.shortHighlightGlow
-        : tokens.trading.longHighlightGlow
-    };`}
+  box-shadow: ${(props) =>
+    props.$highlight
+      ? `inset 0 0 8px ${
+          props.$side === "ask"
+            ? tokens.trading.shortHighlightGlow
+            : tokens.trading.longHighlightGlow
+        }`
+      : "none"};
 
   &:hover {
     background: ${tokens.overlay.white10};
@@ -491,7 +498,7 @@ const Row = styled("div")<{
 
 // Dim background layer represents the cumulative Total. Rendered behind the
 // bright layer, anchored to the right edge.
-const DimLayer = styled("div")<{ $side: "ask" | "bid"; $width: number }>`
+const DimLayer = styled.div<{ $side: "ask" | "bid"; $width: number }>`
   position: absolute;
   top: 0;
   bottom: 0;
@@ -505,7 +512,7 @@ const DimLayer = styled("div")<{ $side: "ask" | "bid"; $width: number }>`
 `;
 
 // Bright background layer represents the current Size at this price level.
-const BrightLayer = styled("div")<{ $side: "ask" | "bid"; $width: number }>`
+const BrightLayer = styled.div<{ $side: "ask" | "bid"; $width: number }>`
   position: absolute;
   top: 0;
   bottom: 0;
@@ -518,7 +525,7 @@ const BrightLayer = styled("div")<{ $side: "ask" | "bid"; $width: number }>`
       : tokens.trading.longHighlightBg};
 `;
 
-const PriceCol = styled("span")<{ $side: "ask" | "bid" }>`
+const PriceCol = styled.span<{ $side: "ask" | "bid" }>`
   position: relative;
   z-index: 2;
   text-align: left;
@@ -526,21 +533,21 @@ const PriceCol = styled("span")<{ $side: "ask" | "bid" }>`
     props.$side === "ask" ? tokens.trading.short : tokens.trading.long};
 `;
 
-const SizeCol = styled("span")`
+const SizeCol = styled.span`
   position: relative;
   z-index: 2;
   text-align: right;
   color: ${tokens.text.onDark};
 `;
 
-const TotalCol = styled("span")`
+const TotalCol = styled.span`
   position: relative;
   z-index: 2;
   text-align: right;
   color: ${tokens.text.onDark};
 `;
 
-const Tooltip = styled("div")`
+const Tooltip = styled.div`
   position: fixed;
   z-index: 1000;
   pointer-events: none;
@@ -572,7 +579,7 @@ const Tooltip = styled("div")`
   }
 `;
 
-const CenterRow = styled("div")`
+const CenterRow = styled.div<{ $clickable?: boolean }>`
   display: flex;
   align-items: center;
   gap: 0.6rem;
@@ -581,6 +588,11 @@ const CenterRow = styled("div")`
   background-color: ${tokens.surface.inputIsland};
   border-top: 1px solid ${tokens.overlay.white10};
   border-bottom: 1px solid ${tokens.overlay.white10};
+  cursor: ${(props) => (props.$clickable ? "pointer" : "default")};
+
+  &:hover {
+    background-color: ${(props) => (props.$clickable ? tokens.overlay.white10 : tokens.surface.inputIsland)};
+  }
 
   .best {
     display: inline-flex;

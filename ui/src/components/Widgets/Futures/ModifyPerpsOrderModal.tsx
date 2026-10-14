@@ -1,7 +1,4 @@
 import { useEffect, useCallback } from "react";
-import Modal from "@mui/material/Modal";
-import CloseIcon from "@mui/icons-material/Close";
-import IconButton from "@mui/material/IconButton";
 import type { PerpsOrder } from "../../../hooks/data/perps/useUserPerpsOrders";
 import { useUpdatePerpsOrders } from "../../../hooks/data/perps/useUpdatePerpsOrders";
 import { useQueryClient } from "@tanstack/react-query";
@@ -21,6 +18,8 @@ import {
   PerpsModalCard,
 } from "./PerpsOrderFormFields";
 import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE_NUM } from "../../../lib/units";
+import { Modal } from "../../Modal";
+import { ModalCloseButton, ModalCloseIcon } from "../../Modal.styled";
 
 interface ModifyPerpsOrderModalProps {
   open: boolean;
@@ -160,9 +159,9 @@ export const ModifyPerpsOrderModal = ({
   return (
     <Modal open={open} onClose={handleClose}>
       <PerpsModalCard>
-        <IconButton className="close" sx={{ color: "white" }} onClick={handleClose}>
-          <CloseIcon />
-        </IconButton>
+        <ModalCloseButton className="close" onClick={handleClose}>
+          <ModalCloseIcon />
+        </ModalCloseButton>
 
         <TransactionForm
           onClose={handleClose}

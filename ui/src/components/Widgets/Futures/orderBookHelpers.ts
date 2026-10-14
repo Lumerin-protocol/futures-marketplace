@@ -44,6 +44,15 @@ export const formatMidPrice = (mid: number): string =>
   Math.abs(mid) < 1 ? mid.toFixed(4) : mid.toFixed(2);
 
 /**
+ * Book mid as an orderable price: the mid of best bid/ask can fall between
+ * ticks (e.g. 3.015), so snap it to the tick grid when the tick size is known.
+ */
+export const formatMidOrderPrice = (mid: number, minimumPriceIncrement?: number | null): string => {
+  if (!minimumPriceIncrement || minimumPriceIncrement <= 0) return formatMidPrice(mid);
+  return formatMidPrice(Math.round(mid / minimumPriceIncrement) * minimumPriceIncrement);
+};
+
+/**
  * Per-price aggregated row consumed by the order-book renderer. Both futures
  * `priceLevels` and perps `priceLevels` get reduced to this shape upstream.
  */

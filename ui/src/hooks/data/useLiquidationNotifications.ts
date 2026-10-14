@@ -1,13 +1,14 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useUserTrades } from "./perps/useUserTrades";
-import { useUserFuturesTrades } from "./useUserFuturesTrades";
+import { refreshVenueViews } from "./refreshVenueViews";
+import { useUserLiquidations } from "./useUserLiquidations";
 
 /**
- * Polls both products' trade feeds (perps + futures) at 15s for forced
- * `isLiquidation` rows and diffs them against a per-address `localStorage`
- * watermark, so the user gets an in-app toast the first time one of their
- * positions is liquidated — without re-alerting on every refetch or replaying
- * the historical backlog on first load.
+ * Polls both products' liquidation feeds (perps + futures) at 15s and diffs them
+ * against a per-address `localStorage` watermark, so the user gets an in-app
+ * toast the first time one of their positions is liquidated — without
+ * re-alerting on every refetch or replaying the historical backlog on first
+ * load.
  *
  * Not unit-tested (manual verification only, per the liquidation-UI plan).
  */
@@ -38,30 +39,15 @@ function writeSeen(address: string, seen: Set<string>): void {
 }
 
 export function useLiquidationNotifications(address?: `0x${string}`) {
-  const perps = useUserTrades(address, { refetch: true });
-  const futures = useUserFuturesTrades(address, { refetch: true });
+  const queryClient = useQueryClient();
+  const { futures, perps } = useUserLiquidations(address);
   const [notifications, setNotifications] = useState<LiquidationNotification[]>([]);
   const initializedFor = useRef<string | null>(null);
 
-  const liquidations = useMemo<LiquidationNotification[]>(() => {
-    const perpsLiq = (perps.data ?? [])
-      .filter((t) => t.isLiquidation)
-      .map((t) => ({
-        id: t.id,
-        product: "perps" as const,
-        timestamp: t.timestamp,
-        liquidator: t.liquidator,
-      }));
-    const futuresLiq = (futures.data ?? [])
-      .filter((t) => t.isLiquidation)
-      .map((t) => ({
-        id: t.id,
-        product: "futures" as const,
-        timestamp: t.timestamp,
-        liquidator: t.liquidator,
-      }));
-    return [...perpsLiq, ...futuresLiq];
-  }, [perps.data, futures.data]);
+  const liquidations = useMemo<LiquidationNotification[]>(
+    () => [...(perps.data ?? []), ...(futures.data ?? [])],
+    [perps.data, futures.data],
+  );
 
   useEffect(() => {
     if (!address) {
@@ -72,7 +58,7 @@ export function useLiquidationNotifications(address?: `0x${string}`) {
 
     // Wait for both feeds to settle their first fetch before priming the
     // watermark, otherwise a late-arriving backlog would all read as "new".
-    if (perps.loading || futures.loading) return;
+    if (perps.isPending || futures.isPending) return;
 
     const seen = readSeen(address);
 
@@ -93,7 +79,14 @@ export function useLiquidationNotifications(address?: `0x${string}`) {
     for (const liq of fresh) next.add(liq.id);
     writeSeen(address, next);
     setNotifications((prev) => [...fresh, ...prev]);
-  }, [address, liquidations, perps.loading, futures.loading]);
+
+    // A keeper liquidation is not the user's own transaction, so none of the
+    // post-tx invalidation paths fire for it. Refresh the affected venue here so
+    // the orders/positions/history views reflect the forced close.
+    for (const product of new Set(fresh.map((liq) => liq.product))) {
+      refreshVenueViews(queryClient, product === "perps" ? "perpetual" : "futures", address);
+    }
+  }, [address, liquidations, perps.isPending, futures.isPending, queryClient]);
 
   const dismiss = (id: string) =>
     setNotifications((prev) => prev.filter((n) => n.id !== id));
