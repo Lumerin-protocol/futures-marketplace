@@ -64,6 +64,17 @@ export default defineConfig({
         },
       },
     ],
+    // The futures proxy is already deployed without viaIR. Keep it pinned
+    // when the implementation compiler moves.
+    overrides: {
+      "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol": {
+        version: "0.8.30",
+        settings: {
+          optimizer: { enabled: true, runs: 200 },
+          evmVersion: "paris",
+        },
+      },
+    },
   },
   verify: {
     etherscan: {
