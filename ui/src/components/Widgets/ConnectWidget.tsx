@@ -7,6 +7,7 @@ import { ChainIcon } from "../../config/chains";
 import { useEffect, useRef } from "react";
 import { truncateAddress } from "../../utils/formatters";
 import { tokens } from "../../styles/tokens";
+import { TESTIDS } from "../../testids";
 
 type Props = {
   onConnect?: () => void;
@@ -30,7 +31,7 @@ export const AccountButton = (props: Props) => {
 
   if (address) {
     return (
-      <Button type="button" onClick={() => open({ view: "Account" })}>
+      <Button type="button" onClick={() => open({ view: "Account" })} data-testid={TESTIDS.accountButton}>
         {/* Avatar (marble palette) omitted */}
         <WuiAvatar address={address} />
         {truncateAddress(address, addressLength)}
@@ -44,6 +45,7 @@ export const AccountButton = (props: Props) => {
         open({ view: "Connect" });
         shouldRedirect.current = true;
       }}
+      data-testid={TESTIDS.accountButton}
     >
       Connect wallet
     </Button>
@@ -56,7 +58,7 @@ export const ChainButton = (props?: { hideName?: boolean }) => {
 
   return (
     ChainIcon && (
-      <Button type="button" onClick={() => open({ view: "Networks" })}>
+      <Button type="button" onClick={() => open({ view: "Networks" })} data-testid={TESTIDS.chainButton}>
         {/* SVG width/height attrs require unitless px (or %), not rem */}
         <ChainIcon width={24} height={24} />
         {!props?.hideName && chain?.name}

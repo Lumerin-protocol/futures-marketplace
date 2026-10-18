@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { styled } from "next-yak";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { tokens } from "../../../styles/tokens";
+import { TESTIDS } from "../../../testids";
 import { useIsMobileTradingLayout } from "./mobile/mobileTradingLayout";
 import type { OrderBookRow } from "./ClassicOrderBook";
 import { computeBookCenter, formatMidOrderPrice, formatMidPrice } from "./orderBookHelpers";
@@ -237,6 +238,9 @@ export const VolumeOrderBook = ({
       return (
         <CenterRow
           $clickable={center.mid != null}
+          data-testid={TESTIDS.orderBookCenter}
+          data-best-bid={center.bestBid ?? undefined}
+          data-best-ask={center.bestAsk ?? undefined}
           onClick={() => {
             if (center.mid != null) {
               onRowClick?.(formatMidOrderPrice(center.mid, minimumPriceIncrement), null);
@@ -286,6 +290,10 @@ export const VolumeOrderBook = ({
           $side={side}
           $empty
           $compact={isMobile}
+          data-testid={TESTIDS.orderBookRow}
+          data-side={side}
+          data-price={formatPrice(row.price)}
+          data-quantity={0}
           onClick={() => onRowClick?.(formatPrice(row.price), null)}
         >
           <PriceCol $side={side}>{formatPrice(row.price)}</PriceCol>
@@ -328,6 +336,10 @@ export const VolumeOrderBook = ({
         $side={side}
         $highlight={highlight}
         $compact={isMobile}
+        data-testid={TESTIDS.orderBookRow}
+        data-side={side}
+        data-price={formatPrice(row.price)}
+        data-quantity={depth.quantity}
         onClick={() => onRowClick?.(formatPrice(row.price), units ?? null)}
         onMouseEnter={showTooltip}
         onMouseMove={showTooltip}

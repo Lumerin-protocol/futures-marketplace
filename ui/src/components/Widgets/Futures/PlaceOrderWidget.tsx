@@ -4,6 +4,7 @@ import { type ComponentProps, type CSSProperties, useState, useEffect, useId, us
 import { SliderMark } from "../../Slider";
 import { Tooltip } from "../../Tooltip";
 import { tokens } from "../../../styles/tokens";
+import { TESTIDS } from "../../../testids";
 import { useAccount } from "wagmi";
 import { useAppKit } from "@reown/appkit/react";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
@@ -1282,7 +1283,7 @@ export const PlaceOrderWidget = ({
 
   return (
     <>
-      <PlaceOrderContainer>
+      <PlaceOrderContainer data-testid={TESTIDS.placeOrderWidget}>
         {/* <h2>Place Order</h2> */}
 
         <MainSection>

@@ -2,6 +2,7 @@ import { type FC, type KeyboardEvent, type ReactNode, useEffect, useRef, useStat
 import { createPortal } from "react-dom";
 import { styled } from "next-yak";
 import { tokens } from "../styles/tokens";
+import { TESTIDS } from "../testids";
 import { ModalCard, ModalCloseButton, ModalCloseIcon } from "./Modal.styled";
 
 interface OverlayProps {
@@ -161,7 +162,7 @@ export const Modal = ({
   if (!mounted) return null;
 
   return createPortal(
-    <Root $zIndex={zIndex}>
+    <Root $zIndex={zIndex} data-testid={TESTIDS.modal}>
       <Backdrop $entered={entered} aria-hidden />
       <Container
         ref={containerRef}
