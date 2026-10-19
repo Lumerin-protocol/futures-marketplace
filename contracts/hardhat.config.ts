@@ -53,16 +53,6 @@ export default defineConfig({
           viaIR: true,
         },
       },
-      {
-        // multicall3 has a strict `pragma solidity 0.8.12;`
-        version: "0.8.12",
-        settings: {
-          optimizer: {
-            enabled: true,
-            runs: 10_000_000,
-          },
-        },
-      },
     ],
   },
   verify: {
