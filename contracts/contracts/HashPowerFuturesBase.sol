@@ -13,6 +13,7 @@ import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/in
 import { IPointsHook } from "collateral-margin/contracts/contracts/interfaces/IPointsHook.sol";
 import { PriceLadderLib } from "./libs/PriceLadderLib.sol";
 import { MathLib as M } from "./libs/MathLib.sol";
+import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /// @title HashPowerFuturesBase — storage layout and internal helpers for {HashPowerFutures}
 /// @dev Owns the full UUPS storage layout (declaration order is part of the layout — do not reorder).
@@ -21,6 +22,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableSet for EnumerableSet.Bytes32Set;
     using StructuredLinkedList for StructuredLinkedList.List;
+    using SafeCast for uint256;
 
     // ── Storage (declaration order is part of the UUPS layout — do not reorder) ──
 
@@ -162,6 +164,11 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     ///      and stresses it as int256. 1e24 contracts per order across every listed expiry
     ///      keeps that sum far below 2^255, so the cast can never wrap.
     uint256 internal constant MAX_ORDER_QUANTITY = 1e24;
+    /// @notice Largest order price accepted, in token decimals (~$1e24 per contract).
+    /// @dev Oracle-independent, so it binds even when the feed is unusable. Keeps every
+    ///      price-derived `int256` (entry value, PnL, fees) far below 2^255, so a price can
+    ///      never wrap into an attacker-chosen negative trade value.
+    uint256 internal constant MAX_PRICE = 1e30;
     uint256 internal constant BPS = 10_000; // Basis points denominator
     /// @notice Hard ceiling on |makerFeeBps| and |takerFeeBps|: 100 bps (1%).
     /// @dev Keeps a trading fee at most a fifth of the 5% MM spot shock, so the argument
@@ -534,11 +541,11 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         _applyFill(_taker, takerFillQty, _price, _expirationAt, _taker != BACKSTOP);
 
         uint256 notional = _price * fill;
-        int256 makerFeeAmt = int256(notional) * int256(makerFeeBps) / int256(BPS);
+        int256 makerFeeAmt = notional.toInt256() * int256(makerFeeBps) / int256(BPS);
         // The backstop is unfunded by design: charging it would only emit a fee `BadDebt`
         // on every unwind fill. Its exits are paid for out of the fee pot via the unwind
         // fee instead. A maker rebate on such a fill is still capped at the pot.
-        int256 takerFeeAmt = _taker == BACKSTOP ? int256(0) : int256(notional) * int256(takerFeeBps) / int256(BPS);
+        int256 takerFeeAmt = _taker == BACKSTOP ? int256(0) : notional.toInt256() * int256(takerFeeBps) / int256(BPS);
         _chargeMatchFees(makerParticipant, _taker, makerFeeAmt, takerFeeAmt);
         _notifyFill(_pointsHook, makerParticipant, _taker, notional, makerFeeAmt, takerFeeAmt, _price, _refPrice);
 
@@ -654,14 +661,14 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
 
         if (netQty == 0) {
             participantExpirationAtNetDelta[_user][_expirationAt] = _signedQty;
-            participantExpirationAtNetEntryValue[_user][_expirationAt] = _signedQty * int256(_tradePrice);
+            participantExpirationAtNetEntryValue[_user][_expirationAt] = _signedQty * _tradePrice.toInt256();
             participantActiveExpirationAts[_user].add(_expirationAt);
             return 0;
         }
 
         if (M.isSameSign(netQty, _signedQty)) {
             participantExpirationAtNetDelta[_user][_expirationAt] = netQty + _signedQty;
-            participantExpirationAtNetEntryValue[_user][_expirationAt] = netEntry + _signedQty * int256(_tradePrice);
+            participantExpirationAtNetEntryValue[_user][_expirationAt] = netEntry + _signedQty * _tradePrice.toInt256();
             return 0;
         }
 
@@ -677,7 +684,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         if (closedAbs < absNet) {
             remainingEntryValue = netEntry * int256(absNet - closedAbs) / int256(absNet);
         }
-        pnl = int256(_tradePrice) * signedClosed - (netEntry - remainingEntryValue);
+        pnl = _tradePrice.toInt256() * signedClosed - (netEntry - remainingEntryValue);
         if (!_transferPnl(_insuranceFundAccount(), _user, pnl) && _mustPay) revert InsufficientMarginBalance();
 
         if (absDq < absNet) {
@@ -693,7 +700,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
             // Flip: open remainder at trade price
             int256 openQty = _signedQty + netQty; // leftover in dq's direction
             participantExpirationAtNetDelta[_user][_expirationAt] = openQty;
-            participantExpirationAtNetEntryValue[_user][_expirationAt] = openQty * int256(_tradePrice);
+            participantExpirationAtNetEntryValue[_user][_expirationAt] = openQty * _tradePrice.toInt256();
             // still active (non-zero)
         }
     }
@@ -1016,7 +1023,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     }
 
     function _validatePrice(uint256 _price) internal pure {
-        if (_price == 0) revert InvalidPrice();
+        if (_price == 0 || _price > MAX_PRICE) revert InvalidPrice();
         if (_price % minimumPriceIncrement != 0) revert InvalidPrice();
     }
 
