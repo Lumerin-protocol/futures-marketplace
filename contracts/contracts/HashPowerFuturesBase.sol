@@ -157,6 +157,11 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     uint8 public constant QUANTITY_DECIMALS = 0;
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION = 100;
     uint256 public constant MAX_PRICE_LEVELS_PER_SIDE = 200;
+    /// @notice Largest |quantity| a single order may carry, in whole contracts.
+    /// @dev The margin engine lifts summed order quantity to WAD (×1e18 from whole contracts)
+    ///      and stresses it as int256. 1e24 contracts per order across every listed expiry
+    ///      keeps that sum far below 2^255, so the cast can never wrap.
+    uint256 internal constant MAX_ORDER_QUANTITY = 1e24;
     uint256 internal constant BPS = 10_000; // Basis points denominator
     /// @notice Hard ceiling on |makerFeeBps| and |takerFeeBps|: 100 bps (1%).
     /// @dev Keeps a trading fee at most a fifth of the 5% MM spot shock, so the argument
@@ -1007,7 +1012,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     }
 
     function _validateQty(int256 _qty) internal pure {
-        if (_qty == 0) revert InvalidQty();
+        if (_qty == 0 || M.abs(_qty) > MAX_ORDER_QUANTITY) revert InvalidQty();
     }
 
     function _validatePrice(uint256 _price) internal pure {
