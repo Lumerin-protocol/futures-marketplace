@@ -7,6 +7,7 @@ import { ICollateralVault } from "collateral-margin/contracts/contracts/interfac
 import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/interfaces/IPortfolioMarginEngine.sol";
 import { IPointsHook } from "collateral-margin/contracts/contracts/interfaces/IPointsHook.sol";
 import { HashPowerFuturesBase } from "./HashPowerFuturesBase.sol";
+import { MathLib as M } from "./libs/MathLib.sol";
 
 /// @title HashPowerFuturesAdmin — owner-only governance surface for {HashPowerFutures}
 /// @notice Every entry point here is `onlyOwner`, plus the UUPS upgrade authorization
@@ -162,6 +163,27 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
                 delete participantExpirationAtNetEntryValue[participant][date];
                 dates.remove(date);
             }
+        }
+    }
+
+    /// @notice Recompute `Σ price²·qty` from the canonical resting orders of each
+    ///         (participant, expiry) pair.
+    /// @dev Upgrade migration for 6.10: orders resting before it carry no moments, and removing
+    ///      one would underflow. Run it, in the upgrade batch, for every pair holding orders —
+    ///      expired-but-unswept ones included — before anything else touches the book.
+    function rebuildOrderMoments(address[] calldata _users, uint256[] calldata _expirationAts) external onlyOwner {
+        if (_users.length != _expirationAts.length) revert ArrayLengthMismatch();
+        for (uint256 i = 0; i < _users.length; i++) {
+            EnumerableSet.Bytes32Set storage ids = participantExpirationAtOrderIdsIndex[_users[i]][_expirationAts[i]];
+            OrderMoments memory moments;
+            uint256 len = ids.length();
+            for (uint256 j = 0; j < len; j++) {
+                Order storage order = orders[ids.at(j)];
+                uint256 p2q = order.price * order.price * M.abs(order.quantity);
+                if (order.quantity > 0) moments.buyP2Q += p2q;
+                else moments.sellP2Q += p2q;
+            }
+            participantExpirationAtOrderMoments[_users[i]][_expirationAts[i]] = moments;
         }
     }
 

@@ -22,7 +22,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev Lives here rather than in {HashPowerFuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `HashPowerFutures.sol` to require a bump.
-    string public constant VERSION = "6.9.0";
+    string public constant VERSION = "6.10.0";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) { }
@@ -531,69 +531,51 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     ///      case a venue-local credit cannot, where the offsetting position sits elsewhere.
     function getRiskView(address _participant) external view returns (ILinearMarket.RiskView memory view_) {
         (int256 liveDelta, int256 liveEntryValue, int256 pinnedPnl) = _positionRiskInputs(_participant);
-        (
-            OrderAggregate memory orders_,
-            uint256 liveBuyQty,
-            uint256 liveSellQty,
-            uint256 pinnedBuyMark,
-            uint256 pinnedSellMark
-        ) = _restingRiskInputs(_participant);
+        uint256 livePrice = liveDelta != 0 ? getMarketPrice() : 0;
+        uint256 buyQty;
+        uint256 sellQty;
+        (buyQty, sellQty, view_.buyOrderFillLoss, view_.sellOrderFillLoss, livePrice) =
+            _restingRiskInputs(_participant, livePrice);
 
-        uint256 livePrice;
-        if (liveDelta != 0 || liveBuyQty != 0 || liveSellQty != 0) {
-            livePrice = getMarketPrice();
-        }
         uint256 scale = 10 ** collateralDecimals;
         view_.netPositionDelta = liveDelta * int256(scale);
         view_.unrealizedPnl = pinnedPnl + int256(livePrice) * liveDelta - liveEntryValue;
-        view_.buyOrderDelta = orders_.buyQty * scale;
-        view_.sellOrderDelta = orders_.sellQty * scale;
-
-        uint256 buyMark = pinnedBuyMark + livePrice * liveBuyQty;
-        uint256 sellMark = pinnedSellMark + livePrice * liveSellQty;
-        if (orders_.buyValue > buyMark) view_.buyOrderFillLoss = orders_.buyValue - buyMark;
-        if (sellMark > orders_.sellValue) view_.sellOrderFillLoss = sellMark - orders_.sellValue;
+        view_.buyOrderDelta = buyQty * scale;
+        view_.sellOrderDelta = sellQty * scale;
     }
 
-    /// @notice Total resting order notional per side at the orders' own limit prices
-    ///         (token decimals).
+    /// @notice Resting order quantity per side and the instant fill loss if any subset of it
+    ///         fills (token decimals).
     /// @dev One pass over the fixed currently tradable delivery window. Historical
     ///      aggregates are never traversed and therefore cannot increase margin-call gas.
     ///
-    ///      The fill-loss clamp is applied per side across all expiries rather than per
-    ///      expiry — the less conservative of the two, and consistent with this venue
-    ///      already collapsing every expiry into a single `netPositionDelta` and ignoring
-    ///      calendar-spread risk.
-    function _restingRiskInputs(address _participant)
+    ///      The fill loss is bounded per expiry at that expiry's price (pinned settlement or
+    ///      live mark) and summed, never netted across orders: fills go best price first, so
+    ///      a deep order must never offset a marketable one's loss. The live mark is read
+    ///      only once a live exposure is found, and returned for reuse.
+    function _restingRiskInputs(address _participant, uint256 _livePrice)
         private
         view
-        returns (
-            OrderAggregate memory orders_,
-            uint256 liveBuyQty,
-            uint256 liveSellQty,
-            uint256 pinnedBuyMark,
-            uint256 pinnedSellMark
-        )
+        returns (uint256 buyQty, uint256 sellQty, uint256 buyLoss, uint256 sellLoss, uint256 livePrice)
     {
+        livePrice = _livePrice;
         (uint256[] memory expirationAts, uint256 activeCount) = _activeOrderExpirations(_participant);
         for (uint256 i = 0; i < activeCount;) {
             uint256 expirationAt = expirationAts[i];
             OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_participant][expirationAt];
-            uint256 buyQty = aggregate.buyQty;
-            uint256 sellQty = aggregate.sellQty;
-            orders_.buyQty += buyQty;
-            orders_.sellQty += sellQty;
-            orders_.buyValue += aggregate.buyValue;
-            orders_.sellValue += aggregate.sellValue;
+            OrderMoments storage moments = participantExpirationAtOrderMoments[_participant][expirationAt];
+            uint256 expBuyQty = aggregate.buyQty;
+            uint256 expSellQty = aggregate.sellQty;
+            buyQty += expBuyQty;
+            sellQty += expSellQty;
 
-            uint256 pinnedPrice = expirationAt <= block.timestamp ? settlementPrice[expirationAt] : 0;
-            if (pinnedPrice == 0) {
-                liveBuyQty += buyQty;
-                liveSellQty += sellQty;
-            } else {
-                pinnedBuyMark += pinnedPrice * buyQty;
-                pinnedSellMark += pinnedPrice * sellQty;
+            uint256 price = expirationAt <= block.timestamp ? settlementPrice[expirationAt] : 0;
+            if (price == 0) {
+                if (livePrice == 0) livePrice = getMarketPrice();
+                price = livePrice;
             }
+            buyLoss += M.fillLossBound(expBuyQty, aggregate.buyValue, moments.buyP2Q, price, true);
+            sellLoss += M.fillLossBound(expSellQty, aggregate.sellValue, moments.sellP2Q, price, false);
             unchecked {
                 ++i;
             }

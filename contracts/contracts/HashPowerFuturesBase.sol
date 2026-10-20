@@ -142,6 +142,16 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     ///      historical bits never require a keeper sweep and never increase risk-view gas.
     mapping(address => mapping(uint256 => uint256)) internal participantOrderExpirationBitmap;
 
+    /// @notice `Σ price²·qty` of a participant's remaining resting orders at one expiry, per
+    ///         side. With `OrderAggregate`'s `Σqty` and `Σprice·qty` it sizes the fill-loss bound.
+    struct OrderMoments {
+        uint256 buyP2Q;
+        uint256 sellP2Q;
+    }
+
+    /// @dev Appended at the storage tail in 6.10. Never move above `participantOrderExpirationBitmap`.
+    mapping(address => mapping(uint256 => OrderMoments)) internal participantExpirationAtOrderMoments;
+
     // immutable
     ICollateralVault public immutable vault;
     uint8 internal immutable collateralDecimals;
@@ -164,11 +174,12 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     ///      and stresses it as int256. 1e24 contracts per order across every listed expiry
     ///      keeps that sum far below 2^255, so the cast can never wrap.
     uint256 internal constant MAX_ORDER_QUANTITY = 1e24;
-    /// @notice Largest order price accepted, in token decimals (~$1e24 per contract).
+    /// @notice Largest order price accepted, in token decimals (~$1e12 per contract).
     /// @dev Oracle-independent, so it binds even when the feed is unusable. Keeps every
     ///      price-derived `int256` (entry value, PnL, fees) far below 2^255, so a price can
-    ///      never wrap into an attacker-chosen negative trade value.
-    uint256 internal constant MAX_PRICE = 1e30;
+    ///      never wrap into an attacker-chosen negative trade value, and keeps the
+    ///      `Σ price²·qty` order moment within uint256.
+    uint256 internal constant MAX_PRICE = 1e18;
     uint256 internal constant BPS = 10_000; // Basis points denominator
     /// @notice Hard ceiling on |makerFeeBps| and |takerFeeBps|: 100 bps (1%).
     /// @dev Keeps a trading fee at most a fifth of the 5% MM spot shock, so the argument
@@ -367,13 +378,17 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     {
         uint256 absQty = M.abs(_quantity);
         OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_participant][_expirationAt];
+        OrderMoments storage moments = participantExpirationAtOrderMoments[_participant][_expirationAt];
         bool wasEmpty = aggregate.buyQty == 0 && aggregate.sellQty == 0;
+        uint256 pq = _price * absQty;
         if (_quantity > 0) {
             aggregate.buyQty += absQty;
-            aggregate.buyValue += _price * absQty;
+            aggregate.buyValue += pq;
+            moments.buyP2Q += pq * _price;
         } else {
             aggregate.sellQty += absQty;
-            aggregate.sellValue += _price * absQty;
+            aggregate.sellValue += pq;
+            moments.sellP2Q += pq * _price;
         }
         if (wasEmpty) {
             _setOrderExpirationActive(_participant, _expirationAt, true);
@@ -388,12 +403,16 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         bool _isBuy
     ) internal {
         OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_participant][_expirationAt];
+        OrderMoments storage moments = participantExpirationAtOrderMoments[_participant][_expirationAt];
+        uint256 pq = _price * _absQty;
         if (_isBuy) {
             aggregate.buyQty -= _absQty;
-            aggregate.buyValue -= _price * _absQty;
+            aggregate.buyValue -= pq;
+            moments.buyP2Q -= pq * _price;
         } else {
             aggregate.sellQty -= _absQty;
-            aggregate.sellValue -= _price * _absQty;
+            aggregate.sellValue -= pq;
+            moments.sellP2Q -= pq * _price;
         }
         if (aggregate.buyQty == 0 && aggregate.sellQty == 0) {
             _setOrderExpirationActive(_participant, _expirationAt, false);

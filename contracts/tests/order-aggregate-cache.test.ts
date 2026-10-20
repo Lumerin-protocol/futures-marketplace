@@ -318,7 +318,7 @@ describe("Futures per-expiration order aggregate cache", () => {
     );
   });
 
-  it("matches scan-based risk values with one global clamp per side", async () => {
+  it("bounds fill loss per expiry without netting across expiries", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller } = accounts;
@@ -362,8 +362,10 @@ describe("Futures per-expiration order aggregate cache", () => {
     const risk = await futures.read.getRiskView([seller.account.address]);
     assert.equal(risk.buyOrderDelta, 2n * unit);
     assert.equal(risk.sellOrderDelta, 2n * unit);
-    assert.equal(risk.buyOrderFillLoss, unit);
-    assert.equal(risk.sellOrderFillLoss, unit);
+    // The bid 10 above the mark fills alone (best price first); the one 9 below cannot
+    // offset it. Single level per expiry, so the bound is exact. Asks mirror.
+    assert.equal(risk.buyOrderFillLoss, 10n * unit);
+    assert.equal(risk.sellOrderFillLoss, 10n * unit);
     assert.deepEqual(await getOrderAggregate(futures, seller.account.address), {
       buyQty: 2n,
       sellQty: 2n,
