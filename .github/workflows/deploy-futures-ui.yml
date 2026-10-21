@@ -284,10 +284,6 @@ jobs:
           put REACT_APP_URL "${{ needs.setup.outputs.marketplace_url }}"
           put REACT_APP_VERSION "$VERSION"
           put DEV_SERVER_HTTPS "false"
-          # Public measurement ID. Only the production exchange sends Analytics.
-          if [ "$ENV" = "main" ]; then
-            put REACT_APP_GA_MEASUREMENT_ID "G-Q8DW7DCLH1"
-          fi
           echo "------------------------------"
 
       - name: Install dependencies
