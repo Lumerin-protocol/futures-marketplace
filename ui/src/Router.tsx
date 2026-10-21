@@ -6,6 +6,7 @@ import { safeLazy } from "./utils/safeLazy";
 // already on screen the instant the app mounts — only the page body below
 // (Futures/Leaderboard, which pull in charts, forms, etc.) needs its own
 // loading state.
+import { Analytics } from "./components/Analytics";
 import { DefaultLayout } from "./components/Layouts/DefaultLayout";
 import { Web3ProviderLazy } from "./Web3ProviderLazy";
 import { PageSpinner } from "./components/Spinner.styled";
@@ -23,6 +24,7 @@ export const Router: FC = () => {
     // which pull in wagmi/charts/forms — is what suspends, showing a spinner
     // in that one spot until its chunk loads.
     <DefaultLayout>
+      <Analytics />
       <Suspense fallback={<PageSpinner />}>
         <Routes>
           {/* One trading element for both modes so futures↔perps only updates the

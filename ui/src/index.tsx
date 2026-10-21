@@ -8,12 +8,15 @@ import { BrowserRouter } from "react-router";
 import { App } from "./App";
 import { ErrorPage } from "./components/ErrorPage";
 import { createRoot } from "react-dom/client";
+import { startAnalytics } from "./lib/analytics";
 
 const ErrorFallback = ({ error }: FallbackProps) => {
   return <ErrorPage error={error instanceof Error ? error : new Error(String(error))} />;
 };
 
 const errorHandler = (_error: unknown, _info: ErrorInfo) => {};
+
+startAnalytics();
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {
