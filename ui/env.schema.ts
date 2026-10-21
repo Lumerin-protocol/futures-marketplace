@@ -16,6 +16,7 @@ export const EnvSchema = Type.Object({
   }),
   REACT_APP_FUTURES_HIGH_PRICE_PERCENTAGE: Type.Integer({ minimum: 0, maximum: 300, default: 50 }),
   REACT_APP_FUTURES_TOKEN_ADDRESS: TypeEthAddress(),
+  REACT_APP_GA_MEASUREMENT_ID: Type.String({ pattern: "^(G-[A-Z0-9]+)?$", default: "" }),
   REACT_APP_GITBOOK_URL: Type.String({ format: "uri" }),
   REACT_APP_MARKET_MAKER_ADDRESS: Type.Optional(TypeEthAddress()),
   REACT_APP_MULTICALL_ADDRESS: Type.Optional(TypeEthAddress()),
