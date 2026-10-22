@@ -1051,6 +1051,19 @@ export const HashPowerFuturesAbi = [
         "internalType": "address[]",
         "name": "_users",
         "type": "address[]"
+      }
+    ],
+    "name": "forceCancelOrders",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address[]",
+        "name": "_users",
+        "type": "address[]"
       },
       {
         "internalType": "uint256[]",
@@ -1729,19 +1742,6 @@ export const HashPowerFuturesAbi = [
   {
     "inputs": [],
     "name": "renounceOwnership",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address[]",
-        "name": "_participants",
-        "type": "address[]"
-      }
-    ],
-    "name": "resetState",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

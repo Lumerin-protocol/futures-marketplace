@@ -298,12 +298,15 @@ export async function filterUsersWithPhysicalOrders(
   futuresAddress: Address,
   candidates: readonly Address[],
   readConcurrency: number,
+  blockNumber?: bigint,
 ): Promise<Address[]> {
+  const block = blockNumber === undefined ? {} : { blockNumber };
   const sorted = sortAddresses(candidates);
   const expirationAts = await readContract(pc, {
     address: futuresAddress,
     abi: ORDER_CACHE_ABI,
     functionName: "getExpirationDates",
+    ...block,
   });
   if (expirationAts.length === 0) return [];
 
@@ -314,6 +317,7 @@ export async function filterUsersWithPhysicalOrders(
         abi: ORDER_CACHE_ABI,
         functionName: "getUserOrdersAtExpiration",
         args: [user, expirationAt],
+        ...block,
       }),
     );
     return perExpiry.flat();
@@ -403,23 +407,64 @@ export async function discoverFromIndexer(
   return { addresses: sortAddresses(addresses), indexedBlock };
 }
 
+export type OrderSlot = { participant: Address; expirationAt: bigint };
+
+type EventScanOptions = {
+  startBlock: bigint;
+  endBlock: bigint;
+  initialChunkSize: bigint;
+  onProgress?: (from: bigint, to: bigint, participants: number) => void;
+  onRetry?: (from: bigint, to: bigint, nextChunk: bigint, error: unknown) => void;
+};
+
 export async function discoverFromEvents(
   pc: PublicClient,
   futuresAddress: Address,
-  options: {
-    startBlock: bigint;
-    endBlock: bigint;
-    initialChunkSize: bigint;
-    onProgress?: (from: bigint, to: bigint, participants: number) => void;
-    onRetry?: (from: bigint, to: bigint, nextChunk: bigint, error: unknown) => void;
-  },
+  options: EventScanOptions,
 ): Promise<Address[]> {
+  const addresses = new Set<Address>();
+  await scanOrderCreated(pc, futuresAddress, options, (participant) => {
+    addresses.add(participant);
+    return addresses.size;
+  });
+  return sortAddresses(addresses);
+}
+
+/**
+ * One `OrderCreated` pass returning every participant plus each (participant, expiry) pair
+ * whose expiry is at or before `expiredBefore`. Expired orders sit outside the tradable window,
+ * so these pairs are the only way to find the ones still resting.
+ */
+export async function discoverOrderSlotsFromEvents(
+  pc: PublicClient,
+  futuresAddress: Address,
+  options: EventScanOptions & { expiredBefore: bigint },
+): Promise<{ participants: Address[]; expiredSlots: OrderSlot[] }> {
+  const participants = new Set<Address>();
+  const expiredSlots = new Map<string, OrderSlot>();
+  await scanOrderCreated(pc, futuresAddress, options, (participant, expirationAt) => {
+    participants.add(participant);
+    if (expirationAt !== undefined && expirationAt <= options.expiredBefore) {
+      expiredSlots.set(`${participant}:${expirationAt}`, { participant, expirationAt });
+    }
+    return participants.size;
+  });
+  return { participants: sortAddresses(participants), expiredSlots: [...expiredSlots.values()] };
+}
+
+/** Walks `OrderCreated` newest-first, halving the window on RPC rejection and growing it back. */
+async function scanOrderCreated(
+  pc: PublicClient,
+  futuresAddress: Address,
+  options: EventScanOptions,
+  visit: (participant: Address, expirationAt: bigint | undefined) => number,
+): Promise<void> {
   if (options.initialChunkSize <= 0n) {
     throw new Error("EVENT_SCAN_CHUNK_SIZE must be greater than zero");
   }
-  if (options.startBlock > options.endBlock) return [];
+  if (options.startBlock > options.endBlock) return;
 
-  const addresses = new Set<Address>();
+  let found = 0;
   let chunkSize = options.initialChunkSize;
   let toBlock = options.endBlock;
   while (toBlock >= options.startBlock) {
@@ -433,9 +478,10 @@ export async function discoverFromEvents(
         toBlock,
       });
       for (const log of logs) {
-        if (log.args.participant) addresses.add(getAddress(log.args.participant));
+        if (log.args.participant)
+          found = visit(getAddress(log.args.participant), log.args.expirationAt);
       }
-      options.onProgress?.(fromBlock, toBlock, addresses.size);
+      options.onProgress?.(fromBlock, toBlock, found);
       if (fromBlock === options.startBlock) break;
       toBlock = fromBlock - 1n;
       if (chunkSize < options.initialChunkSize) {
@@ -455,7 +501,6 @@ export async function discoverFromEvents(
       options.onRetry?.(fromBlock, toBlock, chunkSize, error);
     }
   }
-  return sortAddresses(addresses);
 }
 
 export async function discoverOrderCacheCandidates(

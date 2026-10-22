@@ -851,9 +851,9 @@ async function benchmarkAdminAndLifecycle() {
     );
     await recordTransaction(
       pc,
-      "resetState(address[])",
-      "two participants with order-and-position state",
-      futures.write.resetState([[seller.account.address, buyer.account.address]], {
+      "forceCancelOrders(address[])",
+      "two participants, one resting order",
+      futures.write.forceCancelOrders([[seller.account.address, buyer.account.address]], {
         account: owner.account,
       }),
     );

@@ -271,7 +271,7 @@ describe("Futures per-expiration order aggregate cache", () => {
     await futures.write.createOrder([price, laterAt, 3n, TimeInForce.GTC], {
       account: seller.account,
     });
-    await futures.write.resetState([[seller.account.address]], { account: owner.account });
+    await futures.write.forceCancelOrders([[seller.account.address]], { account: owner.account });
     assert.equal((await getUserOrders(futures, seller.account.address)).length, 0);
     assert.deepEqual(
       aggregateTuple(
@@ -279,31 +279,6 @@ describe("Futures per-expiration order aggregate cache", () => {
       ),
       [0n, 0n, 0n, 0n, 0n, 0n],
     );
-  });
-
-  it("resetState leaves expired orders inert for optional cleanup", async () => {
-    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault, hashpriceUsd } = contracts;
-    const { owner, seller, buyer, tc } = accounts;
-    const expiredAt = config.deliveryDates[0];
-    const price = parseUnits("40", 6);
-
-    await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
-    await futures.write.createOrder([price, expiredAt, -2n, TimeInForce.GTC], {
-      account: seller.account,
-    });
-    const [expiredOrderId] = await getUserOrders(futures, seller.account.address);
-
-    await tc.setNextBlockTimestamp({ timestamp: expiredAt + 1n });
-    await tc.mine({ blocks: 1 });
-    await refreshHashprice(hashpriceUsd, expiredAt + 1n);
-    await futures.write.resetState([[seller.account.address]], { account: owner.account });
-
-    assert.equal((await getUserOrders(futures, seller.account.address)).length, 0);
-    assert.equal((await futures.read.getOrder([expiredOrderId])).quantity, -2n, "physical order remains");
-
-    await futures.write.removeOutdatedOrders([[expiredOrderId]], { account: buyer.account });
-    assert.equal((await futures.read.getOrder([expiredOrderId])).quantity, 0n);
   });
 
   it("removes the cached order aggregate during order liquidation", async () => {

@@ -22,7 +22,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev Lives here rather than in {HashPowerFuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `HashPowerFutures.sol` to require a bump.
-    string public constant VERSION = "6.10.0";
+    string public constant VERSION = "6.11.0";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) { }
@@ -140,11 +140,11 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         uint256 len = _orderIds.length;
         for (uint256 i = 0; i < len; i++) {
             bytes32 orderId = _orderIds[i];
-            Order memory order = orders[orderId];
+            Order storage order = orders[orderId];
             if (order.participant == address(0) || order.quantity == 0 || order.expirationAt >= block.timestamp) {
                 continue;
             }
-            _dropRestingOrder(orderId, order);
+            _dropRestingOrder(orderId, true);
             removed++;
         }
     }
@@ -200,19 +200,10 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
 
     /// @dev Shared cancel body for `cancelOrder` / `updateOrders`.
     function _cancelOrder(address _participant, bytes32 _orderId) internal {
-        Order memory order = orders[_orderId];
+        Order storage order = orders[_orderId];
         if (order.participant != _participant) revert OrderNotBelongToSender();
         if (order.quantity == 0) revert OrderNotExists();
-        _dropRestingOrder(_orderId, order);
-    }
-
-    /// @dev Unindex a resting order and announce it cancelled. Callers own the authorization
-    ///      decision; this only performs the removal.
-    function _dropRestingOrder(bytes32 _orderId, Order memory _order) private {
-        _removeRestingOrder(
-            _orderId, _order.expirationAt, _order.price, _order.participant, _order.quantity > 0, true
-        );
-        emit OrderCancelled(_orderId, _order.participant);
+        _dropRestingOrder(_orderId, true);
     }
 
     /// @dev In-place size shrink. Keeps the order id in its price/expiry queue slot.
@@ -249,7 +240,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     function liquidateOrder(address _user, bytes32 _orderId) external {
         if (_user == BACKSTOP) revert BackstopAccount();
         if (!_underwater(_user)) revert NotLiquidatable();
-        Order memory order = orders[_orderId];
+        Order storage order = orders[_orderId];
         if (order.participant != _user) revert OrderNotBelongToUser();
         if (order.quantity == 0) revert OrderNotExists();
         _doLiquidateOrder(_user, _orderId, order);
@@ -263,7 +254,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         uint256 len = _orderIds.length;
         for (uint256 i = 0; i < len; i++) {
             bytes32 orderId = _orderIds[i];
-            Order memory order = orders[orderId];
+            Order storage order = orders[orderId];
             // Skip raced/stale ids before the expensive portfolio MM check.
             if (order.participant != _user || order.quantity == 0) continue;
             if (!_underwater(_user)) break;
@@ -277,14 +268,12 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         return _vaultBalance(_participant) < portfolioMargin.computePortfolioMM(_participant);
     }
 
-    function _doLiquidateOrder(address _user, bytes32 _orderId, Order memory _order) internal {
+    function _doLiquidateOrder(address _user, bytes32 _orderId, Order storage _order) internal {
         uint256 orderNotional = _order.price * M.abs(_order.quantity);
-        bool isBuy = _order.quantity > 0;
-        _removeRestingOrder(_orderId, _order.expirationAt, _order.price, _order.participant, isBuy, true);
+        _dropRestingOrder(_orderId, true);
 
         uint256 liqFee = _chargeLiquidationFee(_user, orderNotional);
 
-        emit OrderCancelled(_orderId, _user);
         emit OrderLiquidated(_orderId, _user, _msgSender(), liqFee);
         _notifyLiquidation(_msgSender(), liqFee);
     }

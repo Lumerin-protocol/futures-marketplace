@@ -1,10 +1,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import hre from "hardhat";
-import { type Address, type PublicClient, getAddress, parseAbiItem } from "viem";
-import { encodeFunctionData } from "viem/utils";
 import { OperationType } from "@safe-global/types-kit";
+import hre from "hardhat";
+import { type Address, getAddress, type Hex, type PublicClient, parseAbiItem } from "viem";
+import { encodeFunctionData } from "viem/utils";
 import {
   readOptionalAddress,
   readOptionalBigInt,
@@ -48,7 +48,7 @@ type ParticipantScanCache = {
 };
 
 async function main() {
-  logTitle("HashPowerFutures Reset State");
+  logTitle("HashPowerFutures Reset (cancel orders, close positions)");
 
   const { viem } = await hre.network.getOrCreate();
   const pc = await viem.getPublicClient();
@@ -104,13 +104,80 @@ async function main() {
     return;
   }
 
-  // ── 2. Execute resetState in batches ───────────────────────────────────
-  const batches = chunk(participants, resetBatch);
-  logInfo("batches", { Count: batches.length, BatchSize: resetBatch });
-
-  await logPrompt(`About to reset state for ${participants.length} participants. Proceed?`);
-
+  // ── 2. Cancel orders, then close live legs and settle matured ones ──────
   const futures = await viem.getContractAt("HashPowerFutures", futuresAddress);
+  const vault = await viem.getContractAt("CollateralVault", await futures.read.vault());
+  const now = (await pc.getBlock()).timestamp;
+  const liveLegs: { users: Address[]; expirationAts: bigint[] } = { users: [], expirationAts: [] };
+  const maturedLegs: { users: Address[]; expirationAts: bigint[] } = {
+    users: [],
+    expirationAts: [],
+  };
+  for (const user of participants) {
+    for (const expirationAt of await futures.read.getActiveExpirationDates([user])) {
+      const { netQuantity } = await futures.read.getUserPosition([user, expirationAt]);
+      if (netQuantity === 0n) continue;
+      const legs = expirationAt > now ? liveLegs : maturedLegs;
+      legs.users.push(user);
+      legs.expirationAts.push(expirationAt);
+    }
+  }
+  const haltedHere = !(await vault.read.halted());
+
+  const calls: { label: string; to: Address; data: Hex }[] = [];
+  if (haltedHere) {
+    calls.push({
+      label: "halt vault",
+      to: vault.address,
+      data: encodeFunctionData({ abi: vault.abi, functionName: "halt" }),
+    });
+  }
+  for (const batch of chunk(participants, resetBatch)) {
+    calls.push({
+      label: `forceCancelOrders (${batch.length})`,
+      to: futuresAddress,
+      data: encodeFunctionData({
+        abi: futures.abi,
+        functionName: "forceCancelOrders",
+        args: [batch],
+      }),
+    });
+  }
+  for (const [functionName, legs] of [
+    ["forceClosePositions", liveLegs],
+    ["settlePositions", maturedLegs],
+  ] as const) {
+    for (let i = 0; i < legs.users.length; i += resetBatch) {
+      const users = legs.users.slice(i, i + resetBatch);
+      calls.push({
+        label: `${functionName} (${users.length} legs)`,
+        to: futuresAddress,
+        data: encodeFunctionData({
+          abi: futures.abi,
+          functionName,
+          args: [users, legs.expirationAts.slice(i, i + resetBatch)],
+        }),
+      });
+    }
+  }
+  if (haltedHere) {
+    calls.push({
+      label: "resume vault",
+      to: vault.address,
+      data: encodeFunctionData({ abi: vault.abi, functionName: "resume" }),
+    });
+  }
+
+  logInfo("plan", {
+    Participants: participants.length,
+    "Live legs (close at mark)": liveLegs.users.length,
+    "Matured legs (settle)": maturedLegs.users.length,
+    Transactions: calls.length,
+    "Halts shared vault": haltedHere ? "yes, resumes at the end" : "no (already halted)",
+  });
+  await logPrompt(
+    `About to cancel orders and close positions for ${participants.length} participants. Proceed?`,
+  );
 
   if (SAFE_OWNER_ADDRESS) {
     if (!proposer) {
@@ -118,42 +185,31 @@ async function main() {
     }
     const { SAFE_API_KEY } = requireEnvsSet("SAFE_API_KEY");
     const safe = new SafeWallet(SAFE_OWNER_ADDRESS, proposer, SAFE_API_KEY);
-    for (let i = 0; i < batches.length; i++) {
-      const batch = batches[i];
-      const data = encodeFunctionData({
-        abi: futures.abi,
-        functionName: "resetState",
-        args: [batch],
-      });
+    for (const call of calls) {
       const safeTxHash = await safe.proposeTransaction({
-        data,
-        to: futuresAddress,
+        data: call.data,
+        to: call.to,
         value: "0",
         operation: OperationType.Call,
       });
-      logStep(
-        `batch ${i + 1}/${batches.length} (${batch.length})`,
-        safe.getSafeUITxUrl(safeTxHash),
-      );
+      logStep(call.label, safe.getSafeUITxUrl(safeTxHash));
     }
     logSuccess(
-      `Proposed ${batches.length} resetState transaction(s) to Safe ${SAFE_OWNER_ADDRESS}`,
+      `Proposed ${calls.length} transaction(s) to Safe ${SAFE_OWNER_ADDRESS}; execute in order`,
     );
     return;
   }
 
-  for (let i = 0; i < batches.length; i++) {
-    const batch = batches[i];
-    const tx = await futures.write.resetState([batch]);
+  for (const call of calls) {
+    const tx = await deployer.sendTransaction({ to: call.to, data: call.data });
     const receipt = await pc.waitForTransactionReceipt({ hash: tx });
+    if (receipt.status !== "success") throw new Error(`${call.label} reverted: ${tx}`);
     logStep(
-      `batch ${i + 1}/${batches.length} (${batch.length})`,
+      call.label,
       `${txUrl(pc, receipt.transactionHash)}  gas=${receipt.gasUsed} block ${receipt.blockNumber}`,
     );
   }
-  logSuccess(
-    `Reset state for ${participants.length} participants across ${batches.length} batch(es)`,
-  );
+  logSuccess(`Cancelled orders and closed positions for ${participants.length} participants`);
 }
 
 /**

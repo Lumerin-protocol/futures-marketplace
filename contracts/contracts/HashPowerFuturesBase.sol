@@ -137,7 +137,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
 
     /// @dev Dead since 6.10. Never read or written; slot retained for proxy storage compatibility.
     mapping(address => mapping(uint256 => OrderAggregate)) internal participantExpirationAtOrderAggregate;
-    /// @dev Dead after v4.3: former order-expiration set used only by resetState. Slot retained.
+    /// @dev Dead after v4.3: former order-expiration set used only by the removed `resetState`. Slot retained.
     mapping(address => EnumerableSet.UintSet) private participantOrderExpirationAts;
     /// @dev Canonical resting-order index for v4.3+: bounded independently per delivery date.
     ///      The legacy global `participantOrderIdsIndex` remains in-place for upgrade cleanup only.
@@ -169,8 +169,9 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     }
 
     /// @dev Appended at the storage tail in 6.10. Never move above `participantOrderExpirationBitmap`.
-    ///      Starts empty on upgrade, so no order may rest when 6.10 goes live: cancel every
-    ///      resting order first. A pre-6.10 order removed afterwards would underflow it.
+    ///      Starts empty on upgrade, so an upgrade from before 6.10 runs `forceCancelOrders` for
+    ///      every user with resting orders. A pre-6.10 order removed any other way (cancel, fill,
+    ///      `removeOutdatedOrders`) would underflow it.
     mapping(address => mapping(uint256 => RestingOrderAggregate)) internal participantExpirationAtRestingOrderAggregate;
 
     // immutable
@@ -749,10 +750,46 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
 
     // ── Internal helpers: cancel / reduce / book upkeep ───────────────────────
 
+    /// @dev Unindex a resting order and announce it cancelled. Callers own the authorization
+    ///      decision; this only performs the removal. Pass `_subtractAggregate = false` only
+    ///      when the caller clears the expiry's whole aggregate afterwards.
+    function _dropRestingOrder(bytes32 _orderId, bool _subtractAggregate) internal {
+        Order storage order = orders[_orderId];
+        address participant = order.participant;
+        uint256 expirationAt = order.expirationAt;
+        uint256 price = order.price;
+        bool isBuy = order.quantity > 0;
+        if (_subtractAggregate) {
+            _decreaseOrderAggregate(participant, expirationAt, price, M.abs(order.quantity), isBuy);
+        }
+        _unlinkRestingOrder(_orderId, expirationAt, price, participant, isBuy, true);
+        emit OrderCancelled(_orderId, participant);
+    }
+
+    /// @dev Empty a participant's aggregate at one expiry and mark the expiry order-free.
+    function _clearOrderAggregate(address _participant, uint256 _expirationAt) internal {
+        delete participantExpirationAtRestingOrderAggregate[_participant][_expirationAt];
+        _setOrderExpirationActive(_participant, _expirationAt, false);
+    }
+
     /// @param cleanupPriceLevel When true, drop the price ladder entry if the queue is empty.
     ///        Match walks a whole level and cleans once at the end (pass false); cancel /
     ///        liquidate / admin remove a single order and must clean immediately (pass true).
     function _removeRestingOrder(
+        bytes32 orderId,
+        uint256 expirationAt,
+        uint256 price,
+        address participant,
+        bool isBuy,
+        bool cleanupPriceLevel
+    ) internal {
+        _decreaseOrderAggregate(participant, expirationAt, price, M.abs(orders[orderId].quantity), isBuy);
+        _unlinkRestingOrder(orderId, expirationAt, price, participant, isBuy, cleanupPriceLevel);
+    }
+
+    /// @dev Take an order out of its queue and its owner's indexes, and delete it. Leaves the
+    ///      aggregate to the caller.
+    function _unlinkRestingOrder(
         bytes32 orderId,
         uint256 expirationAt,
         uint256 price,
@@ -767,7 +804,6 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         }
         participantOrderIdsIndex[participant].remove(orderId);
         participantExpirationAtOrderIdsIndex[participant][expirationAt].remove(orderId);
-        _decreaseOrderAggregate(participant, expirationAt, price, M.abs(orders[orderId].quantity), isBuy);
         delete orders[orderId];
     }
 
