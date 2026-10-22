@@ -1,7 +1,11 @@
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect } from "react";
 import { clearSnapshotRunner, runSnapshotOnce, setSnapshotRunner } from "./driverRegistry";
-import { realizedPnlSinceBaseline, windowCutoffSeconds } from "../../../lib/portfolioPnl";
+import {
+  realizedPnlAfterFees,
+  realizedPnlSinceBaseline,
+  windowCutoffSeconds,
+} from "../../../lib/portfolioPnl";
 import { graphqlRequest } from "../graphql";
 import { futuresSlices } from "../queries/futures";
 import { buildDocument, type Slice } from "../queries/slice";
@@ -47,6 +51,12 @@ import {
 } from "../useUserLiquidations";
 import { PORTFOLIO_OPEN_EXPOSURE_QK } from "../pnl/usePortfolioUnrealizedPnl";
 import { PORTFOLIO_REALIZED_PNL_QK } from "../pnl/usePortfolioRealizedPnl";
+import {
+  FEES_FIRST_CURSOR,
+  FEES_PAGE_SIZE,
+  totalWindowFees,
+  type WindowFeeRow,
+} from "../pnl/windowFees";
 import { SNAPSHOT_TICK_MS, snapshotQueryOptions } from "./config";
 import { writeIfChanged, writeResponseIfChanged } from "./writeIfChanged";
 import { resetVenueHistory } from "../refreshVenueViews";
@@ -75,6 +85,7 @@ interface FuturesSnapshotResponse {
   liquidations?: LiquidationRow[];
   me?: { realizedPnl: string } | null;
   realizedBaseline?: { cumulativeRealizedPnl: string }[];
+  feesInWindow?: WindowFeeRow[];
 }
 
 export interface FuturesSnapshotResult {
@@ -120,6 +131,7 @@ const slicesForTick = (groups: readonly TickGroup[], expirationAt: number | unde
       futuresSlices.liquidations,
       futuresSlices.me,
       futuresSlices.realizedBaseline,
+      futuresSlices.feesInWindow,
     );
   }
 
@@ -162,6 +174,8 @@ export const fetchFuturesSnapshot = async (
       exposureFirst: EXPOSURE_LIMIT,
       liquidationsFirst: LIQUIDATIONS_FIRST,
       cutoff,
+      feesFirst: FEES_PAGE_SIZE,
+      feesAfterId: FEES_FIRST_CURSOR,
     }),
   );
 
@@ -261,11 +275,17 @@ export const fetchFuturesSnapshot = async (
     if (response.me !== undefined) {
       // A missing `User` row means the account has never traded this venue.
       const realized = response.me
-        ? realizedPnlSinceBaseline(
-            BigInt(response.me.realizedPnl),
-            response.realizedBaseline?.length
-              ? BigInt(response.realizedBaseline[0].cumulativeRealizedPnl)
-              : null,
+        ? realizedPnlAfterFees(
+            realizedPnlSinceBaseline(
+              BigInt(response.me.realizedPnl),
+              response.realizedBaseline?.length
+                ? BigInt(response.realizedBaseline[0].cumulativeRealizedPnl)
+                : null,
+            ),
+            await totalWindowFees(response.feesInWindow ?? [], {
+              address: address.toLowerCase(),
+              cutoff,
+            }),
           )
         : 0n;
       writeIfChanged(

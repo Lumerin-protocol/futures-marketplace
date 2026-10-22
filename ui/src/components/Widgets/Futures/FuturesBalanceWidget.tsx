@@ -6,7 +6,7 @@ import { useAccount } from "wagmi";
 import { useModal } from "../../../hooks/useModal";
 import { RefreshableValue } from "../../RefreshableValue";
 import { formatValue, paymentToken } from "../../../lib/units";
-import { REALIZED_PNL_WINDOW_DAYS } from "../../../lib/portfolioPnl";
+import { REALIZED_PNL_FEES_HINT, REALIZED_PNL_WINDOW_DAYS } from "../../../lib/portfolioPnl";
 import {
   formatMarginRatio,
   marginStatusCopy,
@@ -49,6 +49,7 @@ interface FuturesBalanceWidgetProps {
 // Both PnL figures cover the whole account, so they do not change when the user
 // switches trading tabs. Spelling that out avoids reading them as futures-only.
 const ALL_VENUES_HINT = "Across all venues (Futures and Perpetuals)";
+const REALIZED_PNL_HINT = `${ALL_VENUES_HINT}. ${REALIZED_PNL_FEES_HINT} Perpetuals funding is not included.`;
 
 const EQUITY_HINT = "Balance plus unrealized PnL across all venues.";
 const MARGIN_USED_HINT = "Initial margin held for open positions and resting orders.";
@@ -256,7 +257,7 @@ export const FuturesBalanceWidget = ({
                   </MetricValue>
                 </MetricCell>
                 <MetricCell>
-                  <HintedLabel hint={ALL_VENUES_HINT}>
+                  <HintedLabel hint={REALIZED_PNL_HINT}>
                     Realized PnL ({REALIZED_PNL_WINDOW_DAYS}D)
                   </HintedLabel>
                   <MetricValue>

@@ -214,6 +214,9 @@ naming explicitly because it is the single densest request pattern in the app.
 - **Order simulation** — RPC, on demand.
 - **The deep-book pagination path** — when a book exceeds 100 levels the driver
   issues extra requests on the same tick.
+- **The fee-window pagination path** — the same for `feesInWindow`, when an
+  account has more than 1,000 fee-bearing trades in the 30-day window
+  (`WindowFeesQuery`, TECH_DEBT.md §25).
 - **`IndexedBlockQuery`** — see above.
 
 ### Dead or unreachable, safe to delete

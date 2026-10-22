@@ -7,6 +7,7 @@ import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { FuturesTradesModal, type FuturesTradesModalSelection } from "./FuturesTradesModal";
 import { LoadMoreButton } from "../../LoadMoreButton";
 import { LiquidationChip, formatLiquidatedQty, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
+import { REALIZED_PNL_FEES_HINT } from "../../../lib/portfolioPnl";
 
 interface HistoricalPositionsListWidgetProps {
   positions: HistoricalPosition[];
@@ -69,7 +70,7 @@ export const HistoricalPositionsListWidget = ({
               <th>Price (USDC)</th>
               <th>Max Quantity</th>
               <th>Exit Price (USDC)</th>
-              <th>Realized PnL (USDC)</th>
+              <th title={REALIZED_PNL_FEES_HINT}>Realized PnL (USDC)</th>
               <th>Created</th>
               <th>Closed</th>
               <th>Actions</th>

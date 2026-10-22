@@ -17,6 +17,7 @@ import { LoadMoreButton } from "../../LoadMoreButton";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { getTxUrl } from "../../../lib/indexer";
 import { LiquidationChip, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
+import { REALIZED_PNL_FEES_HINT, realizedPnlAfterFees } from "../../../lib/portfolioPnl";
 import { ClosePositionForm, type ClosablePosition } from "../../Forms/ClosePositionForm";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { ModalItem } from "../../Modal";
@@ -341,13 +342,18 @@ const FuturesTradesTable = ({
             <th>Price (USDC)</th>
             <th>Quantity</th>
             <th>Trading Fee</th>
-            <th>Realized PnL</th>
+            <th title={REALIZED_PNL_FEES_HINT}>Realized PnL</th>
             <th>Tx Hash</th>
           </tr>
         </thead>
         <tbody>
           {displayedTrades.map((trade) => {
             const isLong = trade.tradeQuantity >= 0;
+            const realizedPnl = realizedPnlAfterFees(
+              trade.realizedPnl,
+              trade.tradingFee,
+              trade.liquidationFee,
+            );
             return (
               <TableRow
                 key={trade.id}
@@ -369,11 +375,8 @@ const FuturesTradesTable = ({
                 <td>{Math.abs(trade.tradeQuantity)}</td>
                 <td>{formatPrice(trade.tradingFee)}</td>
                 <td>
-                  <PnLText
-                    $isPositive={Number(trade.realizedPnl) >= 0}
-                    $isZero={Number(trade.realizedPnl) === 0}
-                  >
-                    {formatPnL(trade.realizedPnl)}
+                  <PnLText $isPositive={realizedPnl >= 0n} $isZero={realizedPnl === 0n}>
+                    {formatPnL(realizedPnl)}
                   </PnLText>
                 </td>
                 <td>
