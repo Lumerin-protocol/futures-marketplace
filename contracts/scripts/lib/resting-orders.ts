@@ -25,15 +25,39 @@ export async function liveOrdersInSlots(
   return perSlot.flat();
 }
 
+/** The `slots` still holding at least one resting order at `blockNumber`. */
+export async function legsWithOrders(
+  pc: PublicClient,
+  futures: Address,
+  slots: readonly OrderSlot[],
+  readConcurrency: number,
+  blockNumber: bigint,
+): Promise<OrderSlot[]> {
+  const counts = await mapConcurrently(
+    slots,
+    readConcurrency,
+    async ({ participant, expirationAt }) => {
+      const ids = await readContract(pc, {
+        address: futures,
+        abi: HashPowerFuturesAbi,
+        functionName: "getUserOrdersAtExpiration",
+        args: [participant, expirationAt],
+        blockNumber,
+      });
+      return ids.length;
+    },
+  );
+  return slots.filter((_, i) => counts[i] > 0);
+}
+
 /**
- * Throws unless every tradable expiry's book is empty, every listed user has no orders and a
- * zero aggregate there, and no order rests in the expired `slots`.
+ * Throws unless every tradable expiry's book is empty and every slot has no orders and a zero
+ * aggregate.
  */
 export async function assertNoRestingOrders(
   pc: PublicClient,
   futures: Address,
-  users: readonly Address[],
-  expiredSlots: readonly OrderSlot[],
+  slots: readonly OrderSlot[],
   readConcurrency: number,
   blockNumber: bigint,
 ): Promise<void> {
@@ -57,9 +81,6 @@ export async function assertNoRestingOrders(
       );
     }
   });
-  const slots = users.flatMap((participant) =>
-    expirationAts.map((expirationAt) => ({ participant, expirationAt })),
-  );
   await mapConcurrently(slots, readConcurrency, async ({ participant, expirationAt }) => {
     const aggregate = await readContract(pc, {
       address: futures,
@@ -72,13 +93,7 @@ export async function assertNoRestingOrders(
       throw new Error(`${participant} has a nonzero aggregate at expiry ${expirationAt}`);
     }
   });
-  const leftovers = await liveOrdersInSlots(
-    pc,
-    futures,
-    [...slots, ...expiredSlots],
-    readConcurrency,
-    blockNumber,
-  );
+  const leftovers = await liveOrdersInSlots(pc, futures, slots, readConcurrency, blockNumber);
   if (leftovers.length > 0) {
     throw new Error(`${leftovers.length} order(s) still resting, e.g. ${leftovers[0]}`);
   }

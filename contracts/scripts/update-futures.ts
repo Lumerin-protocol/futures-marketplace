@@ -24,25 +24,22 @@ import {
   chunk,
   discoverOrderSlotsFromEvents,
   fetchDeploymentBlockFromEtherscan,
-  filterUsersWithPhysicalOrders,
   readPositiveInteger,
 } from "./lib/order-aggregate-cache.ts";
-import { assertNoRestingOrders, liveOrdersInSlots } from "./lib/resting-orders.ts";
+import { assertNoRestingOrders, legsWithOrders } from "./lib/resting-orders.ts";
 
 const DEFAULT_SAFE_GAS_OVERHEAD = 150_000n;
-const TARGET_CODE_VERSION = "6.13.0";
+const TARGET_CODE_VERSION = "6.14.0";
 const UPGRADE_CONFIRMATIONS = 5;
 // 6.8.0 calls the engine's `reduceLimits` / `meetsTradeMargin` on every order. Against an
 // older engine every order reverts, so the engine has to be upgraded first.
 const MIN_ENGINE_VERSION = "2.2.0";
 // 6.10 starts a new resting-order aggregate, so orders placed before it must not survive the
-// upgrade. With the shared vault halted: expired orders (outside the tradable window) are
-// removed on the old code with `removeOutdatedOrders`, then the upgrade call is
-// `forceCancelOrders` for every user with orders in the window (further batches follow while
-// still halted). Resume the vault only once every venue is upgraded and verified
-// (`VERIFY_ONLY=true` checks a venue without upgrading).
+// upgrade. With the shared vault halted, the upgrade call is `forceCancelOrders` on every
+// (user, expiry) leg that still holds orders, matured and out-of-window dates included
+// (further batches follow while still halted). Resume the vault only once every venue is
+// upgraded and verified (`VERIFY_ONLY=true` checks a venue without upgrading).
 const DEFAULT_FORCE_CANCEL_BATCH_SIZE = 20;
-const DEFAULT_REMOVE_EXPIRED_BATCH_SIZE = 50;
 const DEFAULT_EVENT_CHUNK = 10_000n;
 const DEFAULT_READ_CONCURRENCY = 16;
 const VERSION_ABI = parseAbi(["function VERSION() view returns (string)"]);
@@ -129,96 +126,40 @@ async function main() {
   const initialChunkSize = readOptionalBigInt("EVENT_SCAN_CHUNK_SIZE") ?? DEFAULT_EVENT_CHUNK;
   const discoverAt = async (blockNumber?: bigint) => {
     const block = await pc.getBlock(blockNumber === undefined ? {} : { blockNumber });
-    const found = await discoverOrderSlotsFromEvents(pc, futuresAddress, {
+    const slots = await discoverOrderSlotsFromEvents(pc, futuresAddress, {
       startBlock,
       endBlock: block.number,
       initialChunkSize,
-      expiredBefore: block.timestamp,
     });
-    return { snapshot: block, ...found };
+    return { snapshot: block, slots };
   };
   if (process.env.VERIFY_ONLY === "true") {
-    const { snapshot, participants, expiredSlots } = await discoverAt();
-    await assertNoRestingOrders(
-      pc,
-      futuresAddress,
-      participants,
-      expiredSlots,
-      readConcurrency,
-      snapshot.number,
-    );
+    const { snapshot, slots } = await discoverAt();
+    await assertNoRestingOrders(pc, futuresAddress, slots, readConcurrency, snapshot.number);
     logSuccess(
-      `No resting orders at block ${snapshot.number} (${participants.length} participants checked)`,
+      `No resting orders at block ${snapshot.number} (${slots.length} order legs checked)`,
     );
     return;
   }
 
   // Listed only once halted, so no user can place an order the cancellation would miss.
-  const { snapshot, participants, expiredSlots } = await discoverAt(
+  const { snapshot, slots } = await discoverAt(
     await ensureVaultHalted(pc, vaultAddress, deployer, proposer),
   );
-  const expiredOrderIds = await liveOrdersInSlots(
-    pc,
-    futuresAddress,
-    expiredSlots,
-    readConcurrency,
-    snapshot.number,
-  );
-  const usersWithOrders = await filterUsersWithPhysicalOrders(
-    pc,
-    futuresAddress,
-    participants,
-    readConcurrency,
-    snapshot.number,
-  );
+  const legs = await legsWithOrders(pc, futuresAddress, slots, readConcurrency, snapshot.number);
   const cancelBatches = chunk(
-    usersWithOrders,
+    legs,
     readPositiveInteger("FORCE_CANCEL_BATCH_SIZE", DEFAULT_FORCE_CANCEL_BATCH_SIZE),
-  );
-  const [nextExpiry] = await futuresProxy.read.getExpirationDates({ blockNumber: snapshot.number });
+  ).map((batch) => [batch.map((l) => l.participant), batch.map((l) => l.expirationAt)] as const);
   logInfo("resting orders", {
     "Orders block": snapshot.number,
-    "Expired orders to remove first": expiredOrderIds.length,
-    "Users with orders in the window": usersWithOrders.length,
+    "Order legs (user, expiry) with orders": legs.length,
     "forceCancelOrders batches": cancelBatches.length,
-    "Upgrade before": `${new Date(Number(nextExpiry) * 1000).toISOString()} (next expiry; rerun after it)`,
   });
-
-  // 3.x cutover: order/position semantics change; 3.1+ also breaks Order storage layout
-  // (safe after futures-reset-state). Required order: pause MM/keeper → futures-reset-state →
-  // this upgrade → new subgraph from upgrade block → cut over keeper/MM/UI ABI.
-  if (typeof currentVersion === "string" && currentVersion.startsWith("2.")) {
-    logInfo("3.x cutover reminder", {
-      BeforeUpgrade: "run scripts/futures-reset-state.ts (clear orders + positions)",
-      AfterUpgrade: "redeploy indexer from upgrade block; point keeper ABI at 3.x",
-      Docs: "docs/06.Event-Desing-Spec.md § Cutover notes",
-    });
-  }
 
   await logPrompt("Review the configuration above. Proceed with upgrade?");
 
-  // ── 1. Remove expired orders on the current implementation ────────────
-  for (const [i, batch] of chunk(
-    expiredOrderIds,
-    readPositiveInteger("REMOVE_EXPIRED_BATCH_SIZE", DEFAULT_REMOVE_EXPIRED_BATCH_SIZE),
-  ).entries()) {
-    const tx = await deployer.writeContract({
-      address: futuresAddress,
-      abi: futuresProxy.abi,
-      functionName: "removeOutdatedOrders",
-      args: [batch],
-    });
-    const receipt = await pc.waitForTransactionReceipt({ hash: tx });
-    if (receipt.status !== "success") {
-      throw new Error(`removeOutdatedOrders reverted: ${txUrl(pc, receipt.transactionHash)}`);
-    }
-    logStep(
-      `removeOutdatedOrders batch ${i + 1} (${batch.length})`,
-      txUrl(pc, receipt.transactionHash),
-    );
-  }
-
-  // ── 2. Deploy new implementation ────────────────────────────────────────
+  // ── 1. Deploy new implementation ────────────────────────────────────────
   logInfo("Deploy new HashPowerFutures implementation", {
     contract: "HashPowerFutures",
   });
@@ -250,7 +191,7 @@ async function main() {
       ? encodeFunctionData({
           abi: futuresImpl.abi,
           functionName: "forceCancelOrders",
-          args: [firstBatch],
+          args: firstBatch,
         })
       : "0x",
   ] as const;
@@ -288,14 +229,14 @@ async function main() {
     );
   }
   logInfo("upgrade preflight", {
-    Call: firstBatch ? `forceCancelOrders(${firstBatch.length} users)` : "(none)",
+    Call: firstBatch ? `forceCancelOrders(${firstBatch[0].length} legs)` : "(none)",
     Simulation: "passed",
     "Estimated upgrade gas": estimatedUpgradeGas,
     "Safe execution overhead": safeGasOverhead,
     "Enforced gas limit": maxAtomicUpgradeGas,
   });
 
-  // ── 3. Upgrade ──────────────────────────────────────────────────────────
+  // ── 2. Upgrade ──────────────────────────────────────────────────────────
   if (SAFE_OWNER_ADDRESS) {
     logInfo("Propose upgrade via Safe", { safe: SAFE_OWNER_ADDRESS });
     await logPrompt("Proceed?");
@@ -322,7 +263,7 @@ async function main() {
         data: encodeFunctionData({
           abi: futuresImpl.abi,
           functionName: "forceCancelOrders",
-          args: [batch],
+          args: batch,
         }),
         to: futuresAddress,
         value: "0",
@@ -405,7 +346,7 @@ async function main() {
     }
     let verifyBlock = receipt.blockNumber;
     for (const [i, batch] of followUpBatches.entries()) {
-      const cancelTx = await upgraded.write.forceCancelOrders([batch]);
+      const cancelTx = await upgraded.write.forceCancelOrders(batch);
       const cancelReceipt = await pc.waitForTransactionReceipt({ hash: cancelTx });
       if (cancelReceipt.status !== "success") {
         throw new Error(`forceCancelOrders reverted: ${txUrl(pc, cancelReceipt.transactionHash)}`);
@@ -416,17 +357,10 @@ async function main() {
         txUrl(pc, cancelReceipt.transactionHash),
       );
     }
-    await assertNoRestingOrders(
-      pc,
-      futuresAddress,
-      usersWithOrders,
-      expiredSlots,
-      readConcurrency,
-      verifyBlock,
-    );
-    logStep("Resting orders", `none left (${usersWithOrders.length} users cancelled)`);
+    await assertNoRestingOrders(pc, futuresAddress, slots, readConcurrency, verifyBlock);
+    logStep("Resting orders", `none left (${legs.length} legs cancelled)`);
 
-    // ── 4. Post-upgrade config ──────────────────────────────────────────
+    // ── 3. Post-upgrade config ──────────────────────────────────────────
     if (marginEngineAddress) {
       const currentMarginEngine = await upgraded.read.portfolioMargin();
       if (currentMarginEngine.toLowerCase() === marginEngineAddress.toLowerCase()) {

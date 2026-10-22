@@ -1053,6 +1053,11 @@ export const HashPowerFuturesAbi = [
         "internalType": "address[]",
         "name": "_users",
         "type": "address[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "_expirationAts",
+        "type": "uint256[]"
       }
     ],
     "name": "forceCancelOrders",

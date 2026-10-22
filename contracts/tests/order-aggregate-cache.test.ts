@@ -271,7 +271,7 @@ describe("Futures per-expiration order aggregate cache", () => {
     await futures.write.createOrder([price, laterAt, 3n, TimeInForce.GTC], {
       account: seller.account,
     });
-    await futures.write.forceCancelOrders([[seller.account.address]], { account: owner.account });
+    await futures.write.forceCancelOrders([[seller.account.address], [laterAt]], { account: owner.account });
     assert.equal((await getUserOrders(futures, seller.account.address)).length, 0);
     assert.deepEqual(
       aggregateTuple(

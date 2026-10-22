@@ -3,16 +3,16 @@ import { describe, it } from "node:test";
 import { network } from "hardhat";
 import { getAddress, parseEventLogs, parseUnits, zeroAddress } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
+import { getUserOrders } from "./lib/viewHelpers.ts";
 import { TimeInForce } from "./timeInForce.ts";
 import { refreshHashprice } from "./utils.ts";
-import { getUserOrders } from "./lib/viewHelpers.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
 const EMPTY_AGGREGATE = { buyQty: 0n, sellQty: 0n, buyPQ: 0n, buyP2Q: 0n, sellPQ: 0n, sellP2Q: 0n };
 
 describe("HashPowerFutures.forceCancelOrders", () => {
-  it("cancels every active-window order of the listed users and nothing else", async () => {
+  it("cancels every order on the listed legs and nothing else", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { owner, seller, buyer, pc } = accounts;
@@ -40,16 +40,27 @@ describe("HashPowerFutures.forceCancelOrders", () => {
     const buyerOrderIds = await getUserOrders(futures, buyer.account.address);
     const sellerOrderIds = await getUserOrders(futures, seller.account.address);
     const buyerPosition = await futures.read.getUserPosition([buyer.account.address, d0]);
-    const sellerAggregate = await futures.read.getOrderAggregateAtExpiration([seller.account.address, d0]);
+    const sellerAggregate = await futures.read.getOrderAggregateAtExpiration([
+      seller.account.address,
+      d0,
+    ]);
     assert.equal(buyerOrderIds.length, 3);
     assert.notEqual(buyerPosition.netQuantity, 0n);
 
+    const buyerAddr = buyer.account.address;
     const hash = await futures.write.forceCancelOrders(
-      [[buyer.account.address, buyer.account.address]],
+      [
+        [buyerAddr, buyerAddr, buyerAddr],
+        [d0, d1, d0],
+      ],
       { account: owner.account },
     );
     const receipt = await pc.waitForTransactionReceipt({ hash });
-    const cancelled = parseEventLogs({ abi: futures.abi, logs: receipt.logs, eventName: "OrderCancelled" });
+    const cancelled = parseEventLogs({
+      abi: futures.abi,
+      logs: receipt.logs,
+      eventName: "OrderCancelled",
+    });
     assert.deepEqual(
       cancelled.map((event) => event.args.orderId).sort(),
       [...buyerOrderIds].sort(),
@@ -76,7 +87,10 @@ describe("HashPowerFutures.forceCancelOrders", () => {
     const [bids1, asks1] = await futures.read.getOrderBookPrices([d1, 200n]);
     assert.deepEqual([...bids1, ...asks1], []);
 
-    assert.deepEqual(await futures.read.getUserPosition([buyer.account.address, d0]), buyerPosition);
+    assert.deepEqual(
+      await futures.read.getUserPosition([buyer.account.address, d0]),
+      buyerPosition,
+    );
     assert.deepEqual(await getUserOrders(futures, seller.account.address), sellerOrderIds);
     assert.deepEqual(
       await futures.read.getOrderAggregateAtExpiration([seller.account.address, d0]),
@@ -84,10 +98,10 @@ describe("HashPowerFutures.forceCancelOrders", () => {
     );
   });
 
-  it("is owner-only, works while halted, and leaves expired orders to removeOutdatedOrders", async () => {
+  it("is owner-only, checks array lengths, works while halted, and cancels expired legs", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault, hashpriceUsd } = contracts;
-    const { owner, seller, buyer, tc } = accounts;
+    const { owner, seller, tc } = accounts;
     const [expiredAt, laterAt] = config.deliveryDates;
     const price = parseUnits("40", 6);
 
@@ -104,23 +118,41 @@ describe("HashPowerFutures.forceCancelOrders", () => {
     await tc.mine({ blocks: 1 });
     await refreshHashprice(hashpriceUsd, expiredAt + 1n);
 
+    const sellerAddr = seller.account.address;
     await viem.assertions.revertWithCustomError(
-      futures.write.forceCancelOrders([[seller.account.address]], { account: seller.account }),
+      futures.write.forceCancelOrders([[sellerAddr], [laterAt]], { account: seller.account }),
       futures,
       "OwnableUnauthorizedAccount",
     );
+    await viem.assertions.revertWithCustomError(
+      futures.write.forceCancelOrders([[sellerAddr], []], { account: owner.account }),
+      futures,
+      "ArrayLengthMismatch",
+    );
 
     await collateralVault.write.halt({ account: owner.account });
-    await futures.write.forceCancelOrders([[seller.account.address]], { account: owner.account });
-
-    assert.deepEqual(await getUserOrders(futures, seller.account.address), []);
-    assert.deepEqual(
-      await futures.read.getOrderAggregateAtExpiration([seller.account.address, laterAt]),
-      EMPTY_AGGREGATE,
+    await futures.write.forceCancelOrders(
+      [
+        [sellerAddr, sellerAddr],
+        [expiredAt, laterAt],
+      ],
+      {
+        account: owner.account,
+      },
     );
-    assert.equal((await futures.read.getOrder([expiredOrderId])).quantity, -2n, "expired order remains");
 
-    await futures.write.removeOutdatedOrders([[expiredOrderId]], { account: buyer.account });
-    assert.equal((await futures.read.getOrder([expiredOrderId])).quantity, 0n);
+    assert.deepEqual(await getUserOrders(futures, sellerAddr), []);
+    for (const expirationAt of [expiredAt, laterAt]) {
+      assert.deepEqual(
+        await futures.read.getOrderAggregateAtExpiration([sellerAddr, expirationAt]),
+        EMPTY_AGGREGATE,
+      );
+    }
+    assert.equal(
+      (await futures.read.getOrder([expiredOrderId])).quantity,
+      0n,
+      "expired order removed",
+    );
+    assert.deepEqual(await futures.read.getUserOrdersAtExpiration([sellerAddr, expiredAt]), []);
   });
 });

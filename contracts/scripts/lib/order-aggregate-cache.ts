@@ -431,25 +431,23 @@ export async function discoverFromEvents(
 }
 
 /**
- * One `OrderCreated` pass returning every participant plus each (participant, expiry) pair
- * whose expiry is at or before `expiredBefore`. Expired orders sit outside the tradable window,
- * so these pairs are the only way to find the ones still resting.
+ * One `OrderCreated` pass returning every (participant, expiry) pair that ever held an order.
+ * Orders on matured dates, or on dates that left the trading window, are only reachable
+ * through these pairs.
  */
 export async function discoverOrderSlotsFromEvents(
   pc: PublicClient,
   futuresAddress: Address,
-  options: EventScanOptions & { expiredBefore: bigint },
-): Promise<{ participants: Address[]; expiredSlots: OrderSlot[] }> {
-  const participants = new Set<Address>();
-  const expiredSlots = new Map<string, OrderSlot>();
+  options: EventScanOptions,
+): Promise<OrderSlot[]> {
+  const slots = new Map<string, OrderSlot>();
   await scanOrderCreated(pc, futuresAddress, options, (participant, expirationAt) => {
-    participants.add(participant);
-    if (expirationAt !== undefined && expirationAt <= options.expiredBefore) {
-      expiredSlots.set(`${participant}:${expirationAt}`, { participant, expirationAt });
+    if (expirationAt !== undefined) {
+      slots.set(`${participant}:${expirationAt}`, { participant, expirationAt });
     }
-    return participants.size;
+    return slots.size;
   });
-  return { participants: sortAddresses(participants), expiredSlots: [...expiredSlots.values()] };
+  return [...slots.values()];
 }
 
 /** Walks `OrderCreated` newest-first, halving the window on RPC rejection and growing it back. */

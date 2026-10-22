@@ -852,9 +852,9 @@ async function benchmarkAdminAndLifecycle() {
     );
     await recordTransaction(
       pc,
-      "forceCancelOrders(address[])",
+      "forceCancelOrders(address[],uint256[])",
       "two participants, one resting order",
-      futures.write.forceCancelOrders([[seller.account.address, buyer.account.address]], {
+      futures.write.forceCancelOrders([[seller.account.address, buyer.account.address], [expirationAt, expirationAt]], {
         account: owner.account,
       }),
     );
