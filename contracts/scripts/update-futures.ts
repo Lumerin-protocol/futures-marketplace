@@ -30,7 +30,7 @@ import {
 import { assertNoRestingOrders, liveOrdersInSlots } from "./lib/resting-orders.ts";
 
 const DEFAULT_SAFE_GAS_OVERHEAD = 150_000n;
-const TARGET_CODE_VERSION = "6.12.0";
+const TARGET_CODE_VERSION = "6.13.0";
 const UPGRADE_CONFIRMATIONS = 5;
 // 6.8.0 calls the engine's `reduceLimits` / `meetsTradeMargin` on every order. Against an
 // older engine every order reverts, so the engine has to be upgraded first.

@@ -5,8 +5,6 @@ import { deployFuturesFixture } from "./fixtures.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
-/** `HashPowerFuturesBase.MAX_PRICE`: the largest price any venue calculation accepts. */
-const MAX_PRICE = 10n ** 18n;
 const COLLATERAL_DECIMALS = 6n;
 
 /** The fixture types the hashprice feed with a two-argument `setPrice`; the mock takes one. */
@@ -22,6 +20,7 @@ describe("HashPowerFutures oracle answer cap", () => {
     const { contracts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, hashpriceUsd } = contracts;
     const decimals = await hashpriceUsd.read.decimals();
+    const MAX_PRICE = await futures.read.MAX_PRICE();
     const feed = hashpriceUsd as unknown as PriceFeed;
 
     await feed.write.setPrice([answerFor(MAX_PRICE, decimals)]);
@@ -35,6 +34,7 @@ describe("HashPowerFutures oracle answer cap", () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, hashpriceUsd } = contracts;
     const decimals = await hashpriceUsd.read.decimals();
+    const MAX_PRICE = await futures.read.MAX_PRICE();
     const feed = await viem.deployContract("PriceFeedMock", [decimals, "out of range"]);
     await feed.write.setPrice([answerFor(MAX_PRICE + config.priceLadderStep, decimals)]);
 

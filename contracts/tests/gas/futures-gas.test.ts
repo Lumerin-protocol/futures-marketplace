@@ -196,6 +196,7 @@ async function benchmarkViews() {
       "MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION()",
       "MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION",
     ],
+    ["MAX_PRICE()", "MAX_PRICE"],
     ["MAX_PRICE_LEVELS_PER_SIDE()", "MAX_PRICE_LEVELS_PER_SIDE"],
     ["UPGRADE_INTERFACE_VERSION()", "UPGRADE_INTERFACE_VERSION"],
     ["VERSION()", "VERSION"],
@@ -964,7 +965,7 @@ describe("Futures gas benchmark", () => {
 
     const snapshot = gas.snapshot();
     const coverage = assertAbiFunctionCoverage(HashPowerFuturesAbi, snapshot, exclusions);
-    assert.equal(coverage.covered.length, 66);
+    assert.equal(coverage.covered.length, 67);
     assert.deepEqual(coverage.excluded, [
       "initialize(address,uint8,uint8,uint256)",
       "proxiableUUID()",
