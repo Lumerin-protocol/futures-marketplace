@@ -533,6 +533,36 @@ protection is that nothing declares it as a hard dependency.
 **To resolve:** add `biome lint` and `vitest run` (with a CI env file) to the
 UI workflow; bump the actions; move husky to the repo root or drop it.
 
+## 25. Realized PnL is netted of fees on the client
+
+**Where:** `realizedPnlAfterFees` in `src/lib/portfolioPnl.ts`; the
+`feesInWindow` slice and `SESSION_LIQUIDATION_FEES` in `queries/common.ts`;
+`hooks/data/pnl/windowFees.ts`.
+
+Both indexers report `realizedPnl` as price PnL only and book fees on separate
+fields, while the contract takes fees out of the balance at every fill. Every
+"Realized PnL" in the UI now subtracts trading and liquidation fees itself,
+counting each fee when it is paid, so an opening trade shows its fee as a loss.
+
+- **The 30-day header sums fee rows.** Nothing upstream plays the part
+  `Trade.cumulativeRealizedPnl` plays for the PnL, so the account tick carries
+  every fee-bearing trade in the window: at most 8 per account on either venue
+  when this was added, paged by id past 1,000. It grows with taker activity.
+- **Liquidation fees ride the session queries** as a filtered nested list,
+  because `PositionSession.tradingFees` leaves them out. An empty list costs
+  ~21 B per session, up to ~2.1 KB on the perps tick at its 100-session page.
+- **Perps funding is not netted.** Windowing it means paging settlements, and
+  one live account settles about every five minutes (3,007 rows in 30 days).
+  It stays in the positions tables' Fees (F/T) column.
+- Order-liquidation fees (`Order.liquidationFee`) belong to no trade and are in
+  no realized figure.
+
+**To resolve:** in both indexers (perps lives in `derivatives-marketplace`), a
+running fee total snapshotted on `Trade` like `cumulativeRealizedPnl`, a
+lifetime total on `User`, and liquidation fees on `PositionSession`. The window
+then costs one baseline row, the nested list goes away, and funding can be
+netted the same way.
+
 ---
 
 ## Lint suppressions

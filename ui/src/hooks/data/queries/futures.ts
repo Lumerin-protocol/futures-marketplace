@@ -1,4 +1,4 @@
-import { commonSlices } from "./common";
+import { commonSlices, SESSION_LIQUIDATION_FEES } from "./common";
 import { buildDocument, defineSlices, type Slice } from "./slice";
 
 /**
@@ -136,6 +136,7 @@ const SESSION_TRADE_FIELDS = `
   tradePrice
   tradeQuantity
   tradingFee
+  liquidationFee
   transactionHash
 `;
 
@@ -275,6 +276,7 @@ export const futuresSlices = defineSlices({
 
   me: commonSlices.me,
   realizedBaseline: commonSlices.realizedBaseline,
+  feesInWindow: commonSlices.feesInWindow,
 
   // --- history -----------------------------------------------------------
 
@@ -312,6 +314,7 @@ export const futuresSlices = defineSlices({
       orderDirection: desc
     ) {
       ${POSITION_SESSION_FIELDS}
+      ${SESSION_LIQUIDATION_FEES}
     }`,
   },
 
@@ -381,7 +384,11 @@ export const UserFuturesLiquidationsQuery = buildDocument("UserFuturesLiquidatio
 export const VenueRealizedPnlQuery = buildDocument("VenueRealizedPnl", [
   futuresSlices.me,
   futuresSlices.realizedBaseline,
+  futuresSlices.feesInWindow,
 ]);
+
+/** The window's fees past their first page. Valid on either venue's subgraph. */
+export const WindowFeesQuery = buildDocument("WindowFees", [futuresSlices.feesInWindow]);
 
 export const HistoricalOrdersQuery = buildDocument("HistoricalOrders", [
   futuresSlices.historyOrders,

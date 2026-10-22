@@ -2,7 +2,11 @@ import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useCallback, useEffect } from "react";
 import { clearSnapshotRunner, runSnapshotOnce, setSnapshotRunner } from "./driverRegistry";
 import { QUANTITY_SCALE, QUANTITY_SCALE_NUM } from "../../../lib/units";
-import { realizedPnlSinceBaseline, windowCutoffSeconds } from "../../../lib/portfolioPnl";
+import {
+  realizedPnlAfterFees,
+  realizedPnlSinceBaseline,
+  windowCutoffSeconds,
+} from "../../../lib/portfolioPnl";
 import { graphqlRequest } from "../graphql";
 import { perpsSlices } from "../queries/perps";
 import { buildDocument, type Slice } from "../queries/slice";
@@ -47,6 +51,12 @@ import {
 } from "../useUserLiquidations";
 import { PORTFOLIO_OPEN_EXPOSURE_QK } from "../pnl/usePortfolioUnrealizedPnl";
 import { PORTFOLIO_REALIZED_PNL_QK } from "../pnl/usePortfolioRealizedPnl";
+import {
+  FEES_FIRST_CURSOR,
+  FEES_PAGE_SIZE,
+  totalWindowFees,
+  type WindowFeeRow,
+} from "../pnl/windowFees";
 import { SNAPSHOT_TICK_MS, snapshotQueryOptions } from "./config";
 import { isDeepEqual, writeIfChanged, writeResponseIfChanged } from "./writeIfChanged";
 import { resetVenueHistory } from "../refreshVenueViews";
@@ -73,6 +83,7 @@ interface PerpsSnapshotResponse {
   liquidations?: LiquidationRow[];
   me?: (PerpsExposureRow & { realizedPnl: string }) | null;
   realizedBaseline?: { cumulativeRealizedPnl: string }[];
+  feesInWindow?: WindowFeeRow[];
 }
 
 export interface PerpsSnapshotResult {
@@ -105,6 +116,7 @@ const slicesForTick = (groups: readonly TickGroup[]) => {
       perpsSlices.liquidations,
       perpsSlices.me,
       perpsSlices.realizedBaseline,
+      perpsSlices.feesInWindow,
     );
   }
 
@@ -140,6 +152,8 @@ export const fetchPerpsSnapshot = async (
     tradesFirst: RECENT_TRADES_DEFAULT_FIRST,
     liquidationsFirst: LIQUIDATIONS_FIRST,
     cutoff,
+    feesFirst: FEES_PAGE_SIZE,
+    feesAfterId: FEES_FIRST_CURSOR,
   };
   const response = await onTheSchedule("perpetual", groups, startedAt, () =>
     graphqlRequest<PerpsSnapshotResponse>(
@@ -232,11 +246,18 @@ export const fetchPerpsSnapshot = async (
 
       // A missing `User` row means the account has never traded this venue.
       const realized = response.me
-        ? realizedPnlSinceBaseline(
-            BigInt(response.me.realizedPnl),
-            response.realizedBaseline?.length
-              ? BigInt(response.realizedBaseline[0].cumulativeRealizedPnl)
-              : null,
+        ? realizedPnlAfterFees(
+            realizedPnlSinceBaseline(
+              BigInt(response.me.realizedPnl),
+              response.realizedBaseline?.length
+                ? BigInt(response.realizedBaseline[0].cumulativeRealizedPnl)
+                : null,
+            ),
+            await totalWindowFees(response.feesInWindow ?? [], {
+              address: address.toLowerCase(),
+              cutoff,
+              subgraphUrl: process.env.REACT_APP_SUBGRAPH_PERPS_URL,
+            }),
           )
         : 0n;
       writeIfChanged(

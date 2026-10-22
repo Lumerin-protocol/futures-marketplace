@@ -10,6 +10,7 @@ import { useSessionTrades } from "../../../hooks/data/useSessionTrades";
 import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPositions";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { getTxUrl } from "../../../lib/indexer";
+import { REALIZED_PNL_FEES_HINT, realizedPnlAfterFees } from "../../../lib/portfolioPnl";
 import type { ContractMode } from "../../../types/types";
 
 export interface FuturesTradesModalSelection {
@@ -155,7 +156,9 @@ export const FuturesTradesModal = ({
             timestamp: trade.timestamp,
             pricePerDay: trade.tradePrice,
             positionType: isLong ? "Long" : "Short",
-            realizedPnl: Number(trade.realizedPnl),
+            realizedPnl: Number(
+              realizedPnlAfterFees(trade.realizedPnl, trade.tradingFee, trade.liquidationFee),
+            ),
             counterparty: null,
             quantity: Math.abs(trade.tradeQuantity),
             hasActive: p.isActive,
@@ -231,7 +234,7 @@ export const FuturesTradesModal = ({
                   <th>Price (USDC)</th>
                   <th>Quantity</th>
                   {/* <th>Counterparty</th> */}
-                  <th>Realized PnL</th>
+                  <th title={REALIZED_PNL_FEES_HINT}>Realized PnL</th>
                   <th>Tx Hash</th>
                 </tr>
               </thead>
