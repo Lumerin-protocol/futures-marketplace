@@ -22,7 +22,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev Lives here rather than in {HashPowerFuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `HashPowerFutures.sol` to require a bump.
-    string public constant VERSION = "6.11.0";
+    string public constant VERSION = "6.12.0";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) { }
@@ -328,7 +328,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         if (_user == BACKSTOP) revert BackstopAccount();
         if (portfolioMargin.hasRestingOrderDelta(_user)) revert OrdersStillOpen();
         if (!_underwater(_user)) revert NotLiquidatable();
-        mark = _getMarketPrice(_getPrice());
+        mark = _marketPrice();
     }
 
     /// @dev Close up to `_closeQty` at `_expirationAt`. Returns false when no positive close.
@@ -371,7 +371,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
 
         bool isBuy = net < 0;
         uint256 closeAbs = M.min(_qty, M.abs(net));
-        uint256 mark = _getMarketPrice(_getPrice());
+        uint256 mark = _marketPrice();
         (uint16 bandBps, uint16 feeBps) = vault.backstopParams();
         uint256 limit = _bandPrice(mark, isBuy, bandBps);
         if (limit == 0) revert InvalidPrice();
@@ -432,7 +432,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     function _ensureSettlementPrice(uint256 expirationAt) internal returns (uint256) {
         uint256 price = settlementPrice[expirationAt];
         if (price == 0) {
-            price = _getMarketPrice(_getPrice());
+            price = _marketPrice();
             if (price == 0) revert InvalidPrice();
             settlementPrice[expirationAt] = price;
             emit SettlementPriceRecorded(expirationAt, price, _msgSender());
@@ -443,7 +443,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     // ── Views ─────────────────────────────────────────────────────────────────
 
     function getMarketPrice() public view returns (uint256) {
-        return _getMarketPrice(_getPrice());
+        return _marketPrice();
     }
 
     function getOrder(bytes32 _orderId) external view returns (Order memory) {

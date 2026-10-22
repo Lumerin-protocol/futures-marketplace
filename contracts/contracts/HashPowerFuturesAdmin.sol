@@ -88,6 +88,7 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
         oracleDecimals = _validateOracleContract(_oracle);
 
         priceOracle = _oracle;
+        _marketPrice();
         emit OracleUpdated(address(_oracle));
     }
 
@@ -118,7 +119,7 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
     function forceClosePositions(address[] calldata _users, uint256[] calldata _expirationAts) external onlyOwner {
         if (!vault.halted()) revert NotHalted();
         if (_users.length != _expirationAts.length) revert ArrayLengthMismatch();
-        uint256 mark = _getMarketPrice(_getPrice());
+        uint256 mark = _marketPrice();
         for (uint256 i = 0; i < _users.length; i++) {
             address user = _users[i];
             uint256 expirationAt = _expirationAts[i];

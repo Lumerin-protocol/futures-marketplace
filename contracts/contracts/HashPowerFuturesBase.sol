@@ -13,7 +13,6 @@ import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/in
 import { IPointsHook } from "collateral-margin/contracts/contracts/interfaces/IPointsHook.sol";
 import { PriceLadderLib } from "./libs/PriceLadderLib.sol";
 import { MathLib as M } from "./libs/MathLib.sol";
-import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /// @title HashPowerFuturesBase — storage layout and internal helpers for {HashPowerFutures}
 /// @dev Owns the full UUPS storage layout (declaration order is part of the layout — do not reorder).
@@ -22,7 +21,6 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableSet for EnumerableSet.Bytes32Set;
     using StructuredLinkedList for StructuredLinkedList.List;
-    using SafeCast for uint256;
 
     // ── Storage (declaration order is part of the UUPS layout — do not reorder) ──
 
@@ -198,11 +196,11 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     ///      `MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION` it keeps `MathLib.fillLossBound`'s
     ///      `qty · Σq(p−m)²` within uint256.
     uint256 internal constant MAX_ORDER_QUANTITY = 1e12;
-    /// @notice Largest order price accepted, in token decimals (~$1e12 per contract).
-    /// @dev Oracle-independent, so it binds even when the feed is unusable. Keeps every
-    ///      price-derived `int256` (entry value, PnL, fees) far below 2^255, so a price can
-    ///      never wrap into an attacker-chosen negative trade value, and keeps the
-    ///      `Σ price²·qty` order moment within uint256.
+    /// @notice Largest price any calculation accepts, in token decimals (~$1e12 per contract):
+    ///         order prices and the oracle mark alike.
+    /// @dev Keeps every price-derived `int256` (entry value, PnL, fees) far below 2^255, so the
+    ///      plain casts can never wrap, and keeps the `Σ price²·qty` order moment and
+    ///      `MathLib.fillLossBound` within uint256. A feed above it reverts like a stale one.
     uint256 internal constant MAX_PRICE = 1e18;
     uint256 internal constant BPS = 10_000; // Basis points denominator
     /// @notice Hard ceiling on |makerFeeBps| and |takerFeeBps|: 100 bps (1%).
@@ -584,11 +582,11 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         _applyFill(_taker, takerFillQty, _price, _expirationAt, _taker != BACKSTOP);
 
         uint256 notional = _price * fill;
-        int256 makerFeeAmt = notional.toInt256() * int256(makerFeeBps) / int256(BPS);
+        int256 makerFeeAmt = int256(notional) * int256(makerFeeBps) / int256(BPS);
         // The backstop is unfunded by design: charging it would only emit a fee `BadDebt`
         // on every unwind fill. Its exits are paid for out of the fee pot via the unwind
         // fee instead. A maker rebate on such a fill is still capped at the pot.
-        int256 takerFeeAmt = _taker == BACKSTOP ? int256(0) : notional.toInt256() * int256(takerFeeBps) / int256(BPS);
+        int256 takerFeeAmt = _taker == BACKSTOP ? int256(0) : int256(notional) * int256(takerFeeBps) / int256(BPS);
         _chargeMatchFees(makerParticipant, _taker, makerFeeAmt, takerFeeAmt);
         _notifyFill(_pointsHook, makerParticipant, _taker, notional, makerFeeAmt, takerFeeAmt, _price, _refPrice);
 
@@ -704,14 +702,14 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
 
         if (netQty == 0) {
             participantExpirationAtNetDelta[_user][_expirationAt] = _signedQty;
-            participantExpirationAtNetEntryValue[_user][_expirationAt] = _signedQty * _tradePrice.toInt256();
+            participantExpirationAtNetEntryValue[_user][_expirationAt] = _signedQty * int256(_tradePrice);
             participantActiveExpirationAts[_user].add(_expirationAt);
             return 0;
         }
 
         if (M.isSameSign(netQty, _signedQty)) {
             participantExpirationAtNetDelta[_user][_expirationAt] = netQty + _signedQty;
-            participantExpirationAtNetEntryValue[_user][_expirationAt] = netEntry + _signedQty * _tradePrice.toInt256();
+            participantExpirationAtNetEntryValue[_user][_expirationAt] = netEntry + _signedQty * int256(_tradePrice);
             return 0;
         }
 
@@ -727,7 +725,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         if (closedAbs < absNet) {
             remainingEntryValue = netEntry * int256(absNet - closedAbs) / int256(absNet);
         }
-        pnl = _tradePrice.toInt256() * signedClosed - (netEntry - remainingEntryValue);
+        pnl = int256(_tradePrice) * signedClosed - (netEntry - remainingEntryValue);
         if (!_transferPnl(_insuranceFundAccount(), _user, pnl) && _mustPay) revert InsufficientMarginBalance();
 
         if (absDq < absNet) {
@@ -743,7 +741,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
             // Flip: open remainder at trade price
             int256 openQty = _signedQty + netQty; // leftover in dq's direction
             participantExpirationAtNetDelta[_user][_expirationAt] = openQty;
-            participantExpirationAtNetEntryValue[_user][_expirationAt] = openQty * _tradePrice.toInt256();
+            participantExpirationAtNetEntryValue[_user][_expirationAt] = openQty * int256(_tradePrice);
             // still active (non-zero)
         }
     }
@@ -917,7 +915,8 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         // Soft path: never revert on a bad round — points just drop the bonus.
         if (answer <= 0 || updatedAt == 0 || updatedAt > block.timestamp) return 0;
         if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) return 0;
-        return _getMarketPrice(uint256(answer));
+        uint256 price = _getMarketPrice(uint256(answer));
+        return price > MAX_PRICE ? 0 : price;
     }
 
     function _notifyLiquidation(address _liquidator, uint256 _fee) internal {
@@ -952,6 +951,13 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     function _getMarketPrice(uint256 _hashpriceUsd) internal view returns (uint256) {
         uint256 scaled = M.scaleDecimals(_hashpriceUsd, oracleDecimals, collateralDecimals);
         return M.roundToNearest(scaled, minimumPriceIncrement);
+    }
+
+    /// @dev Hard-validated oracle mark in venue units. Capped at `MAX_PRICE` like order prices,
+    ///      so every price-derived cast and product stays in range.
+    function _marketPrice() internal view returns (uint256 price) {
+        price = _getMarketPrice(_getPrice());
+        if (price > MAX_PRICE) revert InvalidOracle();
     }
 
     function _activePricesSlice(StructuredLinkedList.List storage priceList, uint256 _maxLevels)
