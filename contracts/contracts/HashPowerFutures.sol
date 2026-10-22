@@ -472,13 +472,15 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         return participantExpirationAtOrderIdsIndex[_user][_expirationAt].values();
     }
 
-    /// @notice Raw per-expiration cache, including orders awaiting cleanup after expiration.
+    /// @notice Raw per-expiration cache, including orders awaiting cleanup after expiration:
+    ///         quantity and the first two price moments per side, the inputs of the fill-loss
+    ///         bound.
     function getOrderAggregateAtExpiration(address _user, uint256 _expirationAt)
         external
         view
-        returns (OrderAggregate memory)
+        returns (RestingOrderAggregate memory)
     {
-        return participantExpirationAtOrderAggregate[_user][_expirationAt];
+        return participantExpirationAtRestingOrderAggregate[_user][_expirationAt];
     }
 
     function getUserPosition(address _user, uint256 _expirationAt) external view returns (Position memory) {
@@ -562,24 +564,35 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         (uint256[] memory expirationAts, uint256 activeCount) = _activeOrderExpirations(_participant);
         for (uint256 i = 0; i < activeCount;) {
             uint256 expirationAt = expirationAts[i];
-            OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_participant][expirationAt];
-            OrderMoments storage moments = participantExpirationAtOrderMoments[_participant][expirationAt];
-            uint256 expBuyQty = aggregate.buyQty;
-            uint256 expSellQty = aggregate.sellQty;
-            buyQty += expBuyQty;
-            sellQty += expSellQty;
+            RestingOrderAggregate storage aggregate =
+                participantExpirationAtRestingOrderAggregate[_participant][expirationAt];
+            buyQty += aggregate.buyQty;
+            sellQty += aggregate.sellQty;
 
             uint256 price = expirationAt <= block.timestamp ? settlementPrice[expirationAt] : 0;
             if (price == 0) {
                 if (livePrice == 0) livePrice = getMarketPrice();
                 price = livePrice;
             }
-            buyLoss += M.fillLossBound(expBuyQty, aggregate.buyValue, moments.buyP2Q, price, true);
-            sellLoss += M.fillLossBound(expSellQty, aggregate.sellValue, moments.sellP2Q, price, false);
+            (uint256 expBuyLoss, uint256 expSellLoss) = _expirationFillLoss(_participant, expirationAt, price);
+            buyLoss += expBuyLoss;
+            sellLoss += expSellLoss;
             unchecked {
                 ++i;
             }
         }
+    }
+
+    /// @dev Fill-loss bound of one expiry's resting book at `_price`, per side.
+    function _expirationFillLoss(address _participant, uint256 _expirationAt, uint256 _price)
+        private
+        view
+        returns (uint256 buyLoss, uint256 sellLoss)
+    {
+        RestingOrderAggregate storage aggregate =
+            participantExpirationAtRestingOrderAggregate[_participant][_expirationAt];
+        buyLoss = M.fillLossBound(aggregate.buyQty, aggregate.buyPQ, aggregate.buyP2Q, _price, true);
+        sellLoss = M.fillLossBound(aggregate.sellQty, aggregate.sellPQ, aggregate.sellP2Q, _price, false);
     }
 
     /// @notice Mark-to-market PnL across active expiries, in collateral token units.

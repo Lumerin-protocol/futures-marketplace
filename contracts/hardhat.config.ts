@@ -64,9 +64,6 @@ export default defineConfig({
   networks: {
     hardhat: {
       type: "edr-simulated",
-      // TEMPORARY: the audit fixes push the venues past EIP-170. Remove before deploying;
-      // the size has to be brought back under 24,576 bytes first.
-      allowUnlimitedContractSize: true,
       mining: {
         auto: true,
       },

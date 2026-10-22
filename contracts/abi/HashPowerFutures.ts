@@ -1191,16 +1191,26 @@ export const HashPowerFuturesAbi = [
           },
           {
             "internalType": "uint256",
-            "name": "buyValue",
+            "name": "buyPQ",
             "type": "uint256"
           },
           {
             "internalType": "uint256",
-            "name": "sellValue",
+            "name": "buyP2Q",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "sellPQ",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "sellP2Q",
             "type": "uint256"
           }
         ],
-        "internalType": "struct HashPowerFuturesBase.OrderAggregate",
+        "internalType": "struct HashPowerFuturesBase.RestingOrderAggregate",
         "name": "",
         "type": "tuple"
       }
@@ -1658,24 +1668,6 @@ export const HashPowerFuturesAbi = [
       }
     ],
     "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address[]",
-        "name": "_users",
-        "type": "address[]"
-      },
-      {
-        "internalType": "uint256[]",
-        "name": "_expirationAts",
-        "type": "uint256[]"
-      }
-    ],
-    "name": "rebuildOrderMoments",
-    "outputs": [],
-    "stateMutability": "nonpayable",
     "type": "function"
   },
   {

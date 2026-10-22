@@ -125,6 +125,9 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     /// @dev Dead — former vault. Moved to immutable.
     address private __gap16;
 
+    /// @notice Pre-6.10 cached totals for a participant's resting orders at one expiry.
+    /// @dev Dead since 6.10, superseded by {RestingOrderAggregate}. Kept only so the legacy
+    ///      mapping's type, and therefore the storage layout, is unchanged.
     struct OrderAggregate {
         uint256 buyQty;
         uint256 sellQty;
@@ -132,6 +135,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         uint256 sellValue;
     }
 
+    /// @dev Dead since 6.10. Never read or written; slot retained for proxy storage compatibility.
     mapping(address => mapping(uint256 => OrderAggregate)) internal participantExpirationAtOrderAggregate;
     /// @dev Dead after v4.3: former order-expiration set used only by resetState. Slot retained.
     mapping(address => EnumerableSet.UintSet) private participantOrderExpirationAts;
@@ -142,15 +146,32 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     ///      historical bits never require a keeper sweep and never increase risk-view gas.
     mapping(address => mapping(uint256 => uint256)) internal participantOrderExpirationBitmap;
 
-    /// @notice `Σ price²·qty` of a participant's remaining resting orders at one expiry, per
-    ///         side. With `OrderAggregate`'s `Σqty` and `Σprice·qty` it sizes the fill-loss bound.
-    struct OrderMoments {
+    /// @notice Canonical cached totals for a participant's remaining resting orders at one
+    ///         expiry, per side: the quantity and the first two price moments.
+    /// @dev A moment is a quantity-weighted sum of a power of price, `Σ q·p^k`. The quantity is
+    ///      the zeroth; the first gives a side's average price and the second its spread, which
+    ///      yields the side's distance from any mark in constant time — the inputs of
+    ///      `MathLib.fillLossBound`. The spread is what stops a deep decoy hiding a marketable
+    ///      order.
+    struct RestingOrderAggregate {
+        /// Σ |qty| over resting bids at the expiry, in whole contracts.
+        uint256 buyQty;
+        /// Σ |qty| over resting asks at the expiry, in whole contracts.
+        uint256 sellQty;
+        /// First moment of resting bids at the expiry, Σ price·qty. Price in token decimals.
+        uint256 buyPQ;
+        /// Second moment of resting bids at the expiry, Σ price²·qty.
         uint256 buyP2Q;
+        /// First moment of resting asks at the expiry, Σ price·|qty|.
+        uint256 sellPQ;
+        /// Second moment of resting asks at the expiry, Σ price²·|qty|.
         uint256 sellP2Q;
     }
 
     /// @dev Appended at the storage tail in 6.10. Never move above `participantOrderExpirationBitmap`.
-    mapping(address => mapping(uint256 => OrderMoments)) internal participantExpirationAtOrderMoments;
+    ///      Starts empty on upgrade, so no order may rest when 6.10 goes live: cancel every
+    ///      resting order first. A pre-6.10 order removed afterwards would underflow it.
+    mapping(address => mapping(uint256 => RestingOrderAggregate)) internal participantExpirationAtRestingOrderAggregate;
 
     // immutable
     ICollateralVault public immutable vault;
@@ -170,10 +191,12 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION = 100;
     uint256 public constant MAX_PRICE_LEVELS_PER_SIDE = 200;
     /// @notice Largest |quantity| a single order may carry, in whole contracts.
-    /// @dev The margin engine lifts summed order quantity to WAD (×1e18 from whole contracts)
-    ///      and stresses it as int256. 1e24 contracts per order across every listed expiry
-    ///      keeps that sum far below 2^255, so the cast can never wrap.
-    uint256 internal constant MAX_ORDER_QUANTITY = 1e24;
+    /// @dev Two overflow bounds rest on it. The margin engine lifts summed order quantity to
+    ///      WAD (×1e18 from whole contracts) and stresses it as int256, so the sum across
+    ///      every listed expiry must stay below 2^255. And with `MAX_PRICE` and
+    ///      `MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION` it keeps `MathLib.fillLossBound`'s
+    ///      `qty · Σq(p−m)²` within uint256.
+    uint256 internal constant MAX_ORDER_QUANTITY = 1e12;
     /// @notice Largest order price accepted, in token decimals (~$1e12 per contract).
     /// @dev Oracle-independent, so it binds even when the feed is unusable. Keeps every
     ///      price-derived `int256` (entry value, PnL, fees) far below 2^255, so a price can
@@ -377,18 +400,18 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         internal
     {
         uint256 absQty = M.abs(_quantity);
-        OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_participant][_expirationAt];
-        OrderMoments storage moments = participantExpirationAtOrderMoments[_participant][_expirationAt];
+        RestingOrderAggregate storage aggregate =
+            participantExpirationAtRestingOrderAggregate[_participant][_expirationAt];
         bool wasEmpty = aggregate.buyQty == 0 && aggregate.sellQty == 0;
         uint256 pq = _price * absQty;
         if (_quantity > 0) {
             aggregate.buyQty += absQty;
-            aggregate.buyValue += pq;
-            moments.buyP2Q += pq * _price;
+            aggregate.buyPQ += pq;
+            aggregate.buyP2Q += pq * _price;
         } else {
             aggregate.sellQty += absQty;
-            aggregate.sellValue += pq;
-            moments.sellP2Q += pq * _price;
+            aggregate.sellPQ += pq;
+            aggregate.sellP2Q += pq * _price;
         }
         if (wasEmpty) {
             _setOrderExpirationActive(_participant, _expirationAt, true);
@@ -402,17 +425,17 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         uint256 _absQty,
         bool _isBuy
     ) internal {
-        OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_participant][_expirationAt];
-        OrderMoments storage moments = participantExpirationAtOrderMoments[_participant][_expirationAt];
+        RestingOrderAggregate storage aggregate =
+            participantExpirationAtRestingOrderAggregate[_participant][_expirationAt];
         uint256 pq = _price * _absQty;
         if (_isBuy) {
             aggregate.buyQty -= _absQty;
-            aggregate.buyValue -= pq;
-            moments.buyP2Q -= pq * _price;
+            aggregate.buyPQ -= pq;
+            aggregate.buyP2Q -= pq * _price;
         } else {
             aggregate.sellQty -= _absQty;
-            aggregate.sellValue -= pq;
-            moments.sellP2Q -= pq * _price;
+            aggregate.sellPQ -= pq;
+            aggregate.sellP2Q -= pq * _price;
         }
         if (aggregate.buyQty == 0 && aggregate.sellQty == 0) {
             _setOrderExpirationActive(_participant, _expirationAt, false);
@@ -426,7 +449,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         returns (uint256 total)
     {
         if (_net == 0) return 0;
-        OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_user][_expirationAt];
+        RestingOrderAggregate storage aggregate = participantExpirationAtRestingOrderAggregate[_user][_expirationAt];
         return _net > 0 ? aggregate.sellQty : aggregate.buyQty;
     }
 
