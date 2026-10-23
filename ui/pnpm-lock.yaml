@@ -61,8 +61,8 @@ importers:
         specifier: https://github.com/Lumerin-protocol/contracts-js#v2.0.7
         version: https://codeload.github.com/Lumerin-protocol/contracts-js/tar.gz/e19cd0301992bf1717ccb2315e02ade3b1337079(bufferutil@4.1.0)(utf-8-validate@5.0.10)
       derivatives-marketplace-abi:
-        specifier: github:Lumerin-protocol/derivatives-marketplace#8b7ed0f&path:/contracts/abi
-        version: https://codeload.github.com/Lumerin-protocol/derivatives-marketplace/tar.gz/8b7ed0f3572d0ea8039a11757b7c1b963be75535#path:/contracts/abi
+        specifier: github:Lumerin-protocol/derivatives-marketplace#207a1f0724fcc4b6c1d9b9d38b8771b4a815886f&path:/contracts/abi
+        version: https://codeload.github.com/Lumerin-protocol/derivatives-marketplace/tar.gz/207a1f0724fcc4b6c1d9b9d38b8771b4a815886f#path:/contracts/abi
       ecies-geth:
         specifier: ^1.6.2
         version: 1.8.0
@@ -2349,8 +2349,8 @@ packages:
     resolution: {integrity: sha512-ZySD7Nf91aLB0RxL4KGrKHBXl7Eds1DAmEdcoVawXnLD7SDhpNgtuII2aAkg7a7QS41jxPSZ17p4VdGnMHk3MQ==}
     engines: {node: '>=0.4.0'}
 
-  derivatives-marketplace-abi@https://codeload.github.com/Lumerin-protocol/derivatives-marketplace/tar.gz/8b7ed0f3572d0ea8039a11757b7c1b963be75535#path:/contracts/abi:
-    resolution: {gitHosted: true, integrity: sha512-JkJW4F+2DgaUOFLgP0OO9QuvJl4bh4m5gle+CVlKH8o+WBRqY2+c3OoFl7ml9lzdwGGwWjOFdchqY4KP/a6OnQ==, path: /contracts/abi, tarball: https://codeload.github.com/Lumerin-protocol/derivatives-marketplace/tar.gz/8b7ed0f3572d0ea8039a11757b7c1b963be75535}
+  derivatives-marketplace-abi@https://codeload.github.com/Lumerin-protocol/derivatives-marketplace/tar.gz/207a1f0724fcc4b6c1d9b9d38b8771b4a815886f#path:/contracts/abi:
+    resolution: {gitHosted: true, path: /contracts/abi, tarball: https://codeload.github.com/Lumerin-protocol/derivatives-marketplace/tar.gz/207a1f0724fcc4b6c1d9b9d38b8771b4a815886f}
     version: 0.0.0
 
   destr@2.0.5:
@@ -7426,7 +7426,7 @@ snapshots:
   delayed-stream@1.0.0:
     optional: true
 
-  derivatives-marketplace-abi@https://codeload.github.com/Lumerin-protocol/derivatives-marketplace/tar.gz/8b7ed0f3572d0ea8039a11757b7c1b963be75535#path:/contracts/abi: {}
+  derivatives-marketplace-abi@https://codeload.github.com/Lumerin-protocol/derivatives-marketplace/tar.gz/207a1f0724fcc4b6c1d9b9d38b8771b4a815886f#path:/contracts/abi: {}
 
   destr@2.0.5: {}
 
