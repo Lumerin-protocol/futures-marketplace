@@ -41,8 +41,11 @@ import {
   formatLiquidatedQty,
   LIQUIDATION_ROW_BG,
 } from "../../../lib/liquidation";
+import { REALIZED_PNL_FEES_HINT, realizedPnlAfterFees } from "../../../lib/portfolioPnl";
 
 type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "POSITION_HISTORY" | "ORDER_HISTORY";
+
+const SESSION_REALIZED_PNL_HINT = `${REALIZED_PNL_FEES_HINT} Funding is not included.`;
 
 interface PerpsOrdersPositionsTabWidgetProps {
   participantAddress?: `0x${string}`;
@@ -767,7 +770,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
               <th title={marginTooltip}>Margin</th>
               <th>Fees (F/T)</th>
               <th>Unrealized PnL</th>
-              <th>Realized PnL</th>
+              <th title={SESSION_REALIZED_PNL_HINT}>Realized PnL</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -775,7 +778,12 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
             {openPositions.map((session) => {
               const displayQuantity = session.netQuantity;
               const isLong = session.isLong;
-              const realizedPnlValue = Number(session.realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
+              const realizedPnl = realizedPnlAfterFees(
+                session.realizedPnl,
+                session.tradingFees,
+                session.liquidationFees,
+              );
+              const realizedPnlValue = Number(realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
               const unrealizedPnl = calculateUnrealizedPnL(session.entryPrice, displayQuantity);
               const unrealizedPnlValue = Number(unrealizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
 
@@ -931,14 +939,19 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, hasMore = fals
               <th>Close Price (USDC)</th>
               <th>Size (USDC)</th>
               <th>Fees (F/T)</th>
-              <th>Realized PnL</th>
+              <th title={SESSION_REALIZED_PNL_HINT}>Realized PnL</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {displayedPositions.map((session) => {
               const isLong = session.isLong;
-              const realizedPnlValue = Number(session.realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
+              const realizedPnl = realizedPnlAfterFees(
+                session.realizedPnl,
+                session.tradingFees,
+                session.liquidationFees,
+              );
+              const realizedPnlValue = Number(realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
               const wasLiquidated = session.liquidatedQuantity > 0n;
 
               return (
@@ -1069,48 +1082,52 @@ const PerpsTradesTable = ({ trades, isLoading, hasMore = false, isFetchingMore, 
             <th>Size (USDC)</th>
             <th>Entry Price After</th>
             <th>Trading Fee</th>
-            <th>Realized PnL</th>
+            <th title={REALIZED_PNL_FEES_HINT}>Realized PnL</th>
             <th>Tx Hash</th>
           </tr>
         </thead>
         <tbody>
-          {displayedTrades.map((trade) => (
-            <TableRow
-              key={trade.id}
-              style={trade.isLiquidation ? { backgroundColor: LIQUIDATION_ROW_BG } : undefined}
-            >
-              <td><DateTimeCell timestamp={trade.timestamp} /></td>
-              <td>
-                <SideCell>
-                  <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
-                    {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
-                  </TypeBadge>
-                  {trade.isLiquidation && <LiquidationChip>Liquidation</LiquidationChip>}
-                </SideCell>
-              </td>
-              <td>{formatPrice(trade.tradePrice)}</td>
-              <td>{((Number(trade.tradePrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(trade.tradeQuantity < 0n ? -trade.tradeQuantity : trade.tradeQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}</td>
-              <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
-              <td>{formatPrice(trade.tradingFee)}</td>
-              <td>
-                <PnLText
-                  $isPositive={Number(trade.realizedPnl) >= 0}
-                  $isZero={Number(trade.realizedPnl) === 0}
-                >
-                  {formatPnL(trade.realizedPnl)}
-                </PnLText>
-              </td>
-              <td>
-                <TxLink 
-                  href={getTxUrl(trade.transactionHash as `0x${string}`)} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                >
-                  {trade.transactionHash.slice(0, 6)}...{trade.transactionHash.slice(-4)}
-                </TxLink>
-              </td>
-            </TableRow>
-          ))}
+          {displayedTrades.map((trade) => {
+            const realizedPnl = realizedPnlAfterFees(
+              trade.realizedPnl,
+              trade.tradingFee,
+              trade.liquidationFee,
+            );
+            return (
+              <TableRow
+                key={trade.id}
+                style={trade.isLiquidation ? { backgroundColor: LIQUIDATION_ROW_BG } : undefined}
+              >
+                <td><DateTimeCell timestamp={trade.timestamp} /></td>
+                <td>
+                  <SideCell>
+                    <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
+                      {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
+                    </TypeBadge>
+                    {trade.isLiquidation && <LiquidationChip>Liquidation</LiquidationChip>}
+                  </SideCell>
+                </td>
+                <td>{formatPrice(trade.tradePrice)}</td>
+                <td>{((Number(trade.tradePrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(trade.tradeQuantity < 0n ? -trade.tradeQuantity : trade.tradeQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}</td>
+                <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
+                <td>{formatPrice(trade.tradingFee)}</td>
+                <td>
+                  <PnLText $isPositive={realizedPnl >= 0n} $isZero={realizedPnl === 0n}>
+                    {formatPnL(realizedPnl)}
+                  </PnLText>
+                </td>
+                <td>
+                  <TxLink 
+                    href={getTxUrl(trade.transactionHash as `0x${string}`)} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                  >
+                    {trade.transactionHash.slice(0, 6)}...{trade.transactionHash.slice(-4)}
+                  </TxLink>
+                </td>
+              </TableRow>
+            );
+          })}
         </tbody>
       </Table>
       <LoadMoreButton hasMore={hasMore} isLoading={isFetchingMore} onClick={onLoadMore} />
@@ -1178,42 +1195,46 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
                 <th>Size (USDC)</th>
                 <th>Entry Price After</th>
                 <th>Trading Fee</th>
-                <th>Realized PnL</th>
+                <th title={REALIZED_PNL_FEES_HINT}>Realized PnL</th>
                 <th>Tx Hash</th>
               </tr>
             </thead>
             <tbody>
-              {displayedTrades.map((trade) => (
-                <TableRow key={trade.id}>
-                  <td><DateTimeCell timestamp={trade.timestamp} /></td>
-                  <td>
-                    <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
-                      {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
-                    </TypeBadge>
-                  </td>
-                  <td>{formatPrice(trade.tradePrice)}</td>
-                  <td>{((Number(trade.tradePrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(trade.tradeQuantity < 0n ? -trade.tradeQuantity : trade.tradeQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}</td>
-                  <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
-                  <td>{formatPrice(trade.tradingFee)}</td>
-                  <td>
-                    <PnLText
-                      $isPositive={Number(trade.realizedPnl) >= 0}
-                      $isZero={Number(trade.realizedPnl) === 0}
-                    >
-                      {formatPnL(trade.realizedPnl)}
-                    </PnLText>
-                  </td>
-                  <td>
-                    <TxLink 
-                      href={getTxUrl(trade.transactionHash as `0x${string}`)} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                    >
-                      {trade.transactionHash.slice(0, 6)}...{trade.transactionHash.slice(-4)}
-                    </TxLink>
-                  </td>
-                </TableRow>
-              ))}
+              {displayedTrades.map((trade) => {
+                const realizedPnl = realizedPnlAfterFees(
+                  trade.realizedPnl,
+                  trade.tradingFee,
+                  trade.liquidationFee,
+                );
+                return (
+                  <TableRow key={trade.id}>
+                    <td><DateTimeCell timestamp={trade.timestamp} /></td>
+                    <td>
+                      <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
+                        {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
+                      </TypeBadge>
+                    </td>
+                    <td>{formatPrice(trade.tradePrice)}</td>
+                    <td>{((Number(trade.tradePrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(trade.tradeQuantity < 0n ? -trade.tradeQuantity : trade.tradeQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}</td>
+                    <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
+                    <td>{formatPrice(trade.tradingFee)}</td>
+                    <td>
+                      <PnLText $isPositive={realizedPnl >= 0n} $isZero={realizedPnl === 0n}>
+                        {formatPnL(realizedPnl)}
+                      </PnLText>
+                    </td>
+                    <td>
+                      <TxLink 
+                        href={getTxUrl(trade.transactionHash as `0x${string}`)} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                      >
+                        {trade.transactionHash.slice(0, 6)}...{trade.transactionHash.slice(-4)}
+                      </TxLink>
+                    </td>
+                  </TableRow>
+                );
+              })}
             </tbody>
           </TradesTable>
         </TradesTableContainer>

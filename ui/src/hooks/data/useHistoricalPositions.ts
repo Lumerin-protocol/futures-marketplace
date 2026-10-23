@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { graphqlRequest } from "./graphql";
 import { sessionIsLong } from "../../lib/positionDirection";
+import { realizedPnlAfterFees, sumTradeFees } from "../../lib/portfolioPnl";
 import { HistoricalPositionsQuery } from "./queries/futures";
 
 export const HISTORICAL_POSITIONS_QK = "HistoricalPositions";
@@ -21,8 +22,8 @@ export type HistoricalPosition = {
   /// which only exists for the last of those three. A session only reaches
   /// CLOSE through a path that folds into this, so it is always populated.
   closePrice: bigint;
-  /// Realized PnL for the session as reported by the indexer. Replaces the
-  /// legacy `buyerPnl` / `sellerPnl` split.
+  /// Realized PnL for the session net of its trading and liquidation fees
+  /// (`realizedPnlAfterFees`). Replaces the legacy `buyerPnl` / `sellerPnl` split.
   pnl: number;
   /// Direction of the closed session, from `sessionIsLong`.
   ///
@@ -63,6 +64,8 @@ export type RawHistoricalPositionSession = {
   lastTradeAt: string;
   realizedPnl: string;
   tradingFees: string;
+  /// See `SESSION_LIQUIDATION_FEES`. Empty unless the session was liquidated.
+  liquidationFees: { liquidationFee: string }[];
   expiration: {
     settlementPrice: string | null;
     settledAt: string | null;
@@ -87,8 +90,9 @@ export type HistoricalPositionsResponse = {
 };
 
 /// Collapse a closed PositionSession into the HistoricalPosition shape. Price
-/// comes from the session's `entryPrice` and PnL from `realizedPnl` — the row no
-/// longer encodes a buyer/seller split since a session belongs to a single user.
+/// comes from the session's `entryPrice` and PnL from `realizedPnl` less the
+/// session's fees — the row no longer encodes a buyer/seller split since a
+/// session belongs to a single user.
 ///
 /// A closed session is flat, so its direction comes from the single fill the
 /// query carries for the purpose. Reading it off the *whole* fill history, which
@@ -104,7 +108,13 @@ export const sessionToHistoricalPosition = (
     expirationAt: session.expirationAt,
     pricePerDay: BigInt(session.entryPrice),
     closePrice: BigInt(session.closePrice),
-    pnl: Number(session.realizedPnl),
+    pnl: Number(
+      realizedPnlAfterFees(
+        BigInt(session.realizedPnl),
+        BigInt(session.tradingFees),
+        sumTradeFees(session.liquidationFees),
+      ),
+    ),
     isLong,
     closedQuantity: session.closedQuantity,
     liquidatedQuantity: session.liquidatedQuantity,

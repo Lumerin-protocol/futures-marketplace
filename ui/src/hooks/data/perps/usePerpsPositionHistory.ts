@@ -1,5 +1,6 @@
 import { UserClosedPositionSessionsQuery } from "../queries/perps";
 import { sessionIsLong } from "../../../lib/positionDirection";
+import { sumTradeFees } from "../../../lib/portfolioPnl";
 import type { PositionSession } from "./useUserPositionSessions";
 import {
   usePaginatedHistory,
@@ -22,6 +23,7 @@ type RawPositionSession = {
   realizedPnl: string;
   status: string;
   tradingFees: string;
+  liquidationFees: { liquidationFee: string }[];
   user: {
     id: string;
   };
@@ -47,6 +49,7 @@ const mapSession = (session: RawPositionSession): PositionSession => ({
   realizedPnl: BigInt(session.realizedPnl),
   status: session.status,
   tradingFees: BigInt(session.tradingFees),
+  liquidationFees: sumTradeFees(session.liquidationFees),
   user: {
     id: session.user.id,
   },

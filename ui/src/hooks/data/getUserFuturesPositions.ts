@@ -106,6 +106,8 @@ export type FuturesSessionTrade = {
   tradePrice: bigint;
   tradeQuantity: number;
   tradingFee: bigint;
+  /// Null unless the trade was a forced close.
+  liquidationFee: bigint | null;
   transactionHash: `0x${string}`;
 };
 
@@ -120,6 +122,7 @@ export type RawSessionTrade = {
   tradePrice: string;
   tradeQuantity: number;
   tradingFee: string;
+  liquidationFee: string | null;
   transactionHash: `0x${string}`;
 };
 
@@ -133,6 +136,7 @@ export const toFuturesSessionTrade = (trade: RawSessionTrade): FuturesSessionTra
   tradePrice: BigInt(trade.tradePrice),
   tradeQuantity: trade.tradeQuantity,
   tradingFee: BigInt(trade.tradingFee),
+  liquidationFee: trade.liquidationFee != null ? BigInt(trade.liquidationFee) : null,
   transactionHash: trade.transactionHash,
 });
 

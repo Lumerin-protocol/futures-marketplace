@@ -27,6 +27,7 @@ import type { ContractMode } from "../../types/types";
 import { useOrderMargin } from "../../hooks/data/useOrderMargin";
 import { useLiquidationThresholds } from "../../hooks/data/useLiquidationThresholds";
 import { useGetMarketPrice } from "../../hooks/data/useGetMarketPrice";
+import { trackOrder } from "../../lib/analytics";
 import { formatMonthDay } from "../../lib/dates";
 import { type OrderLeg, type OrderMarginQuote, snapshotWithChanges } from "../../lib/orderMargin";
 import { positionBefore, snapshotWithFill } from "../../lib/orderPreview";
@@ -1009,6 +1010,7 @@ export const PlaceOrderForm: FC<Props> = ({
           },
           postConfirmation: async (receipt: TransactionReceipt) => {
             const venue = contractMode === "perpetual" ? "perps" : "futures";
+            trackOrder(venue, isBuy ? "buy" : "sell");
             const contractAddress = (
               venue === "perps"
                 ? process.env.REACT_APP_PERPS_TOKEN_ADDRESS

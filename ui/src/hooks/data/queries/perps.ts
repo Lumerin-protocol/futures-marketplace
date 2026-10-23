@@ -1,4 +1,4 @@
-import { commonSlices } from "./common";
+import { commonSlices, SESSION_LIQUIDATION_FEES } from "./common";
 import { buildDocument, defineSlices, type Slice } from "./slice";
 
 /**
@@ -51,6 +51,7 @@ const DIRECTION_FILL = `
  */
 const PERPS_POSITION_SESSION_FIELDS = `
   ${DIRECTION_FILL}
+  ${SESSION_LIQUIDATION_FEES}
   closePrice
   entryPrice
   closedQuantity
@@ -79,6 +80,7 @@ const PERPS_SESSION_TRADE_FIELDS = `
   tradePrice
   tradeQuantity
   tradingFee
+  liquidationFee
   transactionHash
 `;
 
@@ -198,6 +200,7 @@ export const perpsSlices = defineSlices({
   },
 
   realizedBaseline: commonSlices.realizedBaseline,
+  feesInWindow: commonSlices.feesInWindow,
 
   // --- history -----------------------------------------------------------
 

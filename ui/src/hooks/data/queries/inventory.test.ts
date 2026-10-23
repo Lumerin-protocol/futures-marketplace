@@ -26,6 +26,7 @@ const FUTURES_INVENTORY: Row[] = [
   ["liquidations", "account"],
   ["me", "account"],
   ["realizedBaseline", "account"],
+  ["feesInWindow", "account"],
   ["historyOrders", "history"],
   ["historyPositions", "history"],
   ["historyTrades", "history"],
@@ -41,6 +42,7 @@ const PERPS_INVENTORY: Row[] = [
   ["liquidations", "account"],
   ["me", "account"],
   ["realizedBaseline", "account"],
+  ["feesInWindow", "account"],
   ["historyOrders", "history"],
   ["historyPositions", "history"],
   ["sessionTrades", "history"],
@@ -163,6 +165,8 @@ describe("document assembly", () => {
     expect(perps.perpsSlices.recentTrades).toBe(commonSlices.recentTrades);
     expect(futures.futuresSlices.realizedBaseline).toBe(commonSlices.realizedBaseline);
     expect(perps.perpsSlices.realizedBaseline).toBe(commonSlices.realizedBaseline);
+    expect(futures.futuresSlices.feesInWindow).toBe(commonSlices.feesInWindow);
+    expect(perps.perpsSlices.feesInWindow).toBe(commonSlices.feesInWindow);
   });
 
   it("feeds the batched history page and the single tables the same fields", () => {

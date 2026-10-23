@@ -1,5 +1,6 @@
 import { graphqlRequest } from "../graphql";
 import { sessionIsLong } from "../../../lib/positionDirection";
+import { sumTradeFees } from "../../../lib/portfolioPnl";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { UserPositionSessionsQuery } from "../queries/perps";
 import { snapshotFedQueryOptions } from "../snapshot/config";
@@ -60,6 +61,7 @@ export const mapUserPositionSessions = (
     realizedPnl: BigInt(session.realizedPnl),
     status: session.status,
     tradingFees: BigInt(session.tradingFees),
+    liquidationFees: sumTradeFees(session.liquidationFees),
     user: {
       id: session.user.id,
     },
@@ -86,6 +88,8 @@ export type PositionSession = {
   realizedPnl: bigint;
   status: string;
   tradingFees: bigint;
+  /// Liquidation fees the session paid, which `tradingFees` leaves out.
+  liquidationFees: bigint;
   user: {
     id: string;
   };
@@ -105,6 +109,8 @@ export type Trade = {
   tradePrice: bigint;
   tradeQuantity: bigint;
   tradingFee: bigint;
+  /// Null unless the trade was a forced close.
+  liquidationFee: bigint | null;
   transactionHash: string;
 };
 
@@ -122,6 +128,8 @@ export type PositionSessionRow = {
   realizedPnl: string;
   status: string;
   tradingFees: string;
+  /// See `SESSION_LIQUIDATION_FEES`. Empty unless the session was liquidated.
+  liquidationFees: { liquidationFee: string }[];
   user: {
     id: string;
   };
