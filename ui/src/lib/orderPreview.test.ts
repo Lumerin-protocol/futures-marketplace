@@ -15,7 +15,7 @@ const params: MMParams = {
   perpQuantityDecimals: 6,
 };
 
-const noOrders = { buyDelta: 0n, sellDelta: 0n, buyValue: 0n, sellValue: 0n };
+const noOrders = { buyQty: 0n, sellQty: 0n, buyPQ: 0n, buyP2Q: 0n, sellPQ: 0n, sellP2Q: 0n };
 
 function snapshot(overrides: {
   balance?: bigint;
@@ -26,7 +26,7 @@ function snapshot(overrides: {
     user: USER,
     balance: overrides.balance ?? 100n * USDC,
     perp: { netQty: 0n, entryPrice: 0n, orders: noOrders, fundingOwed: 0n, ...overrides.perp },
-    futures: { positions: overrides.positions ?? [], orders: noOrders },
+    futures: { positions: overrides.positions ?? [], orders: [] },
   };
 }
 
@@ -34,7 +34,12 @@ function future(netQuantity: bigint, entryPrice: bigint, expirationAt = 1n) {
   return { expirationAt, netQuantity, netEntryValue: entryPrice * netQuantity, settlementPrice: 0n };
 }
 
-const futuresLeg = (quantity: bigint, price: bigint): OrderLeg => ({ venue: "futures", price, quantity });
+const futuresLeg = (quantity: bigint, price: bigint): OrderLeg => ({
+  venue: "futures",
+  expirationAt: 1n,
+  price,
+  quantity,
+});
 const perpsLeg = (quantity: bigint, price: bigint): OrderLeg => ({ venue: "perps", price, quantity });
 
 describe("positionBefore", () => {

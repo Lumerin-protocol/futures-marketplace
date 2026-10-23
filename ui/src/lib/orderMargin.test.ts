@@ -32,7 +32,7 @@ const usdc = (price: number) => BigInt(Math.round(price * 1e6));
 /** The mark every case below is quoted at. */
 const MARK = usdc(5);
 
-const noOrders = { buyDelta: 0n, sellDelta: 0n, buyValue: 0n, sellValue: 0n };
+const noOrders = { buyQty: 0n, sellQty: 0n, buyPQ: 0n, buyP2Q: 0n, sellPQ: 0n, sellP2Q: 0n };
 
 function snapshot(overrides: {
   balance?: bigint;
@@ -46,7 +46,7 @@ function snapshot(overrides: {
     perp: { netQty: 0n, entryPrice: 0n, orders: noOrders, fundingOwed: 0n, ...overrides.perp },
     futures: {
       positions: overrides.positions ?? [],
-      orders: overrides.futuresOrders ?? noOrders,
+      orders: overrides.futuresOrders ?? [],
     },
   };
 }
@@ -64,20 +64,22 @@ function future(
   };
 }
 
-const bid = (quantity: bigint, price: bigint): OrderLeg => ({
+const bid = (quantity: bigint, price: bigint, expirationAt = 1n): OrderLeg => ({
   venue: "futures",
+  expirationAt,
   price,
   quantity,
 });
-const ask = (quantity: bigint, price: bigint): OrderLeg => ({
+const ask = (quantity: bigint, price: bigint, expirationAt = 1n): OrderLeg => ({
   venue: "futures",
+  expirationAt,
   price,
   quantity: -quantity,
 });
 
 /** The gate `createOrder` applies, spelled out rather than borrowed. */
 const gateAccepts = (snap: AccountSnapshot, leg: OrderLeg): boolean => {
-  const withLeg = snapshotWithChanges(snap, params, { place: [leg] });
+  const withLeg = snapshotWithChanges(snap, { place: [leg] });
   return snap.balance >= imRequired(withLeg, params, MARK);
 };
 
@@ -100,37 +102,57 @@ const imFor = (snap: AccountSnapshot, leg: OrderLeg): bigint =>
     .imIncrease;
 
 describe("snapshotWithChanges reports what the venues report to the engine", () => {
-  test("a futures bid joins the buy side at the venue's delta and value scale", () => {
-    // `getRiskView` scales order delta by 10^collateralDecimals and values the
-    // book at the orders' own limit prices.
-    const withBid = snapshotWithChanges(snapshot({}), params, {
-      place: [bid(3n, usdc(4))],
+  test("a futures bid joins its expiry's buy side as the venue stores it", () => {
+    // `RestingOrderAggregate` per expiry: Σq, Σp·q, Σp²·q in whole contracts.
+    const withBid = snapshotWithChanges(snapshot({}), {
+      place: [bid(3n, usdc(4), 7n)],
     });
 
-    expect(withBid.futures.orders.buyDelta).toBe(3n * USDC);
-    expect(withBid.futures.orders.buyValue).toBe(3n * usdc(4));
-    expect(withBid.futures.orders.sellDelta).toBe(0n);
+    expect(withBid.futures.orders).toEqual([
+      {
+        ...noOrders,
+        expirationAt: 7n,
+        settlementPrice: 0n,
+        buyQty: 3n,
+        buyPQ: 3n * usdc(4),
+        buyP2Q: 3n * usdc(4) * usdc(4),
+      },
+    ]);
     expect(withBid.perp.orders).toEqual(noOrders);
   });
 
-  test("a perps ask joins the perps book with quantity de-scaled", () => {
-    // Perps quantity carries `perpQuantityDecimals`; delta and value do not.
+  test("a perps ask joins the perps book in the venue's own quantity units", () => {
+    // Perps moments keep `perpQuantityDecimals` and are not de-scaled.
     const twoContracts = 2n * USDC;
-    const withAsk = snapshotWithChanges(snapshot({}), params, {
+    const withAsk = snapshotWithChanges(snapshot({}), {
       place: [{ venue: "perps", price: usdc(5), quantity: -twoContracts }],
     });
 
-    expect(withAsk.perp.orders.sellDelta).toBe(2n * USDC);
-    expect(withAsk.perp.orders.sellValue).toBe(usdc(10));
-    expect(withAsk.futures.orders).toEqual(noOrders);
+    expect(withAsk.perp.orders).toEqual({
+      ...noOrders,
+      sellQty: twoContracts,
+      sellPQ: twoContracts * usdc(5),
+      sellP2Q: twoContracts * usdc(5) * usdc(5),
+    });
+    expect(withAsk.futures.orders).toEqual([]);
+  });
+
+  test("bids at different expiries stay on separate books", () => {
+    const withBids = snapshotWithChanges(snapshot({}), {
+      place: [bid(1n, usdc(4), 1n), bid(2n, usdc(4), 2n), bid(3n, usdc(4), 1n)],
+    });
+    expect(withBids.futures.orders.map((book) => [book.expirationAt, book.buyQty])).toEqual([
+      [1n, 4n],
+      [2n, 2n],
+    ]);
   });
 
   test("cancelling a leg undoes placing it", () => {
     const leg = bid(7n, usdc(6));
     const base = snapshot({ balance: 100n * USDC });
-    const placed = snapshotWithChanges(base, params, { place: [leg] });
+    const placed = snapshotWithChanges(base, { place: [leg] });
 
-    expect(snapshotWithChanges(placed, params, { cancel: [leg] }).futures.orders).toEqual(
+    expect(snapshotWithChanges(placed, { cancel: [leg] }).futures.orders).toEqual(
       base.futures.orders,
     );
   });
@@ -138,15 +160,15 @@ describe("snapshotWithChanges reports what the venues report to the engine", () 
   test("a modify prices the replacement with the old order already off the book", () => {
     // What `updateOrders` does: cancels, then creates, then checks margin once.
     const resting = bid(10n, usdc(5));
-    const withResting = snapshotWithChanges(snapshot({}), params, { place: [resting] });
+    const withResting = snapshotWithChanges(snapshot({}), { place: [resting] });
 
-    const modified = snapshotWithChanges(withResting, params, {
+    const modified = snapshotWithChanges(withResting, {
       cancel: [resting],
       place: [bid(4n, usdc(5))],
     });
 
-    expect(modified.futures.orders.buyDelta).toBe(4n * USDC);
-    expect(modified.futures.orders.buyValue).toBe(4n * usdc(5));
+    expect(modified.futures.orders[0]?.buyQty).toBe(4n);
+    expect(modified.futures.orders[0]?.buyPQ).toBe(4n * usdc(5));
   });
 
   test("closing a venue clears its position but leaves the other one alone", () => {
@@ -156,11 +178,11 @@ describe("snapshotWithChanges reports what the venues report to the engine", () 
       positions: [future(-3n, MARK)],
     });
 
-    const flatPerps = snapshotWithChanges(snap, params, { closePerps: true });
+    const flatPerps = snapshotWithChanges(snap, { closePerps: true });
     expect(flatPerps.perp.netQty).toBe(0n);
     expect(flatPerps.futures.positions).toEqual(snap.futures.positions);
 
-    const flatFutures = snapshotWithChanges(snap, params, { closeFutures: [1n] });
+    const flatFutures = snapshotWithChanges(snap, { closeFutures: [1n] });
     expect(flatFutures.futures.positions).toEqual([]);
     expect(flatFutures.perp.netQty).toBe(2n * USDC);
   });
@@ -173,7 +195,7 @@ describe("snapshotWithChanges reports what the venues report to the engine", () 
       positions: [future(2n, MARK, 100n), future(-3n, MARK, 200n), future(4n, MARK, 300n)],
     });
 
-    const remaining = snapshotWithChanges(snap, params, { closeFutures: [200n] }).futures.positions;
+    const remaining = snapshotWithChanges(snap, { closeFutures: [200n] }).futures.positions;
     expect(remaining.map((position) => position.expirationAt)).toEqual([100n, 300n]);
   });
 
@@ -183,7 +205,7 @@ describe("snapshotWithChanges reports what the venues report to the engine", () 
       balance: 100n * USDC,
       perp: { netQty: 2n * USDC, entryPrice: MARK, fundingOwed: usdc(3) },
     });
-    expect(snapshotWithChanges(snap, params, { closePerps: true }).perp.fundingOwed).toBe(usdc(3));
+    expect(snapshotWithChanges(snap, { closePerps: true }).perp.fundingOwed).toBe(usdc(3));
   });
 
   test("orderNotional is the fee base at the leg's own limit price", () => {
@@ -215,6 +237,26 @@ describe("quoteOrderMargin charges what the engine charges", () => {
     // Bid $1 over the mark on 4 contracts: $2 stress + $4 that fills underwater.
     expect(imFor(flat, bid(4n, usdc(6)))).toBe(usdc(6));
     expect(imFor(flat, ask(4n, usdc(4)))).toBe(usdc(6));
+  });
+
+  test("a deep bid cannot net away a marketable bid's fill loss", () => {
+    // $6 and $4 bids around the $5 mark: their limit value equals their mark value,
+    // so a netted figure reads no loss, while filling the $6 bid alone loses $4.
+    // 8 contracts × $5 × 10% = $4 stress, plus the venue's $4 bound.
+    const decoy = snapshotWithChanges(flat, {
+      place: [bid(4n, usdc(6)), bid(4n, usdc(4))],
+    });
+    expect(imRequired(decoy, params, MARK)).toBe(usdc(8));
+  });
+
+  test("each expiry's book is bounded on its own", () => {
+    // The decoy pair on one expiry ($4 bound) and a bid at the mark on another ($0).
+    // 12 contracts × $5 × 10% = $6 stress. Pooled into one book, the at-mark bid
+    // would sit inside the pair's spread and raise the bound.
+    const books = snapshotWithChanges(flat, {
+      place: [bid(4n, usdc(6), 1n), bid(4n, usdc(4), 1n), bid(4n, MARK, 2n)],
+    });
+    expect(imRequired(books, params, MARK)).toBe(usdc(10));
   });
 
   test("the reserved fee comes out of headroom on top of IM", () => {
@@ -341,6 +383,7 @@ describe("maxAffordableQuantity lands on the gate's edge", () => {
       snapshot: snap,
       params,
       venue: "futures",
+      expirationAt: 1n,
       price,
       markPrice: MARK,
       isBuy,
@@ -423,6 +466,7 @@ describe("maxAffordableQuantity lands on the gate's edge", () => {
         snapshot: flat,
         params,
         venue: "futures",
+        expirationAt: 1n,
         price: MARK,
         markPrice: MARK,
         isBuy: true,
