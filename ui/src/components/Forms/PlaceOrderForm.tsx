@@ -29,7 +29,12 @@ import { useLiquidationThresholds } from "../../hooks/data/useLiquidationThresho
 import { useGetMarketPrice } from "../../hooks/data/useGetMarketPrice";
 import { trackOrder } from "../../lib/analytics";
 import { formatMonthDay } from "../../lib/dates";
-import { type OrderLeg, type OrderMarginQuote, snapshotWithChanges } from "../../lib/orderMargin";
+import {
+  type OrderBook,
+  type OrderLeg,
+  type OrderMarginQuote,
+  snapshotWithChanges,
+} from "../../lib/orderMargin";
 import { positionBefore, snapshotWithFill } from "../../lib/orderPreview";
 import { imRequired, mmRequired, type AccountSnapshot } from "@hashpower/portfolio-margin";
 import {
@@ -263,12 +268,14 @@ export const PlaceOrderForm: FC<Props> = ({
       reservedFee = feeFor(notional);
     }
 
+    const book: OrderBook = venue === "perps" ? { venue } : { venue, expirationAt };
     return orderMargin.quote(
-      { place: [{ venue, price, quantity: isBuy ? nativeQty : -nativeQty }] },
+      { place: [{ ...book, price, quantity: isBuy ? nativeQty : -nativeQty }] },
       { reservedFee },
     );
   }, [
     contractMode,
+    expirationAt,
     price,
     restingQuantity,
     isBuy,
@@ -332,10 +339,11 @@ export const PlaceOrderForm: FC<Props> = ({
     const scale = venue === "perps" ? QUANTITY_SCALE_NUM : 1;
     const nativeQty = BigInt(Math.round(restingQuantity * scale));
     if (nativeQty === 0n) return undefined;
-    const leg: OrderLeg = { venue, price, quantity: isBuy ? nativeQty : -nativeQty };
+    const book: OrderBook = venue === "perps" ? { venue } : { venue, expirationAt };
+    const leg: OrderLeg = { ...book, price, quantity: isBuy ? nativeQty : -nativeQty };
     const expiry = venue === "futures" ? expirationAt : undefined;
 
-    const placed = snapshotWithChanges(snapshot, params, { place: [leg] });
+    const placed = snapshotWithChanges(snapshot, { place: [leg] });
     const filled = snapshotWithFill(snapshot, params, leg, expiry);
     // The fee is held back from placement on, so it is in every state but "before".
     const figures = (snap: AccountSnapshot, fee: bigint): RiskFigures => {

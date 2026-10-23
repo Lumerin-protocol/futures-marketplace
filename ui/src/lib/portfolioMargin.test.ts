@@ -21,7 +21,7 @@ const params: MMParams = {
 /** `price` in whole USDC. */
 const usdc = (price: number) => BigInt(Math.round(price * 1e6));
 
-const noOrders = { buyDelta: 0n, sellDelta: 0n, buyValue: 0n, sellValue: 0n };
+const noOrders = { buyQty: 0n, sellQty: 0n, buyPQ: 0n, buyP2Q: 0n, sellPQ: 0n, sellP2Q: 0n };
 
 function snapshot(overrides: {
   balance?: bigint;
@@ -40,7 +40,7 @@ function snapshot(overrides: {
     },
     futures: {
       positions: overrides.positions ?? [],
-      orders: noOrders,
+      orders: [],
     },
   };
 }

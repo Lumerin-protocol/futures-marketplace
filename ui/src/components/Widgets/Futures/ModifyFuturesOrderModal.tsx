@@ -163,6 +163,7 @@ export const ModifyFuturesOrderModal = ({
         cancel: [
           {
             venue: "futures",
+            expirationAt: order.expirationAt,
             price: order.pricePerDay,
             quantity: isBuy ? BigInt(order.quantity) : -BigInt(order.quantity),
           },
@@ -170,6 +171,7 @@ export const ModifyFuturesOrderModal = ({
         place: [
           {
             venue: "futures",
+            expirationAt: order.expirationAt,
             price: newPriceInWei,
             quantity: isBuy ? absNewQuantity : -absNewQuantity,
           },

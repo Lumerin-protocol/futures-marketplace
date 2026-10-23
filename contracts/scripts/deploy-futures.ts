@@ -7,7 +7,7 @@ import { verifyContract } from "../lib/verify.ts";
 import { addrUrl, txUrl } from "../lib/explorer.ts";
 import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts";
 
-const TARGET_CODE_VERSION = "6.5.0";
+const TARGET_CODE_VERSION = "6.15.0";
 
 /** Minimal AggregatorV3 slice used to sanity-check HashpriceUSD before deploy. */
 const aggregatorV3Abi = [
@@ -118,7 +118,13 @@ async function main() {
       `Implementation VERSION is ${implementationVersion}, expected ${TARGET_CODE_VERSION}`,
     );
   }
-  await verifyContract(futuresImpl.address, [collateralVaultAddress]);
+  if (
+    !(await verifyContract(futuresImpl.address, [collateralVaultAddress], undefined, {
+      contract: "contracts/HashPowerFutures.sol:HashPowerFutures",
+    }))
+  ) {
+    throw new Error(`Basescan did not verify implementation ${futuresImpl.address}`);
+  }
   logStep("Verified", addrUrl(pc, futuresImpl.address));
 
   // ── 2. Deploy proxy ─────────────────────────────────────────────────────
@@ -147,7 +153,13 @@ async function main() {
     confirmations: 5,
   });
   logStep("Deployed", addrUrl(pc, futuresProxy.address));
-  await verifyContract(futuresProxy.address, [futuresImpl.address, initData]);
+  if (
+    !(await verifyContract(futuresProxy.address, [futuresImpl.address, initData], undefined, {
+      contract: "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy",
+    }))
+  ) {
+    throw new Error(`Basescan did not verify proxy ${futuresProxy.address}`);
+  }
   logStep("Verified", addrUrl(pc, futuresProxy.address));
 
   const futures = await viem.getContractAt("HashPowerFutures", futuresProxy.address);

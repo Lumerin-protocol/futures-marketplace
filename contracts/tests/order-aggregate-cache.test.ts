@@ -17,14 +17,30 @@ type HashPowerFuturesContract = Awaited<ReturnType<typeof deployFuturesFixture>>
 type OrderAggregate = {
   readonly buyQty: bigint;
   readonly sellQty: bigint;
-  readonly buyValue: bigint;
-  readonly sellValue: bigint;
+  readonly buyPQ: bigint;
+  readonly buyP2Q: bigint;
+  readonly sellPQ: bigint;
+  readonly sellP2Q: bigint;
 };
 
-function aggregateTuple(
-  aggregate: OrderAggregate,
-): [buyQty: bigint, sellQty: bigint, buyValue: bigint, sellValue: bigint] {
-  return [aggregate.buyQty, aggregate.sellQty, aggregate.buyValue, aggregate.sellValue];
+type AggregateTuple = [
+  buyQty: bigint,
+  sellQty: bigint,
+  buyPQ: bigint,
+  buyP2Q: bigint,
+  sellPQ: bigint,
+  sellP2Q: bigint,
+];
+
+function aggregateTuple(aggregate: OrderAggregate): AggregateTuple {
+  return [
+    aggregate.buyQty,
+    aggregate.sellQty,
+    aggregate.buyPQ,
+    aggregate.buyP2Q,
+    aggregate.sellPQ,
+    aggregate.sellP2Q,
+  ];
 }
 
 async function assertCacheMatchesOrders(
@@ -32,20 +48,18 @@ async function assertCacheMatchesOrders(
   user: Address,
   expirationAts: readonly bigint[],
 ) {
-  const expected = new Map<bigint, [bigint, bigint, bigint, bigint]>();
-  for (const expirationAt of expirationAts) expected.set(expirationAt, [0n, 0n, 0n, 0n]);
+  const empty = (): AggregateTuple => [0n, 0n, 0n, 0n, 0n, 0n];
+  const expected = new Map<bigint, AggregateTuple>();
+  for (const expirationAt of expirationAts) expected.set(expirationAt, empty());
 
   for (const orderId of await getUserOrders(futures, user)) {
     const order = await futures.read.getOrder([orderId]);
-    const aggregate = expected.get(order.expirationAt) ?? [0n, 0n, 0n, 0n];
+    const aggregate = expected.get(order.expirationAt) ?? empty();
     const absQty = order.quantity > 0n ? order.quantity : -order.quantity;
-    if (order.quantity > 0n) {
-      aggregate[0] += absQty;
-      aggregate[2] += order.price * absQty;
-    } else {
-      aggregate[1] += absQty;
-      aggregate[3] += order.price * absQty;
-    }
+    const side = order.quantity > 0n ? 0 : 1;
+    aggregate[side] += absQty;
+    aggregate[2 + 2 * side] += order.price * absQty;
+    aggregate[3 + 2 * side] += order.price * order.price * absQty;
     expected.set(order.expirationAt, aggregate);
   }
 
@@ -169,7 +183,7 @@ describe("Futures per-expiration order aggregate cache", () => {
       aggregateTuple(
         await futures.read.getOrderAggregateAtExpiration([seller.account.address, expirationAt]),
       ),
-      [0n, 6n, 0n, makerPrice * 6n],
+      [0n, 6n, 0n, 0n, makerPrice * 6n, makerPrice * makerPrice * 6n],
     );
 
     await futures.write.createOrder([makerPrice, expirationAt, 6n, TimeInForce.GTC], {
@@ -187,7 +201,7 @@ describe("Futures per-expiration order aggregate cache", () => {
       aggregateTuple(
         await futures.read.getOrderAggregateAtExpiration([buyer.account.address, expirationAt]),
       ),
-      [0n, 3n, 0n, makerPrice * 3n],
+      [0n, 3n, 0n, 0n, makerPrice * 3n, makerPrice * makerPrice * 3n],
     );
 
     await futures.write.createOrder([takerLimit, expirationAt, 5n, TimeInForce.GTC], {
@@ -197,7 +211,7 @@ describe("Futures per-expiration order aggregate cache", () => {
       aggregateTuple(
         await futures.read.getOrderAggregateAtExpiration([buyer.account.address, expirationAt]),
       ),
-      [2n, 0n, takerLimit * 2n, 0n],
+      [2n, 0n, takerLimit * 2n, takerLimit * takerLimit * 2n, 0n, 0n],
       "self-cross remainder must be cached at the taker limit",
     );
     await assertCacheMatchesOrders(futures, buyer.account.address, [expirationAt]);
@@ -216,7 +230,7 @@ describe("Futures per-expiration order aggregate cache", () => {
           secondExpirationAt,
         ]),
       ),
-      [3n, 0n, takerLimit * 3n, 0n],
+      [3n, 0n, takerLimit * 3n, takerLimit * takerLimit * 3n, 0n, 0n],
       "normal-fill remainder must be cached at the taker limit",
     );
     await assertCacheMatchesOrders(futures, buyer.account.address, [expirationAt, secondExpirationAt]);
@@ -243,7 +257,7 @@ describe("Futures per-expiration order aggregate cache", () => {
       aggregateTuple(
         await futures.read.getOrderAggregateAtExpiration([seller.account.address, expiredAt]),
       ),
-      [0n, 2n, 0n, price * 2n],
+      [0n, 2n, 0n, 0n, price * 2n, price * price * 2n],
       "raw cache includes expired physical orders",
     );
     await futures.write.removeOutdatedOrders([[expiredOrderId]], { account: buyer.account });
@@ -251,45 +265,20 @@ describe("Futures per-expiration order aggregate cache", () => {
       aggregateTuple(
         await futures.read.getOrderAggregateAtExpiration([seller.account.address, expiredAt]),
       ),
-      [0n, 0n, 0n, 0n],
+      [0n, 0n, 0n, 0n, 0n, 0n],
     );
 
     await futures.write.createOrder([price, laterAt, 3n, TimeInForce.GTC], {
       account: seller.account,
     });
-    await futures.write.resetState([[seller.account.address]], { account: owner.account });
+    await futures.write.forceCancelOrders([[seller.account.address], [laterAt]], { account: owner.account });
     assert.equal((await getUserOrders(futures, seller.account.address)).length, 0);
     assert.deepEqual(
       aggregateTuple(
         await futures.read.getOrderAggregateAtExpiration([seller.account.address, laterAt]),
       ),
-      [0n, 0n, 0n, 0n],
+      [0n, 0n, 0n, 0n, 0n, 0n],
     );
-  });
-
-  it("resetState leaves expired orders inert for optional cleanup", async () => {
-    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
-    const { futures, collateralVault, hashpriceUsd } = contracts;
-    const { owner, seller, buyer, tc } = accounts;
-    const expiredAt = config.deliveryDates[0];
-    const price = parseUnits("40", 6);
-
-    await collateralVault.write.deposit([parseUnits("10000", 6)], { account: seller.account });
-    await futures.write.createOrder([price, expiredAt, -2n, TimeInForce.GTC], {
-      account: seller.account,
-    });
-    const [expiredOrderId] = await getUserOrders(futures, seller.account.address);
-
-    await tc.setNextBlockTimestamp({ timestamp: expiredAt + 1n });
-    await tc.mine({ blocks: 1 });
-    await refreshHashprice(hashpriceUsd, expiredAt + 1n);
-    await futures.write.resetState([[seller.account.address]], { account: owner.account });
-
-    assert.equal((await getUserOrders(futures, seller.account.address)).length, 0);
-    assert.equal((await futures.read.getOrder([expiredOrderId])).quantity, -2n, "physical order remains");
-
-    await futures.write.removeOutdatedOrders([[expiredOrderId]], { account: buyer.account });
-    assert.equal((await futures.read.getOrder([expiredOrderId])).quantity, 0n);
   });
 
   it("removes the cached order aggregate during order liquidation", async () => {
@@ -314,11 +303,11 @@ describe("Futures per-expiration order aggregate cache", () => {
       aggregateTuple(
         await futures.read.getOrderAggregateAtExpiration([buyer.account.address, expirationAt]),
       ),
-      [0n, 0n, 0n, 0n],
+      [0n, 0n, 0n, 0n, 0n, 0n],
     );
   });
 
-  it("matches scan-based risk values with one global clamp per side", async () => {
+  it("bounds fill loss per expiry without netting across expiries", async () => {
     const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures, collateralVault } = contracts;
     const { seller } = accounts;
@@ -362,13 +351,18 @@ describe("Futures per-expiration order aggregate cache", () => {
     const risk = await futures.read.getRiskView([seller.account.address]);
     assert.equal(risk.buyOrderDelta, 2n * unit);
     assert.equal(risk.sellOrderDelta, 2n * unit);
-    assert.equal(risk.buyOrderFillLoss, unit);
-    assert.equal(risk.sellOrderFillLoss, unit);
+    // The bid 10 above the mark fills alone (best price first); the one 9 below cannot
+    // offset it. Single level per expiry, so the bound is exact. Asks mirror.
+    assert.equal(risk.buyOrderFillLoss, 10n * unit);
+    assert.equal(risk.sellOrderFillLoss, 10n * unit);
+    const square = (x: bigint) => x * x;
     assert.deepEqual(await getOrderAggregate(futures, seller.account.address), {
       buyQty: 2n,
       sellQty: 2n,
-      buyValue: 2n * mark + unit,
-      sellValue: 2n * mark - unit,
+      buyPQ: 2n * mark + unit,
+      buyP2Q: square(mark + 10n * unit) + square(mark - 9n * unit),
+      sellPQ: 2n * mark - unit,
+      sellP2Q: square(mark - 10n * unit) + square(mark + 9n * unit),
     });
     await assertCacheMatchesOrders(futures, seller.account.address, expirationAts);
   });
@@ -395,8 +389,10 @@ describe("Futures per-expiration order aggregate cache", () => {
     assert.deepEqual(await getOrderAggregate(futures, seller.account.address), {
       buyQty: 2n,
       sellQty: 0n,
-      buyValue: price * 2n,
-      sellValue: 0n,
+      buyPQ: price * 2n,
+      buyP2Q: price * price * 2n,
+      sellPQ: 0n,
+      sellP2Q: 0n,
     });
 
     const staleExpiredAt = expirationAt + (await futures.read.MAX_ORACLE_STALENESS()) + 2n;
@@ -408,14 +404,16 @@ describe("Futures per-expiration order aggregate cache", () => {
     assert.deepEqual(await getOrderAggregate(futures, seller.account.address), {
       buyQty: 0n,
       sellQty: 0n,
-      buyValue: 0n,
-      sellValue: 0n,
+      buyPQ: 0n,
+      buyP2Q: 0n,
+      sellPQ: 0n,
+      sellP2Q: 0n,
     });
     assert.deepEqual(
       aggregateTuple(
         await futures.read.getOrderAggregateAtExpiration([seller.account.address, expirationAt]),
       ),
-      [2n, 0n, price * 2n, 0n],
+      [2n, 0n, price * 2n, price * price * 2n, 0n, 0n],
     );
   });
 

@@ -69,6 +69,7 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, accountBa
       cancel: [
         {
           venue: "futures",
+          expirationAt: order.expirationAt,
           price: order.pricePerDay,
           quantity: order.isBuy ? BigInt(order.quantity) : -BigInt(order.quantity),
         },

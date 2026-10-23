@@ -88,6 +88,7 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
         oracleDecimals = _validateOracleContract(_oracle);
 
         priceOracle = _oracle;
+        _marketPrice();
         emit OracleUpdated(address(_oracle));
     }
 
@@ -114,11 +115,11 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
     /// @dev Only while the vault is halted, so no fill can land between legs. Reverts
     ///      `PositionMatured` on a matured leg: those are worth their settlement price and must go
     ///      through `settlePositions`. Empty legs are skipped. Resting orders are left alone; they
-    ///      carry no exposure until they fill.
+    ///      carry no exposure until they fill, and {forceCancelOrders} removes them.
     function forceClosePositions(address[] calldata _users, uint256[] calldata _expirationAts) external onlyOwner {
         if (!vault.halted()) revert NotHalted();
         if (_users.length != _expirationAts.length) revert ArrayLengthMismatch();
-        uint256 mark = _getMarketPrice(_getPrice());
+        uint256 mark = _marketPrice();
         for (uint256 i = 0; i < _users.length; i++) {
             address user = _users[i];
             uint256 expirationAt = _expirationAts[i];
@@ -130,40 +131,29 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
         }
     }
 
-    /// @notice Admin escape hatch: clear active orders + aggregate positions for the given participants.
-    /// @dev Expired v4.3+ orders are already inert and remain available to optional permissionless
-    ///      cleanup. Does not walk legacy lots for economics — zeros `netDelta` / `netEntryValue` /
-    ///      `activeExpirationAts` directly. Pre-v3 lot indexes and the pre-v4.3 global order index
-    ///      are no longer purged here: nothing has written them for several releases, and the
-    ///      bytecode they cost pushed the venue over EIP-170.
-    function resetState(address[] calldata _participants) external onlyOwner {
-        for (uint256 p = 0; p < _participants.length; p++) {
-            address participant = _participants[p];
-            (uint256[] memory orderExpirationAts, uint256 orderExpirationCount) =
-                _activeOrderExpirations(participant);
-
-            for (uint256 d = 0; d < orderExpirationCount; d++) {
-                EnumerableSet.Bytes32Set storage deliveryOrders =
-                    participantExpirationAtOrderIdsIndex[participant][orderExpirationAts[d]];
-                while (deliveryOrders.length() > 0) {
-                    bytes32 orderId = deliveryOrders.at(deliveryOrders.length() - 1);
-                    Order storage order = orders[orderId];
-                    bool isBuy = order.quantity > 0;
-                    _removeRestingOrder(orderId, order.expirationAt, order.price, participant, isBuy, true);
-                    emit OrderCancelled(orderId, participant);
-                }
+    /// @notice Cancel every resting order on the given (user, expiry) legs, emitting
+    ///         `OrderCancelled` per order like a user's own cancel. Realizes nothing, so it runs
+    ///         with or without a halt; pair it with `forceClosePositions` / `settlePositions` to
+    ///         unwind users fully.
+    /// @dev Any expiry is accepted: matured ones, whose orders sit inert, and dates that left the
+    ///      trading window after `futureExpirationDatesCount` shrank. Clears each leg's aggregate
+    ///      wholesale instead of subtracting per order, so it also removes orders placed before
+    ///      6.10, which the aggregate never counted: run it as the call of any upgrade from
+    ///      before 6.10, on every leg with resting orders. Legs without orders are skipped.
+    function forceCancelOrders(address[] calldata _users, uint256[] calldata _expirationAts) external onlyOwner {
+        if (_users.length != _expirationAts.length) revert ArrayLengthMismatch();
+        for (uint256 i = 0; i < _users.length; i++) {
+            address user = _users[i];
+            uint256 expirationAt = _expirationAts[i];
+            bytes32[] memory orderIds = participantExpirationAtOrderIdsIndex[user][expirationAt].values();
+            if (orderIds.length == 0) continue;
+            for (uint256 j = 0; j < orderIds.length; j++) {
+                _dropRestingOrder(orderIds[j], false);
             }
-
-            // Clear aggregates + active dates directly (no lot iteration for economics).
-            EnumerableSet.UintSet storage dates = participantActiveExpirationAts[participant];
-            while (dates.length() > 0) {
-                uint256 date = dates.at(0);
-                delete participantExpirationAtNetDelta[participant][date];
-                delete participantExpirationAtNetEntryValue[participant][date];
-                dates.remove(date);
-            }
+            _clearOrderAggregate(user, expirationAt);
         }
     }
+
 
     /// @dev Returns the feed's decimals so the caller can cache them in the same pass.
     function _validateOracleContract(AggregatorV3Interface _oracle) private view returns (uint8) {
