@@ -134,6 +134,11 @@ async function main() {
     return { snapshot: block, slots };
   };
   if (process.env.VERIFY_ONLY === "true") {
+    if (currentVersion !== TARGET_CODE_VERSION) {
+      throw new Error(
+        `Proxy VERSION is ${currentVersion}, expected ${TARGET_CODE_VERSION}; has the upgrade executed?`,
+      );
+    }
     const { snapshot, slots } = await discoverAt();
     await assertNoRestingOrders(pc, futuresAddress, slots, readConcurrency, snapshot.number);
     logSuccess(
@@ -169,9 +174,12 @@ async function main() {
   });
 
   logStep("Deployed", addrUrl(pc, futuresImpl.address));
-  await verifyContract(futuresImpl.address, [vaultAddress], undefined, {
+  const verified = await verifyContract(futuresImpl.address, [vaultAddress], undefined, {
     contract: "contracts/HashPowerFutures.sol:HashPowerFutures",
   });
+  if (!verified) {
+    throw new Error(`Basescan did not verify implementation ${futuresImpl.address}`);
+  }
   logStep("Verified", addrUrl(pc, futuresImpl.address));
 
   const newVersion = await futuresImpl.read.VERSION();

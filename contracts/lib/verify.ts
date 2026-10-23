@@ -17,14 +17,17 @@ export type VerifyOpts = {
   force?: boolean;
 };
 
-/// Verify on each provider in turn. Never throws — failures are logged so the
-/// deploy script can keep going.
+/// Verify on each provider in turn. Never throws — failures are logged so a
+/// caller can decide whether Basescan has to succeed.
+///
+/// Returns whether Etherscan (Basescan) verification succeeded or was already
+/// done. Blockscout and Sourcify are best-effort and do not affect the result.
 export async function verifyContract(
   address: string,
   constructorArgs?: readonly unknown[],
   providers: readonly Provider[] = DEFAULT_PROVIDERS,
   opts: VerifyOpts = {},
-) {
+): Promise<boolean> {
   // hardhat-verify defaults to the built-in `production` profile (runs=200, no
   // viaIR). Deploy/compile use `default` (viaIR + our optimizer settings).
   // Force `default` so the compiler input matches on-chain bytecode.
@@ -43,18 +46,22 @@ export async function verifyContract(
     force: opts.force,
   };
 
+  let etherscanOk = !providers.includes("etherscan");
   for (const provider of providers) {
     console.log(`\nVerifying ${args.address} on ${provider}...`);
     try {
       await hreVerify({ ...args, provider }, hre);
       console.log(`  ${provider}: verified.`);
+      if (provider === "etherscan") etherscanOk = true;
     } catch (err) {
       const msg = (err as Error).message ?? String(err);
       if (msg.includes("Already Verified") || msg.includes("already been verified")) {
         console.log(`  ${provider}: already verified.`);
+        if (provider === "etherscan") etherscanOk = true;
       } else {
         console.warn(`  ${provider}: verification failed — ${msg}`);
       }
     }
   }
+  return etherscanOk;
 }
