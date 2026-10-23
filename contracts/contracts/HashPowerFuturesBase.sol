@@ -195,7 +195,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     ///      every listed expiry must stay below 2^255. And with `MAX_PRICE` and
     ///      `MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION` it keeps `MathLib.fillLossBound`'s
     ///      `qty · Σq(p−m)²` within uint256.
-    uint256 internal constant MAX_ORDER_QUANTITY = 1e12;
+    uint256 public constant MAX_ORDER_QUANTITY = 1e12;
     /// @notice Largest price any calculation accepts, in token decimals ($10,000 per contract,
     ///         ~20x the all-time hashprice high): order prices and the oracle mark alike.
     /// @dev Keeps every price-derived `int256` (entry value, PnL, fees) far below 2^255, so the

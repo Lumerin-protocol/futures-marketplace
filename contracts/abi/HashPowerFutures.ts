@@ -869,6 +869,19 @@ export const HashPowerFuturesAbi = [
   },
   {
     "inputs": [],
+    "name": "MAX_ORDER_QUANTITY",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "MAX_PRICE",
     "outputs": [
       {
