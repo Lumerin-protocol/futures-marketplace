@@ -25,8 +25,8 @@ importers:
         specifier: ^0.2.2
         version: 0.2.6(@fortawesome/fontawesome-svg-core@6.7.2)(react@19.3.0)
       '@hashpower/portfolio-margin':
-        specifier: github:Lumerin-protocol/collateral-margin#ca775850c10a7f1496df327daaa0e6a47f595009&path:/portfolio-margin
-        version: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/ca775850c10a7f1496df327daaa0e6a47f595009#path:/portfolio-margin
+        specifier: github:Lumerin-protocol/collateral-margin#5c11f15e5db872812d93726cfdea88cd373c1af9&path:/portfolio-margin
+        version: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/5c11f15e5db872812d93726cfdea88cd373c1af9#path:/portfolio-margin
       '@heroicons/react':
         specifier: ^2.1.1
         version: 2.2.0(react@19.3.0)
@@ -55,8 +55,8 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
       collateral-margin-abi:
-        specifier: github:Lumerin-protocol/collateral-margin#ca775850c10a7f1496df327daaa0e6a47f595009&path:/contracts/abi
-        version: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/ca775850c10a7f1496df327daaa0e6a47f595009#path:/contracts/abi
+        specifier: github:Lumerin-protocol/collateral-margin#5c11f15e5db872812d93726cfdea88cd373c1af9&path:/contracts/abi
+        version: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/5c11f15e5db872812d93726cfdea88cd373c1af9#path:/contracts/abi
       contracts-js:
         specifier: https://github.com/Lumerin-protocol/contracts-js#v2.0.7
         version: https://codeload.github.com/Lumerin-protocol/contracts-js/tar.gz/e19cd0301992bf1717ccb2315e02ade3b1337079(bufferutil@4.1.0)(utf-8-validate@5.0.10)
@@ -504,9 +504,9 @@ packages:
     peerDependencies:
       graphql: ^0.8.0 || ^0.9.0 || ^0.10.0 || ^0.11.0 || ^0.12.0 || ^0.13.0 || ^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0
 
-  '@hashpower/portfolio-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/ca775850c10a7f1496df327daaa0e6a47f595009#path:/portfolio-margin':
-    resolution: {gitHosted: true, path: /portfolio-margin, tarball: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/ca775850c10a7f1496df327daaa0e6a47f595009}
-    version: 0.2.0
+  '@hashpower/portfolio-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/5c11f15e5db872812d93726cfdea88cd373c1af9#path:/portfolio-margin':
+    resolution: {gitHosted: true, integrity: sha512-Ul7kWstNypb73xKCTFcQm0IF5Sqs6I588JaayjnH13pb2jbWqQ+pAad224+H3Q/riFVqZfvJm7bH+tXYEtU02g==, path: /portfolio-margin, tarball: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/5c11f15e5db872812d93726cfdea88cd373c1af9}
+    version: 0.3.0
     engines: {node: '>=22'}
 
   '@heroicons/react@2.2.0':
@@ -2183,8 +2183,8 @@ packages:
     resolution: {integrity: sha512-EcR6r5a8bj6pu3ycsa/E/cKVGuTgZJZdsyUYHOksG/UHIiKfjxzRxYJpyVBwYaQeOvghal9fcc4PidlgzugAQg==}
     engines: {node: '>=6'}
 
-  collateral-margin-abi@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/ca775850c10a7f1496df327daaa0e6a47f595009#path:/contracts/abi:
-    resolution: {gitHosted: true, path: /contracts/abi, tarball: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/ca775850c10a7f1496df327daaa0e6a47f595009}
+  collateral-margin-abi@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/5c11f15e5db872812d93726cfdea88cd373c1af9#path:/contracts/abi:
+    resolution: {gitHosted: true, integrity: sha512-Ul7kWstNypb73xKCTFcQm0IF5Sqs6I588JaayjnH13pb2jbWqQ+pAad224+H3Q/riFVqZfvJm7bH+tXYEtU02g==, path: /contracts/abi, tarball: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/5c11f15e5db872812d93726cfdea88cd373c1af9}
     version: 0.0.0
 
   color-convert@1.9.3:
@@ -5170,7 +5170,7 @@ snapshots:
     dependencies:
       graphql: 16.14.2
 
-  '@hashpower/portfolio-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/ca775850c10a7f1496df327daaa0e6a47f595009#path:/portfolio-margin': {}
+  '@hashpower/portfolio-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/5c11f15e5db872812d93726cfdea88cd373c1af9#path:/portfolio-margin': {}
 
   '@heroicons/react@2.2.0(react@19.3.0)':
     dependencies:
@@ -7270,7 +7270,7 @@ snapshots:
   clsx@1.2.1:
     optional: true
 
-  collateral-margin-abi@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/ca775850c10a7f1496df327daaa0e6a47f595009#path:/contracts/abi: {}
+  collateral-margin-abi@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/5c11f15e5db872812d93726cfdea88cd373c1af9#path:/contracts/abi: {}
 
   color-convert@1.9.3:
     dependencies:

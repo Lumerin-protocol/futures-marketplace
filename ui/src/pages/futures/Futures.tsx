@@ -223,7 +223,8 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // Account-wide liquidation prices, solved off the same portfolio margin model
   // the Futures contract liquidates on. Cross-product, so there is one pair per
   // account (not per position) and a hedged book can have thresholds on both sides.
-  const { liqPrice, liqDirection, alreadyUnderwater } = useLiquidationThresholds(address);
+  const { liqPrice, liqDirection, alreadyUnderwater, snapshot } =
+    useLiquidationThresholds(address);
 
   // Everything the account portfolio panel reads, off the IPortfolioMarginEngine
   // resolved via the Futures contract. `im` is also the single source of truth
@@ -448,6 +449,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       isRefreshingRealizedPnL={realizedInWindow.isRefreshing}
       balanceQuery={balanceQuery}
       accountBalance={accountBalanceQuery}
+      accountDebt={snapshot?.accountDebt ?? null}
     />
   );
 

@@ -43,6 +43,7 @@ function snapshot(overrides: {
   return {
     user: USER,
     balance: overrides.balance ?? 0n,
+    accountDebt: 0n,
     perp: { netQty: 0n, entryPrice: 0n, orders: noOrders, fundingOwed: 0n, ...overrides.perp },
     futures: {
       positions: overrides.positions ?? [],

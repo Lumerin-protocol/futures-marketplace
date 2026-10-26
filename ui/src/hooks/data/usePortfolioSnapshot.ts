@@ -1,14 +1,16 @@
 import { useMemo } from "react";
-import { useReadContracts } from "wagmi";
+import { useReadContract, useReadContracts } from "wagmi";
 import type {
   AccountSnapshot,
   FuturesRestingOrders,
   RestingOrders,
 } from "@hashpower/portfolio-margin";
+import { CollateralVaultAbi } from "collateral-margin-abi/CollateralVault.ts";
 import { HashPowerFuturesAbi } from "futures-marketplace-abi/HashPowerFutures.ts";
 import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
 import { PAYMENT_TOKEN_DECIMALS, QUANTITY_DECIMALS } from "../../lib/units";
 import { useGetFutureBalance } from "./useGetFutureBalance";
+import { useFuturesCollateralVault } from "./useFuturesCollateralVault";
 import { withErrors } from "../../lib/withErrors";
 
 // The pinned derivatives ABI still exposes the legacy averaged-entry tuple.
@@ -73,6 +75,17 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
     | undefined;
 
   const balanceQuery = useGetFutureBalance(address);
+  const { data: collateralVaultAddress } = useFuturesCollateralVault();
+  const accountDebtQuery = useReadContract({
+    address: collateralVaultAddress,
+    abi: withErrors(CollateralVaultAbi),
+    functionName: "accountDebt",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: !!address && !!collateralVaultAddress,
+      refetchInterval: 10000,
+    },
+  });
 
   const futuresQuery = useReadContracts({
     contracts: [
@@ -206,16 +219,25 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
 
   const snapshot = useMemo<AccountSnapshot | undefined>(() => {
     const balance = balanceQuery.data as bigint | undefined;
-    if (!address || balance === undefined || !futuresOrders || !perps || !positions) {
+    const accountDebt = accountDebtQuery.data as bigint | undefined;
+    if (
+      !address ||
+      balance === undefined ||
+      accountDebt === undefined ||
+      !futuresOrders ||
+      !perps ||
+      !positions
+    ) {
       return undefined;
     }
     return {
       user: address,
       balance,
+      accountDebt,
       perp: perps.perp,
       futures: { positions, orders: futuresOrders },
     };
-  }, [address, balanceQuery.data, futuresOrders, perps, positions]);
+  }, [address, balanceQuery.data, accountDebtQuery.data, futuresOrders, perps, positions]);
 
   return {
     snapshot,
@@ -225,6 +247,7 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
     perpQuantityDecimals: perps?.perpQuantityDecimals ?? QUANTITY_DECIMALS,
     isLoading:
       balanceQuery.isLoading ||
+      accountDebtQuery.isLoading ||
       futuresQuery.isLoading ||
       perpsQuery.isLoading ||
       aggregatesQuery.isLoading ||
@@ -232,6 +255,7 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
       orderAggregatesQuery.isLoading,
     isError:
       balanceQuery.isError ||
+      accountDebtQuery.isError ||
       futuresQuery.isError ||
       perpsQuery.isError ||
       aggregatesQuery.isError ||
