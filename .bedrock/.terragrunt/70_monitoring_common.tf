@@ -2,6 +2,17 @@
 # MONITORING COMMON - Locals, Data Sources, IAM
 ################################################################################
 
+# foundation-core: titanio-{env}-hpdx-alerts (Slack) / titanio-{env}-hpdx-page (SMS)
+data "aws_sns_topic" "hpdx_alerts" {
+  count = var.monitoring.create && var.monitoring.dev_alerts_topic_name != "" ? 1 : 0
+  name  = var.monitoring.dev_alerts_topic_name
+}
+
+data "aws_sns_topic" "hpdx_page" {
+  count = var.monitoring.create && var.monitoring.devops_alerts_topic_name != "" ? 1 : 0
+  name  = var.monitoring.devops_alerts_topic_name
+}
+
 locals {
   # Environment suffix for resource naming
   env_suffix = substr(var.account_shortname, 8, 3)
@@ -9,12 +20,14 @@ locals {
   # Monitoring namespace for custom metrics
   monitoring_namespace = "FuturesMarketplace/${local.env_suffix}"
 
-  # SNS Topic ARNs for alerting
-  dev_alerts_sns_arn    = var.monitoring.create && var.monitoring.dev_alerts_topic_name != "" ? "arn:aws:sns:${var.default_region}:${var.account_number}:${var.monitoring.dev_alerts_topic_name}" : ""
-  devops_alerts_sns_arn = var.monitoring.create && var.monitoring.devops_alerts_topic_name != "" ? "arn:aws:sns:${var.default_region}:${var.account_number}:${var.monitoring.devops_alerts_topic_name}" : ""
-
-  # Use devops alerts for critical (production) or dev alerts for non-prod
-  critical_sns_arn = var.account_lifecycle == "prd" ? local.devops_alerts_sns_arn : local.dev_alerts_sns_arn
+  # SNS topics are created by foundation-core operational-alerting. Look up by
+  # name — do not construct ARNs or pull remote state.
+  # Use devops alerts for critical (production) or alerts (Slack) for non-prod.
+  critical_sns_arn = var.account_lifecycle == "prd" ? (
+    length(data.aws_sns_topic.hpdx_page) > 0 ? data.aws_sns_topic.hpdx_page[0].arn : ""
+  ) : (
+    length(data.aws_sns_topic.hpdx_alerts) > 0 ? data.aws_sns_topic.hpdx_alerts[0].arn : ""
+  )
 
   # Alarm action strategy:
   # - Component alarms: NO notifications (just state tracking for composites)
@@ -25,7 +38,7 @@ locals {
   component_alarm_actions = []
 
   # Composite alarms - send notifications only when enabled
-  composite_alarm_actions = var.monitoring.notifications_enabled ? [local.critical_sns_arn] : []
+  composite_alarm_actions = var.monitoring.notifications_enabled && local.critical_sns_arn != "" ? [local.critical_sns_arn] : []
 
   # Alarm evaluation periods - calculated from unhealthy_alarm_period_minutes
   # Different metric sources have different native periods:
