@@ -294,7 +294,7 @@ export const FuturesBalanceWidget = ({
             <ActionButtons>
               <ActionButton onClick={depositModal.open}>Deposit</ActionButton>
               <ActionButton onClick={withdrawalModal.open}>Withdraw</ActionButton>
-              <ActionButton onClick={sendModal.open}>Send</ActionButton>
+              <ActionButton onClick={sendModal.open}>Transfer</ActionButton>
             </ActionButtons>
 
             {/* One note at a time. Caution begins exactly where balance drops
