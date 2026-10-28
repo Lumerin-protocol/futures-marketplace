@@ -19,6 +19,7 @@ import { PrimaryButton } from "../../Forms/FormButtons/Buttons.styled";
 import { ModalItem } from "../../Modal";
 import { DepositForm } from "../../Forms/DepositForm";
 import { WithdrawalForm } from "../../Forms/WithdrawalForm";
+import { SendCollateralForm } from "../../Forms/SendCollateralForm";
 import type { AccountBalance } from "../../../types/types";
 
 interface BalanceQueryResult {
@@ -170,6 +171,7 @@ export const FuturesBalanceWidget = ({
   const { address } = useAccount();
   const depositModal = useModal();
   const withdrawalModal = useModal();
+  const sendModal = useModal();
 
   const handleDepositSuccess = () => {
     balanceQuery.refetch();
@@ -179,6 +181,11 @@ export const FuturesBalanceWidget = ({
   const handleWithdrawalSuccess = () => {
     balanceQuery.refetch();
     withdrawalModal.close();
+  };
+
+  const handleSendSuccess = () => {
+    balanceQuery.refetch();
+    sendModal.close();
   };
 
   const { tier, ratioPercent, belowIM, isError } = marginRisk;
@@ -287,6 +294,7 @@ export const FuturesBalanceWidget = ({
             <ActionButtons>
               <ActionButton onClick={depositModal.open}>Deposit</ActionButton>
               <ActionButton onClick={withdrawalModal.open}>Withdraw</ActionButton>
+              <ActionButton onClick={sendModal.open}>Send</ActionButton>
             </ActionButtons>
 
             {/* One note at a time. Caution begins exactly where balance drops
@@ -314,6 +322,17 @@ export const FuturesBalanceWidget = ({
       <ModalItem open={withdrawalModal.isOpen} setOpen={withdrawalModal.setOpen}>
         <WithdrawalForm
           closeForm={handleWithdrawalSuccess}
+          lockedAmount={marginRisk.im}
+          isLoadingLockedAmount={marginRisk.isLoading}
+          isLockedAmountError={marginRisk.isError}
+          lockedTooltip={MARGIN_USED_HINT}
+          balanceQuery={balanceQuery}
+        />
+      </ModalItem>
+
+      <ModalItem open={sendModal.isOpen} setOpen={sendModal.setOpen}>
+        <SendCollateralForm
+          closeForm={handleSendSuccess}
           lockedAmount={marginRisk.im}
           isLoadingLockedAmount={marginRisk.isLoading}
           isLockedAmountError={marginRisk.isError}
@@ -414,10 +433,16 @@ const ActionButtons = styled.div`
 `;
 
 const ActionButton = styled(PrimaryButton)`
-  flex: 1;
-  padding: 0.45rem 0.5rem;
-  font-size: 0.8rem;
+  flex: 1 1 0;
+  padding: 0.4rem 0.35rem;
+  font-size: 0.75rem;
   min-width: 0;
+  /* Shared Button styles add margin-right on siblings; spacing is via gap only. */
+  margin-right: 0;
+
+  &:not(:last-child) {
+    margin-right: 0;
+  }
 `;
 
 // Pushed to the foot of its column so the dial lines up with Margin Used
