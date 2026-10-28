@@ -105,7 +105,7 @@ export const SendCollateralForm: FC<SendCollateralFormProps> = ({
           return "Enter a valid recipient address";
         }
         if (address && recipient.toLowerCase() === address.toLowerCase()) {
-          return "Cannot send to your own address";
+          return "Cannot transfer to your own address";
         }
         return true;
       },
@@ -155,7 +155,7 @@ export const SendCollateralForm: FC<SendCollateralFormProps> = ({
         </InputWrapper>
         <AmountInputForm
           control={form.control as Control<{ amount: string }>}
-          label="Send Amount"
+          label="Transfer Amount"
           additionalValidate={validateBalance}
           onMaxClick={handleMaxClick}
           showMaxButton={availableBalance !== undefined && !isLoadingLockedAmount}
@@ -197,7 +197,7 @@ export const SendCollateralForm: FC<SendCollateralFormProps> = ({
             </span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-gray-300">Available to send:</span>
+            <span className="text-gray-300">Available to transfer:</span>
             <span className="text-white font-medium">
               {isLoadingLockedAmount || isLockedAmountError
                 ? isLockedAmountError
@@ -242,7 +242,7 @@ export const SendCollateralForm: FC<SendCollateralFormProps> = ({
     } else if (address && recipient.toLowerCase() === address.toLowerCase()) {
       form.setError("recipient", {
         type: "validation",
-        message: "Cannot send to your own address",
+        message: "Cannot transfer to your own address",
       });
       valid = false;
     }
@@ -250,7 +250,7 @@ export const SendCollateralForm: FC<SendCollateralFormProps> = ({
     if (!amountValue || parseFloat(amountValue) <= 0) {
       form.setError("amount", {
         type: "validation",
-        message: "Send Amount must be a positive number",
+        message: "Transfer Amount must be a positive number",
       });
       valid = false;
     } else if (isLockedAmountError) {
@@ -356,7 +356,7 @@ export const SendCollateralForm: FC<SendCollateralFormProps> = ({
   return (
     <TransactionForm
       onClose={closeForm}
-      title="Send Collateral"
+      title="Internal Transfer"
       description="Move available collateral to another account's vault balance"
       reviewForm={inputForm}
       validateInput={validateInput}
@@ -364,7 +364,7 @@ export const SendCollateralForm: FC<SendCollateralFormProps> = ({
       resultForm={() => (
         <div className="space-y-4">
           <div className="p-4 rounded-lg">
-            <p className="text-gray-300">Collateral sent to the recipient&apos;s vault balance.</p>
+            <p className="text-gray-300">Collateral transferred to the recipient&apos;s vault balance.</p>
             <p className="text-white font-medium mt-2">
               Amount: {form.getValues("amount")} {paymentToken.symbol}
             </p>
