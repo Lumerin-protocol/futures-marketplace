@@ -55,7 +55,14 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const { mode: modeParam } = useParams<{ mode: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const previousAddressRef = useRef<string | undefined>(undefined);
+  // WalletConnect clears `address` for a moment while it reconnects. Remember
+  // the last real account so that flicker does not remount the order form or
+  // the portfolio panel. A switch between two addresses still changes the key,
+  // which drops typed order state and any modal left open for the old account.
+  // Market data (chart, book, price) is not keyed and stays on screen.
+  const accountKeyRef = useRef(address);
+  if (address) accountKeyRef.current = address;
+  const accountKey = accountKeyRef.current ?? "disconnected";
   // Below 768px the page renders the mobile-only compound layout (order book
   // beside the place-order form, chart collapsed) instead of the desktop grid.
   const isMobileTradingLayout = useIsMobileTradingLayout();
@@ -105,23 +112,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     },
     [navigate],
   );
-
-  // Reload the page only when the user genuinely switches to a different wallet
-  // account. `address` from useAccount() flickers undefined <-> 0x... while
-  // WalletConnect is connecting/reconnecting, so we ignore falsy values and
-  // only react to a transition between two distinct defined addresses.
-  useEffect(() => {
-    if (!address) return;
-    const normalized = address.toLowerCase();
-    if (previousAddressRef.current === undefined) {
-      previousAddressRef.current = normalized;
-      return;
-    }
-    if (previousAddressRef.current !== normalized) {
-      previousAddressRef.current = normalized;
-      window.location.reload();
-    }
-  }, [address]);
 
   const [chartTimePeriod, setChartTimePeriod] = useState<TimePeriod>("5d");
   const hashrateQuery = useHashrateIndexData({ timePeriod: chartTimePeriod });
@@ -438,6 +428,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
   const balanceNode = (
     <FuturesBalanceWidget
+      key={`balance:${accountKey}`}
       marginRisk={marginRisk}
       liqPrice={liqPrice}
       unrealizedPnL={unrealized.total}
@@ -453,6 +444,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
   const placeOrderNode = (
     <PlaceOrderWidget
+      key={`order:${accountKey}`}
       externalPrice={selectedPrice}
       externalAmount={selectedAmount}
       externalExpirationAt={selectedExpirationAt}
@@ -476,6 +468,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const tablesNode = isConnected ? (
     contractMode === "perpetual" ? (
       <PerpsOrdersPositionsTabWidget
+        key={`positions:${accountKey}`}
         participantAddress={address}
         marketPrice={marketPrice}
         positionSessions={positionSessionsQuery.data?.positionSessions || []}
@@ -488,6 +481,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       />
     ) : (
       <OrdersPositionsTabWidget
+        key={`positions:${accountKey}`}
         orders={participantData?.data?.orders || []}
         positions={positionBookData?.data?.positions || []}
         ordersLoading={isParticipantLoading}
