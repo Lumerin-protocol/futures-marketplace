@@ -527,14 +527,14 @@
     },
     {
       "function": "settlePosition(address,uint256)",
-      "gas": "105134",
+      "gas": "105184",
       "id": "settlePosition(address,uint256)::matured position with pnl",
       "kind": "transaction",
       "scenario": "matured position with pnl"
     },
     {
       "function": "settlePositions(address[],uint256[])",
-      "gas": "141731",
+      "gas": "141811",
       "id": "settlePositions(address[],uint256[])::batch-2",
       "kind": "transaction",
       "scenario": "batch-2"
@@ -569,7 +569,7 @@
     },
     {
       "function": "unwindBackstop(uint256,uint256)",
-      "gas": "197502",
+      "gas": "197542",
       "id": "unwindBackstop(uint256,uint256)::sell 2 into one resting bid",
       "kind": "transaction",
       "scenario": "sell 2 into one resting bid"
