@@ -1,11 +1,11 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { network } from "hardhat";
-import { getAddress, parseEventLogs, parseUnits, zeroHash } from "viem";
 import type { NetworkConnection } from "hardhat/types/network";
+import { getAddress, parseEventLogs, parseUnits, zeroHash } from "viem";
 import { deployFuturesFixture } from "./fixtures.ts";
-import { refreshHashprice, scaleHashprice } from "./utils.ts";
 import { TimeInForce } from "./timeInForce.ts";
+import { refreshHashprice, scaleHashprice } from "./utils.ts";
 
 const { viem, networkHelpers } = await network.getOrCreate();
 
@@ -65,7 +65,12 @@ async function backstopFixture(_conn: NetworkConnection) {
     /** Sum of every participant's net at `deliveryDate`, backstop included. */
     async netSum() {
       let sum = 0n;
-      for (const who of [seller.account.address, buyer.account.address, buyer2.account.address, backstop]) {
+      for (const who of [
+        seller.account.address,
+        buyer.account.address,
+        buyer2.account.address,
+        backstop,
+      ]) {
         sum += (await futures.read.getUserPosition([who, deliveryDate])).netQuantity;
       }
       return sum;
@@ -145,7 +150,11 @@ describe("Futures - protocol backstop", function () {
         (await futures.read.getUserPosition([buyer.account.address, deliveryDate])).netQuantity,
         0n,
       );
-      assert.equal(await collateralVault.read.balanceOf([data.backstop]), 0n, "hand-off costs nothing");
+      assert.equal(
+        await collateralVault.read.balanceOf([data.backstop]),
+        0n,
+        "hand-off costs nothing",
+      );
       assert.equal(await data.netSum(), 0n);
     });
 
@@ -160,9 +169,12 @@ describe("Futures - protocol backstop", function () {
 
       // Now rally so the seller (short 11) becomes liquidatable: thin their collateral first.
       const sellerBal = await collateralVault.read.balanceOf([seller.account.address]);
-      await collateralVault.write.withdraw([sellerBal - (await futures.read.getMarketPrice()) * 3n], {
-        account: seller.account,
-      });
+      await collateralVault.write.withdraw(
+        [sellerBal - (await futures.read.getMarketPrice()) * 3n],
+        {
+          account: seller.account,
+        },
+      );
       await scaleHashprice(hashpriceUsd, 150n, 100n);
       assert.equal(await portfolioMarginEngine.read.isLiquidatable([seller.account.address]), true);
 
@@ -199,7 +211,9 @@ describe("Futures - protocol backstop", function () {
       });
 
       const callerBefore = await collateralVault.read.balanceOf([buyer2.account.address]);
-      const hash = await futures.write.unwindBackstop([deliveryDate, bidQty], { account: buyer2.account });
+      const hash = await futures.write.unwindBackstop([deliveryDate, bidQty], {
+        account: buyer2.account,
+      });
       const receipt = await pc.waitForTransactionReceipt({ hash });
 
       const backstopPos = await futures.read.getUserPosition([data.backstop, deliveryDate]);
@@ -217,16 +231,28 @@ describe("Futures - protocol backstop", function () {
         expectedFee,
         "caller receives the unwind fee",
       );
-      assert.equal(await futures.read.collectedFeesBalance(), pot - expectedFee, "paid from the fee pot");
+      assert.equal(
+        await futures.read.collectedFeesBalance(),
+        pot - expectedFee,
+        "paid from the fee pot",
+      );
 
-      const [unwound] = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "BackstopUnwound" });
+      const [unwound] = parseEventLogs({
+        logs: receipt.logs,
+        abi: futures.abi,
+        eventName: "BackstopUnwound",
+      });
       assert.equal(getAddress(unwound.args.caller), getAddress(buyer2.account.address));
       assert.equal(unwound.args.expirationAt, deliveryDate);
       assert.equal(unwound.args.filledQuantity, -bidQty);
       assert.equal(unwound.args.fee, expectedFee);
 
       // Emitted like an IOC from the backstop, limited to the band edge (tick-aligned toward the mark).
-      const [created] = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "OrderCreated" });
+      const [created] = parseEventLogs({
+        logs: receipt.logs,
+        abi: futures.abi,
+        eventName: "OrderCreated",
+      });
       assert.equal(getAddress(created.args.participant), getAddress(data.backstop));
       assert.equal(created.args.quantity, -bidQty);
       const offset = (mark * BigInt(bandBps)) / BPS;
@@ -243,11 +269,19 @@ describe("Futures - protocol backstop", function () {
 
       await data.handOffAll();
       const mark = await futures.read.getMarketPrice();
-      await futures.write.createOrder([mark, deliveryDate, 2n, TimeInForce.GTC], { account: seller.account });
+      await futures.write.createOrder([mark, deliveryDate, 2n, TimeInForce.GTC], {
+        account: seller.account,
+      });
 
-      const hash = await futures.write.unwindBackstop([deliveryDate, lotCount], { account: buyer2.account });
+      const hash = await futures.write.unwindBackstop([deliveryDate, lotCount], {
+        account: buyer2.account,
+      });
       const receipt = await pc.waitForTransactionReceipt({ hash });
-      const [unwound] = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "BackstopUnwound" });
+      const [unwound] = parseEventLogs({
+        logs: receipt.logs,
+        abi: futures.abi,
+        eventName: "BackstopUnwound",
+      });
       assert.equal(unwound.args.filledQuantity, -2n);
       assert.equal(unwound.args.fee, 0n, "zero fee bps and empty pot");
       assert.equal(
@@ -266,7 +300,9 @@ describe("Futures - protocol backstop", function () {
       await collateralVault.write.setBackstopParams([100, 0], { account: owner.account });
       const mark = await futures.read.getMarketPrice();
       const farBid = ((mark * 90n) / 100n / priceLadderStep) * priceLadderStep;
-      await futures.write.createOrder([farBid, deliveryDate, 5n, TimeInForce.GTC], { account: seller.account });
+      await futures.write.createOrder([farBid, deliveryDate, 5n, TimeInForce.GTC], {
+        account: seller.account,
+      });
 
       await viem.assertions.revertWithCustomError(
         futures.write.unwindBackstop([deliveryDate, 1n], { account: buyer2.account }),
@@ -286,11 +322,19 @@ describe("Futures - protocol backstop", function () {
       const pot = 7n;
       await collateralVault.write.depositFor([futures.address, pot], { account: owner.account });
       const mark = await futures.read.getMarketPrice();
-      await futures.write.createOrder([mark, deliveryDate, 1n, TimeInForce.GTC], { account: seller.account });
+      await futures.write.createOrder([mark, deliveryDate, 1n, TimeInForce.GTC], {
+        account: seller.account,
+      });
 
-      const hash = await futures.write.unwindBackstop([deliveryDate, 1n], { account: buyer2.account });
+      const hash = await futures.write.unwindBackstop([deliveryDate, 1n], {
+        account: buyer2.account,
+      });
       const receipt = await pc.waitForTransactionReceipt({ hash });
-      const [unwound] = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "BackstopUnwound" });
+      const [unwound] = parseEventLogs({
+        logs: receipt.logs,
+        abi: futures.abi,
+        eventName: "BackstopUnwound",
+      });
       assert.equal(unwound.args.fee, pot);
       assert.equal(await futures.read.collectedFeesBalance(), 0n);
     });
@@ -304,16 +348,28 @@ describe("Futures - protocol backstop", function () {
       await data.handOffAll();
       await futures.write.setTakerFeeBps([100], { account: owner.account });
       const mark = await futures.read.getMarketPrice();
-      await futures.write.createOrder([mark, deliveryDate, 2n, TimeInForce.GTC], { account: seller.account });
+      await futures.write.createOrder([mark, deliveryDate, 2n, TimeInForce.GTC], {
+        account: seller.account,
+      });
 
-      const hash = await futures.write.unwindBackstop([deliveryDate, 2n], { account: buyer2.account });
+      const hash = await futures.write.unwindBackstop([deliveryDate, 2n], {
+        account: buyer2.account,
+      });
       const receipt = await pc.waitForTransactionReceipt({ hash });
-      const badDebt = parseEventLogs({ logs: receipt.logs, abi: collateralVault.abi, eventName: "BadDebt" });
-      assert.equal(badDebt.length, 0, "an unfunded backstop would otherwise record BadDebt on a fee");
+      const badDebt = parseEventLogs({
+        logs: receipt.logs,
+        abi: collateralVault.abi,
+        eventName: "BadDebt",
+      });
+      assert.equal(
+        badDebt.length,
+        0,
+        "an unfunded backstop would otherwise record BadDebt on a fee",
+      );
       assert.equal(await collateralVault.read.balanceOf([data.backstop]), 0n);
     });
 
-    it("stays open while the vault is halted", async function () {
+    it("reverts TradingHalted while the vault is halted", async function () {
       const data = await networkHelpers.loadFixture(backstopFixture);
       const { futures, collateralVault } = data.contracts;
       const { owner, seller, buyer2 } = data.accounts;
@@ -321,13 +377,19 @@ describe("Futures - protocol backstop", function () {
 
       await data.handOffAll();
       const mark = await futures.read.getMarketPrice();
-      await futures.write.createOrder([mark, deliveryDate, 1n, TimeInForce.GTC], { account: seller.account });
+      await futures.write.createOrder([mark, deliveryDate, 1n, TimeInForce.GTC], {
+        account: seller.account,
+      });
       await collateralVault.write.halt({ account: owner.account });
 
-      await futures.write.unwindBackstop([deliveryDate, 1n], { account: buyer2.account });
+      await viem.assertions.revertWithCustomError(
+        futures.write.unwindBackstop([deliveryDate, 1n], { account: buyer2.account }),
+        futures,
+        "TradingHalted",
+      );
       assert.equal(
         (await futures.read.getUserPosition([data.backstop, deliveryDate])).netQuantity,
-        lotCount - 1n,
+        lotCount,
       );
     });
 
@@ -373,12 +435,16 @@ describe("Futures - protocol backstop", function () {
         "BackstopAccount",
       );
       await viem.assertions.revertWithCustomError(
-        futures.write.liquidatePosition([data.backstop, deliveryDate, 1n], { account: buyer2.account }),
+        futures.write.liquidatePosition([data.backstop, deliveryDate, 1n], {
+          account: buyer2.account,
+        }),
         futures,
         "BackstopAccount",
       );
       await viem.assertions.revertWithCustomError(
-        futures.write.liquidatePositions([data.backstop, [deliveryDate], [1n]], { account: buyer2.account }),
+        futures.write.liquidatePositions([data.backstop, [deliveryDate], [1n]], {
+          account: buyer2.account,
+        }),
         futures,
         "BackstopAccount",
       );
@@ -395,7 +461,9 @@ describe("Futures - protocol backstop", function () {
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
 
       await viem.assertions.revertWithCustomError(
-        futures.write.liquidatePosition([buyer.account.address, deliveryDate, 1n], { account: buyer2.account }),
+        futures.write.liquidatePosition([buyer.account.address, deliveryDate, 1n], {
+          account: buyer2.account,
+        }),
         futures,
         "PositionMatured",
       );
@@ -427,18 +495,33 @@ describe("Futures - protocol backstop", function () {
       assert.ok(pinned < mark);
 
       const debtBefore = await collateralVault.read.traderBadDebtTotal();
-      const hash = await futures.write.settlePosition([data.backstop, deliveryDate], { account: buyer2.account });
+      const hash = await futures.write.settlePosition([data.backstop, deliveryDate], {
+        account: buyer2.account,
+      });
       const receipt = await pc.waitForTransactionReceipt({ hash });
-      const badDebt = parseEventLogs({ logs: receipt.logs, abi: collateralVault.abi, eventName: "BadDebt" });
+      const badDebt = parseEventLogs({
+        logs: receipt.logs,
+        abi: collateralVault.abi,
+        eventName: "BadDebt",
+      });
       assert.equal(badDebt.length, 1);
       assert.equal(getAddress(badDebt[0].args.payer), getAddress(data.backstop));
       assert.equal(badDebt[0].args.amount, (mark - pinned) * lotCount);
-      assert.equal((await collateralVault.read.traderBadDebtTotal()) - debtBefore, (mark - pinned) * lotCount);
-      assert.equal((await futures.read.getUserPosition([data.backstop, deliveryDate])).netQuantity, 0n);
+      assert.equal(
+        (await collateralVault.read.traderBadDebtTotal()) - debtBefore,
+        (mark - pinned) * lotCount,
+      );
+      assert.equal(
+        (await futures.read.getUserPosition([data.backstop, deliveryDate])).netQuantity,
+        0n,
+      );
 
       // The remaining users settle against the fund as usual; everything nets to zero.
       await futures.write.settlePositions(
-        [[seller.account.address, buyer2.account.address], [deliveryDate, deliveryDate]],
+        [
+          [seller.account.address, buyer2.account.address],
+          [deliveryDate, deliveryDate],
+        ],
         { account: seller.account },
       );
       assert.equal(await data.netSum(), 0n);
@@ -458,13 +541,17 @@ describe("Futures - protocol backstop", function () {
       const pinned = await futures.read.settlementPrice([deliveryDate]);
       assert.ok(pinned > mark);
 
-      await futures.write.settlePosition([data.backstop, deliveryDate], { account: buyer2.account });
+      await futures.write.settlePosition([data.backstop, deliveryDate], {
+        account: buyer2.account,
+      });
       const profit = (pinned - mark) * lotCount;
       assert.equal(await collateralVault.read.balanceOf([data.backstop]), profit);
 
       // `withdrawBackstop` pays the recipient in USDC, like the insurance-fund withdrawal.
       const ownerBefore = await usdcMock.read.balanceOf([owner.account.address]);
-      await collateralVault.write.withdrawBackstop([owner.account.address, profit], { account: owner.account });
+      await collateralVault.write.withdrawBackstop([owner.account.address, profit], {
+        account: owner.account,
+      });
       assert.equal((await usdcMock.read.balanceOf([owner.account.address])) - ownerBefore, profit);
       assert.equal(await collateralVault.read.balanceOf([data.backstop]), 0n);
     });
@@ -478,18 +565,24 @@ describe("Futures - protocol backstop", function () {
       const { deliveryDate } = data.config;
 
       await viem.assertions.revertWithCustomError(
-        futures.write.forceClosePositions([[buyer.account.address], [deliveryDate]], { account: owner.account }),
+        futures.write.forceClosePositions([[buyer.account.address], [deliveryDate]], {
+          account: owner.account,
+        }),
         futures,
         "NotHalted",
       );
       await viem.assertions.revertWithCustomError(
-        futures.write.forceClosePositions([[buyer.account.address], [deliveryDate]], { account: seller.account }),
+        futures.write.forceClosePositions([[buyer.account.address], [deliveryDate]], {
+          account: seller.account,
+        }),
         futures,
         "OwnableUnauthorizedAccount",
       );
       await collateralVault.write.halt({ account: owner.account });
       await viem.assertions.revertWithCustomError(
-        futures.write.forceClosePositions([[buyer.account.address], []], { account: owner.account }),
+        futures.write.forceClosePositions([[buyer.account.address], []], {
+          account: owner.account,
+        }),
         futures,
         "ArrayLengthMismatch",
       );
@@ -514,15 +607,22 @@ describe("Futures - protocol backstop", function () {
       for (const who of [...users, data.backstop]) {
         assert.equal((await futures.read.getUserPosition([who, deliveryDate])).netQuantity, 0n);
       }
-      const liquidated = parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "PositionLiquidated" });
+      const liquidated = parseEventLogs({
+        logs: receipt.logs,
+        abi: futures.abi,
+        eventName: "PositionLiquidated",
+      });
       assert.equal(liquidated.length, 3);
-      const bySeller = liquidated.find((e) => getAddress(e.args.user) === getAddress(seller.account.address));
+      const bySeller = liquidated.find(
+        (e) => getAddress(e.args.user) === getAddress(seller.account.address),
+      );
       assert.ok(bySeller);
       assert.equal(bySeller.args.closedQuantity, -lotCount - 1n);
       assert.equal(bySeller.args.liquidatorFee, 0n);
       assert.equal(bySeller.args.pnl, (entry - mark) * (lotCount + 1n));
       assert.equal(
-        parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "BackstopAssigned" }).length,
+        parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "BackstopAssigned" })
+          .length,
         0,
       );
       // All PnL netted through the fund: with equal marks the fund is back where it started.
@@ -544,7 +644,9 @@ describe("Futures - protocol backstop", function () {
       await refreshHashprice(hashpriceUsd, deliveryDate);
       await tc.setNextBlockTimestamp({ timestamp: deliveryDate });
       await viem.assertions.revertWithCustomError(
-        futures.write.forceClosePositions([[buyer.account.address], [deliveryDate]], { account: owner.account }),
+        futures.write.forceClosePositions([[buyer.account.address], [deliveryDate]], {
+          account: owner.account,
+        }),
         futures,
         "PositionMatured",
       );

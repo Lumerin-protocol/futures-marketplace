@@ -22,7 +22,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev Lives here rather than in {HashPowerFuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `HashPowerFutures.sol` to require a bump.
-    string public constant VERSION = "6.15.0";
+    string public constant VERSION = "6.15.1";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) { }
@@ -359,11 +359,12 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @notice Reduce the protocol backstop's leg at `_expirationAt` by up to `_qty` contracts as a
     ///         taker, inside `mark ± backstopUnwindBandBps`, and pay the caller
     ///         `backstopUnwindFeeBps` of the filled notional at the mark from the fee pot.
-    /// @dev Permissionless and allowed while the vault is halted: unwinding only shrinks protocol
-    ///      exposure. Reduce-only by construction. Reverts `TimeInForceNotFilled` when nothing
+    /// @dev Permissionless. Reverts `TradingHalted` while the vault is halted, since a fill would
+    ///      open positions users cannot reduce until it clears. Reduce-only by construction. Reverts `TimeInForceNotFilled` when nothing
     ///      inside the band fills, so callers can simulate before sending. The fee is capped at
     ///      the fee pot balance. Matured backstop legs go through `settlePosition` instead.
     function unwindBackstop(uint256 _expirationAt, uint256 _qty) external {
+        _requireTradingOpen();
         if (!_isActiveExpirationAt(_expirationAt)) revert ExpirationDateNotAvailable();
         if (_qty == 0) revert InvalidQty();
         int256 net = participantExpirationAtNetDelta[BACKSTOP][_expirationAt];

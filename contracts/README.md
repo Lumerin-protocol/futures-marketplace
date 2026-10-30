@@ -25,7 +25,8 @@ refused (`PositionMatured`; the batch form skips them) and settle through
 
 `unwindBackstop(expirationAt, qty)` is permissionless: an IOC that only reduces
 the backstop's leg, limited to `mark ± vault.backstopParams().unwindBandBps`,
-reverting `TimeInForceNotFilled` on a zero fill, paying the caller
+reverting `TimeInForceNotFilled` on a zero fill and `TradingHalted` while the
+vault is halted, paying the caller
 `unwindFeeBps` of the filled notional from the fee pot (`BackstopUnwound`). The
 backstop pays no taker fee. `forceClosePositions(users, expirationAts)` is an
 owner-only, halted-only close at the mark with no hand-off, for clearing

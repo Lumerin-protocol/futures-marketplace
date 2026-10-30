@@ -1,13 +1,13 @@
 import fs from "node:fs";
-import { encodeFunctionData, getAddress, formatUnits } from "viem";
 import hre from "hardhat";
+import { encodeFunctionData, formatUnits, getAddress } from "viem";
 import { readOptionalAddress, requireAddress, requireEnvsSet } from "../lib/env.ts";
-import { writeAndWait } from "../lib/writeContract.ts";
-import { verifyContract } from "../lib/verify.ts";
 import { addrUrl, txUrl } from "../lib/explorer.ts";
 import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts";
+import { verifyContract } from "../lib/verify.ts";
+import { writeAndWait } from "../lib/writeContract.ts";
 
-const TARGET_CODE_VERSION = "6.15.0";
+const TARGET_CODE_VERSION = "6.15.1";
 
 /** Minimal AggregatorV3 slice used to sanity-check HashpriceUSD before deploy. */
 const aggregatorV3Abi = [
@@ -50,10 +50,7 @@ async function main() {
   // instead of executing the call.
   const MARGIN_ENGINE_ADDRESS = readOptionalAddress("MARGIN_ENGINE_ADDRESS");
 
-  const env = requireEnvsSet(
-    "LIQUIDATION_MARGIN_PERCENT",
-    "FUTURE_DELIVERY_DATES_COUNT",
-  );
+  const env = requireEnvsSet("LIQUIDATION_MARGIN_PERCENT", "FUTURE_DELIVERY_DATES_COUNT");
 
   const [deployer] = await viem.getWalletClients();
   const pc = await viem.getPublicClient();
@@ -201,7 +198,10 @@ async function main() {
         functionName: "setOracle",
         args: [hashpriceUsdAddress],
       });
-      logInfo("PME wiring (run as PME owner)", { "PME address": pme.address, "PME owner": pmeOwner });
+      logInfo("PME wiring (run as PME owner)", {
+        "PME address": pme.address,
+        "PME owner": pmeOwner,
+      });
       logStep(`PME.addLinearMarket(${futures.address})`, data);
       logStep(`PME.setOracle(${hashpriceUsdAddress})`, oracleData);
     }
