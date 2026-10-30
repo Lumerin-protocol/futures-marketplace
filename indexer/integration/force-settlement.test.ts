@@ -190,7 +190,16 @@ describe("forced settlement: the indexer follows forceCancelOrders and forceClos
     const snap = await matchstick.indexSnapshot([]);
     await assertMatchesChain(snap, fixture);
 
-    const trades = snap.saved("Trade").filter((tr) => String(tr.transactionHash).toLowerCase() === hash);
+    const txTrades = snap.saved("Trade").filter((tr) => String(tr.transactionHash).toLowerCase() === hash);
+    const assigned = parseEventLogs({ abi: futures.abi, logs: receipt.logs, eventName: "BackstopAssigned" });
+    const assignments = txTrades.filter((tr) => tr.isBackstopAssignment === true);
+    const assignedExpiries = new Set(assigned.map((log) => log.args.expirationAt));
+    assert.equal(assignments.length, assignedExpiries.size, "one backstop trade per (tx, session), i.e. per expiry");
+    const backstop = id(await futures.read.BACKSTOP());
+    for (const assignment of assignments) {
+      assert.equal(String(assignment.user).toLowerCase(), backstop);
+    }
+    const trades = txTrades.filter((tr) => tr.isBackstopAssignment !== true);
     assert.equal(trades.length, closed.length);
     for (const trade of trades) {
       assert.equal(trade.isLiquidation, true, "a forced close is indexed as a liquidation");
