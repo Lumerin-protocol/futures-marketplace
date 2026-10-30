@@ -927,12 +927,19 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
 
     // ── Internal helpers: margin / liquidation ────────────────────────────────
 
-    /// @dev The backstop inherits the liquidated quantity (same sign as the user's position) so
+    /// @dev The one path that closes a user's leg outside the book (liquidation and
+    ///      `forceClosePositions`): closes `_signedClose` (same sign as the leg) at `_mark`,
+    ///      realizing the exact entry-value slice against the fund, and the backstop inherits it so
     ///      positions keep summing to zero per expiry: the user's counterparties are untouched and
-    ///      the backstop now faces them. Goes through `_applyFill`, so an opposite backstop leg nets and
-    ///      realizes against the fund; what it cannot pay is recorded as `BadDebt` by the vault.
-    ///      No margin check: the backstop is a ledger for protocol exposure, not a margined trader.
-    function _handOffToBackstop(address _user, uint256 _expirationAt, int256 _signedClose, uint256 _mark) internal {
+    ///      the backstop now faces them. Both sides go through `_applyFill`, so an opposite backstop
+    ///      leg nets and realizes against the fund; what it cannot pay is recorded as `BadDebt` by
+    ///      the vault. No fee and no margin check: the backstop is a ledger for protocol exposure,
+    ///      not a margined trader.
+    function _closeToBackstop(address _user, uint256 _expirationAt, int256 _signedClose, uint256 _mark)
+        internal
+        returns (int256 pnl)
+    {
+        pnl = _applyFill(_user, -_signedClose, _mark, _expirationAt, false);
         _applyFill(BACKSTOP, _signedClose, _mark, _expirationAt, false);
         emit BackstopAssigned(_user, _expirationAt, _signedClose, _mark);
     }

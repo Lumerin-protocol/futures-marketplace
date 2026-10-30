@@ -7,7 +7,7 @@ import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts
 import { verifyContract } from "../lib/verify.ts";
 import { writeAndWait } from "../lib/writeContract.ts";
 
-const TARGET_CODE_VERSION = "6.15.1";
+const TARGET_CODE_VERSION = "6.15.2";
 
 /** Minimal AggregatorV3 slice used to sanity-check HashpriceUSD before deploy. */
 const aggregatorV3Abi = [

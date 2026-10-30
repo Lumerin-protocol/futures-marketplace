@@ -198,7 +198,7 @@
     },
     {
       "function": "forceClosePositions(address[],uint256[])",
-      "gas": "100612",
+      "gas": "197816",
       "id": "forceClosePositions(address[],uint256[])::two legs at the mark while halted",
       "kind": "transaction",
       "scenario": "two legs at the mark while halted"
@@ -373,14 +373,14 @@
     },
     {
       "function": "liquidatePosition(address,uint256,uint256)",
-      "gas": "305725",
+      "gas": "305790",
       "id": "liquidatePosition(address,uint256,uint256)::partial close",
       "kind": "transaction",
       "scenario": "partial close"
     },
     {
       "function": "liquidatePositions(address,uint256[],uint256[])",
-      "gas": "359432",
+      "gas": "359497",
       "id": "liquidatePositions(address,uint256[],uint256[])::skip-empty-then-partial-close",
       "kind": "transaction",
       "scenario": "skip-empty-then-partial-close"
@@ -569,7 +569,7 @@
     },
     {
       "function": "unwindBackstop(uint256,uint256)",
-      "gas": "199223",
+      "gas": "199221",
       "id": "unwindBackstop(uint256,uint256)::sell 2 into one resting bid",
       "kind": "transaction",
       "scenario": "sell 2 into one resting bid"

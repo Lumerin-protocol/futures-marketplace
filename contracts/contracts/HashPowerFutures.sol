@@ -22,7 +22,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev Lives here rather than in {HashPowerFuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `HashPowerFutures.sol` to require a bump.
-    string public constant VERSION = "6.15.1";
+    string public constant VERSION = "6.15.2";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) { }
@@ -341,11 +341,9 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         uint256 closeAbs = M.min(_closeQty, M.abs(_netQty));
         if (closeAbs == 0) return false;
 
-        // Full and partial closes share `_applyFill`: it realizes the exact entry-value slice
-        // against the fund and zeroes the leg when `closeAbs == |net|`.
+        // Full and partial closes share `_applyFill`, which zeroes the leg when `closeAbs == |net|`.
         int256 signedClose = M.toSigned(_netQty > 0, closeAbs);
-        int256 pnl = _applyFill(_user, -signedClose, _mark, _expirationAt, false);
-        _handOffToBackstop(_user, _expirationAt, signedClose, _mark);
+        int256 pnl = _closeToBackstop(_user, _expirationAt, signedClose, _mark);
         uint256 liqFee = _chargeLiquidationFee(_user, _mark * closeAbs);
 
         _revertIfOverLiquidated(_user);

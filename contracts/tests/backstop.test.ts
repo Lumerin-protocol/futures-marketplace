@@ -588,7 +588,7 @@ describe("Futures - protocol backstop", function () {
       );
     });
 
-    it("closes each leg at the mark with no fee and no backstop hand-off", async function () {
+    it("closes each leg at the mark with no fee through the backstop, which ends flat", async function () {
       const data = await networkHelpers.loadFixture(backstopFixture);
       const { futures, collateralVault } = data.contracts;
       const { owner, buyer, buyer2, seller, pc } = data.accounts;
@@ -623,7 +623,7 @@ describe("Futures - protocol backstop", function () {
       assert.equal(
         parseEventLogs({ logs: receipt.logs, abi: futures.abi, eventName: "BackstopAssigned" })
           .length,
-        0,
+        3,
       );
       // All PnL netted through the fund: with equal marks the fund is back where it started.
       assert.equal(await collateralVault.read.insuranceFundBalance(), fundBefore);

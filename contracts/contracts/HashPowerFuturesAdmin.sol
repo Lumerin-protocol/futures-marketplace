@@ -109,13 +109,15 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
 
     // ── Escape hatch ──────────────────────────────────────────────────────────
 
-    /// @notice Close the given (user, expiry) legs at the current mark, realizing PnL against the
-    ///         insurance fund. No fee, no backstop hand-off: the fund's implicit position closes
-    ///         with the users'. Emits `PositionLiquidated` so indexers need nothing new.
-    /// @dev Only while the vault is halted, so no fill can land between legs. Reverts
-    ///      `PositionMatured` on a matured leg: those are worth their settlement price and must go
-    ///      through `settlePositions`. Empty legs are skipped. Resting orders are left alone; they
-    ///      carry no exposure until they fill, and {forceCancelOrders} removes them.
+    /// @notice Close the given (user, expiry) legs at the current mark with no fee, handing each to
+    ///         the backstop like a liquidation, so positions keep summing to zero: closing a
+    ///         one-sided set moves its net onto the backstop, closing every user leaves it flat.
+    ///         Emits `BackstopAssigned` and `PositionLiquidated` so indexers need nothing new.
+    /// @dev Only while the vault is halted, so no fill can land between legs. Listing the
+    ///      backstop itself only re-marks its leg (realized against the fund, size unchanged).
+    ///      Reverts `PositionMatured` on a matured leg: those are worth their settlement price and
+    ///      must go through `settlePositions`. Empty legs are skipped. Resting orders are left
+    ///      alone; they carry no exposure until they fill, and {forceCancelOrders} removes them.
     function forceClosePositions(address[] calldata _users, uint256[] calldata _expirationAts) external onlyOwner {
         if (!vault.halted()) revert NotHalted();
         if (_users.length != _expirationAts.length) revert ArrayLengthMismatch();
@@ -126,7 +128,7 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
             if (block.timestamp >= expirationAt) revert PositionMatured();
             int256 netQty = participantExpirationAtNetDelta[user][expirationAt];
             if (netQty == 0) continue;
-            int256 pnl = _applyFill(user, -netQty, mark, expirationAt, false);
+            int256 pnl = _closeToBackstop(user, expirationAt, netQty, mark);
             emit PositionLiquidated(user, _msgSender(), expirationAt, netQty, pnl, 0);
         }
     }
