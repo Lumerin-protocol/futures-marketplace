@@ -31,7 +31,7 @@ describe("X3-R4-5-2 — futures backstop unwind opens no user position while hal
     const entry = await futures.read.getMarketPrice();
     const deliveryDate = config.deliveryDates[0];
     const lotCount = 10n;
-    await usdcMock.write.approve([collateralVault.address, maxUint256], { account: carol.account });
+    await usdcMock.write.approve([collateralVault.address, maxUint256], { account: carol.account, chain: carol.chain });
     await collateralVault.write.deposit([(entry * 22n) / 10n], { account: buyer.account });
     await collateralVault.write.deposit([entry * 100n], { account: seller.account });
     await collateralVault.write.deposit([entry * 100n], { account: buyer2.account });
