@@ -29,7 +29,12 @@ import { useLiquidationThresholds } from "../../hooks/data/useLiquidationThresho
 import { useGetMarketPrice } from "../../hooks/data/useGetMarketPrice";
 import { trackOrder } from "../../lib/analytics";
 import { formatMonthDay } from "../../lib/dates";
-import { type OrderLeg, type OrderMarginQuote, snapshotWithChanges } from "../../lib/orderMargin";
+import {
+  type OrderBook,
+  type OrderLeg,
+  type OrderMarginQuote,
+  snapshotWithChanges,
+} from "../../lib/orderMargin";
 import { positionBefore, snapshotWithFill } from "../../lib/orderPreview";
 import { imRequired, mmRequired, type AccountSnapshot } from "@hashpower/portfolio-margin";
 import {
@@ -53,7 +58,9 @@ import {
   QUANTITY_SCALE,
   QUANTITY_SCALE_NUM,
 } from "../../lib/units";
-import { quoteOrderFees } from "../../lib/orderFees";
+import { feeOnNotional, quoteOrderFees } from "../../lib/orderFees";
+import { fillPoints } from "../../lib/points";
+import { PointsEstimateStat } from "./PointsEstimateStat";
 import { type OrderExecution, summarizeOrderExecution } from "../../lib/orderExecution";
 import { TimeInForce, type TimeInForceValue } from "../../types/timeInForce";
 import {
@@ -200,7 +207,7 @@ export const PlaceOrderForm: FC<Props> = ({
     takerFeeBps: futuresTakerFeeBps,
     isLoading: isFeesLoading,
   } = useMakerTakerFees();
-  const { wMaker, wTaker, weightScale, isLoading: isWeightsLoading } = usePointsHookWeights();
+  const { wMaker, wTaker, weightScale, minFee, isLoading: isWeightsLoading } = usePointsHookWeights();
   // What the transaction did, read from its receipt once it has confirmed, and
   // the account figures frozen the moment it was sent so the result step can
   // show `before → now` against live reads.
@@ -225,12 +232,6 @@ export const PlaceOrderForm: FC<Props> = ({
 
   // Notional size (USDC) of this order — the "Notional" stat in the headline.
   const sizeUSDC = (Number(price) / PAYMENT_TOKEN_SCALE_NUM) * absoluteQuantity;
-
-  // Estimated points rewards: points = weight * size / WEIGHT_SCALE.
-  const makerReward =
-    wMaker !== undefined && weightScale ? (Number(wMaker) * sizeUSDC) / Number(weightScale) : null;
-  const takerReward =
-    wTaker !== undefined && weightScale ? (Number(wTaker) * sizeUSDC) / Number(weightScale) : null;
 
   const orderMargin = useOrderMargin();
 
@@ -263,12 +264,14 @@ export const PlaceOrderForm: FC<Props> = ({
       reservedFee = feeFor(notional);
     }
 
+    const book: OrderBook = venue === "perps" ? { venue } : { venue, expirationAt };
     return orderMargin.quote(
-      { place: [{ venue, price, quantity: isBuy ? nativeQty : -nativeQty }] },
+      { place: [{ ...book, price, quantity: isBuy ? nativeQty : -nativeQty }] },
       { reservedFee },
     );
   }, [
     contractMode,
+    expirationAt,
     price,
     restingQuantity,
     isBuy,
@@ -332,10 +335,11 @@ export const PlaceOrderForm: FC<Props> = ({
     const scale = venue === "perps" ? QUANTITY_SCALE_NUM : 1;
     const nativeQty = BigInt(Math.round(restingQuantity * scale));
     if (nativeQty === 0n) return undefined;
-    const leg: OrderLeg = { venue, price, quantity: isBuy ? nativeQty : -nativeQty };
+    const book: OrderBook = venue === "perps" ? { venue } : { venue, expirationAt };
+    const leg: OrderLeg = { ...book, price, quantity: isBuy ? nativeQty : -nativeQty };
     const expiry = venue === "futures" ? expirationAt : undefined;
 
-    const placed = snapshotWithChanges(snapshot, params, { place: [leg] });
+    const placed = snapshotWithChanges(snapshot, { place: [leg] });
     const filled = snapshotWithFill(snapshot, params, leg, expiry);
     // The fee is held back from placement on, so it is in every state but "before".
     const figures = (snap: AccountSnapshot, fee: bigint): RiskFigures => {
@@ -522,6 +526,19 @@ export const PlaceOrderForm: FC<Props> = ({
     makerFeeBps !== undefined && takerFeeBps !== undefined
       ? quoteOrderFees({ notional: placedNotional, makerFeeBps, takerFeeBps, canRest })
       : undefined;
+
+  // Estimated points for a full fill of the order, per side, under the hook's
+  // fee rules (`fillPoints`).
+  const orderNotional = (() => {
+    const nativeQty = BigInt(Math.round(absoluteQuantity * (isPerps ? QUANTITY_SCALE_NUM : 1)));
+    return isPerps ? (price * nativeQty) / QUANTITY_SCALE : price * nativeQty;
+  })();
+  const estimatePoints = (side: "maker" | "taker", weight: bigint | undefined, bps: number | undefined) =>
+    weight !== undefined && weightScale && minFee !== undefined && bps !== undefined
+      ? fillPoints({ notionalUSDC: sizeUSDC, fee: feeOnNotional(orderNotional, bps), minFee, weight, weightScale, side })
+      : null;
+  const makerReward = estimatePoints("maker", wMaker, makerFeeBps);
+  const takerReward = estimatePoints("taker", wTaker, takerFeeBps);
   // `fees.reserved` is max(maker, taker) clamped at zero — the same reserve the
   // margin memo passes to the gate — so margin + reserved is the total required.
   const totalRequired =
@@ -579,12 +596,24 @@ export const PlaceOrderForm: FC<Props> = ({
   const result = (() => {
     if (!execution) return undefined;
     const { placed, filled, resting, cancelled, feePaid, averagePrice, positionAfter } = execution;
-    const fillNotionalUSDC = execution.fills.reduce(
-      (sum, fill) => sum + (Number(fill.price) / PAYMENT_TOKEN_SCALE_NUM) * nativeQty(fill.quantity),
-      0,
-    );
+    // Fills in the placing transaction are the user's taker fills; each is one
+    // `onFill` and earns on its own fee.
     const pointsEarned =
-      wTaker !== undefined && weightScale ? (Number(wTaker) * fillNotionalUSDC) / Number(weightScale) : null;
+      wTaker !== undefined && weightScale && minFee !== undefined
+        ? execution.fills.reduce(
+            (sum, fill) =>
+              sum +
+              fillPoints({
+                notionalUSDC: (Number(fill.price) / PAYMENT_TOKEN_SCALE_NUM) * nativeQty(fill.quantity),
+                fee: fill.fee,
+                minFee,
+                weight: wTaker,
+                weightScale,
+                side: "taker",
+              }),
+            0,
+          )
+        : null;
     // The fee for the resting part is charged on fill; the venue holds the worse
     // of maker/taker against it until then, exactly as it did at review.
     const restingNotional = isPerps ? (price * abs(resting)) / QUANTITY_SCALE : price * abs(resting);
@@ -687,27 +716,13 @@ export const PlaceOrderForm: FC<Props> = ({
                   <strong>{sizeUSDC.toFixed(2)} USDC</strong>
                 </HeadlineStat>
                 {!pointsAreZero && (
-                  <HeadlineStat>
-                    <span>
-                      Points
-                      <HelpTip
-                        title={
-                          canRest
-                            ? "Estimated points for a full fill, credited as the order is matched. Maker points for the part that rests on the book until filled, taker points for the part matched immediately — a partial match earns a mix. A resting order earns nothing until it fills."
-                            : "Estimated points, credited when the order is matched. This order cannot rest on the book, so it earns taker points."
-                        }
-                      />
-                    </span>
-                    <strong>
-                      {makerReward !== null && takerReward !== null
-                        ? canRest
-                          ? `${makerReward.toFixed(2)} / ${takerReward.toFixed(2)} pts`
-                          : `${takerReward.toFixed(2)} pts`
-                        : isWeightsLoading
-                          ? "Loading…"
-                          : "—"}
-                    </strong>
-                  </HeadlineStat>
+                  <PointsEstimateStat
+                    canRest={canRest}
+                    makerReward={makerReward}
+                    takerReward={takerReward}
+                    minFee={minFee}
+                    isLoading={isWeightsLoading}
+                  />
                 )}
               </HeadlineStats>
             </Headline>

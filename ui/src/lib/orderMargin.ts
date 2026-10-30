@@ -19,6 +19,7 @@
 import {
   imRequired,
   type AccountSnapshot,
+  type FuturesRestingOrders,
   type MMParams,
   type RestingOrders,
 } from "@hashpower/portfolio-margin";
@@ -27,18 +28,23 @@ import {
 export type OrderVenue = "futures" | "perps";
 
 /**
+ * The book an order sits on. Futures keep one book per expiry, and the venue
+ * bounds each expiry's fill loss on its own, so a futures order names its expiry.
+ */
+export type OrderBook = { venue: "perps" } | { venue: "futures"; expirationAt: bigint };
+
+/**
  * One order's margin-relevant identity: which book it sits on, at what limit
  * price, and what signed size.
  *
  * `quantity` is signed (+bid / −ask) in the venue's own units: whole contracts
  * for futures, `10^perpQuantityDecimals` units for perps.
  */
-export interface OrderLeg {
-  venue: OrderVenue;
+export type OrderLeg = OrderBook & {
   /** Limit price, token decimals. */
   price: bigint;
   quantity: bigint;
-}
+};
 
 /**
  * A hypothetical change to the account, evaluated against the same requirement
@@ -92,32 +98,67 @@ export function orderNotional(leg: OrderLeg, params: MMParams): bigint {
  * `orders` with `leg` applied to its side, `sign` being `1n` to add it and `-1n`
  * to take it off.
  *
- * Both venues report order delta scaled by `10^tokenDecimals` and order value at
- * the orders' own limit prices, so this is one piece of arithmetic for either
- * venue once quantity is de-scaled — see `RestingOrders`.
+ * Both venues keep a side's quantity and its first two price moments, in their
+ * own quantity units and unscaled, so this is one piece of arithmetic for either
+ * venue — see `RestingOrders`.
  */
-function applyLeg(orders: RestingOrders, leg: OrderLeg, params: MMParams, sign: bigint): RestingOrders {
-  const delta =
-    (sign * abs(leg.quantity) * 10n ** BigInt(params.tokenDecimals)) /
-    quantityScale(leg.venue, params);
-  const value = sign * orderNotional(leg, params);
+function applyLeg<T extends RestingOrders>(orders: T, leg: OrderLeg, sign: bigint): T {
+  const qty = sign * abs(leg.quantity);
+  const pq = qty * leg.price;
+  const p2q = pq * leg.price;
   return leg.quantity > 0n
-    ? { ...orders, buyDelta: orders.buyDelta + delta, buyValue: orders.buyValue + value }
-    : { ...orders, sellDelta: orders.sellDelta + delta, sellValue: orders.sellValue + value };
+    ? {
+        ...orders,
+        buyQty: orders.buyQty + qty,
+        buyPQ: orders.buyPQ + pq,
+        buyP2Q: orders.buyP2Q + p2q,
+      }
+    : {
+        ...orders,
+        sellQty: orders.sellQty + qty,
+        sellPQ: orders.sellPQ + pq,
+        sellP2Q: orders.sellP2Q + p2q,
+      };
+}
+
+/**
+ * `books` with `leg` applied to its expiry's book, opening the book if needed and
+ * dropping it once both sides are empty, as the snapshot reader does.
+ */
+function applyFuturesLeg(
+  books: readonly FuturesRestingOrders[],
+  leg: OrderLeg & { venue: "futures" },
+  sign: bigint,
+): FuturesRestingOrders[] {
+  const existing = books.find((book) => book.expirationAt === leg.expirationAt);
+  const book = existing ?? {
+    expirationAt: leg.expirationAt,
+    settlementPrice: 0n,
+    buyQty: 0n,
+    sellQty: 0n,
+    buyPQ: 0n,
+    buyP2Q: 0n,
+    sellPQ: 0n,
+    sellP2Q: 0n,
+  };
+  const updated = applyLeg(book, leg, sign);
+  const rest = books.filter((other) => other !== existing);
+  if (updated.buyQty === 0n && updated.sellQty === 0n) return rest;
+  return existing ? books.map((other) => (other === existing ? updated : other)) : [...books, updated];
 }
 
 /**
  * The snapshot the engine would see once `changes` are applied.
  *
  * A crossing order (market / IOC / FOK) ends up a position rather than a resting
- * order, and this still quotes it correctly: the engine's fill-loss term for a
- * resting order and its IM unrealized-loss term for the filled position are the
- * same `max(0, adverse move × quantity)` clamped per venue, over the same stress
- * delta. Modelling every order as resting keeps one path through the math.
+ * order, and this still quotes it safely: alone on its book, the engine's
+ * fill-loss bound for it equals its IM unrealized-loss term once filled,
+ * `max(0, adverse move × quantity)`, over the same stress delta. Sharing a book
+ * with other orders, the bound covers at least the same loss, so the quote errs
+ * high. Modelling every order as resting keeps one path through the math.
  */
 export function snapshotWithChanges(
   snapshot: AccountSnapshot,
-  params: MMParams,
   changes: PortfolioChanges,
 ): AccountSnapshot {
   let perpOrders = snapshot.perp.orders;
@@ -125,8 +166,8 @@ export function snapshotWithChanges(
 
   const apply = (leg: OrderLeg, sign: bigint) => {
     if (leg.quantity === 0n) return;
-    if (leg.venue === "perps") perpOrders = applyLeg(perpOrders, leg, params, sign);
-    else futuresOrders = applyLeg(futuresOrders, leg, params, sign);
+    if (leg.venue === "perps") perpOrders = applyLeg(perpOrders, leg, sign);
+    else futuresOrders = applyFuturesLeg(futuresOrders, leg, sign);
   };
 
   // Cancels first, so freed capacity is available to the places — the order the
@@ -206,7 +247,7 @@ export function quoteOrderMargin(args: {
   } = args;
 
   const imBefore = imRequired(snapshot, params, markPrice);
-  const imAfter = imRequired(snapshotWithChanges(snapshot, params, changes), params, markPrice);
+  const imAfter = imRequired(snapshotWithChanges(snapshot, changes), params, markPrice);
   const headroom = snapshot.balance - imAfter - reservedFee;
 
   return {
@@ -229,28 +270,32 @@ const MAX_SEARCH_QUANTITY = 1n << 40n;
 /**
  * Largest size the gate would still accept, in the venue's quantity units.
  *
- * The requirement is convex in size, so the affordable sizes form one interval
- * and a bisection lands exactly on its edge. The search is seeded from the
- * account as it stands, so it reports *funded* capacity only: an account already
- * at or past its IM has none and gets zero. Unwinding from there goes through the
- * gate's other branch, so callers union this with their reduce-only capacity.
+ * The requirement never falls as size grows — the stress leg and the fill-loss
+ * bound both rise with it — so the affordable sizes form one interval and a
+ * bisection lands exactly on its edge. The search is seeded from the account as
+ * it stands, so it reports *funded* capacity only: an account already at or past
+ * its IM has none and gets zero. Unwinding from there goes through the gate's
+ * other branch, so callers union this with their reduce-only capacity.
  */
-export function maxAffordableQuantity(args: {
-  snapshot: AccountSnapshot;
-  params: MMParams;
-  venue: OrderVenue;
-  /** Limit price, token decimals. */
-  price: bigint;
-  markPrice: bigint;
-  isBuy: boolean;
-  /** Fee to hold back for a candidate notional. */
-  reserveFee?: (notional: bigint) => bigint;
-}): bigint {
-  const { snapshot, params, venue, price, markPrice, isBuy, reserveFee } = args;
+export function maxAffordableQuantity(
+  args: OrderBook & {
+    snapshot: AccountSnapshot;
+    params: MMParams;
+    /** Limit price, token decimals. */
+    price: bigint;
+    markPrice: bigint;
+    isBuy: boolean;
+    /** Fee to hold back for a candidate notional. */
+    reserveFee?: (notional: bigint) => bigint;
+  },
+): bigint {
+  const { snapshot, params, price, markPrice, isBuy, reserveFee } = args;
   if (price <= 0n || markPrice <= 0n) return 0n;
+  const book: OrderBook =
+    args.venue === "perps" ? { venue: "perps" } : { venue: "futures", expirationAt: args.expirationAt };
 
   const affordable = (quantity: bigint): boolean => {
-    const leg: OrderLeg = { venue, price, quantity: isBuy ? quantity : -quantity };
+    const leg: OrderLeg = { ...book, price, quantity: isBuy ? quantity : -quantity };
     const reservedFee = reserveFee ? reserveFee(orderNotional(leg, params)) : 0n;
     return quoteOrderMargin({
       snapshot,

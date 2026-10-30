@@ -1,13 +1,13 @@
 import fs from "node:fs";
-import { encodeFunctionData, getAddress, formatUnits } from "viem";
 import hre from "hardhat";
+import { encodeFunctionData, formatUnits, getAddress } from "viem";
 import { readOptionalAddress, requireAddress, requireEnvsSet } from "../lib/env.ts";
-import { writeAndWait } from "../lib/writeContract.ts";
-import { verifyContract } from "../lib/verify.ts";
 import { addrUrl, txUrl } from "../lib/explorer.ts";
 import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts";
+import { verifyContract } from "../lib/verify.ts";
+import { writeAndWait } from "../lib/writeContract.ts";
 
-const TARGET_CODE_VERSION = "6.5.0";
+const TARGET_CODE_VERSION = "6.15.2";
 
 /** Minimal AggregatorV3 slice used to sanity-check HashpriceUSD before deploy. */
 const aggregatorV3Abi = [
@@ -50,10 +50,7 @@ async function main() {
   // instead of executing the call.
   const MARGIN_ENGINE_ADDRESS = readOptionalAddress("MARGIN_ENGINE_ADDRESS");
 
-  const env = requireEnvsSet(
-    "LIQUIDATION_MARGIN_PERCENT",
-    "FUTURE_DELIVERY_DATES_COUNT",
-  );
+  const env = requireEnvsSet("LIQUIDATION_MARGIN_PERCENT", "FUTURE_DELIVERY_DATES_COUNT");
 
   const [deployer] = await viem.getWalletClients();
   const pc = await viem.getPublicClient();
@@ -118,7 +115,13 @@ async function main() {
       `Implementation VERSION is ${implementationVersion}, expected ${TARGET_CODE_VERSION}`,
     );
   }
-  await verifyContract(futuresImpl.address, [collateralVaultAddress]);
+  if (
+    !(await verifyContract(futuresImpl.address, [collateralVaultAddress], undefined, {
+      contract: "contracts/HashPowerFutures.sol:HashPowerFutures",
+    }))
+  ) {
+    throw new Error(`Basescan did not verify implementation ${futuresImpl.address}`);
+  }
   logStep("Verified", addrUrl(pc, futuresImpl.address));
 
   // ── 2. Deploy proxy ─────────────────────────────────────────────────────
@@ -147,7 +150,13 @@ async function main() {
     confirmations: 5,
   });
   logStep("Deployed", addrUrl(pc, futuresProxy.address));
-  await verifyContract(futuresProxy.address, [futuresImpl.address, initData]);
+  if (
+    !(await verifyContract(futuresProxy.address, [futuresImpl.address, initData], undefined, {
+      contract: "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy",
+    }))
+  ) {
+    throw new Error(`Basescan did not verify proxy ${futuresProxy.address}`);
+  }
   logStep("Verified", addrUrl(pc, futuresProxy.address));
 
   const futures = await viem.getContractAt("HashPowerFutures", futuresProxy.address);
@@ -189,7 +198,10 @@ async function main() {
         functionName: "setOracle",
         args: [hashpriceUsdAddress],
       });
-      logInfo("PME wiring (run as PME owner)", { "PME address": pme.address, "PME owner": pmeOwner });
+      logInfo("PME wiring (run as PME owner)", {
+        "PME address": pme.address,
+        "PME owner": pmeOwner,
+      });
       logStep(`PME.addLinearMarket(${futures.address})`, data);
       logStep(`PME.setOracle(${hashpriceUsdAddress})`, oracleData);
     }

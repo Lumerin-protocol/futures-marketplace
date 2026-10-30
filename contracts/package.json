@@ -26,7 +26,6 @@
     "deploy:local": "hardhat run scripts/deploy-local.ts",
     "upgrade:futures": "hardhat run scripts/update-futures.ts",
     "futures:close": "hardhat run scripts/futures-close.ts",
-    "futures:reset-state": "hardhat run scripts/futures-reset-state.ts",
     "set:btc-price": "hardhat run scripts/set-bitcoin-price.ts"
   },
   "devDependencies": {
@@ -50,7 +49,7 @@
     "@safe-global/api-kit": "^5.0.1",
     "@safe-global/protocol-kit": "^8.0.4",
     "@safe-global/types-kit": "^4.0.1",
-    "collateral-margin": "github:Lumerin-protocol/collateral-margin#d4b3dac6a33caea52dae62c8aee1061372df91d3",
+    "collateral-margin": "github:Lumerin-protocol/collateral-margin#28757c11a803c2bcfd39182cc9c43df0bd8f8cee",
     "multicall3": "github:mds1/multicall3",
     "solidity-linked-list": "6.5.0",
     "viem": "^2.54.6"

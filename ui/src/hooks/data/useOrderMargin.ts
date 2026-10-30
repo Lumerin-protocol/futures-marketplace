@@ -4,8 +4,8 @@ import { imRequired, type MMParams } from "@hashpower/portfolio-margin";
 import {
   maxAffordableQuantity,
   quoteOrderMargin,
+  type OrderBook,
   type OrderMarginQuote,
-  type OrderVenue,
   type PortfolioChanges,
 } from "../../lib/orderMargin";
 import { useGetMarketPrice } from "./useGetMarketPrice";
@@ -45,12 +45,13 @@ export interface OrderMarginModel {
    * Largest funded size for a side, in the venue's quantity units. Excludes
    * reduce-only capacity, which the gate admits through its own branch.
    */
-  maxQuantity: (args: {
-    venue: OrderVenue;
-    price: bigint;
-    isBuy: boolean;
-    reserveFee?: (notional: bigint) => bigint;
-  }) => bigint | undefined;
+  maxQuantity: (
+    args: OrderBook & {
+      price: bigint;
+      isBuy: boolean;
+      reserveFee?: (notional: bigint) => bigint;
+    },
+  ) => bigint | undefined;
 }
 
 export function useOrderMargin(): OrderMarginModel {
@@ -96,12 +97,13 @@ export function useOrderMargin(): OrderMarginModel {
   );
 
   const maxQuantity = useCallback(
-    (args: {
-      venue: OrderVenue;
-      price: bigint;
-      isBuy: boolean;
-      reserveFee?: (notional: bigint) => bigint;
-    }): bigint | undefined => {
+    (
+      args: OrderBook & {
+        price: bigint;
+        isBuy: boolean;
+        reserveFee?: (notional: bigint) => bigint;
+      },
+    ): bigint | undefined => {
       if (!snapshot || !params || !markPrice) return undefined;
       return maxAffordableQuantity({ snapshot, params, markPrice, ...args });
     },

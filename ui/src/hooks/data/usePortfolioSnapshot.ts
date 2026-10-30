@@ -1,10 +1,16 @@
 import { useMemo } from "react";
-import { useReadContracts } from "wagmi";
-import type { AccountSnapshot, RestingOrders } from "@hashpower/portfolio-margin";
+import { useReadContract, useReadContracts } from "wagmi";
+import type {
+  AccountSnapshot,
+  FuturesRestingOrders,
+  RestingOrders,
+} from "@hashpower/portfolio-margin";
+import { CollateralVaultAbi } from "collateral-margin-abi/CollateralVault.ts";
 import { HashPowerFuturesAbi } from "futures-marketplace-abi/HashPowerFutures.ts";
 import { HashPowerPerpsDEXAbi } from "derivatives-marketplace-abi/HashPowerPerpsDEX.ts";
 import { PAYMENT_TOKEN_DECIMALS, QUANTITY_DECIMALS } from "../../lib/units";
 import { useGetFutureBalance } from "./useGetFutureBalance";
+import { useFuturesCollateralVault } from "./useFuturesCollateralVault";
 import { withErrors } from "../../lib/withErrors";
 
 // The pinned derivatives ABI still exposes the legacy averaged-entry tuple.
@@ -32,13 +38,16 @@ const PERPS_EXACT_POSITION_ABI = [
 type ReadResult = { status: "success"; result: unknown } | { status: "failure" };
 
 /// The `getRiskView` tuple, narrowed to the fields the margin model reads.
-type RiskView = { pendingFunding: bigint; buyOrderDelta: bigint; sellOrderDelta: bigint };
+type RiskView = { pendingFunding: bigint };
 
-type OrderAggregate = {
-  buyQty: bigint;
-  sellQty: bigint;
-  buyValue: bigint;
-  sellValue: bigint;
+/// A book with no resting orders.
+const NO_ORDERS: RestingOrders = {
+  buyQty: 0n,
+  sellQty: 0n,
+  buyPQ: 0n,
+  buyP2Q: 0n,
+  sellPQ: 0n,
+  sellP2Q: 0n,
 };
 
 /// Reads every input `PortfolioMarginEngine._computeMargin` consumes, so the
@@ -49,9 +58,11 @@ type OrderAggregate = {
 /// to be read before those aggregates can be fetched, so the reads happen in
 /// two waves. Wagmi batches each wave through multicall.
 ///
-/// Resting orders come from risk deltas plus unclamped limit-price totals.
-/// Perps still exposes `getOrderAggregate`; futures sums
-/// `getOrderAggregateAtExpiration` over `getExpirationDates()`.
+/// Resting orders are each venue's per-side quantity and price moments, which the
+/// margin model bounds fill loss from at any price: perps `getOrderAggregate`,
+/// futures `getOrderAggregateAtExpiration` per expiry in `getExpirationDates()`,
+/// kept per expiry with its settlement price because the venue bounds each expiry
+/// at its own price.
 ///
 /// The snapshot stays `undefined` until every read has succeeded — a partial
 /// one would silently understate the margin requirement.
@@ -64,6 +75,17 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
     | undefined;
 
   const balanceQuery = useGetFutureBalance(address);
+  const { data: collateralVaultAddress } = useFuturesCollateralVault();
+  const accountDebtQuery = useReadContract({
+    address: collateralVaultAddress,
+    abi: withErrors(CollateralVaultAbi),
+    functionName: "accountDebt",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: !!address && !!collateralVaultAddress,
+      refetchInterval: 10000,
+    },
+  });
 
   const futuresQuery = useReadContracts({
     contracts: [
@@ -151,13 +173,22 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
     query: { enabled: !!futuresAddress && hasPositions, refetchInterval: 10000 },
   });
 
+  // Each window expiry's book, then its settlement price (zero until it settles).
   const orderAggregatesQuery = useReadContracts({
-    contracts: (orderExpirationAts ?? []).map((expirationAt) => ({
-      address: futuresAddress,
-      abi: withErrors(HashPowerFuturesAbi),
-      functionName: "getOrderAggregateAtExpiration" as const,
-      args: [address as `0x${string}`, expirationAt] as const,
-    })),
+    contracts: [
+      ...(orderExpirationAts ?? []).map((expirationAt) => ({
+        address: futuresAddress,
+        abi: withErrors(HashPowerFuturesAbi),
+        functionName: "getOrderAggregateAtExpiration" as const,
+        args: [address as `0x${string}`, expirationAt] as const,
+      })),
+      ...(orderExpirationAts ?? []).map((expirationAt) => ({
+        address: futuresAddress,
+        abi: withErrors(HashPowerFuturesAbi),
+        functionName: "settlementPrice" as const,
+        args: [expirationAt] as const,
+      })),
+    ],
     query: { enabled: !!address && !!futuresAddress && hasOrderWindow, refetchInterval: 10000 },
   });
 
@@ -188,16 +219,25 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
 
   const snapshot = useMemo<AccountSnapshot | undefined>(() => {
     const balance = balanceQuery.data as bigint | undefined;
-    if (!address || balance === undefined || !futuresOrders || !perps || !positions) {
+    const accountDebt = accountDebtQuery.data as bigint | undefined;
+    if (
+      !address ||
+      balance === undefined ||
+      accountDebt === undefined ||
+      !futuresOrders ||
+      !perps ||
+      !positions
+    ) {
       return undefined;
     }
     return {
       user: address,
       balance,
+      accountDebt,
       perp: perps.perp,
       futures: { positions, orders: futuresOrders },
     };
-  }, [address, balanceQuery.data, futuresOrders, perps, positions]);
+  }, [address, balanceQuery.data, accountDebtQuery.data, futuresOrders, perps, positions]);
 
   return {
     snapshot,
@@ -207,6 +247,7 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
     perpQuantityDecimals: perps?.perpQuantityDecimals ?? QUANTITY_DECIMALS,
     isLoading:
       balanceQuery.isLoading ||
+      accountDebtQuery.isLoading ||
       futuresQuery.isLoading ||
       perpsQuery.isLoading ||
       aggregatesQuery.isLoading ||
@@ -214,6 +255,7 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
       orderAggregatesQuery.isLoading,
     isError:
       balanceQuery.isError ||
+      accountDebtQuery.isError ||
       futuresQuery.isError ||
       perpsQuery.isError ||
       aggregatesQuery.isError ||
@@ -222,43 +264,42 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
   };
 }
 
-/// Pair a venue's risk deltas with its cached order aggregate.
-function restingOrders(
-  risk: RiskView,
-  aggregate: { buyValue: bigint; sellValue: bigint },
-): RestingOrders {
+/// The six moment fields of a venue's `RestingOrderAggregate`.
+function moments(aggregate: RestingOrders): RestingOrders {
   return {
-    buyDelta: risk.buyOrderDelta,
-    sellDelta: risk.sellOrderDelta,
-    buyValue: aggregate.buyValue,
-    sellValue: aggregate.sellValue,
+    buyQty: aggregate.buyQty,
+    sellQty: aggregate.sellQty,
+    buyPQ: aggregate.buyPQ,
+    buyP2Q: aggregate.buyP2Q,
+    sellPQ: aggregate.sellPQ,
+    sellP2Q: aggregate.sellP2Q,
   };
 }
 
+/// One book per window expiry that has resting orders.
 function readFuturesOrders(
   wave1: ReadResult[] | undefined,
-  orderAggregates: ReadResult[] | undefined,
+  orderReads: ReadResult[] | undefined,
   orderExpirationAts: readonly bigint[] | undefined,
-): RestingOrders | undefined {
-  const values = allSucceeded(wave1, 3);
-  if (!values || orderExpirationAts === undefined) return undefined;
+): FuturesRestingOrders[] | undefined {
+  if (!allSucceeded(wave1, 3) || orderExpirationAts === undefined) return undefined;
+  const count = orderExpirationAts.length;
+  if (count === 0) return [];
 
-  if (orderExpirationAts.length === 0) {
-    return restingOrders(values[0] as RiskView, { buyValue: 0n, sellValue: 0n });
+  const values = allSucceeded(orderReads, count * 2);
+  if (!values) return undefined;
+
+  const books: FuturesRestingOrders[] = [];
+  for (let i = 0; i < count; i++) {
+    const aggregate = values[i] as RestingOrders;
+    if (aggregate.buyQty === 0n && aggregate.sellQty === 0n) continue;
+    books.push({
+      ...moments(aggregate),
+      expirationAt: orderExpirationAts[i],
+      settlementPrice: values[count + i] as bigint,
+    });
   }
-
-  const aggregates = allSucceeded(orderAggregates, orderExpirationAts.length);
-  if (!aggregates) return undefined;
-
-  let buyValue = 0n;
-  let sellValue = 0n;
-  for (const entry of aggregates) {
-    const aggregate = entry as OrderAggregate;
-    buyValue += aggregate.buyValue;
-    sellValue += aggregate.sellValue;
-  }
-
-  return restingOrders(values[0] as RiskView, { buyValue, sellValue });
+  return books;
 }
 
 function readPerps(
@@ -270,7 +311,7 @@ function readPerps(
   const flat: AccountSnapshot["perp"] = {
     netQty: 0n,
     entryPrice: 0n,
-    orders: { buyDelta: 0n, sellDelta: 0n, buyValue: 0n, sellValue: 0n },
+    orders: NO_ORDERS,
     fundingOwed: 0n,
   };
 
@@ -291,10 +332,7 @@ function readPerps(
       netQty: position.netQuantity,
       entryPrice:
         absNetQuantity === 0n ? 0n : (absNetEntryValue * 1_000_000n) / absNetQuantity,
-      orders: restingOrders(
-        risk,
-        values[2] as { buyValue: bigint; sellValue: bigint },
-      ),
+      orders: moments(values[2] as RestingOrders),
       // The engine only counts funding the user owes.
       fundingOwed: risk.pendingFunding > 0n ? risk.pendingFunding : 0n,
     },

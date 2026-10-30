@@ -196,6 +196,8 @@ async function benchmarkViews() {
       "MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION()",
       "MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION",
     ],
+    ["MAX_ORDER_QUANTITY()", "MAX_ORDER_QUANTITY"],
+    ["MAX_PRICE()", "MAX_PRICE"],
     ["MAX_PRICE_LEVELS_PER_SIDE()", "MAX_PRICE_LEVELS_PER_SIDE"],
     ["UPGRADE_INTERFACE_VERSION()", "UPGRADE_INTERFACE_VERSION"],
     ["VERSION()", "VERSION"],
@@ -851,9 +853,9 @@ async function benchmarkAdminAndLifecycle() {
     );
     await recordTransaction(
       pc,
-      "resetState(address[])",
-      "two participants with order-and-position state",
-      futures.write.resetState([[seller.account.address, buyer.account.address]], {
+      "forceCancelOrders(address[],uint256[])",
+      "two participants, one resting order",
+      futures.write.forceCancelOrders([[seller.account.address, buyer.account.address], [expirationAt, expirationAt]], {
         account: owner.account,
       }),
     );
@@ -964,7 +966,7 @@ describe("Futures gas benchmark", () => {
 
     const snapshot = gas.snapshot();
     const coverage = assertAbiFunctionCoverage(HashPowerFuturesAbi, snapshot, exclusions);
-    assert.equal(coverage.covered.length, 66);
+    assert.equal(coverage.covered.length, 68);
     assert.deepEqual(coverage.excluded, [
       "initialize(address,uint8,uint8,uint256)",
       "proxiableUUID()",

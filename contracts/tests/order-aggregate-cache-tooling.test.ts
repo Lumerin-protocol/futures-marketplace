@@ -28,8 +28,8 @@ describe("order aggregate cache tooling", () => {
     assert.deepEqual(
       aggregateOrdersByExpiration(orders),
       new Map([
-        [1n, { buyQty: 3n, sellQty: 2n, buyValue: 15n, sellValue: 14n }],
-        [2n, { buyQty: 4n, sellQty: 0n, buyValue: 44n, sellValue: 0n }],
+        [1n, { buyQty: 3n, sellQty: 2n, buyPQ: 15n, buyP2Q: 75n, sellPQ: 14n, sellP2Q: 98n }],
+        [2n, { buyQty: 4n, sellQty: 0n, buyPQ: 44n, buyP2Q: 484n, sellPQ: 0n, sellP2Q: 0n }],
       ]),
     );
   });
@@ -144,8 +144,8 @@ describe("order aggregate cache tooling", () => {
       [orderC, { participant: alice, price: 11n, quantity: 4n, expirationAt: 2n }],
     ]);
     const aggregates = new Map<bigint, OrderAggregate>([
-      [1n, { buyQty: 3n, sellQty: 2n, buyValue: 15n, sellValue: 14n }],
-      [2n, { buyQty: 4n, sellQty: 0n, buyValue: 44n, sellValue: 0n }],
+      [1n, { buyQty: 3n, sellQty: 2n, buyPQ: 15n, buyP2Q: 75n, sellPQ: 14n, sellP2Q: 98n }],
+      [2n, { buyQty: 4n, sellQty: 0n, buyPQ: 44n, buyP2Q: 484n, sellPQ: 0n, sellP2Q: 0n }],
     ]);
     const reader = {
       getExpirationDates: async () => [1n, 2n],
@@ -157,7 +157,7 @@ describe("order aggregate cache tooling", () => {
     const result = await verifyOrderAggregateCache([alice], reader, 2);
     assert.deepEqual(result, { users: 1, orders: 3, expirations: 2 });
 
-    aggregates.set(2n, { buyQty: 99n, sellQty: 0n, buyValue: 44n, sellValue: 0n });
+    aggregates.set(2n, { buyQty: 99n, sellQty: 0n, buyPQ: 44n, buyP2Q: 484n, sellPQ: 0n, sellP2Q: 0n });
     await assert.rejects(
       verifyOrderAggregateCache([alice], reader, 2),
       /buyQty=99, expected 4/,
