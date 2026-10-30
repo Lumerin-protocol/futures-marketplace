@@ -9,6 +9,7 @@ import { truncateAddress } from "../../utils/formatters";
 import { getTxUrl } from "../../lib/indexer";
 import { AddressLength } from "../../types/types";
 import { usePointsHookWeights } from "../../hooks/data/usePointsHookWeights";
+import { PointsRules } from "./PointsRules";
 import { useIndexerOutageToast } from "../../hooks/data/indexerErrors";
 import { RiskToast } from "../../components/Widgets/Futures/RiskToast";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../lib/units";
@@ -34,21 +35,11 @@ const WalletAvatar = ({ address }: { address: string }) => (
   <wui-avatar alt={address} address={address} size="sm" />
 );
 
-// Points per 1 USDC of trade size, i.e. weight / WEIGHT_SCALE. This collapses
-// the raw fixed-point weights (which carry a lot of trailing zeros) into a
-// readable multiplier.
-const formatRate = (weight?: bigint, scale?: bigint) => {
-  if (weight === undefined || scale === undefined || scale === 0n) {
-    return "—";
-  }
-  const rate = Number(weight) / Number(scale);
-  return rate.toLocaleString("en-US", { maximumFractionDigits: 4 });
-};
 
 export const Leaderboard: FC = () => {
   const { address, isConnected } = useAccount();
   const isMobile = useMediaQuery("(max-width: 600px)");
-  const { wMaker, wTaker, weightScale } = usePointsHookWeights();
+  const { wMaker, wTaker, weightScale, minFee } = usePointsHookWeights();
   const indexerOutage = useIndexerOutageToast();
 
   const { data: rawLeaderboard = [], isLoading: isLeaderboardLoading } = usePointsLeaderboard(20);
@@ -168,28 +159,7 @@ export const Leaderboard: FC = () => {
         <SideColumn>
           <RulesWidget>
             <SectionTitle>How To Earn Points</SectionTitle>
-            <RulesList>
-              <RuleItem>
-                <RuleHeader>
-                  <RuleAction>Trade rewards</RuleAction>
-                </RuleHeader>
-                <RuleDescription>
-                  Earn points based on the size (USDC notional) of your trades. Points are only credited
-                  once your order is matched and becomes a position — resting or unmatched orders don't
-                  earn anything.
-                </RuleDescription>
-                <RateList>
-                  <RateRow>
-                    <RateLabel>Maker fills</RateLabel>
-                    <RatePoints>{formatRate(wMaker, weightScale)} pts / USDC</RatePoints>
-                  </RateRow>
-                  <RateRow>
-                    <RateLabel>Taker fills</RateLabel>
-                    <RatePoints>{formatRate(wTaker, weightScale)} pts / USDC</RatePoints>
-                  </RateRow>
-                </RateList>
-              </RuleItem>
-            </RulesList>
+            <PointsRules wMaker={wMaker} wTaker={wTaker} weightScale={weightScale} minFee={minFee} />
           </RulesWidget>
 
           <LogsWidget>
@@ -532,69 +502,14 @@ const TxHashLink = styled.a`
   }
 `;
 
-const RulesList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-`;
 
-const RuleItem = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.75rem;
-  border: 1px solid ${tokens.border.muted04};
-  border-radius: ${tokens.radius.md};
-  background-color: ${tokens.overlay.white02};
-`;
 
-const RuleHeader = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-`;
 
-const RuleAction = styled.span`
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: ${tokens.text.onDark};
-`;
 
-const RateList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  margin-top: 0.25rem;
-`;
 
-const RateRow = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.4rem 0.6rem;
-  border-radius: ${tokens.radius.sm};
-  background-color: ${tokens.overlay.white02};
-`;
 
-const RateLabel = styled.span`
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: ${tokens.text.secondary};
-`;
 
-const RatePoints = styled.span`
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: ${tokens.trading.profit};
-`;
 
-const RuleDescription = styled.span`
-  font-size: 0.8rem;
-  color: ${tokens.text.secondary};
-  line-height: 1.4;
-`;
 
 const EmptyState = styled.div`
   padding: 1.5rem 0;
