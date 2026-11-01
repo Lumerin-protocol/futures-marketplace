@@ -31,9 +31,13 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
     // `liquidationMarginPercent` has no setter: it is vestigial (see {HashPowerFuturesBase}) and the
     // setter's bytecode was reclaimed to keep the venue under EIP-170.
 
+    /// @dev The count can only grow: a lower count unlists dates that may hold resting orders,
+    ///      which `getRiskView` then stops reserving although they can fill once the window
+    ///      reaches those dates again. The initializer sets at least 1, so this also rejects 0.
     function setFutureExpirationDatesCount(uint8 _futureExpirationDatesCount) public onlyOwner {
-        if (_futureExpirationDatesCount < 1) {
-            revert ValueOutOfRange(1, int256(uint256(type(uint8).max)));
+        uint8 current = futureExpirationDatesCount;
+        if (_futureExpirationDatesCount < current) {
+            revert ValueOutOfRange(int256(uint256(current)), int256(uint256(type(uint8).max)));
         }
         futureExpirationDatesCount = _futureExpirationDatesCount;
         emit FutureExpirationDatesCountUpdated(_futureExpirationDatesCount);

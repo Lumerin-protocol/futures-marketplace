@@ -766,8 +766,8 @@ async function benchmarkAdminAndLifecycle() {
     await recordTransaction(
       pc,
       "setFutureExpirationDatesCount(uint8)",
-      "10-to-8",
-      futures.write.setFutureExpirationDatesCount([8], { account: owner.account }),
+      "10-to-12",
+      futures.write.setFutureExpirationDatesCount([12], { account: owner.account }),
     );
     await recordTransaction(
       pc,

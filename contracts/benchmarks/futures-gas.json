@@ -471,10 +471,10 @@
     },
     {
       "function": "setFutureExpirationDatesCount(uint8)",
-      "gas": "34889",
-      "id": "setFutureExpirationDatesCount(uint8)::10-to-8",
+      "gas": "34895",
+      "id": "setFutureExpirationDatesCount(uint8)::10-to-12",
       "kind": "transaction",
-      "scenario": "10-to-8"
+      "scenario": "10-to-12"
     },
     {
       "function": "setHook(address)",
