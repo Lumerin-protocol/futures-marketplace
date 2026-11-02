@@ -373,14 +373,14 @@
     },
     {
       "function": "liquidatePosition(address,uint256,uint256)",
-      "gas": "305790",
+      "gas": "305812",
       "id": "liquidatePosition(address,uint256,uint256)::partial close",
       "kind": "transaction",
       "scenario": "partial close"
     },
     {
       "function": "liquidatePositions(address,uint256[],uint256[])",
-      "gas": "359497",
+      "gas": "359519",
       "id": "liquidatePositions(address,uint256[],uint256[])::skip-empty-then-partial-close",
       "kind": "transaction",
       "scenario": "skip-empty-then-partial-close"
@@ -513,7 +513,7 @@
     },
     {
       "function": "setPortfolioMargin(address)",
-      "gas": "49977",
+      "gas": "50043",
       "id": "setPortfolioMargin(address)::revalidate-current-engine",
       "kind": "transaction",
       "scenario": "revalidate-current-engine"

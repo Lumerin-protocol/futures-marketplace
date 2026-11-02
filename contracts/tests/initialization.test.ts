@@ -29,7 +29,7 @@ describe("Futures - Initialization", () => {
     const { contracts } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
 
-    assert.equal(await futures.read.MAX_ORACLE_STALENESS(), 3600n);
+    assert.equal(await futures.read.MAX_ORACLE_STALENESS(), 7200n);
   });
 
   it("exposes version metadata in the runtime and generated ABI", async function () {
@@ -98,6 +98,18 @@ describe("Futures - Oracle staleness", function () {
       futures,
       "InvalidOracle",
     );
+  });
+
+  it("N18: serves the mark from a price 72 minutes old, like the 2026-11-02 gap on prd", async function () {
+    const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
+    const { futures } = contracts;
+    const { tc, pc } = accounts;
+
+    const { timestamp: now } = await pc.getBlock({ blockTag: "latest" });
+    await tc.setNextBlockTimestamp({ timestamp: now + 72n * 60n });
+    await tc.mine({ blocks: 1 });
+
+    await assert.doesNotReject(futures.read.getMarketPrice());
   });
 
   it("reverts getMarketPrice with OracleStale once the answer ages past MAX_ORACLE_STALENESS", async function () {

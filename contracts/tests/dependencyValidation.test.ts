@@ -182,7 +182,8 @@ describe("Futures - dependency validation", function () {
       const feed = await viem.deployContract("PriceFeedMock", [FEED_DECIMALS, "invalid time"]);
       const answer = parseUnits("34.4", FEED_DECIMALS);
 
-      await feed.write.setRound([1n, answer, now - 3601n, now - 3601n, 1n]);
+      const staleAt = now - (await futures.read.MAX_ORACLE_STALENESS()) - 1n;
+      await feed.write.setRound([1n, answer, staleAt, staleAt, 1n]);
       await viem.assertions.revertWithCustomError(
         futures.write.setOracle([feed.address], { account: owner.account }),
         futures,

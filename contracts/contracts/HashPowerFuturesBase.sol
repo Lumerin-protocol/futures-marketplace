@@ -210,7 +210,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     ///      accept 327%.
     int16 internal constant MAX_FEE_BPS = 100;
     uint32 internal constant SECONDS_PER_DAY = 3600 * 24;
-    uint256 public constant MAX_ORACLE_STALENESS = 3600; // 1 hour
+    uint256 public constant MAX_ORACLE_STALENESS = 7200; // 2 hours: hashprice updates only on a Bitcoin block
     uint8 public constant EXPIRATION_INTERVAL_DAYS = 30;
     /// @notice Minimum price increment for orders: $0.01 in USDC (6 decimals).
     uint256 public constant minimumPriceIncrement = 0.01e6;
