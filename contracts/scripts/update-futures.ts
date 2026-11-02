@@ -1,13 +1,6 @@
 import { OperationType } from "@safe-global/types-kit";
 import hre from "hardhat";
-import {
-  type Address,
-  encodeFunctionData,
-  getAddress,
-  type PublicClient,
-  parseAbi,
-  zeroAddress,
-} from "viem";
+import { encodeFunctionData, getAddress, zeroAddress } from "viem";
 import { estimateContractGas, simulateContract } from "viem/actions";
 import {
   readOptionalAddress,
@@ -19,6 +12,7 @@ import { addrUrl, txUrl } from "../lib/explorer.ts";
 import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts";
 import { SafeWallet } from "../lib/safe.ts";
 import { verifyContract } from "../lib/verify.ts";
+import { requireUpgradeDependencies } from "./lib/dependencies.ts";
 import { ensureVaultHalted } from "./lib/halt.ts";
 import {
   chunk,
@@ -31,40 +25,15 @@ import { assertNoRestingOrders, legsWithOrders } from "./lib/resting-orders.ts";
 const DEFAULT_SAFE_GAS_OVERHEAD = 150_000n;
 const TARGET_CODE_VERSION = "6.15.4";
 const UPGRADE_CONFIRMATIONS = 5;
-// 6.8.0 calls the engine's `reduceLimits` / `meetsTradeMargin` on every order. Against an
-// older engine every order reverts, so the engine has to be upgraded first.
-const MIN_ENGINE_VERSION = "2.2.0";
 // 6.10 starts a new resting-order aggregate, so orders placed before it must not survive the
 // upgrade. With the shared vault halted, the upgrade call is `forceCancelOrders` on every
 // (user, expiry) leg that still holds orders, matured and out-of-window dates included
 // (further batches follow while still halted). Resume the vault only once every venue is
-// upgraded and verified (`VERIFY_ONLY=true` checks a venue without upgrading).
+// upgraded and verified (`VERIFY_ONLY=true` checks a venue without upgrading). The vault and
+// the engine are upgraded before the venues; `requireUpgradeDependencies` enforces it.
 const DEFAULT_FORCE_CANCEL_BATCH_SIZE = 20;
 const DEFAULT_EVENT_CHUNK = 10_000n;
 const DEFAULT_READ_CONCURRENCY = 16;
-const VERSION_ABI = parseAbi(["function VERSION() view returns (string)"]);
-
-/** Dotted-version comparison; an unreadable version never passes. */
-function versionAtLeast(version: string, min: string): boolean {
-  const have = version.split(".").map(Number);
-  const want = min.split(".").map(Number);
-  for (let i = 0; i < want.length; i++) {
-    const part = have[i] ?? 0;
-    if (part !== want[i]) return part > want[i];
-  }
-  return true;
-}
-
-async function requireEngineVersion(pc: PublicClient, engine: Address): Promise<void> {
-  const version = await pc
-    .readContract({ address: engine, abi: VERSION_ABI, functionName: "VERSION" })
-    .catch(() => "unknown");
-  if (!versionAtLeast(version, MIN_ENGINE_VERSION)) {
-    throw new Error(
-      `PortfolioMarginEngine ${engine} is at ${version}; upgrade it to ${MIN_ENGINE_VERSION} or later before this venue`,
-    );
-  }
-}
 
 async function main() {
   logTitle("HashPowerFutures Upgrade");
@@ -110,9 +79,11 @@ async function main() {
   );
   const engines = new Set([wiredEngine, getAddress(marginEngineAddress ?? zeroAddress)]);
   engines.delete(zeroAddress);
-  for (const engine of engines) {
-    await requireEngineVersion(pc, engine);
-  }
+  await requireUpgradeDependencies(pc, {
+    venue: futuresAddress,
+    vault: vaultAddress,
+    engines: [...engines],
+  });
 
   // ── Resting orders: discover and plan the cancellation ─────────────────
   const readConcurrency = readPositiveInteger("READ_CONCURRENCY", DEFAULT_READ_CONCURRENCY);

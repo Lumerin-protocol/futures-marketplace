@@ -49,7 +49,7 @@
     "@safe-global/api-kit": "^5.0.1",
     "@safe-global/protocol-kit": "^8.0.4",
     "@safe-global/types-kit": "^4.0.1",
-    "collateral-margin": "github:Lumerin-protocol/collateral-margin#ea1ec4a1fe82437ab98e3f4371a1c33cd0cc8273",
+    "collateral-margin": "github:Lumerin-protocol/collateral-margin#34e32258cc40753c35d25915399d2e00d558b920",
     "multicall3": "github:mds1/multicall3",
     "solidity-linked-list": "6.5.0",
     "viem": "^2.54.6"
