@@ -220,6 +220,7 @@ async function benchmarkViews() {
       "getQuantityAtPrice",
       [firstExpiration, price + step, false],
     ],
+    ["getExposureView(address)", "getExposureView", [seller.account.address]],
     ["getRiskView(address)", "getRiskView", [seller.account.address]],
     ["hasRestingOrderDelta(address)", "hasRestingOrderDelta", [seller.account.address]],
     ["getUnrealizedPnl(address)", "getUnrealizedPnl", [buyer.account.address]],
@@ -286,6 +287,14 @@ async function benchmarkScaledRiskViews() {
     }
     const expirationCount = Math.min(target, 3);
     const scenario = `${target}-orders-${expirationCount}-expirations`;
+    await recordView(
+      pc,
+      futures,
+      "getExposureView(address)",
+      "getExposureView",
+      [seller.account.address],
+      scenario,
+    );
     await recordView(
       pc,
       futures,
@@ -966,7 +975,7 @@ describe("Futures gas benchmark", () => {
 
     const snapshot = gas.snapshot();
     const coverage = assertAbiFunctionCoverage(HashPowerFuturesAbi, snapshot, exclusions);
-    assert.equal(coverage.covered.length, 68);
+    assert.equal(coverage.covered.length, 69);
     assert.deepEqual(coverage.excluded, [
       "initialize(address,uint8,uint8,uint256)",
       "proxiableUUID()",

@@ -23,7 +23,7 @@ import {
 import { assertNoRestingOrders, legsWithOrders } from "./lib/resting-orders.ts";
 
 const DEFAULT_SAFE_GAS_OVERHEAD = 150_000n;
-const TARGET_CODE_VERSION = "6.15.4";
+const TARGET_CODE_VERSION = "6.16.0";
 const UPGRADE_CONFIRMATIONS = 5;
 // 6.10 starts a new resting-order aggregate, so orders placed before it must not survive the
 // upgrade. With the shared vault halted, the upgrade call is `forceCancelOrders` on every
