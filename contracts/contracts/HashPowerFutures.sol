@@ -10,6 +10,7 @@ import { ILinearMarketExposure } from "collateral-margin/contracts/contracts/int
 import { MathLib as M } from "./libs/MathLib.sol";
 import { HashPowerFuturesBase } from "./HashPowerFuturesBase.sol";
 import { HashPowerFuturesAdmin } from "./HashPowerFuturesAdmin.sol";
+import { HashPowerFuturesAdminModule } from "./HashPowerFuturesAdminModule.sol";
 
 /// @title HashPowerFutures — cash-settled hashrate futures CLOB (v3: aggregate positions + qty-bearing orders)
 /// @dev The permissionless surface: trading, liquidation and views. Storage and internal
@@ -23,10 +24,10 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev Lives here rather than in {HashPowerFuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `HashPowerFutures.sol` to require a bump.
-    string public constant VERSION = "6.16.0";
+    string public constant VERSION = "6.16.1";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) { }
+    constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) HashPowerFuturesAdmin(_vault) { }
 
     function initialize(
         AggregatorV3Interface _priceOracle,
@@ -40,7 +41,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
 
         __Ownable_init(_msgSender());
         __UUPSUpgradeable_init();
-        setOracle(_priceOracle);
+        _delegateCallAdminModule(abi.encodeCall(HashPowerFuturesAdminModule.setOracle, (_priceOracle)));
         liquidationMarginPercent = _liquidationMarginPercent;
         futureExpirationDatesCount = _futureExpirationDatesCount;
         firstFutureExpirationDate = _firstFutureExpirationDate;

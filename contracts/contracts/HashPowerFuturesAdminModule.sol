@@ -1,0 +1,174 @@
+//SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
+import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/interfaces/IPortfolioMarginEngine.sol";
+import { IPointsHook } from "collateral-margin/contracts/contracts/interfaces/IPointsHook.sol";
+import { HashPowerFuturesBase } from "./HashPowerFuturesBase.sol";
+
+/// @title HashPowerFuturesAdminModule — the bodies of {HashPowerFuturesAdmin}'s owner-only calls
+/// @notice Holds the owner-only functions so {HashPowerFutures} fits EIP-170. Created by the
+///         implementation's constructor with the same vault, and run only by delegatecall from
+///         the implementation, in the proxy's storage.
+/// @dev Same storage layout as the implementation by inheriting {HashPowerFuturesBase}, and
+///      declares none of its own. Called directly it has no owner (its initializers are
+///      disabled), so every function reverts.
+contract HashPowerFuturesAdminModule is HashPowerFuturesBase {
+    using EnumerableSet for EnumerableSet.UintSet;
+    using EnumerableSet for EnumerableSet.Bytes32Set;
+
+    /// @notice {HashPowerFutures.VERSION} of the implementation that creates this module.
+    string public constant VERSION = "6.16.1";
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) { }
+
+    /// @dev Upgrades go through the implementation, never the module.
+    function _authorizeUpgrade(address) internal view override onlyOwner { }
+
+    /// @dev The count can only grow: a lower count unlists dates that may hold resting orders,
+    ///      which `getRiskView` then stops reserving although they can fill once the window
+    ///      reaches those dates again. The initializer sets at least 1, so this also rejects 0.
+    function setFutureExpirationDatesCount(uint8 _futureExpirationDatesCount) public onlyOwner {
+        uint8 current = futureExpirationDatesCount;
+        if (_futureExpirationDatesCount < current) {
+            revert ValueOutOfRange(int256(uint256(current)), int256(uint256(type(uint8).max)));
+        }
+        futureExpirationDatesCount = _futureExpirationDatesCount;
+        emit FutureExpirationDatesCountUpdated(_futureExpirationDatesCount);
+    }
+
+    /// @notice Set the maker fee in basis points. Bounded by {_validateFees}.
+    function setMakerFeeBps(int16 _makerFeeBps) external onlyOwner {
+        _validateFees(_makerFeeBps, takerFeeBps);
+        makerFeeBps = _makerFeeBps;
+        emit MakerFeeBpsUpdated(_makerFeeBps);
+    }
+
+    /// @notice Set the taker fee in basis points. Bounded by {_validateFees}.
+    function setTakerFeeBps(int16 _takerFeeBps) external onlyOwner {
+        _validateFees(makerFeeBps, _takerFeeBps);
+        takerFeeBps = _takerFeeBps;
+        emit TakerFeeBpsUpdated(_takerFeeBps);
+    }
+
+    /// @notice Set the liquidation fee in basis points on the liquidated notional.
+    /// @param _bps Fee in bps (e.g., 50 = 0.5%). Capped at `BPS` (100% of notional).
+    function setLiquidationFeeBps(uint16 _bps) external onlyOwner {
+        _validateBPS(_bps);
+        liquidationFeeBps = _bps;
+        emit LiquidationFeeBpsUpdated(_bps);
+    }
+
+    function setLiquidatorShareBps(uint16 _bps) external onlyOwner {
+        _validateBPS(_bps);
+        liquidatorShareBps = _bps;
+        emit LiquidatorShareBpsUpdated(_bps);
+    }
+
+    /// @notice Withdraw accrued trading and liquidation revenue to the venue owner.
+    /// @dev Drains the venue's vault account (the fee pot). No separate accumulator.
+    function withdrawCollectedFees() external onlyOwner {
+        vault.withdrawTo(owner(), _vaultBalance(address(this)));
+    }
+
+    /// @dev Every order and every liquidation routes through the engine, and the venue never
+    ///      null-checks it, so a wrong address here bricks the book. The engine must also
+    ///      aggregate this venue's own vault.
+    function setPortfolioMargin(IPortfolioMarginEngine _pm) external onlyOwner {
+        if (address(_pm) == address(0)) revert ZeroAddress();
+        _setPortfolioMargin(_pm);
+    }
+
+    function setHook(address _hook) external onlyOwner {
+        if (_hook != address(0)) _requireContract(_hook);
+
+        hook = IPointsHook(_hook);
+        emit HookUpdated(_hook);
+    }
+
+    /// @notice Close the given (user, expiry) legs at the current mark with no fee, handing each to
+    ///         the backstop like a liquidation, so positions keep summing to zero: closing a
+    ///         one-sided set moves its net onto the backstop, closing every user leaves it flat.
+    ///         Emits `BackstopAssigned` and `PositionLiquidated` so indexers need nothing new.
+    /// @dev Only while the vault is halted, so no fill can land between legs. Listing the
+    ///      backstop itself only re-marks its leg (realized against the fund, size unchanged).
+    ///      Reverts `PositionMatured` on a matured leg: those are worth their settlement price and
+    ///      must go through `settlePositions`. Empty legs are skipped. Resting orders are left
+    ///      alone; they carry no exposure until they fill, and {forceCancelOrders} removes them.
+    function forceClosePositions(address[] calldata _users, uint256[] calldata _expirationAts) external onlyOwner {
+        if (!vault.halted()) revert NotHalted();
+        if (_users.length != _expirationAts.length) revert ArrayLengthMismatch();
+        uint256 mark = _marketPrice();
+        for (uint256 i = 0; i < _users.length; i++) {
+            address user = _users[i];
+            uint256 expirationAt = _expirationAts[i];
+            if (block.timestamp >= expirationAt) revert PositionMatured();
+            int256 netQty = participantExpirationAtNetDelta[user][expirationAt];
+            if (netQty == 0) continue;
+            int256 pnl = _closeToBackstop(user, expirationAt, netQty, mark);
+            emit PositionLiquidated(user, _msgSender(), expirationAt, netQty, pnl, 0);
+        }
+    }
+
+    /// @notice Cancel every resting order on the given (user, expiry) legs, emitting
+    ///         `OrderCancelled` per order like a user's own cancel. Realizes nothing, so it runs
+    ///         with or without a halt; pair it with `forceClosePositions` / `settlePositions` to
+    ///         unwind users fully.
+    /// @dev Any expiry is accepted: matured ones, whose orders sit inert, and dates that left the
+    ///      trading window after `futureExpirationDatesCount` shrank. Clears each leg's aggregate
+    ///      wholesale instead of subtracting per order, so it also removes orders placed before
+    ///      6.10, which the aggregate never counted: run it as the call of any upgrade from
+    ///      before 6.10, on every leg with resting orders. Legs without orders are skipped.
+    function forceCancelOrders(address[] calldata _users, uint256[] calldata _expirationAts) external onlyOwner {
+        if (_users.length != _expirationAts.length) revert ArrayLengthMismatch();
+        for (uint256 i = 0; i < _users.length; i++) {
+            address user = _users[i];
+            uint256 expirationAt = _expirationAts[i];
+            bytes32[] memory orderIds = participantExpirationAtOrderIdsIndex[user][expirationAt].values();
+            if (orderIds.length == 0) continue;
+            for (uint256 j = 0; j < orderIds.length; j++) {
+                _dropRestingOrder(orderIds[j], false);
+            }
+            _clearOrderAggregate(user, expirationAt);
+        }
+    }
+
+    /// @dev Smoke-tests the feed before adopting it. Requires it to already serve a positive,
+    ///      initialized round: a feed that never answers reads as price 0, which would settle
+    ///      and mark every position at zero.
+    function setOracle(AggregatorV3Interface _oracle) external onlyOwner {
+        if (address(_oracle) == address(0)) revert InvalidOracle();
+
+        oracleDecimals = _validateOracleContract(_oracle);
+
+        priceOracle = _oracle;
+        _marketPrice();
+        emit OracleUpdated(address(_oracle));
+    }
+
+    /// @dev Returns the feed's decimals so the caller can cache them in the same pass.
+    function _validateOracleContract(AggregatorV3Interface _oracle) private view returns (uint8) {
+        _requireContract(address(_oracle));
+
+        int256 answer;
+        uint256 updatedAt;
+        try _oracle.latestRoundData() returns (uint80, int256 _answer, uint256, uint256 _updatedAt, uint80) {
+            answer = _answer;
+            updatedAt = _updatedAt;
+        } catch {
+            revert InvalidDependency();
+        }
+        _validateOracleRound(answer, updatedAt);
+
+        uint8 dec;
+        try _oracle.decimals() returns (uint8 _dec) {
+            dec = _dec;
+        } catch {
+            revert InvalidDependency();
+        }
+        return dec;
+    }
+}

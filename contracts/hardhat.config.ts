@@ -78,9 +78,6 @@ export default defineConfig({
       mining: {
         auto: true,
       },
-      // CF-321 branch only: the venue exceeds EIP-170 until its size work lands (library, then
-      // possibly a diamond). The compiler still warns; mainnet would reject the deployment.
-      allowUnlimitedContractSize: true,
     },
     localhost: {
       type: "http",
