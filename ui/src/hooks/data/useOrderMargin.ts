@@ -5,6 +5,7 @@ import {
   maxAffordableQuantity,
   quoteOrderMargin,
   type OrderBook,
+  type OrderLeg,
   type OrderMarginQuote,
   type PortfolioChanges,
 } from "../../lib/orderMargin";
@@ -52,11 +53,16 @@ export interface OrderMarginModel {
       reserveFee?: (notional: bigint) => bigint;
     },
   ) => bigint | undefined;
+  /**
+   * `book` with its expiry's mark range when it is a futures book that lacks one, so
+   * an order on a book the account does not hold yet is valued as the venue values it.
+   */
+  withMarks: <T extends OrderBook>(book: T) => T;
 }
 
 export function useOrderMargin(): OrderMarginModel {
   const { address } = useAccount();
-  const { snapshot, tokenDecimals, perpQuantityDecimals, isLoading, isError } =
+  const { snapshot, markRanges, tokenDecimals, perpQuantityDecimals, isLoading, isError } =
     usePortfolioSnapshot(address);
   const shocks = useMarginEngineShocks();
   const { data: marketPrice } = useGetMarketPrice();
@@ -78,22 +84,32 @@ export function useOrderMargin(): OrderMarginModel {
   // blocking rather than to an optimistic number.
   const isReady = !!snapshot && !!params && !!markPrice && markPrice > 0n && !isError;
 
+  const withMarks = useCallback(
+    <T extends OrderBook>(book: T): T => {
+      if (book.venue !== "futures" || book.low !== undefined) return book;
+      const range = markRanges?.get(book.expirationAt);
+      return range ? { ...book, ...range } : book;
+    },
+    [markRanges],
+  );
+
   const quote = useCallback(
     (
       changes: PortfolioChanges,
       options?: { reservedFee?: bigint; locallyReducing?: boolean },
     ): OrderMarginQuote | undefined => {
       if (!snapshot || !params || !markPrice) return undefined;
+      const marked = (legs?: readonly OrderLeg[]) => legs?.map((leg) => withMarks(leg));
       return quoteOrderMargin({
         snapshot,
         params,
         markPrice,
-        changes,
+        changes: { ...changes, place: marked(changes.place), cancel: marked(changes.cancel) },
         reservedFee: options?.reservedFee,
         locallyReducing: options?.locallyReducing,
       });
     },
-    [snapshot, params, markPrice],
+    [snapshot, params, markPrice, withMarks],
   );
 
   const maxQuantity = useCallback(
@@ -105,9 +121,9 @@ export function useOrderMargin(): OrderMarginModel {
       },
     ): bigint | undefined => {
       if (!snapshot || !params || !markPrice) return undefined;
-      return maxAffordableQuantity({ snapshot, params, markPrice, ...args });
+      return maxAffordableQuantity({ snapshot, params, markPrice, ...withMarks(args) });
     },
-    [snapshot, params, markPrice],
+    [snapshot, params, markPrice, withMarks],
   );
 
   const currentIm = useMemo(() => {
@@ -122,5 +138,6 @@ export function useOrderMargin(): OrderMarginModel {
     balance: snapshot?.balance,
     quote,
     maxQuantity,
+    withMarks,
   };
 }

@@ -121,6 +121,9 @@ export function snapshotWithFill(
             netEntryValue,
             // The leg trades on a live expiry, so it cannot carry a pinned price.
             settlementPrice: current?.settlementPrice ?? 0n,
+            // A new position takes the expiry's mark range from the leg.
+            low: current?.low ?? leg.low,
+            high: current?.high ?? leg.high,
           },
         ];
 

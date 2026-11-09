@@ -20,6 +20,7 @@ import {
   imRequired,
   type AccountSnapshot,
   type FuturesRestingOrders,
+  type MarkRange,
   type MMParams,
   type RestingOrders,
 } from "@hashpower/portfolio-margin";
@@ -29,9 +30,13 @@ export type OrderVenue = "futures" | "perps";
 
 /**
  * The book an order sits on. Futures keep one book per expiry, and the venue
- * bounds each expiry's fill loss on its own, so a futures order names its expiry.
+ * bounds each expiry's fill loss on its own, so a futures order names its expiry,
+ * with that expiry's mark range (`getMarkRange`: bids at `low`, asks at `high`) for a
+ * book the account does not have yet.
  */
-export type OrderBook = { venue: "perps" } | { venue: "futures"; expirationAt: bigint };
+export type OrderBook =
+  | { venue: "perps" }
+  | ({ venue: "futures"; expirationAt: bigint } & MarkRange);
 
 /**
  * One order's margin-relevant identity: which book it sits on, at what limit
@@ -133,6 +138,8 @@ function applyFuturesLeg(
   const existing = books.find((book) => book.expirationAt === leg.expirationAt);
   const book = existing ?? {
     expirationAt: leg.expirationAt,
+    low: leg.low,
+    high: leg.high,
     settlementPrice: 0n,
     buyQty: 0n,
     sellQty: 0n,
@@ -224,7 +231,10 @@ export interface OrderMarginQuote {
 export function quoteOrderMargin(args: {
   snapshot: AccountSnapshot;
   params: MMParams;
-  /** Spot the engine stresses around (token decimals) — the venue's own mark. */
+  /**
+   * The index (futures `getMarketPrice`, token decimals) the snapshot's marks move
+   * with; each venue and expiry is valued at its own mark.
+   */
   markPrice: bigint;
   changes: PortfolioChanges;
   /** Worst of maker/taker on the placed notional; see `useMakerTakerFees`. */
@@ -292,7 +302,9 @@ export function maxAffordableQuantity(
   const { snapshot, params, price, markPrice, isBuy, reserveFee } = args;
   if (price <= 0n || markPrice <= 0n) return 0n;
   const book: OrderBook =
-    args.venue === "perps" ? { venue: "perps" } : { venue: "futures", expirationAt: args.expirationAt };
+    args.venue === "perps"
+      ? { venue: "perps" }
+      : { venue: "futures", expirationAt: args.expirationAt, low: args.low, high: args.high };
 
   const affordable = (quantity: bigint): boolean => {
     const leg: OrderLeg = { ...book, price, quantity: isBuy ? quantity : -quantity };
