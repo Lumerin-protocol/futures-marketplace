@@ -208,6 +208,13 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
     "../artifacts/contracts/HashPowerFutures.sol/HashPowerFutures.json",
     [collateralVault.address],
   );
+  // Every expiry marks at the index feed, as `HashpriceGlideUSD` does before the halving window.
+  const markOracle = await deployContract<"MarkRangeOracleMock">(
+    walletClient,
+    pc,
+    "../artifacts/contracts/mocks/MarkRangeOracleMock.sol/MarkRangeOracleMock.json",
+    [hashpriceUsd.address],
+  );
   const futuresProxy = await deployContract<"ERC1967Proxy">(
     walletClient,
     pc,
@@ -218,7 +225,7 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
         abi: futuresImpl.abi,
         functionName: "initialize",
         args: [
-          hashpriceUsd.address,
+          markOracle.address,
           liquidationMarginPercent,
           futureExpirationDatesCount,
           firstFutureExpirationDate,
@@ -327,6 +334,7 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
     contracts: {
       usdcMock,
       hashpriceUsd,
+      markOracle,
       futures,
       collateralVault,
       portfolioMarginEngine,

@@ -7,6 +7,7 @@ import { ICollateralVault } from "collateral-margin/contracts/contracts/interfac
 import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/interfaces/IPortfolioMarginEngine.sol";
 import { IPointsHook } from "collateral-margin/contracts/contracts/interfaces/IPointsHook.sol";
 import { HashPowerFuturesBase } from "./HashPowerFuturesBase.sol";
+import { IMarkRangeOracle } from "./interfaces/IMarkRangeOracle.sol";
 
 /// @title HashPowerFuturesAdminModule — the bodies of {HashPowerFuturesAdmin}'s owner-only calls
 /// @notice Holds the owner-only functions so {HashPowerFutures} fits EIP-170. Created by the
@@ -20,7 +21,7 @@ contract HashPowerFuturesAdminModule is HashPowerFuturesBase {
     using EnumerableSet for EnumerableSet.Bytes32Set;
 
     /// @notice {HashPowerFutures.VERSION} of the implementation that creates this module.
-    string public constant VERSION = "6.16.1";
+    string public constant VERSION = "6.17.0";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) { }
@@ -101,14 +102,13 @@ contract HashPowerFuturesAdminModule is HashPowerFuturesBase {
     function forceClosePositions(address[] calldata _users, uint256[] calldata _expirationAts) external onlyOwner {
         if (!vault.halted()) revert NotHalted();
         if (_users.length != _expirationAts.length) revert ArrayLengthMismatch();
-        uint256 mark = _marketPrice();
         for (uint256 i = 0; i < _users.length; i++) {
             address user = _users[i];
             uint256 expirationAt = _expirationAts[i];
             if (block.timestamp >= expirationAt) revert PositionMatured();
             int256 netQty = participantExpirationAtNetDelta[user][expirationAt];
             if (netQty == 0) continue;
-            int256 pnl = _closeToBackstop(user, expirationAt, netQty, mark);
+            int256 pnl = _closeToBackstop(user, expirationAt, netQty, _sideMark(expirationAt, netQty > 0));
             emit PositionLiquidated(user, _msgSender(), expirationAt, netQty, pnl, 0);
         }
     }
@@ -136,17 +136,29 @@ contract HashPowerFuturesAdminModule is HashPowerFuturesBase {
         }
     }
 
-    /// @dev Smoke-tests the feed before adopting it. Requires it to already serve a positive,
-    ///      initialized round: a feed that never answers reads as price 0, which would settle
-    ///      and mark every position at zero.
-    function setOracle(AggregatorV3Interface _oracle) external onlyOwner {
+    /// @notice Adopt a mark oracle and the index it is built on: live expiries mark off its
+    ///         ranges, settlement reads its index (`priceOracle`), so the two always agree.
+    /// @dev Smoke-tests both before adopting them. Requires the index to already serve a
+    ///      positive, initialized round: a feed that never answers reads as price 0, which would
+    ///      settle and mark every position at zero.
+    function setOracle(IMarkRangeOracle _oracle) external onlyOwner {
         if (address(_oracle) == address(0)) revert InvalidOracle();
+        _requireContract(address(_oracle));
+        AggregatorV3Interface index;
+        try _oracle.hashpriceUsd() returns (address readIndex) {
+            index = AggregatorV3Interface(readIndex);
+        } catch {
+            revert InvalidDependency();
+        }
+        if (address(index) == address(0)) revert InvalidOracle();
 
-        oracleDecimals = _validateOracleContract(_oracle);
-
-        priceOracle = _oracle;
+        oracleDecimals = _validateOracleContract(index);
+        priceOracle = index;
+        markOracle = _oracle;
         _marketPrice();
-        emit OracleUpdated(address(_oracle));
+        _sideMark(block.timestamp, true);
+        emit OracleUpdated(address(index));
+        emit MarkOracleUpdated(address(_oracle));
     }
 
     /// @dev Returns the feed's decimals so the caller can cache them in the same pass.

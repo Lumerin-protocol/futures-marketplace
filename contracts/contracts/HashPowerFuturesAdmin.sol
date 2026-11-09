@@ -1,10 +1,10 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
 import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/interfaces/IPortfolioMarginEngine.sol";
 import { HashPowerFuturesBase } from "./HashPowerFuturesBase.sol";
+import { IMarkRangeOracle } from "./interfaces/IMarkRangeOracle.sol";
 import { HashPowerFuturesAdminModule } from "./HashPowerFuturesAdminModule.sol";
 
 /// @title HashPowerFuturesAdmin — owner-only governance surface for {HashPowerFutures}
@@ -82,7 +82,7 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
 
     /// @notice See {HashPowerFuturesAdminModule-setOracle}. `initialize` reaches it through
     ///      `_delegateCallAdminModule`, since a stub forwards the transaction's own calldata.
-    function setOracle(AggregatorV3Interface _oracle) external {
+    function setOracle(IMarkRangeOracle _oracle) external {
         _oracle;
         _delegateToAdminModule();
     }

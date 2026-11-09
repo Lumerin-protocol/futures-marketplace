@@ -8,6 +8,7 @@ import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableS
 import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import { StructuredLinkedList } from "solidity-linked-list/contracts/StructuredLinkedList.sol";
 import { Versionable } from "./interfaces/Versionable.sol";
+import { IMarkRangeOracle } from "./interfaces/IMarkRangeOracle.sol";
 import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
 import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/interfaces/IPortfolioMarginEngine.sol";
 import { IPointsHook } from "collateral-margin/contracts/contracts/interfaces/IPointsHook.sol";
@@ -172,6 +173,12 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     ///      `removeOutdatedOrders`) would underflow it.
     mapping(address => mapping(uint256 => RestingOrderAggregate)) internal participantExpirationAtRestingOrderAggregate;
 
+    /// @notice Per-expiry mark ranges (`HashpriceGlideUSD`). `setOracle` adopts it together with
+    ///         its index as `priceOracle`, which settlement reads.
+    /// @dev Appended at the storage tail in 6.17. Empty after an upgrade until `setOracle` runs,
+    ///      and every mark read reverts meanwhile; `update-futures.ts` sets it while halted.
+    IMarkRangeOracle public markOracle;
+
     // immutable
     ICollateralVault public immutable vault;
     uint8 internal immutable collateralDecimals;
@@ -318,6 +325,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     event LiquidationFeeBpsUpdated(uint16 newLiquidationFeeBps);
     event LiquidatorShareBpsUpdated(uint16 newLiquidatorShareBps);
     event OracleUpdated(address newOracle);
+    event MarkOracleUpdated(address markOracle);
     event PortfolioMarginUpdated(address newPortfolioMargin);
     event HookUpdated(address indexed hook);
 
@@ -1077,6 +1085,50 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     function _validateOracleRound(int256 answer, uint256 updatedAt) internal view {
         if (answer <= 0 || updatedAt == 0 || updatedAt > block.timestamp) revert InvalidOracle();
         if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) revert OracleStale();
+    }
+
+    /// @dev Mark ranges of live expiries in venue units: longs and bids at `low`, shorts and asks
+    ///      at `high`. Validated like the index: a stale or out-of-bounds range reverts.
+    function _markRanges(uint256[] memory _expirationAts)
+        internal
+        view
+        returns (uint256[] memory low, uint256[] memory high)
+    {
+        uint256 n = _expirationAts.length;
+        if (n == 0) return (_expirationAts, _expirationAts);
+        uint256 updatedAt;
+        (low, high, updatedAt) = markOracle.markRangesAt(_expirationAts);
+        if (low.length != n || high.length != n) revert InvalidOracle();
+        _validateOracleRound(int256(low[0]), updatedAt);
+        for (uint256 i = 0; i < n; i++) {
+            (low[i], high[i]) = _venueRange(low[i], high[i]);
+        }
+    }
+
+    /// @dev The mark range of one live expiry.
+    function _markRange(uint256 _expirationAt) internal view returns (uint256 low, uint256 high) {
+        uint256 updatedAt;
+        (low, high, updatedAt) = markOracle.markRangeAt(_expirationAt);
+        _validateOracleRound(int256(low), updatedAt);
+        return _venueRange(low, high);
+    }
+
+    /// @dev One oracle range in venue units, each end bounded like the index.
+    function _venueRange(uint256 _low, uint256 _high) private view returns (uint256 low, uint256 high) {
+        low = _boundedMarketPrice(_low);
+        high = _boundedMarketPrice(_high);
+        if (low > high) revert InvalidOracle();
+    }
+
+    /// @dev The mark of one live expiry for the side being valued (long: `low`, short: `high`).
+    function _sideMark(uint256 _expirationAt, bool _isLong) internal view returns (uint256) {
+        (uint256 low, uint256 high) = _markRange(_expirationAt);
+        return _isLong ? low : high;
+    }
+
+    function _boundedMarketPrice(uint256 _raw) internal view returns (uint256 price) {
+        price = _getMarketPrice(_raw);
+        if (price == 0 || price > MAX_PRICE) revert InvalidOracle();
     }
 
     function _getPrice() internal view returns (uint256) {

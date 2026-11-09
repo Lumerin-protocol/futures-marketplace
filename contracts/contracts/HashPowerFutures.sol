@@ -2,12 +2,12 @@
 pragma solidity ^0.8.20;
 
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import { StructuredLinkedList } from "solidity-linked-list/contracts/StructuredLinkedList.sol";
 import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
 import { ILinearMarket } from "collateral-margin/contracts/contracts/interfaces/ILinearMarket.sol";
 import { ILinearMarketExposure } from "collateral-margin/contracts/contracts/interfaces/ILinearMarketExposure.sol";
 import { MathLib as M } from "./libs/MathLib.sol";
+import { IMarkRangeOracle } from "./interfaces/IMarkRangeOracle.sol";
 import { HashPowerFuturesBase } from "./HashPowerFuturesBase.sol";
 import { HashPowerFuturesAdmin } from "./HashPowerFuturesAdmin.sol";
 import { HashPowerFuturesAdminModule } from "./HashPowerFuturesAdminModule.sol";
@@ -24,13 +24,13 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev Lives here rather than in {HashPowerFuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `HashPowerFutures.sol` to require a bump.
-    string public constant VERSION = "6.16.1";
+    string public constant VERSION = "6.17.0";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) HashPowerFuturesAdmin(_vault) { }
 
     function initialize(
-        AggregatorV3Interface _priceOracle,
+        IMarkRangeOracle _oracle,
         uint8 _liquidationMarginPercent,
         uint8 _futureExpirationDatesCount,
         uint256 _firstFutureExpirationDate
@@ -41,7 +41,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
 
         __Ownable_init(_msgSender());
         __UUPSUpgradeable_init();
-        _delegateCallAdminModule(abi.encodeCall(HashPowerFuturesAdminModule.setOracle, (_priceOracle)));
+        _delegateCallAdminModule(abi.encodeCall(HashPowerFuturesAdminModule.setOracle, (_oracle)));
         liquidationMarginPercent = _liquidationMarginPercent;
         futureExpirationDatesCount = _futureExpirationDatesCount;
         firstFutureExpirationDate = _firstFutureExpirationDate;
@@ -290,7 +290,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     ///      expiry is still a partial close of the portfolio — but it is vacuous once no
     ///      portfolio risk remains (IM == MM == 0), which is the bad-debt / deep-underwater path.
     function liquidatePosition(address _user, uint256 _expirationAt, uint256 _closeQty) external {
-        uint256 mark = _liquidationPreflight(_user);
+        _liquidationPreflight(_user);
         if (_closeQty == 0) revert InvalidQty();
         // A matured leg is worth its settlement price, not the live mark; `settlePosition` closes it.
         if (block.timestamp >= _expirationAt) revert PositionMatured();
@@ -298,7 +298,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         int256 netQty = participantExpirationAtNetDelta[_user][_expirationAt];
         if (netQty == 0) revert NotLiquidatable();
 
-        if (!_closePosition(_user, _expirationAt, netQty, _closeQty, mark)) revert NotLiquidatable();
+        if (!_closePosition(_user, _expirationAt, netQty, _closeQty)) revert NotLiquidatable();
     }
 
     /// @notice Batch liquidate across expiries. Keeper chooses legs; keeps prior closes.
@@ -307,7 +307,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         external
     {
         if (_expirationAts.length != _closeQtys.length) revert ArrayLengthMismatch();
-        uint256 mark = _liquidationPreflight(_user);
+        _liquidationPreflight(_user);
 
         uint256 closed = 0;
         for (uint256 i = 0; i < _expirationAts.length; i++) {
@@ -317,7 +317,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
             int256 netQty = participantExpirationAtNetDelta[_user][expirationAt];
             // Skip empty/stale/matured legs; stop only once healthy.
             if (netQty == 0 || closeQty == 0 || block.timestamp >= expirationAt) continue;
-            if (!_closePosition(_user, expirationAt, netQty, closeQty, mark)) continue;
+            if (!_closePosition(_user, expirationAt, netQty, closeQty)) continue;
             closed++;
         }
 
@@ -325,18 +325,18 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     }
 
     /// @dev Shared gate for position liquidation: not the backstop, orders-first, underwater.
-    ///      Returns the live mark so callers read the oracle once.
-    function _liquidationPreflight(address _user) internal view returns (uint256 mark) {
+    ///      Each leg closes at its own mark for the side closed (a long at the low mark).
+    function _liquidationPreflight(address _user) internal view {
         if (_user == BACKSTOP) revert BackstopAccount();
         if (portfolioMargin.hasRestingOrderDelta(_user)) revert OrdersStillOpen();
         if (!_underwater(_user)) revert NotLiquidatable();
-        mark = _marketPrice();
     }
 
-    /// @dev Close up to `_closeQty` at `_expirationAt`. Returns false when no positive close.
-    ///      Runs the portfolio OverLiquidation guard before emit/notify so an oversize close
-    ///      does not pay log/hook gas on the revert path (matches Perps).
-    function _closePosition(address _user, uint256 _expirationAt, int256 _netQty, uint256 _closeQty, uint256 _mark)
+    /// @dev Close up to `_closeQty` at `_expirationAt`, at the mark for the side closed. Returns
+    ///      false when no positive close. Runs the portfolio OverLiquidation guard before
+    ///      emit/notify so an oversize close does not pay log/hook gas on the revert path
+    ///      (matches Perps).
+    function _closePosition(address _user, uint256 _expirationAt, int256 _netQty, uint256 _closeQty)
         internal
         returns (bool)
     {
@@ -345,8 +345,9 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
 
         // Full and partial closes share `_applyFill`, which zeroes the leg when `closeAbs == |net|`.
         int256 signedClose = M.toSigned(_netQty > 0, closeAbs);
-        int256 pnl = _closeToBackstop(_user, _expirationAt, signedClose, _mark);
-        uint256 liqFee = _chargeLiquidationFee(_user, _mark * closeAbs);
+        uint256 mark = _sideMark(_expirationAt, _netQty > 0);
+        int256 pnl = _closeToBackstop(_user, _expirationAt, signedClose, mark);
+        uint256 liqFee = _chargeLiquidationFee(_user, mark * closeAbs);
 
         _revertIfOverLiquidated(_user);
         emit PositionLiquidated(_user, _msgSender(), _expirationAt, signedClose, pnl, liqFee);
@@ -372,7 +373,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
 
         bool isBuy = net < 0;
         uint256 closeAbs = M.min(_qty, M.abs(net));
-        uint256 mark = _marketPrice();
+        uint256 mark = _sideMark(_expirationAt, net > 0);
         (uint16 bandBps, uint16 feeBps) = vault.backstopParams();
         uint256 limit = _bandPrice(mark, isBuy, bandBps);
         if (limit == 0) revert InvalidPrice();
@@ -484,35 +485,8 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         return participantActiveExpirationAts[_user].values();
     }
 
-    /// @dev Collect mark-independent position inputs. Future expiries cannot have a pinned
-    ///      settlement price, so their settlement slots are not touched. All unpinned
-    ///      positions share one live mark and can be collapsed before pricing.
-    function _positionRiskInputs(address _participant)
-        private
-        view
-        returns (int256 liveDelta, int256 liveEntryValue, int256 pinnedPnl)
-    {
-        EnumerableSet.UintSet storage dates = participantActiveExpirationAts[_participant];
-        uint256 len = dates.length();
-        for (uint256 i = 0; i < len;) {
-            uint256 date = dates.at(i);
-            int256 dateDelta = participantExpirationAtNetDelta[_participant][date];
-            int256 entryValue = participantExpirationAtNetEntryValue[_participant][date];
-            uint256 pinnedPrice = date <= block.timestamp ? settlementPrice[date] : 0;
-            if (pinnedPrice != 0) {
-                pinnedPnl += int256(pinnedPrice) * dateDelta - entryValue;
-            } else {
-                liveDelta += dateDelta;
-                liveEntryValue += entryValue;
-            }
-            unchecked {
-                ++i;
-            }
-        }
-    }
-
     /// @dev The resting book per side: quantity (contracts), instant fill loss and exposure
-    ///      (token decimals), each expiry priced at its pinned settlement or the live mark.
+    ///      (token decimals), each expiry priced at its pinned settlement or its mark range.
     struct RestingRisk {
         uint256 buyQty;
         uint256 sellQty;
@@ -522,19 +496,25 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         uint256 sellExposure;
     }
 
+    /// @dev Live positions summed: delta (contracts) and exposure (token decimals) at their marks.
+    struct PositionRisk {
+        int256 liveDelta;
+        int256 liveExposure;
+        int256 unrealizedPnl;
+    }
+
     /// @notice ILinearMarketExposure: all per-user margin inputs in a single call, with live
-    ///         positions and resting orders valued at the mark.
-    /// @dev The engine reads this and shocks the exposure by a percentage, so the mark need not
-    ///      be the index it stresses.
+    ///         positions and resting orders valued at each expiry's mark.
+    /// @dev The engine reads this and shocks the exposure by a percentage, so a mark need not be
+    ///      the index it stresses: a date settling after a halving is worth about half of it.
     function getExposureView(address _participant)
         external
         view
         returns (ILinearMarketExposure.ExposureView memory view_)
     {
-        (int256 liveDelta, int256 unrealizedPnl, RestingRisk memory resting, uint256 livePrice) =
-            _riskInputs(_participant);
-        view_.netPositionExposure = liveDelta * int256(livePrice);
-        view_.unrealizedPnl = unrealizedPnl;
+        (PositionRisk memory positions, RestingRisk memory resting) = _riskInputs(_participant, true);
+        view_.netPositionExposure = positions.liveExposure;
+        view_.unrealizedPnl = positions.unrealizedPnl;
         view_.buyOrderExposure = resting.buyExposure;
         view_.sellOrderExposure = resting.sellExposure;
         view_.buyOrderFillLoss = resting.buyLoss;
@@ -546,93 +526,100 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev Deprecated for margin: the engine reads `getExposureView`, and this only for a venue
     ///      without it, valuing the deltas at its index.
     function getRiskView(address _participant) external view returns (ILinearMarket.RiskView memory view_) {
-        (int256 liveDelta, int256 unrealizedPnl, RestingRisk memory resting,) = _riskInputs(_participant);
+        (PositionRisk memory positions, RestingRisk memory resting) = _riskInputs(_participant, true);
         uint256 scale = 10 ** collateralDecimals;
-        view_.netPositionDelta = liveDelta * int256(scale);
-        view_.unrealizedPnl = unrealizedPnl;
+        view_.netPositionDelta = positions.liveDelta * int256(scale);
+        view_.unrealizedPnl = positions.unrealizedPnl;
         view_.buyOrderDelta = resting.buyQty * scale;
         view_.sellOrderDelta = resting.sellQty * scale;
         view_.buyOrderFillLoss = resting.buyLoss;
         view_.sellOrderFillLoss = resting.sellLoss;
     }
 
-    /// @dev One loop computes the live-position delta and the mark-to-market PnL; a second
-    ///      aggregates the resting book. Resting orders carry no margin figure of their own:
-    ///      the engine's `imSpotShock` sizes them, netted into the portfolio — exact and
-    ///      cross-product, covering the case a venue-local reduce credit cannot, where the
-    ///      offsetting position sits elsewhere. Returns the live mark it priced at (0 when no
-    ///      live exposure needed it).
-    function _riskInputs(address _participant)
-        private
-        view
-        returns (int256 liveDelta, int256 unrealizedPnl, RestingRisk memory resting, uint256 livePrice)
-    {
-        int256 liveEntryValue;
-        int256 pinnedPnl;
-        (liveDelta, liveEntryValue, pinnedPnl) = _positionRiskInputs(_participant);
-        livePrice = liveDelta != 0 ? getMarketPrice() : 0;
-        (resting, livePrice) = _restingRiskInputs(_participant, livePrice);
-        unrealizedPnl = pinnedPnl + int256(livePrice) * liveDelta - liveEntryValue;
+    /// @notice Mark-to-market PnL across active expiries, in collateral token units: live expiries
+    ///         at their marks (longs at the low mark, shorts at the high), settled-but-unswept ones
+    ///         at their pinned settlement price.
+    function getUnrealizedPnl(address _participant) external view returns (int256) {
+        (PositionRisk memory positions,) = _riskInputs(_participant, false);
+        return positions.unrealizedPnl;
     }
 
-    /// @notice Resting order quantity per side, the instant fill loss if any subset of it
-    ///         fills, and its exposure (token decimals).
-    /// @dev One pass over the fixed currently tradable delivery window. Historical
-    ///      aggregates are never traversed and therefore cannot increase margin-call gas.
-    ///
-    ///      The fill loss and the exposure are priced per expiry at that expiry's price
-    ///      (pinned settlement or live mark) and summed; the fill loss is never netted across
-    ///      orders: fills go best price first, so a deep order must never offset a marketable
-    ///      one's loss. The live mark is read only once a live exposure is found, and returned
-    ///      for reuse.
-    function _restingRiskInputs(address _participant, uint256 _livePrice)
+    /// @notice The mark range of `_expirationAt` in collateral token units: longs and bids are valued
+    ///         at `low`, shorts and asks at `high` (both the index mark without a mark oracle).
+    function getMarkRange(uint256 _expirationAt) external view returns (uint256 low, uint256 high) {
+        return _markRange(_expirationAt);
+    }
+
+    /// @dev One mark read for every live expiry the account holds or rests orders on, then one
+    ///      loop over positions and one over the resting book. Resting orders carry no margin
+    ///      figure of their own: the engine's `imSpotShock` sizes them, netted into the portfolio —
+    ///      exact and cross-product, covering the case a venue-local reduce credit cannot, where
+    ///      the offsetting position sits elsewhere. The fill loss is bounded per expiry (bids at
+    ///      the low mark, asks at the high, since a filled bid is a long) and summed, never netted
+    ///      across orders: fills go best price first, so a deep order must never offset a
+    ///      marketable one's loss. One pass over the tradable window: historical aggregates are
+    ///      never traversed.
+    function _riskInputs(address _participant, bool _withOrders)
         private
         view
-        returns (RestingRisk memory resting, uint256 livePrice)
+        returns (PositionRisk memory positions, RestingRisk memory resting)
     {
-        livePrice = _livePrice;
-        (uint256[] memory expirationAts, uint256 activeCount) = _activeOrderExpirations(_participant);
-        for (uint256 i = 0; i < activeCount;) {
-            uint256 expirationAt = expirationAts[i];
-            RestingOrderAggregate storage aggregate =
-                participantExpirationAtRestingOrderAggregate[_participant][expirationAt];
+        EnumerableSet.UintSet storage dates = participantActiveExpirationAts[_participant];
+        uint256 positionCount = dates.length();
+        uint256[] memory orderDates;
+        uint256 orderCount;
+        if (_withOrders) (orderDates, orderCount) = _activeOrderExpirations(_participant);
+
+        uint256[] memory live = new uint256[](positionCount + orderCount);
+        uint256 liveCount;
+        for (uint256 i = 0; i < positionCount; i++) {
+            uint256 date = dates.at(i);
+            if (_pinnedPrice(date) == 0) live[liveCount++] = date;
+        }
+        for (uint256 i = 0; i < orderCount; i++) {
+            if (_pinnedPrice(orderDates[i]) == 0) live[liveCount++] = orderDates[i];
+        }
+        assembly ("memory-safe") {
+            mstore(live, liveCount)
+        }
+        (uint256[] memory low, uint256[] memory high) = _markRanges(live);
+
+        uint256 k;
+        for (uint256 i = 0; i < positionCount; i++) {
+            uint256 date = dates.at(i);
+            int256 delta = participantExpirationAtNetDelta[_participant][date];
+            uint256 price = _pinnedPrice(date);
+            if (price == 0) {
+                price = delta > 0 ? low[k] : high[k];
+                k++;
+                positions.liveDelta += delta;
+                positions.liveExposure += delta * int256(price);
+            }
+            positions.unrealizedPnl +=
+                int256(price) * delta - participantExpirationAtNetEntryValue[_participant][date];
+        }
+        for (uint256 i = 0; i < orderCount; i++) {
+            uint256 date = orderDates[i];
+            RestingOrderAggregate storage aggregate = participantExpirationAtRestingOrderAggregate[_participant][date];
+            uint256 bidPrice = _pinnedPrice(date);
+            uint256 askPrice = bidPrice;
+            if (bidPrice == 0) {
+                (bidPrice, askPrice) = (low[k], high[k]);
+                k++;
+            }
             resting.buyQty += aggregate.buyQty;
             resting.sellQty += aggregate.sellQty;
-
-            uint256 price = expirationAt <= block.timestamp ? settlementPrice[expirationAt] : 0;
-            if (price == 0) {
-                if (livePrice == 0) livePrice = getMarketPrice();
-                price = livePrice;
-            }
-            (uint256 expBuyLoss, uint256 expSellLoss) = _expirationFillLoss(_participant, expirationAt, price);
-            resting.buyLoss += expBuyLoss;
-            resting.sellLoss += expSellLoss;
-            resting.buyExposure += aggregate.buyQty * price;
-            resting.sellExposure += aggregate.sellQty * price;
-            unchecked {
-                ++i;
-            }
+            resting.buyLoss += M.fillLossBound(aggregate.buyQty, aggregate.buyPQ, aggregate.buyP2Q, bidPrice, true);
+            resting.sellLoss +=
+                M.fillLossBound(aggregate.sellQty, aggregate.sellPQ, aggregate.sellP2Q, askPrice, false);
+            resting.buyExposure += aggregate.buyQty * bidPrice;
+            resting.sellExposure += aggregate.sellQty * askPrice;
         }
     }
 
-    /// @dev Fill-loss bound of one expiry's resting book at `_price`, per side.
-    function _expirationFillLoss(address _participant, uint256 _expirationAt, uint256 _price)
-        private
-        view
-        returns (uint256 buyLoss, uint256 sellLoss)
-    {
-        RestingOrderAggregate storage aggregate =
-            participantExpirationAtRestingOrderAggregate[_participant][_expirationAt];
-        buyLoss = M.fillLossBound(aggregate.buyQty, aggregate.buyPQ, aggregate.buyP2Q, _price, true);
-        sellLoss = M.fillLossBound(aggregate.sellQty, aggregate.sellPQ, aggregate.sellP2Q, _price, false);
-    }
-
-    /// @notice Mark-to-market PnL across active expiries, in collateral token units.
-    ///         Settled-but-unswept expiries are marked at their pinned settlement price.
-    function getUnrealizedPnl(address _participant) external view returns (int256) {
-        (int256 liveDelta, int256 liveEntryValue, int256 pinnedPnl) = _positionRiskInputs(_participant);
-        uint256 livePrice = liveDelta != 0 ? getMarketPrice() : 0;
-        return pinnedPnl + int256(livePrice) * liveDelta - liveEntryValue;
+    /// @dev A matured expiry's pinned settlement price; 0 while it is live or not yet pinned.
+    function _pinnedPrice(uint256 _expirationAt) private view returns (uint256) {
+        return _expirationAt <= block.timestamp ? settlementPrice[_expirationAt] : 0;
     }
 
     /// @notice The currently tradable expiration timestamps, earliest first.

@@ -7,7 +7,7 @@ import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts
 import { verifyContract } from "../lib/verify.ts";
 import { writeAndWait } from "../lib/writeContract.ts";
 
-const TARGET_CODE_VERSION = "6.16.1";
+const TARGET_CODE_VERSION = "6.17.0";
 
 /** Minimal AggregatorV3 slice used to sanity-check HashpriceUSD before deploy. */
 const aggregatorV3Abi = [
@@ -33,6 +33,17 @@ const aggregatorV3Abi = [
   },
 ] as const;
 
+/** The mark oracle's index feed (`IMarkRangeOracle.hashpriceUsd`). */
+const markRangeOracleAbi = [
+  {
+    type: "function",
+    name: "hashpriceUsd",
+    inputs: [],
+    outputs: [{ type: "address" }],
+    stateMutability: "view",
+  },
+] as const;
+
 async function main() {
   logTitle("HashPowerFutures Deployment");
 
@@ -41,7 +52,8 @@ async function main() {
   // The HashPowerFutures contract reads its underlying ERC20 (and decimals) from the
   // collateral vault, so `USDC_TOKEN_ADDRESS` is no longer a deploy-time input.
   const collateralVaultAddress = requireAddress("VAULT_ADDRESS");
-  const hashpriceUsdAddress = requireAddress("HASHPRICE_USD_ADDRESS");
+  // `HashpriceGlideUSD`: per-expiry marks, and the index futures settles on.
+  const markOracleAddress = requireAddress("MARK_ORACLE_ADDRESS");
   const SAFE_OWNER_ADDRESS = readOptionalAddress("SAFE_OWNER_ADDRESS");
   // Optional: when set, wire the HashPowerFutures contract into the cross-product
   // PortfolioMarginEngine end-to-end (HashPowerFutures.setPortfolioMargin + PME.addLinearMarket
@@ -77,6 +89,13 @@ async function main() {
     Decimals: await paymentToken.read.decimals(),
   });
 
+  const hashpriceUsdAddress = getAddress(
+    await pc.readContract({
+      address: markOracleAddress,
+      abi: markRangeOracleAbi,
+      functionName: "hashpriceUsd",
+    }),
+  );
   const decimals = await pc.readContract({
     address: hashpriceUsdAddress,
     abi: aggregatorV3Abi,
@@ -87,8 +106,9 @@ async function main() {
     abi: aggregatorV3Abi,
     functionName: "latestRoundData",
   });
-  logInfo("HASHPRICE_USD", {
-    Address: addrUrl(pc, hashpriceUsdAddress),
+  logInfo("oracles", {
+    MARK_ORACLE: addrUrl(pc, markOracleAddress),
+    HASHPRICE_USD: addrUrl(pc, hashpriceUsdAddress),
     Decimals: decimals,
     Answer: formatUnits(answer, decimals),
   });
@@ -134,7 +154,7 @@ async function main() {
     abi: futuresImpl.abi,
     functionName: "initialize",
     args: [
-      hashpriceUsdAddress,
+      markOracleAddress,
       Number(env.LIQUIDATION_MARGIN_PERCENT),
       Number(env.FUTURE_DELIVERY_DATES_COUNT),
       firstFutureExpirationDate,
@@ -239,6 +259,7 @@ async function main() {
   logInfo("addresses", {
     HashPowerFutures: futures.address,
     "  futures impl": futuresImpl.address,
+    MARK_ORACLE: markOracleAddress,
     HASHPRICE_USD: hashpriceUsdAddress,
   });
 
