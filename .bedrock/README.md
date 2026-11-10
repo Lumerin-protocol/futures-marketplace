@@ -303,8 +303,9 @@ monitoring = {
   create_metric_filters    = true
   create_synthetics_canary = false  # true for production
   notifications_enabled    = false  # true to send SNS alerts
-  dev_alerts_topic_name    = "titanio-dev-dev-alerts"
-  devops_alerts_topic_name = "titanio-dev-dev-alerts"
+  # Looked up via data.aws_sns_topic (foundation-core operational-alerting).
+  dev_alerts_topic_name    = "titanio-dev-hpdx-alerts"  # Slack #hpdx-alerts
+  devops_alerts_topic_name = "titanio-dev-hpdx-alerts"  # non-prod: same; LMN uses hpdx-page
   dashboard_period         = 300
 }
 

@@ -26,6 +26,11 @@ interface AddMarginWithPermitProps {
   signature: PermitSignature;
   /** Account to credit the deposit to — the connected wallet for self-deposits. */
   recipient: `0x${string}`;
+  /**
+   * Block a prior on-chain step was mined in (e.g. Send Collateral's withdraw).
+   * Pins the `depositForPermit` simulation to avoid racing RPC lag.
+   */
+  minBlockNumber?: bigint;
 }
 
 /// ERC20 approval flow for futures deposits. The spender must be the
@@ -100,6 +105,9 @@ export function useAddMargin() {
 /// `usePermitAddMargin().signPermit`) and then pulls+credits the deposit —
 /// no separate on-chain approve, and no RPC-drift window between an approve
 /// and a subsequent read/simulate since there's only one on-chain write.
+///
+/// `recipient` may be another address (e.g. Send Collateral credits the
+/// destination account's vault balance after a withdraw).
 export function useAddMarginWithPermit() {
   const { writeContractAsync, isPending, isError, error, data: hash } = useWriteContract();
   const { data: collateralVaultAddress } = useFuturesCollateralVault();
@@ -116,10 +124,15 @@ export function useAddMarginWithPermit() {
       client: walletClient,
     });
 
-    const { amount, deadline, signature, recipient } = props;
-    const req = await vault.simulate.depositForPermit(
-      [recipient, amount, deadline, signature.v, signature.r, signature.s],
-      { account: walletClient.account.address },
+    const { amount, deadline, signature, recipient, minBlockNumber } = props;
+    const req = await retryUntilBlockAvailable(() =>
+      vault.simulate.depositForPermit(
+        [recipient, amount, deadline, signature.v, signature.r, signature.s],
+        {
+          account: walletClient.account.address,
+          ...(minBlockNumber !== undefined ? { blockNumber: minBlockNumber } : {}),
+        },
+      ),
     );
 
     return writeContractAsync(req.request);
@@ -127,6 +140,54 @@ export function useAddMarginWithPermit() {
 
   return {
     addMarginWithPermitAsync,
+    isPending,
+    isError,
+    error,
+    hash,
+  };
+}
+
+interface DepositForProps {
+  recipient: `0x${string}`;
+  amount: bigint;
+  /**
+   * Block a prior step (withdraw / approve) was mined in. Pins the
+   * `depositFor` simulation so it does not race RPC lag — same pattern as
+   * `useAddMargin` after an on-chain approve.
+   */
+  minBlockNumber?: bigint;
+}
+
+/// Credits `recipient`'s vault balance by pulling USDC from the caller via
+/// `vault.depositFor`. Used by Send Collateral after withdraw (+ approve).
+export function useDepositFor() {
+  const { writeContractAsync, isPending, isError, error, data: hash } = useWriteContract();
+  const { data: collateralVaultAddress } = useFuturesCollateralVault();
+
+  const depositForAsync = async (props: DepositForProps) => {
+    if (!collateralVaultAddress) {
+      throw new Error("Collateral vault address not loaded yet. Please try again.");
+    }
+    const walletClient = await requireWalletClient();
+
+    const vault = getContract({
+      address: collateralVaultAddress,
+      abi: withErrors(CollateralVaultAbi),
+      client: walletClient,
+    });
+
+    const req = await retryUntilBlockAvailable(() =>
+      vault.simulate.depositFor([props.recipient, props.amount], {
+        account: walletClient.account.address,
+        ...(props.minBlockNumber !== undefined ? { blockNumber: props.minBlockNumber } : {}),
+      }),
+    );
+
+    return writeContractAsync(req.request);
+  };
+
+  return {
+    depositForAsync,
     isPending,
     isError,
     error,
