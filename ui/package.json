@@ -18,6 +18,7 @@
     "build:analyze": "vite build && vite-bundle-analyzer build/bundle-analyzer.html",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
+    "check": "pnpm typecheck && pnpm lint",
     "serve": "serve -s build -p 3001",
     "measure:bundle": "node scripts/measure-bundle.mjs",
     "measure:runtime": "node scripts/measure-runtime.mjs",
