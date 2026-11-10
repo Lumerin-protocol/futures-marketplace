@@ -25,7 +25,7 @@ contract HashPowerFuturesAdminModule is HashPowerFuturesBase {
     using EnumerableSet for EnumerableSet.Bytes32Set;
 
     /// @notice {HashPowerFutures.VERSION} of the implementation that creates this module.
-    string public constant VERSION = "6.18.1";
+    string public constant VERSION = "6.19.0";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) { }
@@ -340,12 +340,23 @@ contract HashPowerFuturesAdminModule is HashPowerFuturesBase {
         _pinWindow();
     }
 
+    /// @notice The upgrade call for a proxy initialized before 6.18, which has neither a mark
+    ///         oracle nor a delivery schedule: adopts `_oracle` and starts the schedule on the
+    ///         stored `firstFutureExpirationDate`, as `initialize` does, so the venue keeps its grid.
+    /// @dev Rejects a venue that already has a schedule: re-anchoring would orphan its pinned dates.
+    function reinitialize(IMarkRangeOracle _oracle) external reinitializer(2) onlyOwner {
+        if (expirySchedule.pinnedCount != 0) revert InvalidInitialization();
+        setOracle(_oracle);
+        _startExpirySchedule(firstFutureExpirationDate);
+        _pinWindow();
+    }
+
     /// @notice Adopt a mark oracle and the index it is built on: live expiries mark off its
     ///         ranges, settlement reads its index (`priceOracle`), so the two always agree.
     /// @dev Smoke-tests both before adopting them. Requires the index to already serve a
     ///      positive, initialized round: a feed that never answers reads as price 0, which would
     ///      settle and mark every position at zero.
-    function setOracle(IMarkRangeOracle _oracle) external onlyOwner {
+    function setOracle(IMarkRangeOracle _oracle) public onlyOwner {
         if (address(_oracle) == address(0)) revert InvalidOracle();
         _requireContract(address(_oracle));
         AggregatorV3Interface index;

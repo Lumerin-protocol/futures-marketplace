@@ -1939,6 +1939,19 @@ export const HashPowerFuturesAbi = [
   {
     "inputs": [
       {
+        "internalType": "contract IMarkRangeOracle",
+        "name": "_oracle",
+        "type": "address"
+      }
+    ],
+    "name": "reinitialize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "bytes32[]",
         "name": "_orderIds",
         "type": "bytes32[]"

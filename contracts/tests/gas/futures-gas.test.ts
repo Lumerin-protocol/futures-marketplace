@@ -4,7 +4,17 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { assertAbiFunctionCoverage, GasRecorder, writeSnapshot } from "@lsheva/evm-gas-benchmark";
 import { network } from "hardhat";
-import { type Address, encodeFunctionData, type Hash, type PublicClient, parseUnits } from "viem";
+import {
+  type Address,
+  encodeAbiParameters,
+  encodeFunctionData,
+  type Hash,
+  type Hex,
+  keccak256,
+  numberToHex,
+  type PublicClient,
+  parseUnits,
+} from "viem";
 import { HashPowerFuturesAbi } from "../../abi/HashPowerFutures.ts";
 import type { FuturesFixture } from "../fixtures.ts";
 import { TimeInForce } from "../timeInForce.ts";
@@ -1087,6 +1097,35 @@ async function benchmarkDeliverySchedule() {
       futures.write.createOrder([price, dates[1], -1n, TimeInForce.GTC], { account: seller.account }),
     );
   }
+  {
+    const data = await fresh();
+    const { futures, markOracle } = data.contracts;
+    const { owner, pc } = data.accounts;
+    await eraseScheduleAndMarkOracle(pc, futures.address);
+    await recordTransaction(
+      pc,
+      "reinitialize(address)",
+      "venue upgraded from 6.8.0, pins the window",
+      futures.write.reinitialize([markOracle.address], { account: owner.account }),
+    );
+  }
+}
+
+/** Zero the state 6.18 added (`forge inspect` slots 38–41), as on a proxy upgraded from 6.8.0. */
+async function eraseScheduleAndMarkOracle(pc: PublicClient, proxy: Address) {
+  const slot = (n: bigint) => numberToHex(n, { size: 32 });
+  const mapping = (key: bigint, n: bigint) =>
+    keccak256(encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }], [key, n]));
+  const read = async (s: Hex) =>
+    BigInt((await pc.getStorageAt({ address: proxy, slot: s })) ?? "0x0");
+  const pinnedCount = (await read(slot(39n))) & 0xffffffffn;
+  for (let k = 0n; k < pinnedCount; k++) {
+    const expiry = await read(mapping(k, 40n));
+    await networkHelpers.setStorageAt(proxy, mapping(k, 40n), 0n);
+    await networkHelpers.setStorageAt(proxy, mapping(expiry, 41n), 0n);
+  }
+  await networkHelpers.setStorageAt(proxy, slot(39n), 0n);
+  await networkHelpers.setStorageAt(proxy, slot(38n), 0n);
 }
 
 describe("Futures gas benchmark", () => {
@@ -1103,7 +1142,7 @@ describe("Futures gas benchmark", () => {
 
     const snapshot = gas.snapshot();
     const coverage = assertAbiFunctionCoverage(HashPowerFuturesAbi, snapshot, exclusions);
-    assert.equal(coverage.covered.length, 74);
+    assert.equal(coverage.covered.length, 75);
     assert.deepEqual(coverage.excluded, [
       "initialize(address,uint8,uint8,uint256)",
       "proxiableUUID()",

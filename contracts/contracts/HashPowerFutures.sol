@@ -24,7 +24,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev Lives here rather than in {HashPowerFuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `HashPowerFutures.sol` to require a bump.
-    string public constant VERSION = "6.18.1";
+    string public constant VERSION = "6.19.0";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) HashPowerFuturesAdmin(_vault) { }
@@ -48,19 +48,8 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         emit LiquidationMarginPercentUpdated(_liquidationMarginPercent);
         emit FutureExpirationDatesCountUpdated(_futureExpirationDatesCount);
 
-        // The delivery chain starts on the plain grid and the first window is pinned at once, so
-        // `getExpirationDates()` is final from the first block.
-        if (_firstFutureExpirationDate > type(uint64).max) {
-            revert ValueOutOfRange(0, int256(uint256(type(uint64).max)));
-        }
-        uint64 first = uint64(_firstFutureExpirationDate);
-        expirySchedule = ExpirySchedule({
-            pinnedCount: 0,
-            anchorSlot: 0,
-            anchorTime: first,
-            prevAnchorSlot: 0,
-            prevAnchorTime: first
-        });
+        // The first window is pinned at once, so `getExpirationDates()` is final from the first block.
+        _startExpirySchedule(_firstFutureExpirationDate);
         _pinDue();
     }
 

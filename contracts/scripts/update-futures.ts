@@ -24,7 +24,7 @@ import { assertNoRestingOrders, legsWithOrders } from "./lib/resting-orders.ts";
 import { resolveBookLib } from "./lib/book-lib.ts";
 
 const DEFAULT_SAFE_GAS_OVERHEAD = 150_000n;
-const TARGET_CODE_VERSION = "6.18.1";
+const TARGET_CODE_VERSION = "6.19.0";
 const UPGRADE_CONFIRMATIONS = 5;
 // 6.10 starts a new resting-order aggregate, so orders placed before it must not survive the
 // upgrade. With the shared vault halted, the upgrade call is `forceCancelOrders` on every
@@ -36,6 +36,17 @@ const DEFAULT_FORCE_CANCEL_BATCH_SIZE = 20;
 const DEFAULT_EVENT_CHUNK = 10_000n;
 const DEFAULT_READ_CONCURRENCY = 16;
 
+/** Whether dotted version `a` precedes `b`; an unreadable version counts as older. */
+function isOlderThan(a: string, b: string): boolean {
+  const parse = (v: string) => v.split(".").map((n) => Number.parseInt(n, 10));
+  const [x, y] = [parse(a), parse(b)];
+  if (x.some(Number.isNaN)) return true;
+  for (let i = 0; i < y.length; i++) {
+    if ((x[i] ?? 0) !== y[i]) return (x[i] ?? 0) < y[i];
+  }
+  return false;
+}
+
 async function main() {
   logTitle("HashPowerFutures Upgrade");
 
@@ -45,7 +56,8 @@ async function main() {
   const SAFE_OWNER_ADDRESS = readOptionalAddress("SAFE_OWNER_ADDRESS");
   const vaultAddress = requireAddress("VAULT_ADDRESS");
   // 6.17 adds the mark oracle (`HashpriceGlideUSD`) with an empty slot: every mark read reverts
-  // until `setOracle` adopts it, which this script does right after the upgrade, still halted.
+  // until it is adopted, still halted: by `reinitialize` in the upgrade call from before 6.18,
+  // by `setOracle` right after it otherwise.
   const markOracleAddress = requireAddress("MARK_ORACLE_ADDRESS");
   const marginEngineAddress = readOptionalAddress("MARGIN_ENGINE_ADDRESS");
   const pointsHookAddress =
@@ -170,16 +182,26 @@ async function main() {
   }
   // Simulate the exact upgrade call from the actual owner and prove it fits
   // before either sending the direct upgrade or creating a Safe proposal.
-  const [firstBatch, ...followUpBatches] = cancelBatches;
+  // A proxy older than 6.18 has no delivery schedule, so its upgrade call is
+  // `reinitialize`, which also adopts the mark oracle; every cancel batch follows it.
+  const reinitialize = isOlderThan(currentVersion, "6.18.0");
+  const firstBatch = reinitialize ? undefined : cancelBatches[0];
+  const followUpBatches = reinitialize ? cancelBatches : cancelBatches.slice(1);
   const upgradeArgs = [
     futuresImpl.address,
-    firstBatch
+    reinitialize
       ? encodeFunctionData({
           abi: futuresImpl.abi,
-          functionName: "forceCancelOrders",
-          args: firstBatch,
+          functionName: "reinitialize",
+          args: [markOracleAddress],
         })
-      : "0x",
+      : firstBatch
+        ? encodeFunctionData({
+            abi: futuresImpl.abi,
+            functionName: "forceCancelOrders",
+            args: firstBatch,
+          })
+        : "0x",
   ] as const;
   await simulateContract(pc, {
     address: futuresAddress,
@@ -215,7 +237,11 @@ async function main() {
     );
   }
   logInfo("upgrade preflight", {
-    Call: firstBatch ? `forceCancelOrders(${firstBatch[0].length} legs)` : "(none)",
+    Call: reinitialize
+      ? `reinitialize(${markOracleAddress})`
+      : firstBatch
+        ? `forceCancelOrders(${firstBatch[0].length} legs)`
+        : "(none)",
     Simulation: "passed",
     "Estimated upgrade gas": estimatedUpgradeGas,
     "Safe execution overhead": safeGasOverhead,
@@ -244,17 +270,19 @@ async function main() {
     logStep("Safe TX hash", txHash);
     logStep("Safe UI URL", safe.getSafeUITxUrl(txHash));
 
-    const setOracleTxHash = await safe.proposeTransaction({
-      data: encodeFunctionData({
-        abi: futuresImpl.abi,
-        functionName: "setOracle",
-        args: [markOracleAddress],
-      }),
-      to: futuresAddress,
-      value: "0",
-      operation: OperationType.Call,
-    });
-    logStep(`setOracle(${markOracleAddress})`, safe.getSafeUITxUrl(setOracleTxHash));
+    if (!reinitialize) {
+      const setOracleTxHash = await safe.proposeTransaction({
+        data: encodeFunctionData({
+          abi: futuresImpl.abi,
+          functionName: "setOracle",
+          args: [markOracleAddress],
+        }),
+        to: futuresAddress,
+        value: "0",
+        operation: OperationType.Call,
+      });
+      logStep(`setOracle(${markOracleAddress})`, safe.getSafeUITxUrl(setOracleTxHash));
+    }
 
     for (const [i, batch] of followUpBatches.entries()) {
       const cancelTxHash = await safe.proposeTransaction({
@@ -268,7 +296,7 @@ async function main() {
         operation: OperationType.Call,
       });
       logStep(
-        `forceCancelOrders batch ${i + 2}/${cancelBatches.length}`,
+        `forceCancelOrders batch ${cancelBatches.length - followUpBatches.length + i + 1}/${cancelBatches.length}`,
         safe.getSafeUITxUrl(cancelTxHash),
       );
     }
@@ -342,15 +370,32 @@ async function main() {
         `Proxy VERSION at block ${receipt.blockNumber} is ${upgradedVersion}, expected ${TARGET_CODE_VERSION}`,
       );
     }
-    const setOracleTx = await upgraded.write.setOracle([markOracleAddress]);
-    const setOracleReceipt = await pc.waitForTransactionReceipt({ hash: setOracleTx });
-    if (setOracleReceipt.status !== "success") {
-      throw new Error(`setOracle reverted: ${txUrl(pc, setOracleReceipt.transactionHash)}`);
+    let verifyBlock = receipt.blockNumber;
+    if (reinitialize) {
+      logStep(`reinitialize(${markOracleAddress})`, "in the upgrade call");
+    } else {
+      const setOracleTx = await upgraded.write.setOracle([markOracleAddress]);
+      const setOracleReceipt = await pc.waitForTransactionReceipt({ hash: setOracleTx });
+      if (setOracleReceipt.status !== "success") {
+        throw new Error(`setOracle reverted: ${txUrl(pc, setOracleReceipt.transactionHash)}`);
+      }
+      logStep(`setOracle(${markOracleAddress})`, txUrl(pc, setOracleReceipt.transactionHash));
+      verifyBlock = setOracleReceipt.blockNumber;
     }
-    logStep(`setOracle(${markOracleAddress})`, txUrl(pc, setOracleReceipt.transactionHash));
-    logStep("HASHPRICE_USD", await upgraded.read.priceOracle());
+    const markOracle = getAddress(await upgraded.read.markOracle({ blockNumber: verifyBlock }));
+    if (markOracle !== getAddress(markOracleAddress)) {
+      throw new Error(
+        `Mark oracle at block ${verifyBlock} is ${markOracle}, expected ${markOracleAddress}`,
+      );
+    }
+    logInfo("oracles", {
+      MARK_ORACLE: markOracle,
+      HASHPRICE_USD: await upgraded.read.priceOracle({ blockNumber: verifyBlock }),
+      "Delivery dates": (await upgraded.read.getExpirationDates({ blockNumber: verifyBlock }))
+        .map((d) => new Date(Number(d) * 1000).toISOString())
+        .join(", "),
+    });
 
-    let verifyBlock = setOracleReceipt.blockNumber;
     for (const [i, batch] of followUpBatches.entries()) {
       const cancelTx = await upgraded.write.forceCancelOrders(batch);
       const cancelReceipt = await pc.waitForTransactionReceipt({ hash: cancelTx });
@@ -359,7 +404,7 @@ async function main() {
       }
       verifyBlock = cancelReceipt.blockNumber;
       logStep(
-        `forceCancelOrders batch ${i + 2}/${cancelBatches.length}`,
+        `forceCancelOrders batch ${cancelBatches.length - followUpBatches.length + i + 1}/${cancelBatches.length}`,
         txUrl(pc, cancelReceipt.transactionHash),
       );
     }

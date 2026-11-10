@@ -95,6 +95,12 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
         _delegateToAdminModule();
     }
 
+    /// @notice See {HashPowerFuturesAdminModule-reinitialize}.
+    function reinitialize(IMarkRangeOracle _oracle) external {
+        _oracle;
+        _delegateToAdminModule();
+    }
+
     /// @notice See {HashPowerFuturesAdminModule-setPortfolioMargin}.
     function setPortfolioMargin(IPortfolioMarginEngine _pm) external {
         _pm;

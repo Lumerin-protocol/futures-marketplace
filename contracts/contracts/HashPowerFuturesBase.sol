@@ -1093,6 +1093,21 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         return s.pinnedCount <= _currentSlot(s) + futureExpirationDatesCount - 1;
     }
 
+    /// @dev Start the delivery chain on the plain grid at `_first`, with nothing pinned yet.
+    function _startExpirySchedule(uint256 _first) internal {
+        if (_first > type(uint64).max) {
+            revert ValueOutOfRange(0, int256(uint256(type(uint64).max)));
+        }
+        uint64 first = uint64(_first);
+        expirySchedule = ExpirySchedule({
+            pinnedCount: 0,
+            anchorSlot: 0,
+            anchorTime: first,
+            prevAnchorSlot: 0,
+            prevAnchorTime: first
+        });
+    }
+
     /// @dev Pin every slot of the tradable window that is not pinned yet.
     function _pinWindow() internal {
         ExpirySchedule memory s = expirySchedule;
