@@ -48,10 +48,10 @@ createAppKit({
   //   },
   // },
   metadata: {
-    name: "Lumerin Marketplace",
-    description: "Buy, sell, and own hashpower through your Web3 wallet",
+    name: "HashPower Derivatives Exchange",
+    description: "Decentralized derivatives market for Bitcoin hashrate",
     url: process.env.REACT_APP_URL, // origin must match your domain & subdomain
-    icons: ["https://avatars.githubusercontent.com/u/179229932"],
+    icons: [`${process.env.REACT_APP_URL?.replace(/\/$/, "")}/favicon.svg`],
   },
   features: {
     swaps: true,
