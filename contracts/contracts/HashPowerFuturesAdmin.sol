@@ -126,7 +126,7 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
     ///      return or revert with its result. The stubs keep their parameter names for the ABI
     ///      and name them once only so the compiler does not report them unused; the module
     ///      decodes the calldata itself.
-    function _delegateToAdminModule() private {
+    function _delegateToAdminModule() internal {
         address module = adminModule;
         assembly ("memory-safe") {
             calldatacopy(0, 0, calldatasize())
