@@ -5,7 +5,6 @@ import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableS
 import { StructuredLinkedList } from "solidity-linked-list/contracts/StructuredLinkedList.sol";
 import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
 import { ILinearMarket } from "collateral-margin/contracts/contracts/interfaces/ILinearMarket.sol";
-import { ILinearMarketExposure } from "collateral-margin/contracts/contracts/interfaces/ILinearMarketExposure.sol";
 import { MathLib as M } from "./libs/MathLib.sol";
 import { FuturesBookLib } from "./libs/FuturesBookLib.sol";
 import { IMarkRangeOracle } from "./interfaces/IMarkRangeOracle.sol";
@@ -405,14 +404,14 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         int256 unrealizedPnl;
     }
 
-    /// @notice ILinearMarketExposure: all per-user margin inputs in a single call, with live
+    /// @notice ILinearMarket: all per-user margin inputs in a single call, with live
     ///         positions and resting orders valued at each expiry's mark.
     /// @dev The engine reads this and shocks the exposure by a percentage, so a mark need not be
     ///      the index it stresses: a date settling after a halving is worth about half of it.
     function getExposureView(address _participant)
         external
         view
-        returns (ILinearMarketExposure.ExposureView memory view_)
+        returns (ILinearMarket.ExposureView memory view_)
     {
         (PositionRisk memory positions, RestingRisk memory resting) = _riskInputs(_participant, true);
         view_.netPositionExposure = positions.liveExposure;
