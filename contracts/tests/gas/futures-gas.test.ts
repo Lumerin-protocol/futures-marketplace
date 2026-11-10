@@ -202,11 +202,14 @@ async function benchmarkViews() {
     ["UPGRADE_INTERFACE_VERSION()", "UPGRADE_INTERFACE_VERSION"],
     ["VERSION()", "VERSION"],
     ["collectedFeesBalance()", "collectedFeesBalance"],
+    ["NO_GO_HALF_WIDTH()", "NO_GO_HALF_WIDTH"],
+    ["deliverySchedule()", "deliverySchedule"],
     ["expirationIntervalDays()", "expirationIntervalDays"],
     ["firstFutureExpirationDate()", "firstFutureExpirationDate"],
     ["futureExpirationDatesCount()", "futureExpirationDatesCount"],
     ["getActiveExpirationDates(address)", "getActiveExpirationDates", [buyer.account.address]],
     ["getExpirationDates()", "getExpirationDates"],
+    ["getMarkRange(uint256)", "getMarkRange", [firstExpiration]],
     ["getMarketPrice()", "getMarketPrice"],
     ["getOrder(bytes32)", "getOrder", [sellerOrder]],
     [
@@ -220,6 +223,7 @@ async function benchmarkViews() {
       "getQuantityAtPrice",
       [firstExpiration, price + step, false],
     ],
+    ["getExposureView(address)", "getExposureView", [seller.account.address]],
     ["getRiskView(address)", "getRiskView", [seller.account.address]],
     ["hasRestingOrderDelta(address)", "hasRestingOrderDelta", [seller.account.address]],
     ["getUnrealizedPnl(address)", "getUnrealizedPnl", [buyer.account.address]],
@@ -234,6 +238,7 @@ async function benchmarkViews() {
       [buyer.account.address, thirdExpiration],
     ],
     ["hook()", "hook"],
+    ["markOracle()", "markOracle"],
     ["liquidationFeeBps()", "liquidationFeeBps"],
     ["liquidationMarginPercent()", "liquidationMarginPercent"],
     ["liquidatorShareBps()", "liquidatorShareBps"],
@@ -286,6 +291,14 @@ async function benchmarkScaledRiskViews() {
     }
     const expirationCount = Math.min(target, 3);
     const scenario = `${target}-orders-${expirationCount}-expirations`;
+    await recordView(
+      pc,
+      futures,
+      "getExposureView(address)",
+      "getExposureView",
+      [seller.account.address],
+      scenario,
+    );
     await recordView(
       pc,
       futures,
@@ -755,6 +768,76 @@ async function benchmarkLiquidations() {
   }
 }
 
+/**
+ * Futures on the real oracle chain (`HashpriceBTCMock` → `HashpriceUSD` → `HashpriceGlideUSD`), with
+ * the halving's estimate between the first two dates, marking every date at the index
+ * (`MarkRangeOracleMock`) and at the glide feed's ranges: what the schedule's ranges cost.
+ */
+async function benchmarkMarkOracle() {
+  for (const withMarks of [false, true]) {
+    const data = await fresh();
+    const { futures, portfolioMarginEngine, collateralVault } = data.contracts;
+    const { owner, seller, buyer, pc } = data.accounts;
+    const [first, second] = data.config.deliveryDates;
+
+    const btc = await viem.deployContract("HashpriceBTCMock", []);
+    const btcUsd = await viem.deployContract("PriceFeedMock", [8, "BTC/USD"]);
+    await btcUsd.write.setPrice([10_000_000_000_000n]);
+    const now = BigInt(await networkHelpers.time.latest());
+    const eta = (first + second) / 2n;
+    await btc.write.setBlock([
+      Number(1_050_000n - (eta - now) / 600n),
+      3_150_000n,
+      150_000_000_000_000n,
+    ]);
+    const hashpriceUSD = await viem.deployContract("HashpriceUSD", [btc.address, btcUsd.address]);
+    const glideUSD = await viem.deployContract("HashpriceGlideUSD", [hashpriceUSD.address]);
+    await portfolioMarginEngine.write.setOracle([hashpriceUSD.address], { account: owner.account });
+    const setup = withMarks ? "glide marks" : "index marks";
+    if (withMarks) {
+      await recordTransaction(
+        pc,
+        "setOracle(address)",
+        "set the glide feed",
+        futures.write.setOracle([glideUSD.address], { account: owner.account }),
+      );
+    } else {
+      const indexMarks = await viem.deployContract("MarkRangeOracleMock", [hashpriceUSD.address]);
+      await futures.write.setOracle([indexMarks.address], { account: owner.account });
+    }
+
+    await collateralVault.write.deposit([TRADING_BALANCE], { account: seller.account });
+    await collateralVault.write.deposit([TRADING_BALANCE], { account: buyer.account });
+    const price = await futures.read.getMarketPrice();
+    const tick = await futures.read.minimumPriceIncrement();
+    await recordTransaction(
+      pc,
+      "createOrder(uint256,uint256,int256,uint8)",
+      `${setup}: resting ask on a post-halving date`,
+      futures.write.createOrder([price, second, -10n, TimeInForce.GTC], {
+        account: seller.account,
+      }),
+    );
+    await recordTransaction(
+      pc,
+      "createOrder(uint256,uint256,int256,uint8)",
+      `${setup}: full match on a post-halving date`,
+      futures.write.createOrder([price, second, 10n, TimeInForce.GTC], { account: buyer.account }),
+    );
+    await futures.write.createOrder([price - tick, first, 5n, TimeInForce.GTC], {
+      account: buyer.account,
+    });
+    await recordView(
+      pc,
+      futures,
+      "getExposureView(address)",
+      "getExposureView",
+      [buyer.account.address],
+      `${setup}: position on one date, bid on another`,
+    );
+  }
+}
+
 async function benchmarkAdminAndLifecycle() {
   {
     const data = await fresh();
@@ -762,6 +845,7 @@ async function benchmarkAdminAndLifecycle() {
     const { owner, pc } = data.accounts;
     const feed = await viem.deployContract("PriceFeedMock", [8, "gas benchmark"]);
     await feed.write.setPrice([parseUnits("34.4", 8)]);
+    const feedMarks = await viem.deployContract("MarkRangeOracleMock", [feed.address]);
 
     await recordTransaction(
       pc,
@@ -803,7 +887,7 @@ async function benchmarkAdminAndLifecycle() {
       pc,
       "setOracle(address)",
       "replace-live-feed",
-      futures.write.setOracle([feed.address], { account: owner.account }),
+      futures.write.setOracle([feedMarks.address], { account: owner.account }),
     );
     await recordTransaction(
       pc,
@@ -920,7 +1004,9 @@ async function benchmarkAdminAndLifecycle() {
     const data = await fresh();
     const { futures, collateralVault } = data.contracts;
     const { owner, pc } = data.accounts;
-    const implementation = await viem.deployContract("HashPowerFutures", [collateralVault.address]);
+    const implementation = await viem.deployContract("HashPowerFutures", [collateralVault.address], {
+      libraries: { FuturesBookLib: data.contracts.bookLib.address },
+    });
     await recordTransaction(
       pc,
       "upgradeToAndCall(address,bytes)",
@@ -954,8 +1040,58 @@ async function benchmarkAdminAndLifecycle() {
   }
 }
 
+/**
+ * The delivery schedule (N28): `pinExpiry` for the slot past the window, on the plain chain and
+ * shifted clear of a halving estimate on it, and the first order after a roll pinning the new
+ * slot inline against an order on an already pinned window.
+ */
+async function benchmarkDeliverySchedule() {
+  const day = 86_400n;
+  {
+    const data = await fresh();
+    const { futures, markOracle } = data.contracts;
+    const { seller, pc } = data.accounts;
+    const dates = await futures.read.getExpirationDates();
+    const last = dates[dates.length - 1];
+    await recordTransaction(
+      pc,
+      "pinExpiry()",
+      "slot past the window, on the chain",
+      futures.write.pinExpiry({ account: seller.account }),
+    );
+    // Roll one slot so the next one becomes pinnable, with the halving estimated on its chain
+    // date (`last` + 60 days): the pin moves it 15 days.
+    await networkHelpers.time.increaseTo(dates[0] + 1n);
+    await markOracle.write.setHalvingEta([last + 60n * day], { account: seller.account, chain: seller.chain });
+    await recordTransaction(
+      pc,
+      "pinExpiry()",
+      "slot past the window, shifted clear of the halving",
+      futures.write.pinExpiry({ account: seller.account }),
+    );
+  }
+  {
+    const data = await fresh();
+    const { futures, hashpriceUsd } = data.contracts;
+    const { seller, pc } = data.accounts;
+    await fund(data, [seller]);
+    const dates = await futures.read.getExpirationDates();
+    // Roll one slot without pinning: the first order afterwards pins the new slot itself.
+    await networkHelpers.time.increaseTo(dates[0] + 1n);
+    await refreshHashprice(hashpriceUsd);
+    const price = await futures.read.getMarketPrice();
+    await recordTransaction(
+      pc,
+      "createOrder(uint256,uint256,int256,uint8)",
+      "first order after a roll, pins the new slot inline",
+      futures.write.createOrder([price, dates[1], -1n, TimeInForce.GTC], { account: seller.account }),
+    );
+  }
+}
+
 describe("Futures gas benchmark", () => {
   it("records deterministic receipt gas, view estimates, and complete ABI coverage", async () => {
+    await benchmarkDeliverySchedule();
     await benchmarkViews();
     await benchmarkScaledRiskViews();
     await benchmarkOrderPlacement();
@@ -963,10 +1099,11 @@ describe("Futures gas benchmark", () => {
     await benchmarkSettlement();
     await benchmarkLiquidations();
     await benchmarkAdminAndLifecycle();
+    await benchmarkMarkOracle();
 
     const snapshot = gas.snapshot();
     const coverage = assertAbiFunctionCoverage(HashPowerFuturesAbi, snapshot, exclusions);
-    assert.equal(coverage.covered.length, 68);
+    assert.equal(coverage.covered.length, 74);
     assert.deepEqual(coverage.excluded, [
       "initialize(address,uint8,uint8,uint256)",
       "proxiableUUID()",

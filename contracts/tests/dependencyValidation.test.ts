@@ -8,6 +8,11 @@ const { viem, networkHelpers } = await network.getOrCreate();
 
 const FEED_DECIMALS = 8;
 
+/** A mark oracle over `feed`, which `setOracle` adopts as the index. */
+async function marksOver(feed: `0x${string}`) {
+  return (await viem.deployContract("MarkRangeOracleMock", [feed])).address;
+}
+
 async function deployVault(collateralToken: `0x${string}`) {
   const impl = await viem.deployContract("CollateralVault", []);
   const proxy = await viem.deployContract("ERC1967Proxy", [
@@ -33,8 +38,9 @@ describe("Futures - dependency validation", function () {
     const token = await viem.deployContract("TokenDecimalsMock", [18]);
     const vault = await deployVault(token.address);
 
+    const bookLib = await viem.deployContract("FuturesBookLib", []);
     await assert.rejects(
-      viem.deployContract("HashPowerFutures", [vault.address]),
+      viem.deployContract("HashPowerFutures", [vault.address], { libraries: { FuturesBookLib: bookLib.address } }),
       /UnsupportedTokenDecimals/,
     );
   });
@@ -146,7 +152,7 @@ describe("Futures - dependency validation", function () {
       const silentFeed = await viem.deployContract("PriceFeedMock", [FEED_DECIMALS, "silent"]);
 
       await viem.assertions.revertWithCustomError(
-        futures.write.setOracle([silentFeed.address], { account: owner.account }),
+        futures.write.setOracle([await marksOver(silentFeed.address)], { account: owner.account }),
         futures,
         "InvalidOracle",
       );
@@ -159,7 +165,7 @@ describe("Futures - dependency validation", function () {
       const feed = await viem.deployContract("PriceFeedMock", [FEED_DECIMALS, "live"]);
       await feed.write.setPrice([parseUnits("34.4", FEED_DECIMALS)]);
 
-      await futures.write.setOracle([feed.address], { account: owner.account });
+      await futures.write.setOracle([await marksOver(feed.address)], { account: owner.account });
       assert.equal(await futures.read.priceOracle(), getAddress(feed.address));
     });
 
@@ -170,7 +176,7 @@ describe("Futures - dependency validation", function () {
       const feed = await viem.deployContract("PriceFeedMock", [4, "low precision"]);
       await feed.write.setPrice([parseUnits("34.4", 4)]);
 
-      await futures.write.setOracle([feed.address], { account: owner.account });
+      await futures.write.setOracle([await marksOver(feed.address)], { account: owner.account });
       assert.equal(await futures.read.getMarketPrice(), parseUnits("34.4", 6));
     });
 
@@ -185,14 +191,14 @@ describe("Futures - dependency validation", function () {
       const staleAt = now - (await futures.read.MAX_ORACLE_STALENESS()) - 1n;
       await feed.write.setRound([1n, answer, staleAt, staleAt, 1n]);
       await viem.assertions.revertWithCustomError(
-        futures.write.setOracle([feed.address], { account: owner.account }),
+        futures.write.setOracle([await marksOver(feed.address)], { account: owner.account }),
         futures,
         "OracleStale",
       );
 
       await feed.write.setRound([2n, answer, now + 3600n, now + 3600n, 2n]);
       await viem.assertions.revertWithCustomError(
-        futures.write.setOracle([feed.address], { account: owner.account }),
+        futures.write.setOracle([await marksOver(feed.address)], { account: owner.account }),
         futures,
         "InvalidOracle",
       );
@@ -205,7 +211,7 @@ describe("Futures - dependency validation", function () {
       const feed = await viem.deployContract("PriceFeedMock", [FEED_DECIMALS, "future runtime"]);
       const answer = parseUnits("34.4", FEED_DECIMALS);
       await feed.write.setPrice([answer]);
-      await futures.write.setOracle([feed.address], { account: owner.account });
+      await futures.write.setOracle([await marksOver(feed.address)], { account: owner.account });
 
       const now = (await pc.getBlock()).timestamp;
       await feed.write.setRound([2n, answer, now + 3600n, now + 3600n, 2n]);

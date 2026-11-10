@@ -38,8 +38,10 @@ describe("HashPowerFutures oracle answer cap", () => {
     const feed = await viem.deployContract("PriceFeedMock", [decimals, "out of range"]);
     await feed.write.setPrice([answerFor(MAX_PRICE + config.priceLadderStep, decimals)]);
 
+    const marks = await viem.deployContract("MarkRangeOracleMock", [feed.address]);
+
     await viem.assertions.revertWithCustomError(
-      futures.write.setOracle([feed.address], { account: accounts.owner.account }),
+      futures.write.setOracle([marks.address], { account: accounts.owner.account }),
       futures,
       "InvalidOracle",
     );

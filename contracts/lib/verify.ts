@@ -15,6 +15,8 @@ export type VerifyOpts = {
   /** Fully qualified name, e.g. `contracts/HashPowerFutures.sol:HashPowerFutures`. */
   contract?: string;
   force?: boolean;
+  /** Linked external libraries by name, e.g. `{ FuturesBookLib: "0x…" }`. */
+  libraries?: Record<string, string>;
 };
 
 /// Verify on each provider in turn. Never throws — failures are logged so a
@@ -44,6 +46,7 @@ export async function verifyContract(
     constructorArgs: normalizedArgs as unknown[],
     contract: opts.contract,
     force: opts.force,
+    libraries: opts.libraries,
   };
 
   let etherscanOk = !providers.includes("etherscan");

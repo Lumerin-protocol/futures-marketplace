@@ -3,6 +3,7 @@ import { useReadContract, useReadContracts } from "wagmi";
 import type {
   AccountSnapshot,
   FuturesRestingOrders,
+  MarkRange,
   RestingOrders,
 } from "@hashpower/portfolio-margin";
 import { CollateralVaultAbi } from "collateral-margin-abi/CollateralVault.ts";
@@ -64,6 +65,11 @@ const NO_ORDERS: RestingOrders = {
 /// kept per expiry with its settlement price because the venue bounds each expiry
 /// at its own price.
 ///
+/// Marks: the engine stresses each venue's exposure at its own marks, so the
+/// snapshot carries the index they were read at (futures `getMarketPrice`), the perps
+/// mark and pending drift, and the mark range (`getMarkRange`) of every expiry held or
+/// listed. `markRanges` returns the listed ones, for orders on a book not held yet.
+///
 /// The snapshot stays `undefined` until every read has succeeded — a partial
 /// one would silently understate the margin requirement.
 export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
@@ -106,6 +112,11 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
         abi: withErrors(HashPowerFuturesAbi),
         functionName: "getExpirationDates",
       },
+      {
+        address: futuresAddress,
+        abi: withErrors(HashPowerFuturesAbi),
+        functionName: "getMarketPrice",
+      },
     ],
     query: { enabled: !!address && !!futuresAddress, refetchInterval: 10000 },
   });
@@ -132,6 +143,13 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
         args: [address as `0x${string}`],
       },
       { address: perpsAddress, abi: withErrors(HashPowerPerpsDEXAbi), functionName: "QUANTITY_DECIMALS" },
+      { address: perpsAddress, abi: withErrors(HashPowerPerpsDEXAbi), functionName: "getMarketPrice" },
+      {
+        address: perpsAddress,
+        abi: withErrors(HashPowerPerpsDEXAbi),
+        functionName: "getPendingDrift",
+        args: [address as `0x${string}`],
+      },
     ],
     query: { enabled: !!address && !!perpsAddress, refetchInterval: 10000 },
   });
@@ -192,6 +210,30 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
     query: { enabled: !!address && !!futuresAddress && hasOrderWindow, refetchInterval: 10000 },
   });
 
+  // Every expiry held or listed, once each.
+  const markExpirationAts = useMemo(() => {
+    if (positionExpirationAts === undefined || orderExpirationAts === undefined) return undefined;
+    return [...new Set([...positionExpirationAts, ...orderExpirationAts])];
+  }, [positionExpirationAts, orderExpirationAts]);
+
+  const markRangesQuery = useReadContracts({
+    contracts: (markExpirationAts ?? []).map((expirationAt) => ({
+      address: futuresAddress,
+      abi: withErrors(HashPowerFuturesAbi),
+      functionName: "getMarkRange" as const,
+      args: [expirationAt] as const,
+    })),
+    query: {
+      enabled: !!futuresAddress && (markExpirationAts?.length ?? 0) > 0,
+      refetchInterval: 10000,
+    },
+  });
+
+  const markRanges = useMemo(
+    () => readMarkRanges(markRangesQuery.data as ReadResult[] | undefined, markExpirationAts),
+    [markRangesQuery.data, markExpirationAts],
+  );
+
   const perps = useMemo(
     () => readPerps(perpsQuery.data as ReadResult[] | undefined, !!perpsAddress),
     [perpsQuery.data, perpsAddress],
@@ -199,31 +241,37 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
 
   const positions = useMemo(
     () =>
+      markRanges &&
       readPositions(
         aggregatesQuery.data as ReadResult[] | undefined,
         settlementQuery.data as ReadResult[] | undefined,
         positionExpirationAts,
+        markRanges,
       ),
-    [aggregatesQuery.data, settlementQuery.data, positionExpirationAts],
+    [aggregatesQuery.data, settlementQuery.data, positionExpirationAts, markRanges],
   );
 
   const futuresOrders = useMemo(
     () =>
+      markRanges &&
       readFuturesOrders(
         futuresQuery.data as ReadResult[] | undefined,
         orderAggregatesQuery.data as ReadResult[] | undefined,
         orderExpirationAts,
+        markRanges,
       ),
-    [futuresQuery.data, orderAggregatesQuery.data, orderExpirationAts],
+    [futuresQuery.data, orderAggregatesQuery.data, orderExpirationAts, markRanges],
   );
 
   const snapshot = useMemo<AccountSnapshot | undefined>(() => {
     const balance = balanceQuery.data as bigint | undefined;
     const accountDebt = accountDebtQuery.data as bigint | undefined;
+    const indexRead = (futuresQuery.data as ReadResult[] | undefined)?.[3];
     if (
       !address ||
       balance === undefined ||
       accountDebt === undefined ||
+      indexRead?.status !== "success" ||
       !futuresOrders ||
       !perps ||
       !positions
@@ -234,13 +282,15 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
       user: address,
       balance,
       accountDebt,
+      index: indexRead.result as bigint,
       perp: perps.perp,
       futures: { positions, orders: futuresOrders },
     };
-  }, [address, balanceQuery.data, accountDebtQuery.data, futuresOrders, perps, positions]);
+  }, [address, balanceQuery.data, accountDebtQuery.data, futuresQuery.data, futuresOrders, perps, positions]);
 
   return {
     snapshot,
+    markRanges,
     // The venues no longer expose `decimals()`; the collateral token is fixed
     // per deployment, so it comes from config rather than an extra RPC hop.
     tokenDecimals: PAYMENT_TOKEN_DECIMALS,
@@ -252,7 +302,8 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
       perpsQuery.isLoading ||
       aggregatesQuery.isLoading ||
       settlementQuery.isLoading ||
-      orderAggregatesQuery.isLoading,
+      orderAggregatesQuery.isLoading ||
+      markRangesQuery.isLoading,
     isError:
       balanceQuery.isError ||
       accountDebtQuery.isError ||
@@ -260,7 +311,8 @@ export function usePortfolioSnapshot(address: `0x${string}` | undefined) {
       perpsQuery.isError ||
       aggregatesQuery.isError ||
       settlementQuery.isError ||
-      orderAggregatesQuery.isError,
+      orderAggregatesQuery.isError ||
+      markRangesQuery.isError,
   };
 }
 
@@ -281,8 +333,9 @@ function readFuturesOrders(
   wave1: ReadResult[] | undefined,
   orderReads: ReadResult[] | undefined,
   orderExpirationAts: readonly bigint[] | undefined,
+  markRanges: ReadonlyMap<bigint, MarkRange>,
 ): FuturesRestingOrders[] | undefined {
-  if (!allSucceeded(wave1, 3) || orderExpirationAts === undefined) return undefined;
+  if (!allSucceeded(wave1, 4) || orderExpirationAts === undefined) return undefined;
   const count = orderExpirationAts.length;
   if (count === 0) return [];
 
@@ -295,6 +348,7 @@ function readFuturesOrders(
     if (aggregate.buyQty === 0n && aggregate.sellQty === 0n) continue;
     books.push({
       ...moments(aggregate),
+      ...markRanges.get(orderExpirationAts[i]),
       expirationAt: orderExpirationAts[i],
       settlementPrice: values[count + i] as bigint,
     });
@@ -317,11 +371,17 @@ function readPerps(
 
   if (!hasPerps) return { perp: flat, perpQuantityDecimals: undefined };
 
-  const values = allSucceeded(results, 4);
+  const values = allSucceeded(results?.slice(0, 4), 4);
   if (!values) return undefined;
 
   const position = values[0] as { netQuantity: bigint; netEntryValue: bigint };
   const risk = values[1] as RiskView;
+  const orders = values[2] as RestingOrders;
+  // The mark and drift matter only to an account trading perps; a failed read (a stale
+  // feed) must not block one that does not.
+  const trades = position.netQuantity !== 0n || orders.buyQty !== 0n || orders.sellQty !== 0n;
+  const marks = allSucceeded(results?.slice(4), 2);
+  if (trades && !marks) return undefined;
   const absNetQuantity =
     position.netQuantity < 0n ? -position.netQuantity : position.netQuantity;
   const absNetEntryValue =
@@ -332,9 +392,11 @@ function readPerps(
       netQty: position.netQuantity,
       entryPrice:
         absNetQuantity === 0n ? 0n : (absNetEntryValue * 1_000_000n) / absNetQuantity,
-      orders: moments(values[2] as RestingOrders),
+      orders: moments(orders),
       // The engine only counts funding the user owes.
       fundingOwed: risk.pendingFunding > 0n ? risk.pendingFunding : 0n,
+      mark: marks?.[0] as bigint | undefined,
+      pendingDrift: marks?.[1] as bigint | undefined,
     },
     perpQuantityDecimals: Number(values[3]),
   };
@@ -345,6 +407,7 @@ function readPositions(
   aggregates: ReadResult[] | undefined,
   settlements: ReadResult[] | undefined,
   expirationAts: readonly bigint[] | undefined,
+  markRanges: ReadonlyMap<bigint, MarkRange>,
 ): AccountSnapshot["futures"]["positions"] | undefined {
   if (!expirationAts) return undefined;
   if (expirationAts.length === 0) return [];
@@ -361,6 +424,7 @@ function readPositions(
     };
     if (netQuantity === 0n) continue;
     result.push({
+      ...markRanges.get(expirationAts[i]),
       expirationAt: expirationAts[i],
       netQuantity,
       netEntryValue,
@@ -368,6 +432,23 @@ function readPositions(
     });
   }
   return result;
+}
+
+/// Each held or listed expiry's mark range, keyed by expiry.
+function readMarkRanges(
+  results: ReadResult[] | undefined,
+  expirationAts: readonly bigint[] | undefined,
+): ReadonlyMap<bigint, MarkRange> | undefined {
+  if (expirationAts === undefined) return undefined;
+  const ranges = new Map<bigint, MarkRange>();
+  if (expirationAts.length === 0) return ranges;
+  const values = allSucceeded(results, expirationAts.length);
+  if (!values) return undefined;
+  for (const [i, expirationAt] of expirationAts.entries()) {
+    const [low, high] = values[i] as readonly [bigint, bigint];
+    ranges.set(expirationAt, { low, high });
+  }
+  return ranges;
 }
 
 function allSucceeded(results: ReadResult[] | undefined, expected: number): unknown[] | undefined {

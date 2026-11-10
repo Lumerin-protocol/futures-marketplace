@@ -21,9 +21,10 @@ import {
   readPositiveInteger,
 } from "./lib/order-aggregate-cache.ts";
 import { assertNoRestingOrders, legsWithOrders } from "./lib/resting-orders.ts";
+import { resolveBookLib } from "./lib/book-lib.ts";
 
 const DEFAULT_SAFE_GAS_OVERHEAD = 150_000n;
-const TARGET_CODE_VERSION = "6.15.4";
+const TARGET_CODE_VERSION = "6.18.1";
 const UPGRADE_CONFIRMATIONS = 5;
 // 6.10 starts a new resting-order aggregate, so orders placed before it must not survive the
 // upgrade. With the shared vault halted, the upgrade call is `forceCancelOrders` on every
@@ -43,6 +44,9 @@ async function main() {
   const futuresAddress = requireAddress("FUTURES_ADDRESS");
   const SAFE_OWNER_ADDRESS = readOptionalAddress("SAFE_OWNER_ADDRESS");
   const vaultAddress = requireAddress("VAULT_ADDRESS");
+  // 6.17 adds the mark oracle (`HashpriceGlideUSD`) with an empty slot: every mark read reverts
+  // until `setOracle` adopts it, which this script does right after the upgrade, still halted.
+  const markOracleAddress = requireAddress("MARK_ORACLE_ADDRESS");
   const marginEngineAddress = readOptionalAddress("MARGIN_ENGINE_ADDRESS");
   const pointsHookAddress =
     readOptionalAddress("POINTS_HOOK_ADDRESS") ?? readOptionalAddress("HOOK_ADDRESS");
@@ -140,13 +144,16 @@ async function main() {
     contract: "HashPowerFutures",
   });
   await logPrompt("Proceed?");
+  const libraries = await resolveBookLib(viem, UPGRADE_CONFIRMATIONS);
   const futuresImpl = await viem.deployContract("HashPowerFutures", [vaultAddress], {
     confirmations: UPGRADE_CONFIRMATIONS,
+    libraries,
   });
 
   logStep("Deployed", addrUrl(pc, futuresImpl.address));
   const verified = await verifyContract(futuresImpl.address, [vaultAddress], undefined, {
     contract: "contracts/HashPowerFutures.sol:HashPowerFutures",
+    libraries,
   });
   if (!verified) {
     throw new Error(`Basescan did not verify implementation ${futuresImpl.address}`);
@@ -237,6 +244,18 @@ async function main() {
     logStep("Safe TX hash", txHash);
     logStep("Safe UI URL", safe.getSafeUITxUrl(txHash));
 
+    const setOracleTxHash = await safe.proposeTransaction({
+      data: encodeFunctionData({
+        abi: futuresImpl.abi,
+        functionName: "setOracle",
+        args: [markOracleAddress],
+      }),
+      to: futuresAddress,
+      value: "0",
+      operation: OperationType.Call,
+    });
+    logStep(`setOracle(${markOracleAddress})`, safe.getSafeUITxUrl(setOracleTxHash));
+
     for (const [i, batch] of followUpBatches.entries()) {
       const cancelTxHash = await safe.proposeTransaction({
         data: encodeFunctionData({
@@ -323,7 +342,15 @@ async function main() {
         `Proxy VERSION at block ${receipt.blockNumber} is ${upgradedVersion}, expected ${TARGET_CODE_VERSION}`,
       );
     }
-    let verifyBlock = receipt.blockNumber;
+    const setOracleTx = await upgraded.write.setOracle([markOracleAddress]);
+    const setOracleReceipt = await pc.waitForTransactionReceipt({ hash: setOracleTx });
+    if (setOracleReceipt.status !== "success") {
+      throw new Error(`setOracle reverted: ${txUrl(pc, setOracleReceipt.transactionHash)}`);
+    }
+    logStep(`setOracle(${markOracleAddress})`, txUrl(pc, setOracleReceipt.transactionHash));
+    logStep("HASHPRICE_USD", await upgraded.read.priceOracle());
+
+    let verifyBlock = setOracleReceipt.blockNumber;
     for (const [i, batch] of followUpBatches.entries()) {
       const cancelTx = await upgraded.write.forceCancelOrders(batch);
       const cancelReceipt = await pc.waitForTransactionReceipt({ hash: cancelTx });

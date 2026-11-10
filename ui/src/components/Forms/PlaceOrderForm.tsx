@@ -264,7 +264,7 @@ export const PlaceOrderForm: FC<Props> = ({
       reservedFee = feeFor(notional);
     }
 
-    const book: OrderBook = venue === "perps" ? { venue } : { venue, expirationAt };
+    const book: OrderBook = orderMargin.withMarks(venue === "perps" ? { venue } : { venue, expirationAt });
     return orderMargin.quote(
       { place: [{ ...book, price, quantity: isBuy ? nativeQty : -nativeQty }] },
       { reservedFee },
@@ -276,6 +276,7 @@ export const PlaceOrderForm: FC<Props> = ({
     restingQuantity,
     isBuy,
     orderMargin.quote,
+    orderMargin.withMarks,
     perpsCollection?.makerFeeBps,
     perpsCollection?.takerFeeBps,
     feeFor,
@@ -335,7 +336,7 @@ export const PlaceOrderForm: FC<Props> = ({
     const scale = venue === "perps" ? QUANTITY_SCALE_NUM : 1;
     const nativeQty = BigInt(Math.round(restingQuantity * scale));
     if (nativeQty === 0n) return undefined;
-    const book: OrderBook = venue === "perps" ? { venue } : { venue, expirationAt };
+    const book: OrderBook = orderMargin.withMarks(venue === "perps" ? { venue } : { venue, expirationAt });
     const leg: OrderLeg = { ...book, price, quantity: isBuy ? nativeQty : -nativeQty };
     const expiry = venue === "futures" ? expirationAt : undefined;
 
@@ -370,6 +371,7 @@ export const PlaceOrderForm: FC<Props> = ({
     isBuy,
     expirationAt,
     reservedFee,
+    orderMargin.withMarks,
   ]);
   const availableBefore = fillPreview?.before.available;
 

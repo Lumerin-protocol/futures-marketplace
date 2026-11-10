@@ -2,13 +2,15 @@
 pragma solidity ^0.8.20;
 
 import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import { StructuredLinkedList } from "solidity-linked-list/contracts/StructuredLinkedList.sol";
 import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
 import { ILinearMarket } from "collateral-margin/contracts/contracts/interfaces/ILinearMarket.sol";
 import { MathLib as M } from "./libs/MathLib.sol";
+import { FuturesBookLib } from "./libs/FuturesBookLib.sol";
+import { IMarkRangeOracle } from "./interfaces/IMarkRangeOracle.sol";
 import { HashPowerFuturesBase } from "./HashPowerFuturesBase.sol";
 import { HashPowerFuturesAdmin } from "./HashPowerFuturesAdmin.sol";
+import { HashPowerFuturesAdminModule } from "./HashPowerFuturesAdminModule.sol";
 
 /// @title HashPowerFutures — cash-settled hashrate futures CLOB (v3: aggregate positions + qty-bearing orders)
 /// @dev The permissionless surface: trading, liquidation and views. Storage and internal
@@ -22,13 +24,13 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev Lives here rather than in {HashPowerFuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `HashPowerFutures.sol` to require a bump.
-    string public constant VERSION = "6.15.4";
+    string public constant VERSION = "6.18.1";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) { }
+    constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) HashPowerFuturesAdmin(_vault) { }
 
     function initialize(
-        AggregatorV3Interface _priceOracle,
+        IMarkRangeOracle _oracle,
         uint8 _liquidationMarginPercent,
         uint8 _futureExpirationDatesCount,
         uint256 _firstFutureExpirationDate
@@ -39,12 +41,27 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
 
         __Ownable_init(_msgSender());
         __UUPSUpgradeable_init();
-        setOracle(_priceOracle);
+        _delegateCallAdminModule(abi.encodeCall(HashPowerFuturesAdminModule.setOracle, (_oracle)));
         liquidationMarginPercent = _liquidationMarginPercent;
         futureExpirationDatesCount = _futureExpirationDatesCount;
         firstFutureExpirationDate = _firstFutureExpirationDate;
         emit LiquidationMarginPercentUpdated(_liquidationMarginPercent);
         emit FutureExpirationDatesCountUpdated(_futureExpirationDatesCount);
+
+        // The delivery chain starts on the plain grid and the first window is pinned at once, so
+        // `getExpirationDates()` is final from the first block.
+        if (_firstFutureExpirationDate > type(uint64).max) {
+            revert ValueOutOfRange(0, int256(uint256(type(uint64).max)));
+        }
+        uint64 first = uint64(_firstFutureExpirationDate);
+        expirySchedule = ExpirySchedule({
+            pinnedCount: 0,
+            anchorSlot: 0,
+            anchorTime: first,
+            prevAnchorSlot: 0,
+            prevAnchorTime: first
+        });
+        _pinDue();
     }
 
     // ── Order placement ───────────────────────────────────────────────────────
@@ -57,6 +74,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     ///      taker must pay any realized loss in full.
     function createOrder(uint256 _price, uint256 _expirationAt, int256 _quantity, TimeInForce _tif) external {
         _requireTradingOpen();
+        _pinDue();
         address sender = _msgSender();
         _validateOrderIntent(_price, _expirationAt, _quantity, _tif);
         uint256 maxAllowedIm;
@@ -77,6 +95,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     ///      a no-op transaction.
     function createOrders(OrderIntent[] calldata _intents) external {
         _requireTradingOpen();
+        _pinDue();
         uint256 len = _intents.length;
         if (len == 0) revert EmptyBatch();
         address sender = _msgSender();
@@ -105,7 +124,10 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         ReduceIntent[] calldata _reduces,
         OrderIntent[] calldata _intents
     ) external {
-        if (_intents.length != 0) _requireTradingOpen();
+        if (_intents.length != 0) {
+            _requireTradingOpen();
+            _pinDue();
+        }
         address sender = _msgSender();
         uint256 cancelLen = _cancelIds.length;
         for (uint256 i = 0; i < cancelLen; i++) {
@@ -132,21 +154,11 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         _cancelOrder(_msgSender(), _orderId);
     }
 
-    /// @notice Optionally close expired resting orders in one maintenance transaction.
-    /// @dev Missing, already-closed and not-yet-expired ids are skipped so concurrent
-    ///      callers cannot revert unrelated cleanup work. No protocol path calls this
-    ///      automatically; expired orders are inert and do not consume future delivery caps.
+    /// @notice See {HashPowerFuturesAdminModule-removeOutdatedOrders}. Permissionless; runs in the
+    ///         module by delegatecall (a maintenance call, so the hop's gas is immaterial).
     function removeOutdatedOrders(bytes32[] calldata _orderIds) external returns (uint256 removed) {
-        uint256 len = _orderIds.length;
-        for (uint256 i = 0; i < len; i++) {
-            bytes32 orderId = _orderIds[i];
-            Order storage order = orders[orderId];
-            if (order.participant == address(0) || order.quantity == 0 || order.expirationAt >= block.timestamp) {
-                continue;
-            }
-            _dropRestingOrder(orderId, true);
-            removed++;
-        }
+        (_orderIds, removed);
+        _delegateToAdminModule();
     }
 
     /// @dev Validated per-leg body of `createOrder` / `createOrders` without the IM-check epilogue.
@@ -236,120 +248,36 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         return count != 0;
     }
 
-    /// @notice Cancel one resting order of an underwater participant, charging the liquidation fee.
+    // Liquidation bodies live in the admin module (reached by delegatecall, in this contract's
+    // storage) so the venue fits EIP-170; the hop costs about 2.6k gas on a liquidation, a keeper
+    // path. Each stub keeps its ABI.
+
+    /// @notice See {HashPowerFuturesAdminModule-liquidateOrder}.
     function liquidateOrder(address _user, bytes32 _orderId) external {
-        if (_user == BACKSTOP) revert BackstopAccount();
-        if (!_underwater(_user)) revert NotLiquidatable();
-        Order storage order = orders[_orderId];
-        if (order.participant != _user) revert OrderNotBelongToUser();
-        if (order.quantity == 0) revert OrderNotExists();
-        _doLiquidateOrder(_user, _orderId, order);
+        (_user, _orderId);
+        _delegateToAdminModule();
     }
 
-    /// @notice Cancel keeper-chosen resting orders. Keeps prior cancels; skips
-    ///         raced/stale ids; stops when the user is healthy.
+    /// @notice See {HashPowerFuturesAdminModule-liquidateOrders}.
     function liquidateOrders(address _user, bytes32[] calldata _orderIds) external {
-        if (_user == BACKSTOP) revert BackstopAccount();
-        uint256 cancelled = 0;
-        uint256 len = _orderIds.length;
-        for (uint256 i = 0; i < len; i++) {
-            bytes32 orderId = _orderIds[i];
-            Order storage order = orders[orderId];
-            // Skip raced/stale ids before the expensive portfolio MM check.
-            if (order.participant != _user || order.quantity == 0) continue;
-            if (!_underwater(_user)) break;
-            _doLiquidateOrder(_user, orderId, order);
-            cancelled++;
-        }
-        if (cancelled == 0) revert NotLiquidatable();
-    }
-
-    function _underwater(address _participant) internal view returns (bool) {
-        return _vaultBalance(_participant) < portfolioMargin.computePortfolioMM(_participant);
-    }
-
-    function _doLiquidateOrder(address _user, bytes32 _orderId, Order storage _order) internal {
-        uint256 orderNotional = _order.price * M.abs(_order.quantity);
-        _dropRestingOrder(_orderId, true);
-
-        uint256 liqFee = _chargeLiquidationFee(_user, orderNotional);
-
-        emit OrderLiquidated(_orderId, _user, _msgSender(), liqFee);
-        _notifyLiquidation(_msgSender(), liqFee);
+        (_user, _orderIds);
+        _delegateToAdminModule();
     }
 
     // ── Position liquidation ──────────────────────────────────────────────────
 
-    /// @notice Force-close up to `closeQty` contracts of an underwater user's net at `expirationAt`.
-    /// @dev Orders-first, portfolio-wide: any resting order delta at any venue gates this call,
-    ///      not just this book's. Keeper sizes `closeQty` off-chain; the end-of-call
-    ///      `OverLiquidation` guard reverts if leftover balance sits above IM while a real
-    ///      IM>MM buffer exists. The guard runs after full closes too — a full close of one
-    ///      expiry is still a partial close of the portfolio — but it is vacuous once no
-    ///      portfolio risk remains (IM == MM == 0), which is the bad-debt / deep-underwater path.
+    /// @notice See {HashPowerFuturesAdminModule-liquidatePosition}.
     function liquidatePosition(address _user, uint256 _expirationAt, uint256 _closeQty) external {
-        uint256 mark = _liquidationPreflight(_user);
-        if (_closeQty == 0) revert InvalidQty();
-        // A matured leg is worth its settlement price, not the live mark; `settlePosition` closes it.
-        if (block.timestamp >= _expirationAt) revert PositionMatured();
-
-        int256 netQty = participantExpirationAtNetDelta[_user][_expirationAt];
-        if (netQty == 0) revert NotLiquidatable();
-
-        if (!_closePosition(_user, _expirationAt, netQty, _closeQty, mark)) revert NotLiquidatable();
+        (_user, _expirationAt, _closeQty);
+        _delegateToAdminModule();
     }
 
-    /// @notice Batch liquidate across expiries. Keeper chooses legs; keeps prior closes.
-    /// @dev Skips empty and matured legs; stops when healthy. End-of-tx `OverLiquidation` if oversize.
+    /// @notice See {HashPowerFuturesAdminModule-liquidatePositions}.
     function liquidatePositions(address _user, uint256[] calldata _expirationAts, uint256[] calldata _closeQtys)
         external
     {
-        if (_expirationAts.length != _closeQtys.length) revert ArrayLengthMismatch();
-        uint256 mark = _liquidationPreflight(_user);
-
-        uint256 closed = 0;
-        for (uint256 i = 0; i < _expirationAts.length; i++) {
-            if (!_underwater(_user)) break;
-            uint256 expirationAt = _expirationAts[i];
-            uint256 closeQty = _closeQtys[i];
-            int256 netQty = participantExpirationAtNetDelta[_user][expirationAt];
-            // Skip empty/stale/matured legs; stop only once healthy.
-            if (netQty == 0 || closeQty == 0 || block.timestamp >= expirationAt) continue;
-            if (!_closePosition(_user, expirationAt, netQty, closeQty, mark)) continue;
-            closed++;
-        }
-
-        if (closed == 0) revert NotLiquidatable();
-    }
-
-    /// @dev Shared gate for position liquidation: not the backstop, orders-first, underwater.
-    ///      Returns the live mark so callers read the oracle once.
-    function _liquidationPreflight(address _user) internal view returns (uint256 mark) {
-        if (_user == BACKSTOP) revert BackstopAccount();
-        if (portfolioMargin.hasRestingOrderDelta(_user)) revert OrdersStillOpen();
-        if (!_underwater(_user)) revert NotLiquidatable();
-        mark = _marketPrice();
-    }
-
-    /// @dev Close up to `_closeQty` at `_expirationAt`. Returns false when no positive close.
-    ///      Runs the portfolio OverLiquidation guard before emit/notify so an oversize close
-    ///      does not pay log/hook gas on the revert path (matches Perps).
-    function _closePosition(address _user, uint256 _expirationAt, int256 _netQty, uint256 _closeQty, uint256 _mark)
-        internal
-        returns (bool)
-    {
-        uint256 closeAbs = M.min(_closeQty, M.abs(_netQty));
-        if (closeAbs == 0) return false;
-
-        // Full and partial closes share `_applyFill`, which zeroes the leg when `closeAbs == |net|`.
-        int256 signedClose = M.toSigned(_netQty > 0, closeAbs);
-        int256 pnl = _closeToBackstop(_user, _expirationAt, signedClose, _mark);
-        uint256 liqFee = _chargeLiquidationFee(_user, _mark * closeAbs);
-
-        _revertIfOverLiquidated(_user);
-        emit PositionLiquidated(_user, _msgSender(), _expirationAt, signedClose, pnl, liqFee);
-        _notifyLiquidation(_msgSender(), liqFee);
-        return true;
+        (_user, _expirationAts, _closeQtys);
+        _delegateToAdminModule();
     }
 
     // ── Backstop unwind ───────────────────────────────────────────────────────
@@ -363,6 +291,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     ///      the fee pot balance. Matured backstop legs go through `settlePosition` instead.
     function unwindBackstop(uint256 _expirationAt, uint256 _qty) external {
         _requireTradingOpen();
+        _pinDue();
         if (!_isActiveExpirationAt(_expirationAt)) revert ExpirationDateNotAvailable();
         if (_qty == 0) revert InvalidQty();
         int256 net = participantExpirationAtNetDelta[BACKSTOP][_expirationAt];
@@ -370,7 +299,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
 
         bool isBuy = net < 0;
         uint256 closeAbs = M.min(_qty, M.abs(net));
-        uint256 mark = _marketPrice();
+        uint256 mark = _sideMark(_expirationAt, net > 0);
         (uint16 bandBps, uint16 feeBps) = vault.backstopParams();
         uint256 limit = _bandPrice(mark, isBuy, bandBps);
         if (limit == 0) revert InvalidPrice();
@@ -391,52 +320,27 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         emit BackstopUnwound(_msgSender(), _expirationAt, M.toSigned(isBuy, filledAbs), fee);
     }
 
-    /// @dev With remaining portfolio risk and a real IM>MM buffer, balance must be ≤ IM.
-    function _revertIfOverLiquidated(address _user) internal view {
-        (uint256 im, uint256 mm) = portfolioMargin.computePortfolioMargins(_user);
-        if (im > mm && _vaultBalance(_user) > im) revert OverLiquidation();
-    }
-
     // ── Settlement ────────────────────────────────────────────────────────────
+    //
+    // Permissionless, run by the keeper once per matured expiry; the bodies live in the admin
+    // module (reached by delegatecall, in this contract's storage) so the venue fits EIP-170.
 
-    /// @notice Permissionlessly pin the settlement price for a matured expiry.
+    /// @notice See {HashPowerFuturesAdminModule-recordSettlementPrice}.
     function recordSettlementPrice(uint256 expirationAt) external returns (uint256 price) {
-        if (block.timestamp < expirationAt) revert SettlementDateNotReached();
-        return _ensureSettlementPrice(expirationAt);
+        (expirationAt, price);
+        _delegateToAdminModule();
     }
 
-    /// @notice Cash-settle a matured aggregate position at the pinned settlement price.
-    function settlePosition(address _user, uint256 _expirationAt) public {
-        if (block.timestamp < _expirationAt) revert PositionExpirationNotStartedYet();
-        int256 netQty = participantExpirationAtNetDelta[_user][_expirationAt];
-        if (netQty == 0) revert PositionNotExists();
-
-        uint256 price = _ensureSettlementPrice(_expirationAt);
-        // A full opposite fill at the pinned price: realizes `price * net - entry` against the fund
-        // and zeroes the leg, the same arithmetic this function used to spell out.
-        int256 pnl = _applyFill(_user, -netQty, price, _expirationAt, false);
-
-        emit PositionSettled(_user, _expirationAt, netQty, pnl, price, _msgSender());
+    /// @notice See {HashPowerFuturesAdminModule-settlePosition}.
+    function settlePosition(address _user, uint256 _expirationAt) external {
+        (_user, _expirationAt);
+        _delegateToAdminModule();
     }
 
-    /// @notice Cash-settle a batch of (user, expiry) pairs. Reverts if any leg is unsettleable.
+    /// @notice See {HashPowerFuturesAdminModule-settlePositions}.
     function settlePositions(address[] calldata _users, uint256[] calldata _expirationAts) external {
-        if (_users.length != _expirationAts.length) revert ArrayLengthMismatch();
-        for (uint256 i = 0; i < _users.length; i++) {
-            settlePosition(_users[i], _expirationAts[i]);
-        }
-    }
-
-    /// @dev Pins the settlement price for `expirationAt` on first call; idempotent thereafter.
-    function _ensureSettlementPrice(uint256 expirationAt) internal returns (uint256) {
-        uint256 price = settlementPrice[expirationAt];
-        if (price == 0) {
-            price = _marketPrice();
-            if (price == 0) revert InvalidPrice();
-            settlementPrice[expirationAt] = price;
-            emit SettlementPriceRecorded(expirationAt, price, _msgSender());
-        }
-        return price;
+        (_users, _expirationAts);
+        _delegateToAdminModule();
     }
 
     // ── Views ─────────────────────────────────────────────────────────────────
@@ -482,126 +386,172 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         return participantActiveExpirationAts[_user].values();
     }
 
-    /// @dev Collect mark-independent position inputs. Future expiries cannot have a pinned
-    ///      settlement price, so their settlement slots are not touched. All unpinned
-    ///      positions share one live mark and can be collapsed before pricing.
-    function _positionRiskInputs(address _participant)
-        private
-        view
-        returns (int256 liveDelta, int256 liveEntryValue, int256 pinnedPnl)
-    {
-        EnumerableSet.UintSet storage dates = participantActiveExpirationAts[_participant];
-        uint256 len = dates.length();
-        for (uint256 i = 0; i < len;) {
-            uint256 date = dates.at(i);
-            int256 dateDelta = participantExpirationAtNetDelta[_participant][date];
-            int256 entryValue = participantExpirationAtNetEntryValue[_participant][date];
-            uint256 pinnedPrice = date <= block.timestamp ? settlementPrice[date] : 0;
-            if (pinnedPrice != 0) {
-                pinnedPnl += int256(pinnedPrice) * dateDelta - entryValue;
-            } else {
-                liveDelta += dateDelta;
-                liveEntryValue += entryValue;
-            }
-            unchecked {
-                ++i;
-            }
-        }
-    }
-
-    /// @notice ILinearMarket: all per-user margin inputs in a single call (saves the
-    ///         portfolio margin engine external-call gas). One loop computes both the
-    ///         live-position delta and the mark-to-market PnL; a second aggregates the
-    ///         resting book into per-side delta and instant fill loss.
-    /// @dev Resting orders no longer carry their own margin figure sized off
-    ///      `liquidationMarginPercent`. The engine's `imSpotShock` sizes them, applied to
-    ///      order delta netted into portfolio net delta — the parameterization change
-    ///      accepted when both venues migrated together. The per-expiry reduce credits are
-    ///      gone with it: netting at the engine is exact and cross-product, and covers the
-    ///      case a venue-local credit cannot, where the offsetting position sits elsewhere.
-    function getRiskView(address _participant) external view returns (ILinearMarket.RiskView memory view_) {
-        (int256 liveDelta, int256 liveEntryValue, int256 pinnedPnl) = _positionRiskInputs(_participant);
-        uint256 livePrice = liveDelta != 0 ? getMarketPrice() : 0;
+    /// @dev The resting book per side: quantity (contracts), instant fill loss and exposure
+    ///      (token decimals), each expiry priced at its pinned settlement or its mark range.
+    struct RestingRisk {
         uint256 buyQty;
         uint256 sellQty;
-        (buyQty, sellQty, view_.buyOrderFillLoss, view_.sellOrderFillLoss, livePrice) =
-            _restingRiskInputs(_participant, livePrice);
+        uint256 buyLoss;
+        uint256 sellLoss;
+        uint256 buyExposure;
+        uint256 sellExposure;
+    }
 
+    /// @dev Live positions summed: delta (contracts) and exposure (token decimals) at their marks.
+    struct PositionRisk {
+        int256 liveDelta;
+        int256 liveExposure;
+        int256 unrealizedPnl;
+    }
+
+    /// @notice ILinearMarket: all per-user margin inputs in a single call, with live
+    ///         positions and resting orders valued at each expiry's mark.
+    /// @dev The engine reads this and shocks the exposure by a percentage, so a mark need not be
+    ///      the index it stresses: a date settling after a halving is worth about half of it.
+    function getExposureView(address _participant)
+        external
+        view
+        returns (ILinearMarket.ExposureView memory view_)
+    {
+        (PositionRisk memory positions, RestingRisk memory resting) = _riskInputs(_participant, true);
+        view_.netPositionExposure = positions.liveExposure;
+        view_.unrealizedPnl = positions.unrealizedPnl;
+        view_.buyOrderExposure = resting.buyExposure;
+        view_.sellOrderExposure = resting.sellExposure;
+        view_.buyOrderFillLoss = resting.buyLoss;
+        view_.sellOrderFillLoss = resting.sellLoss;
+    }
+
+    /// @notice ILinearMarket: all per-user margin inputs in a single call, with deltas in
+    ///         contracts.
+    /// @dev Deprecated for margin: the engine reads `getExposureView`, and this only for a venue
+    ///      without it, valuing the deltas at its index.
+    function getRiskView(address _participant) external view returns (ILinearMarket.RiskView memory view_) {
+        (PositionRisk memory positions, RestingRisk memory resting) = _riskInputs(_participant, true);
         uint256 scale = 10 ** collateralDecimals;
-        view_.netPositionDelta = liveDelta * int256(scale);
-        view_.unrealizedPnl = pinnedPnl + int256(livePrice) * liveDelta - liveEntryValue;
-        view_.buyOrderDelta = buyQty * scale;
-        view_.sellOrderDelta = sellQty * scale;
+        view_.netPositionDelta = positions.liveDelta * int256(scale);
+        view_.unrealizedPnl = positions.unrealizedPnl;
+        view_.buyOrderDelta = resting.buyQty * scale;
+        view_.sellOrderDelta = resting.sellQty * scale;
+        view_.buyOrderFillLoss = resting.buyLoss;
+        view_.sellOrderFillLoss = resting.sellLoss;
     }
 
-    /// @notice Resting order quantity per side and the instant fill loss if any subset of it
-    ///         fills (token decimals).
-    /// @dev One pass over the fixed currently tradable delivery window. Historical
-    ///      aggregates are never traversed and therefore cannot increase margin-call gas.
-    ///
-    ///      The fill loss is bounded per expiry at that expiry's price (pinned settlement or
-    ///      live mark) and summed, never netted across orders: fills go best price first, so
-    ///      a deep order must never offset a marketable one's loss. The live mark is read
-    ///      only once a live exposure is found, and returned for reuse.
-    function _restingRiskInputs(address _participant, uint256 _livePrice)
-        private
-        view
-        returns (uint256 buyQty, uint256 sellQty, uint256 buyLoss, uint256 sellLoss, uint256 livePrice)
-    {
-        livePrice = _livePrice;
-        (uint256[] memory expirationAts, uint256 activeCount) = _activeOrderExpirations(_participant);
-        for (uint256 i = 0; i < activeCount;) {
-            uint256 expirationAt = expirationAts[i];
-            RestingOrderAggregate storage aggregate =
-                participantExpirationAtRestingOrderAggregate[_participant][expirationAt];
-            buyQty += aggregate.buyQty;
-            sellQty += aggregate.sellQty;
-
-            uint256 price = expirationAt <= block.timestamp ? settlementPrice[expirationAt] : 0;
-            if (price == 0) {
-                if (livePrice == 0) livePrice = getMarketPrice();
-                price = livePrice;
-            }
-            (uint256 expBuyLoss, uint256 expSellLoss) = _expirationFillLoss(_participant, expirationAt, price);
-            buyLoss += expBuyLoss;
-            sellLoss += expSellLoss;
-            unchecked {
-                ++i;
-            }
-        }
-    }
-
-    /// @dev Fill-loss bound of one expiry's resting book at `_price`, per side.
-    function _expirationFillLoss(address _participant, uint256 _expirationAt, uint256 _price)
-        private
-        view
-        returns (uint256 buyLoss, uint256 sellLoss)
-    {
-        RestingOrderAggregate storage aggregate =
-            participantExpirationAtRestingOrderAggregate[_participant][_expirationAt];
-        buyLoss = M.fillLossBound(aggregate.buyQty, aggregate.buyPQ, aggregate.buyP2Q, _price, true);
-        sellLoss = M.fillLossBound(aggregate.sellQty, aggregate.sellPQ, aggregate.sellP2Q, _price, false);
-    }
-
-    /// @notice Mark-to-market PnL across active expiries, in collateral token units.
-    ///         Settled-but-unswept expiries are marked at their pinned settlement price.
+    /// @notice Mark-to-market PnL across active expiries, in collateral token units: live expiries
+    ///         at their marks (longs at the low mark, shorts at the high), settled-but-unswept ones
+    ///         at their pinned settlement price.
     function getUnrealizedPnl(address _participant) external view returns (int256) {
-        (int256 liveDelta, int256 liveEntryValue, int256 pinnedPnl) = _positionRiskInputs(_participant);
-        uint256 livePrice = liveDelta != 0 ? getMarketPrice() : 0;
-        return pinnedPnl + int256(livePrice) * liveDelta - liveEntryValue;
+        (PositionRisk memory positions,) = _riskInputs(_participant, false);
+        return positions.unrealizedPnl;
     }
 
-    /// @notice The currently tradable expiration timestamps, earliest first.
-    function getExpirationDates() external view returns (uint256[] memory) {
-        uint256 currentExpirationDateIndex = _getCurrentExpirationAtIndex();
-        uint256[] memory expirationDatesArray = new uint256[](futureExpirationDatesCount);
-        for (uint256 i = 0; i < futureExpirationDatesCount;) {
-            expirationDatesArray[i] = _activeExpirationAt(currentExpirationDateIndex, i);
-            unchecked {
-                ++i;
-            }
+    /// @notice The mark range of `_expirationAt` in collateral token units: longs and bids are valued
+    ///         at `low`, shorts and asks at `high` (both the index mark without a mark oracle).
+    function getMarkRange(uint256 _expirationAt) external view returns (uint256 low, uint256 high) {
+        return _markRange(_expirationAt);
+    }
+
+    /// @dev One mark read for every live expiry the account holds or rests orders on, then one
+    ///      loop over positions and one over the resting book. Resting orders carry no margin
+    ///      figure of their own: the engine's `imSpotShock` sizes them, netted into the portfolio —
+    ///      exact and cross-product, covering the case a venue-local reduce credit cannot, where
+    ///      the offsetting position sits elsewhere. The fill loss is bounded per expiry (bids at
+    ///      the low mark, asks at the high, since a filled bid is a long) and summed, never netted
+    ///      across orders: fills go best price first, so a deep order must never offset a
+    ///      marketable one's loss. One pass over the tradable window: historical aggregates are
+    ///      never traversed.
+    function _riskInputs(address _participant, bool _withOrders)
+        private
+        view
+        returns (PositionRisk memory positions, RestingRisk memory resting)
+    {
+        EnumerableSet.UintSet storage dates = participantActiveExpirationAts[_participant];
+        uint256 positionCount = dates.length();
+        uint256[] memory orderDates;
+        uint256 orderCount;
+        if (_withOrders) (orderDates, orderCount) = _activeOrderExpirations(_participant);
+
+        uint256[] memory live = new uint256[](positionCount + orderCount);
+        uint256 liveCount;
+        for (uint256 i = 0; i < positionCount; i++) {
+            uint256 date = dates.at(i);
+            if (_pinnedPrice(date) == 0) live[liveCount++] = date;
         }
-        return expirationDatesArray;
+        for (uint256 i = 0; i < orderCount; i++) {
+            if (_pinnedPrice(orderDates[i]) == 0) live[liveCount++] = orderDates[i];
+        }
+        assembly ("memory-safe") {
+            mstore(live, liveCount)
+        }
+        (uint256[] memory low, uint256[] memory high) = _markRanges(live);
+
+        uint256 k;
+        for (uint256 i = 0; i < positionCount; i++) {
+            uint256 date = dates.at(i);
+            int256 delta = participantExpirationAtNetDelta[_participant][date];
+            uint256 price = _pinnedPrice(date);
+            if (price == 0) {
+                price = delta > 0 ? low[k] : high[k];
+                k++;
+                positions.liveDelta += delta;
+                positions.liveExposure += delta * int256(price);
+            }
+            positions.unrealizedPnl +=
+                int256(price) * delta - participantExpirationAtNetEntryValue[_participant][date];
+        }
+        for (uint256 i = 0; i < orderCount; i++) {
+            uint256 date = orderDates[i];
+            RestingOrderAggregate storage aggregate = participantExpirationAtRestingOrderAggregate[_participant][date];
+            uint256 bidPrice = _pinnedPrice(date);
+            uint256 askPrice = bidPrice;
+            if (bidPrice == 0) {
+                (bidPrice, askPrice) = (low[k], high[k]);
+                k++;
+            }
+            resting.buyQty += aggregate.buyQty;
+            resting.sellQty += aggregate.sellQty;
+            resting.buyLoss += M.fillLossBound(aggregate.buyQty, aggregate.buyPQ, aggregate.buyP2Q, bidPrice, true);
+            resting.sellLoss +=
+                M.fillLossBound(aggregate.sellQty, aggregate.sellPQ, aggregate.sellP2Q, askPrice, false);
+            resting.buyExposure += aggregate.buyQty * bidPrice;
+            resting.sellExposure += aggregate.sellQty * askPrice;
+        }
+    }
+
+    /// @dev A matured expiry's pinned settlement price; 0 while it is live or not yet pinned.
+    function _pinnedPrice(uint256 _expirationAt) private view returns (uint256) {
+        return _expirationAt <= block.timestamp ? settlementPrice[_expirationAt] : 0;
+    }
+
+    /// @notice The currently tradable expiration timestamps, earliest first. A slot not pinned
+    ///         yet (only while no pin has run since it rolled in) shows the chain's date, which
+    ///         the pin may still move clear of the halving; see {pinExpiry}.
+    function getExpirationDates() external view returns (uint256[] memory) {
+        return _windowExpiries();
+    }
+
+    // ── Delivery schedule ─────────────────────────────────────────────────────
+
+    /// @dev Pin any unpinned slot of the tradable window (normally none: one read and a compare).
+    ///      The pinning itself runs in the admin module, so the hot paths carry only the check.
+    function _pinDue() internal {
+        if (_pinIsDue(expirySchedule)) {
+            _delegateCallAdminModule(abi.encodeCall(HashPowerFuturesAdminModule.pinWindow, ()));
+        }
+    }
+
+    /// @notice The schedule in one read: the first slot whose date is still ahead (the tradable
+    ///         window starts there), how many slots are pinned (`pinExpiry` pins this slot when it
+    ///         is at most one past the window), and the date that matured last (0 before the first).
+    function deliverySchedule()
+        external
+        view
+        returns (uint256 currentSlot, uint256 pinnedCount, uint256 previousExpiry)
+    {
+        ExpirySchedule memory s = expirySchedule;
+        currentSlot = _currentSlot(s);
+        pinnedCount = s.pinnedCount;
+        if (currentSlot != 0) previousExpiry = _expiryOfSlot(currentSlot - 1, s);
     }
 
     /// @notice Active bid/ask price levels for one expiration (bids high→low, asks low→high).
@@ -617,71 +567,30 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @notice Simulate a limit order: filled qty, VWAP, and remainder (view, no state change).
     /// @dev Skips own resting liquidity (matches on-match STP net-out). Self-trade is judged
     ///      against the caller, so simulating for another account requires setting the
-    ///      `eth_call` `from` field to that account.
+    ///      `eth_call` `from` field to that account. Served by {FuturesBookLib} (an external
+    ///      library linked at deploy) to keep the venue under EIP-170; off-chain callers only.
     function simulateOrder(uint256 _expirationAt, uint256 _price, int256 _quantity)
         external
         view
         returns (int256 filledQuantity, uint256 averageFillPrice, int256 remainingQuantity)
     {
-        if (_quantity == 0) return (0, 0, 0);
-
-        bool isBuy = _quantity > 0;
-        int256 remaining = _quantity;
-        uint256 totalNotional = 0;
-        uint256 totalFilledAbs = 0;
-        StructuredLinkedList.List storage oppositePrices =
-            isBuy ? activeAskPrices[_expirationAt] : activeBidPrices[_expirationAt];
-        (, uint256 currentPrice) = oppositePrices.getNextNode(0);
-
-        while (currentPrice != 0 && remaining != 0) {
-            if (isBuy && currentPrice > _price) break;
-            if (!isBuy && currentPrice < _price) break;
-
-            StructuredLinkedList.List storage orderQueue =
-                _expirationAtPriceOrderIds(_expirationAt, currentPrice, !isBuy);
-            (, uint256 orderIdUint) = orderQueue.getNextNode(0);
-
-            while (orderIdUint != 0 && remaining != 0) {
-                Order storage makerOrder = orders[bytes32(orderIdUint)];
-                // STP: own resting size would net out, not fill.
-                if (makerOrder.participant != _msgSender() && makerOrder.quantity != 0) {
-                    uint256 matchAmt = M.min(M.abs(makerOrder.quantity), M.abs(remaining));
-                    if (matchAmt > 0) {
-                        totalNotional += currentPrice * matchAmt;
-                        totalFilledAbs += matchAmt;
-                        remaining -= M.toSigned(isBuy, matchAmt);
-                    }
-                } else if (makerOrder.participant == _msgSender() && makerOrder.quantity != 0) {
-                    uint256 cancelAmt = M.min(M.abs(makerOrder.quantity), M.abs(remaining));
-                    remaining -= M.toSigned(isBuy, cancelAmt);
-                }
-                (, orderIdUint) = orderQueue.getNextNode(orderIdUint);
-            }
-
-            (, currentPrice) = oppositePrices.getNextNode(currentPrice);
-        }
-
-        remainingQuantity = remaining;
-        filledQuantity = _quantity - remainingQuantity;
-        if (totalFilledAbs > 0) {
-            averageFillPrice = totalNotional / totalFilledAbs;
-        }
+        return FuturesBookLib.simulateOrder(
+            activeBidPrices,
+            activeAskPrices,
+            expirationAtPriceOrdersLongIdQueue,
+            expirationAtPriceOrdersShortIdQueue,
+            orders,
+            _msgSender(),
+            _expirationAt,
+            _price,
+            _quantity
+        );
     }
 
-    /// @notice Sum of resting abs quantity at one (expirationAt, price, side).
+    /// @notice Sum of resting abs quantity at one (expirationAt, price, side). See {simulateOrder}
+    ///         for where it runs.
     function getQuantityAtPrice(uint256 _expirationAt, uint256 _price, bool _isBid) external view returns (uint256) {
-        StructuredLinkedList.List storage queue = _expirationAtPriceOrderIds(_expirationAt, _price, _isBid);
-
-        uint256 total = 0;
-        uint256 size = queue.sizeOf();
-        if (size == 0) return 0;
-
-        (, uint256 nodeId) = queue.getNextNode(0);
-        for (uint256 i = 0; i < size && nodeId != 0; i++) {
-            total += M.abs(orders[bytes32(nodeId)].quantity);
-            (, nodeId) = queue.getNextNode(nodeId);
-        }
-        return total;
+        return FuturesBookLib.quantityInQueue(_expirationAtPriceOrderIds(_expirationAt, _price, _isBid), orders);
     }
 
     function expirationIntervalDays() external pure returns (uint8) {

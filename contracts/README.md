@@ -7,11 +7,26 @@ EIP-170 limit of 24 576 bytes. The compiler warns when it is exceeded. The 6.7.0
 backstop work reclaimed space by removing the finished 4.3 order-index cutover
 (`dropActiveOrders` and its script) and the no-op `setLiquidationMarginPercent`,
 and by routing liquidation, settlement and force-close through `_applyFill`.
-Check the size after any change to the venue:
+Check the size after any change to the venue, **on a clean compile**: an incremental build
+(`hardhat compile` after editing a few files) can report the venue several hundred bytes smaller
+than the clean build CI and the deploy scripts produce (observed 24,265 B against 25,033 B for the
+same source), so measure with:
 
 ```sh
-node -e "const a=require('./artifacts/contracts/HashPowerFutures.sol/HashPowerFutures.json');console.log((a.deployedBytecode.length-2)/2)"
+pnpm clean && pnpm compile && node -e "const a=require('./artifacts/contracts/HashPowerFutures.sol/HashPowerFutures.json');console.log((a.deployedBytecode.length-2)/2)"
 ```
+
+Two pieces of the venue live outside its runtime, both reached by `delegatecall` in the proxy's
+storage: `HashPowerFuturesAdminModule` (created by the implementation's constructor, N27), which
+holds the owner-only functions and, since 6.18.0, the permissionless keeper-driven bodies
+(liquidation, settlement, `removeOutdatedOrders`, `pinExpiry`; about 2.6k gas per call for the
+hop, none of them a trading path), and the off-chain order-book views `simulateOrder` /
+`getQuantityAtPrice` in the external library `FuturesBookLib` (`contracts/libs/`), which is
+**linked at deploy**. `deploy-futures.ts` and `update-futures.ts` deploy and verify the library
+unless `FUTURES_BOOK_LIB_ADDRESS` names one already on the network (it holds no state, so one per
+network is enough), pass it as `libraries` and verify the implementation with it. Test fixtures
+link it through `deployFuturesImplementation` (`tests/fixtures.ts`); the keeper's integration
+stack through `linkArtifact`. No on-chain path of the venue calls into the library.
 
 ## Liquidation and the protocol backstop
 
