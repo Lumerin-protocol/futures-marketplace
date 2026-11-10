@@ -13,6 +13,16 @@ Check the size after any change to the venue:
 node -e "const a=require('./artifacts/contracts/HashPowerFutures.sol/HashPowerFutures.json');console.log((a.deployedBytecode.length-2)/2)"
 ```
 
+Two pieces of the venue live outside its runtime, both reached by `delegatecall` in the proxy's
+storage: the owner-only functions in `HashPowerFuturesAdminModule` (created by the
+implementation's constructor, N27) and the off-chain order-book views `simulateOrder` /
+`getQuantityAtPrice` in the external library `FuturesBookLib` (`contracts/libs/`), which is
+**linked at deploy**. `deploy-futures.ts` and `update-futures.ts` deploy and verify the library
+unless `FUTURES_BOOK_LIB_ADDRESS` names one already on the network (it holds no state, so one per
+network is enough), pass it as `libraries` and verify the implementation with it. Test fixtures
+link it through `deployFuturesImplementation` (`tests/fixtures.ts`); the keeper's integration
+stack through `linkArtifact`. No on-chain path of the venue calls into the library.
+
 ## Liquidation and the protocol backstop
 
 `liquidatePosition(user, expirationAt)` / `liquidatePositions(user, expirationAts)`

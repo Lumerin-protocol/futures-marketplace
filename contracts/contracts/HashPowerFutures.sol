@@ -7,6 +7,7 @@ import { ICollateralVault } from "collateral-margin/contracts/contracts/interfac
 import { ILinearMarket } from "collateral-margin/contracts/contracts/interfaces/ILinearMarket.sol";
 import { ILinearMarketExposure } from "collateral-margin/contracts/contracts/interfaces/ILinearMarketExposure.sol";
 import { MathLib as M } from "./libs/MathLib.sol";
+import { FuturesBookLib } from "./libs/FuturesBookLib.sol";
 import { IMarkRangeOracle } from "./interfaces/IMarkRangeOracle.sol";
 import { HashPowerFuturesBase } from "./HashPowerFuturesBase.sol";
 import { HashPowerFuturesAdmin } from "./HashPowerFuturesAdmin.sol";
@@ -24,7 +25,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @dev Lives here rather than in {HashPowerFuturesBase} so that a diff to this file
     ///      and the version it ships under stay in the same place — CI reads it
     ///      straight out of `HashPowerFutures.sol` to require a bump.
-    string public constant VERSION = "6.17.0";
+    string public constant VERSION = "6.18.0";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) HashPowerFuturesAdmin(_vault) { }
@@ -47,6 +48,21 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         firstFutureExpirationDate = _firstFutureExpirationDate;
         emit LiquidationMarginPercentUpdated(_liquidationMarginPercent);
         emit FutureExpirationDatesCountUpdated(_futureExpirationDatesCount);
+
+        // The delivery chain starts on the plain grid and the first window is pinned at once, so
+        // `getExpirationDates()` is final from the first block.
+        if (_firstFutureExpirationDate > type(uint64).max) {
+            revert ValueOutOfRange(0, int256(uint256(type(uint64).max)));
+        }
+        uint64 first = uint64(_firstFutureExpirationDate);
+        expirySchedule = ExpirySchedule({
+            pinnedCount: 0,
+            anchorSlot: 0,
+            anchorTime: first,
+            prevAnchorSlot: 0,
+            prevAnchorTime: first
+        });
+        _pinDue();
     }
 
     // ── Order placement ───────────────────────────────────────────────────────
@@ -59,6 +75,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     ///      taker must pay any realized loss in full.
     function createOrder(uint256 _price, uint256 _expirationAt, int256 _quantity, TimeInForce _tif) external {
         _requireTradingOpen();
+        _pinDue();
         address sender = _msgSender();
         _validateOrderIntent(_price, _expirationAt, _quantity, _tif);
         uint256 maxAllowedIm;
@@ -79,6 +96,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     ///      a no-op transaction.
     function createOrders(OrderIntent[] calldata _intents) external {
         _requireTradingOpen();
+        _pinDue();
         uint256 len = _intents.length;
         if (len == 0) revert EmptyBatch();
         address sender = _msgSender();
@@ -107,7 +125,10 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         ReduceIntent[] calldata _reduces,
         OrderIntent[] calldata _intents
     ) external {
-        if (_intents.length != 0) _requireTradingOpen();
+        if (_intents.length != 0) {
+            _requireTradingOpen();
+            _pinDue();
+        }
         address sender = _msgSender();
         uint256 cancelLen = _cancelIds.length;
         for (uint256 i = 0; i < cancelLen; i++) {
@@ -366,6 +387,7 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     ///      the fee pot balance. Matured backstop legs go through `settlePosition` instead.
     function unwindBackstop(uint256 _expirationAt, uint256 _qty) external {
         _requireTradingOpen();
+        _pinDue();
         if (!_isActiveExpirationAt(_expirationAt)) revert ExpirationDateNotAvailable();
         if (_qty == 0) revert InvalidQty();
         int256 net = participantExpirationAtNetDelta[BACKSTOP][_expirationAt];
@@ -622,17 +644,35 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
         return _expirationAt <= block.timestamp ? settlementPrice[_expirationAt] : 0;
     }
 
-    /// @notice The currently tradable expiration timestamps, earliest first.
+    /// @notice The currently tradable expiration timestamps, earliest first. A slot not pinned
+    ///         yet (only while no pin has run since it rolled in) shows the chain's date, which
+    ///         the pin may still move clear of the halving; see {pinExpiry}.
     function getExpirationDates() external view returns (uint256[] memory) {
-        uint256 currentExpirationDateIndex = _getCurrentExpirationAtIndex();
-        uint256[] memory expirationDatesArray = new uint256[](futureExpirationDatesCount);
-        for (uint256 i = 0; i < futureExpirationDatesCount;) {
-            expirationDatesArray[i] = _activeExpirationAt(currentExpirationDateIndex, i);
-            unchecked {
-                ++i;
-            }
+        return _windowExpiries();
+    }
+
+    // ── Delivery schedule ─────────────────────────────────────────────────────
+
+    /// @dev Pin any unpinned slot of the tradable window (normally none: one read and a compare).
+    ///      The pinning itself runs in the admin module, so the hot paths carry only the check.
+    function _pinDue() internal {
+        if (_pinIsDue(expirySchedule)) {
+            _delegateCallAdminModule(abi.encodeCall(HashPowerFuturesAdminModule.pinWindow, ()));
         }
-        return expirationDatesArray;
+    }
+
+    /// @notice The schedule in one read: the first slot whose date is still ahead (the tradable
+    ///         window starts there), how many slots are pinned (`pinExpiry` pins this slot when it
+    ///         is at most one past the window), and the date that matured last (0 before the first).
+    function deliverySchedule()
+        external
+        view
+        returns (uint256 currentSlot, uint256 pinnedCount, uint256 previousExpiry)
+    {
+        ExpirySchedule memory s = expirySchedule;
+        currentSlot = _currentSlot(s);
+        pinnedCount = s.pinnedCount;
+        if (currentSlot != 0) previousExpiry = _expiryOfSlot(currentSlot - 1, s);
     }
 
     /// @notice Active bid/ask price levels for one expiration (bids high→low, asks low→high).
@@ -648,71 +688,30 @@ contract HashPowerFutures is HashPowerFuturesAdmin {
     /// @notice Simulate a limit order: filled qty, VWAP, and remainder (view, no state change).
     /// @dev Skips own resting liquidity (matches on-match STP net-out). Self-trade is judged
     ///      against the caller, so simulating for another account requires setting the
-    ///      `eth_call` `from` field to that account.
+    ///      `eth_call` `from` field to that account. Served by {FuturesBookLib} (an external
+    ///      library linked at deploy) to keep the venue under EIP-170; off-chain callers only.
     function simulateOrder(uint256 _expirationAt, uint256 _price, int256 _quantity)
         external
         view
         returns (int256 filledQuantity, uint256 averageFillPrice, int256 remainingQuantity)
     {
-        if (_quantity == 0) return (0, 0, 0);
-
-        bool isBuy = _quantity > 0;
-        int256 remaining = _quantity;
-        uint256 totalNotional = 0;
-        uint256 totalFilledAbs = 0;
-        StructuredLinkedList.List storage oppositePrices =
-            isBuy ? activeAskPrices[_expirationAt] : activeBidPrices[_expirationAt];
-        (, uint256 currentPrice) = oppositePrices.getNextNode(0);
-
-        while (currentPrice != 0 && remaining != 0) {
-            if (isBuy && currentPrice > _price) break;
-            if (!isBuy && currentPrice < _price) break;
-
-            StructuredLinkedList.List storage orderQueue =
-                _expirationAtPriceOrderIds(_expirationAt, currentPrice, !isBuy);
-            (, uint256 orderIdUint) = orderQueue.getNextNode(0);
-
-            while (orderIdUint != 0 && remaining != 0) {
-                Order storage makerOrder = orders[bytes32(orderIdUint)];
-                // STP: own resting size would net out, not fill.
-                if (makerOrder.participant != _msgSender() && makerOrder.quantity != 0) {
-                    uint256 matchAmt = M.min(M.abs(makerOrder.quantity), M.abs(remaining));
-                    if (matchAmt > 0) {
-                        totalNotional += currentPrice * matchAmt;
-                        totalFilledAbs += matchAmt;
-                        remaining -= M.toSigned(isBuy, matchAmt);
-                    }
-                } else if (makerOrder.participant == _msgSender() && makerOrder.quantity != 0) {
-                    uint256 cancelAmt = M.min(M.abs(makerOrder.quantity), M.abs(remaining));
-                    remaining -= M.toSigned(isBuy, cancelAmt);
-                }
-                (, orderIdUint) = orderQueue.getNextNode(orderIdUint);
-            }
-
-            (, currentPrice) = oppositePrices.getNextNode(currentPrice);
-        }
-
-        remainingQuantity = remaining;
-        filledQuantity = _quantity - remainingQuantity;
-        if (totalFilledAbs > 0) {
-            averageFillPrice = totalNotional / totalFilledAbs;
-        }
+        return FuturesBookLib.simulateOrder(
+            activeBidPrices,
+            activeAskPrices,
+            expirationAtPriceOrdersLongIdQueue,
+            expirationAtPriceOrdersShortIdQueue,
+            orders,
+            _msgSender(),
+            _expirationAt,
+            _price,
+            _quantity
+        );
     }
 
-    /// @notice Sum of resting abs quantity at one (expirationAt, price, side).
+    /// @notice Sum of resting abs quantity at one (expirationAt, price, side). See {simulateOrder}
+    ///         for where it runs.
     function getQuantityAtPrice(uint256 _expirationAt, uint256 _price, bool _isBid) external view returns (uint256) {
-        StructuredLinkedList.List storage queue = _expirationAtPriceOrderIds(_expirationAt, _price, _isBid);
-
-        uint256 total = 0;
-        uint256 size = queue.sizeOf();
-        if (size == 0) return 0;
-
-        (, uint256 nodeId) = queue.getNextNode(0);
-        for (uint256 i = 0; i < size && nodeId != 0; i++) {
-            total += M.abs(orders[bytes32(nodeId)].quantity);
-            (, nodeId) = queue.getNextNode(nodeId);
-        }
-        return total;
+        return FuturesBookLib.quantityInQueue(_expirationAtPriceOrderIds(_expirationAt, _price, _isBid), orders);
     }
 
     function expirationIntervalDays() external pure returns (uint8) {

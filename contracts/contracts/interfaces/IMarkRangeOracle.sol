@@ -18,4 +18,8 @@ interface IMarkRangeOracle {
 
     /// @notice The index feed the ranges derive from; must be the venue's settlement feed.
     function hashpriceUsd() external view returns (address);
+
+    /// @notice Estimated timestamp of the next halving; 0 when there is none to estimate. Venues keep
+    ///         their delivery dates clear of it.
+    function halvingEta() external view returns (uint256);
 }

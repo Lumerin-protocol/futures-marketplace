@@ -11,7 +11,9 @@ const EIP170_LIMIT = 24_576;
 describe("HashPowerFutures - contract size", () => {
   it("keeps the implementation runtime within the EIP-170 limit", async () => {
     const data = await networkHelpers.loadFixture(deployFuturesFixture);
-    const implementation = await viem.deployContract("HashPowerFutures", [data.contracts.collateralVault.address]);
+    const implementation = await viem.deployContract("HashPowerFutures", [data.contracts.collateralVault.address], {
+      libraries: { FuturesBookLib: data.contracts.bookLib.address },
+    });
     const pc = await viem.getPublicClient();
     const code = await pc.getCode({ address: implementation.address });
     assert.ok(code);

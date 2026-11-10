@@ -21,7 +21,7 @@ contract HashPowerFuturesAdminModule is HashPowerFuturesBase {
     using EnumerableSet for EnumerableSet.Bytes32Set;
 
     /// @notice {HashPowerFutures.VERSION} of the implementation that creates this module.
-    string public constant VERSION = "6.17.0";
+    string public constant VERSION = "6.18.0";
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(ICollateralVault _vault) HashPowerFuturesBase(_vault) { }
@@ -134,6 +134,26 @@ contract HashPowerFuturesAdminModule is HashPowerFuturesBase {
             }
             _clearOrderAggregate(user, expirationAt);
         }
+    }
+
+    /// @notice Pin the next delivery date, up to one slot past the tradable window: the chain's
+    ///         date, moved to the nearer edge of the no-go zone around the estimated halving when it
+    ///         falls inside it. Permissionless and deterministic from the oracle at this block; the
+    ///         venue also pins any due slot itself on the first trade after a roll.
+    /// @return slot The slot pinned
+    /// @return expiry Its delivery date
+    function pinExpiry() external returns (uint256 slot, uint256 expiry) {
+        ExpirySchedule memory s = expirySchedule;
+        if (s.pinnedCount > _currentSlot(s) + futureExpirationDatesCount) revert NothingToPin();
+        slot = s.pinnedCount;
+        expiry = _pinNext(s);
+        expirySchedule = s;
+    }
+
+    /// @notice Pin every unpinned slot of the tradable window. Run by the venue itself, by
+    ///         delegatecall, on the first trade after a roll; harmless to call directly.
+    function pinWindow() external {
+        _pinWindow();
     }
 
     /// @notice Adopt a mark oracle and the index it is built on: live expiries mark off its

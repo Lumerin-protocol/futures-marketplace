@@ -21,9 +21,10 @@ import {
   readPositiveInteger,
 } from "./lib/order-aggregate-cache.ts";
 import { assertNoRestingOrders, legsWithOrders } from "./lib/resting-orders.ts";
+import { resolveBookLib } from "./lib/book-lib.ts";
 
 const DEFAULT_SAFE_GAS_OVERHEAD = 150_000n;
-const TARGET_CODE_VERSION = "6.17.0";
+const TARGET_CODE_VERSION = "6.18.0";
 const UPGRADE_CONFIRMATIONS = 5;
 // 6.10 starts a new resting-order aggregate, so orders placed before it must not survive the
 // upgrade. With the shared vault halted, the upgrade call is `forceCancelOrders` on every
@@ -143,13 +144,16 @@ async function main() {
     contract: "HashPowerFutures",
   });
   await logPrompt("Proceed?");
+  const libraries = await resolveBookLib(viem, UPGRADE_CONFIRMATIONS);
   const futuresImpl = await viem.deployContract("HashPowerFutures", [vaultAddress], {
     confirmations: UPGRADE_CONFIRMATIONS,
+    libraries,
   });
 
   logStep("Deployed", addrUrl(pc, futuresImpl.address));
   const verified = await verifyContract(futuresImpl.address, [vaultAddress], undefined, {
     contract: "contracts/HashPowerFutures.sol:HashPowerFutures",
+    libraries,
   });
   if (!verified) {
     throw new Error(`Basescan did not verify implementation ${futuresImpl.address}`);

@@ -28,8 +28,9 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     mapping(bytes32 => Order) internal orders;
     /// @dev Dead after v3 reset: former bilateral lot mapping. Slot retained for upgrade safety.
     mapping(bytes32 => LegacyLot) internal positions;
-    mapping(uint256 => mapping(uint256 => StructuredLinkedList.List)) private expirationAtPriceOrdersLongIdQueue;
-    mapping(uint256 => mapping(uint256 => StructuredLinkedList.List)) private expirationAtPriceOrdersShortIdQueue;
+    /// @dev `internal` (not `private`) since 6.18 so the venue can hand them to `FuturesBookLib`.
+    mapping(uint256 => mapping(uint256 => StructuredLinkedList.List)) internal expirationAtPriceOrdersLongIdQueue;
+    mapping(uint256 => mapping(uint256 => StructuredLinkedList.List)) internal expirationAtPriceOrdersShortIdQueue;
     /// @dev Dead after v3: former bilateral lot index. Slot retained.
     mapping(address => EnumerableSet.Bytes32Set) internal participantPositionIdsIndex;
     mapping(address => EnumerableSet.Bytes32Set) internal participantOrderIdsIndex;
@@ -179,6 +180,28 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     ///      and every mark read reverts meanwhile; `update-futures.ts` sets it while halted.
     IMarkRangeOracle public markOracle;
 
+    /// @dev The delivery schedule in one slot, so hot paths resolve dates with one read and
+    ///      arithmetic. Slots `[0, pinnedCount)` have pinned dates. Dates form a chain 30 days
+    ///      apart that a shift re-anchors: a slot `k >= anchorSlot` is at
+    ///      `anchorTime + (k − anchorSlot) × interval`, one in `[prevAnchorSlot, anchorSlot)` at
+    ///      `prevAnchorTime + (k − prevAnchorSlot) × interval`, and an older one (only when two
+    ///      shifts fall inside one window) in `pinnedExpiryOf`. Before any shift both anchors are
+    ///      `(0, firstFutureExpirationDate)`, the plain grid.
+    struct ExpirySchedule {
+        uint32 pinnedCount;
+        uint32 anchorSlot;
+        uint64 anchorTime;
+        uint32 prevAnchorSlot;
+        uint64 prevAnchorTime;
+    }
+
+    /// @dev Appended at the storage tail in 6.18 with the two mappings below; `initialize` sets it.
+    ExpirySchedule internal expirySchedule;
+    /// @dev Every pinned slot's date, and the inverse (slot + 1, so 0 means not a date). Read only
+    ///      for dates outside the two anchored regimes.
+    mapping(uint256 => uint256) internal pinnedExpiryOf;
+    mapping(uint256 => uint256) internal slotOfPinnedExpiry;
+
     // immutable
     ICollateralVault public immutable vault;
     uint8 internal immutable collateralDecimals;
@@ -219,6 +242,12 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     uint32 internal constant SECONDS_PER_DAY = 3600 * 24;
     uint256 public constant MAX_ORACLE_STALENESS = 7200; // 2 hours: hashprice updates only on a Bitcoin block
     uint8 public constant EXPIRATION_INTERVAL_DAYS = 30;
+    /// @notice Half-width of the no-go zone around the estimated halving (`markOracle.halvingEta()`):
+    ///         a delivery date that would fall closer than this to the estimate when its slot is
+    ///         pinned is listed at the nearer edge of the zone instead, so no date is ever valued on
+    ///         both sides of the halving or steps across its window. Half the interval, so at most
+    ///         one date per halving moves, by at most this much.
+    uint256 public constant NO_GO_HALF_WIDTH = 15 days;
     /// @notice Minimum price increment for orders: $0.01 in USDC (6 decimals).
     uint256 public constant minimumPriceIncrement = 0.01e6;
 
@@ -326,6 +355,9 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     event LiquidatorShareBpsUpdated(uint16 newLiquidatorShareBps);
     event OracleUpdated(address newOracle);
     event MarkOracleUpdated(address markOracle);
+    /// @notice Slot `slot` got its delivery date: the chain's date, or the nearer edge of the no-go
+    ///         zone around `halvingEta` when the chain's date fell inside it (`shifted`).
+    event ExpiryPinned(uint256 indexed slot, uint256 expiry, uint256 halvingEta, bool shifted);
     event PortfolioMarginUpdated(address newPortfolioMargin);
     event HookUpdated(address indexed hook);
 
@@ -376,6 +408,8 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     error PositionMatured();
     /// @notice `forceClosePositions` runs only while the vault is halted.
     error NotHalted();
+    /// @notice Every slot up to one past the tradable window is already pinned.
+    error NothingToPin();
 
     /// @param _vault The shared collateral vault. Its `collateralToken()` provides the underlying ERC20.
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -991,21 +1025,146 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         return out;
     }
 
-    function _getCurrentExpirationAtIndex() internal view returns (uint256) {
-        if (block.timestamp > firstFutureExpirationDate) {
-            return (block.timestamp - firstFutureExpirationDate) / expirationIntervalSeconds() + 1;
+    // ── Internal helpers: delivery schedule ───────────────────────────────────
+    //
+    // Dates are a chain 30 days apart that a shift re-anchors. Every read below works from the
+    // packed `expirySchedule` word (one SLOAD per transaction, warm afterwards) and arithmetic;
+    // the per-slot tables are touched only for dates outside the two anchored regimes.
+
+    /// @dev First slot whose date is still ahead (the tradable window starts here). Same boundary
+    ///      semantics as the former grid arithmetic: a date equal to `block.timestamp` has rolled.
+    function _currentSlot(ExpirySchedule memory s) internal view returns (uint256) {
+        uint256 interval = expirationIntervalSeconds();
+        if (block.timestamp > s.anchorTime) {
+            return s.anchorSlot + (block.timestamp - s.anchorTime) / interval + 1;
         }
-        return 0;
+        if (block.timestamp > s.prevAnchorTime) {
+            uint256 slot = s.prevAnchorSlot + (block.timestamp - s.prevAnchorTime) / interval + 1;
+            return slot < s.anchorSlot ? slot : s.anchorSlot;
+        }
+        // Both anchors ahead (two shifts inside one window): walk back over the pinned dates.
+        uint256 k = s.prevAnchorSlot;
+        while (k > 0 && pinnedExpiryOf[k - 1] > block.timestamp) {
+            unchecked {
+                --k;
+            }
+        }
+        return k;
     }
 
-    function _activeExpirationAt(uint256 _currentIndex, uint256 _offset) internal view returns (uint256) {
-        unchecked {
-            return firstFutureExpirationDate + expirationIntervalSeconds() * (_currentIndex + _offset);
+    /// @dev The date of a pinned slot. For a slot past `pinnedCount` this is the chain's default,
+    ///      which a pin may still move; such a slot never holds orders.
+    function _expiryOfSlot(uint256 _slot, ExpirySchedule memory s) internal view returns (uint256) {
+        uint256 interval = expirationIntervalSeconds();
+        if (_slot >= s.anchorSlot) return s.anchorTime + (_slot - s.anchorSlot) * interval;
+        if (_slot >= s.prevAnchorSlot) return s.prevAnchorTime + (_slot - s.prevAnchorSlot) * interval;
+        return pinnedExpiryOf[_slot];
+    }
+
+    /// @dev The slot a date belongs to, if it is or can become a delivery date: on the current
+    ///      regime's chain, on the previous one below the anchor, or pinned earlier. The grid date
+    ///      of a shifted slot matches none of these.
+    function _slotOfExpiry(uint256 _expirationAt, ExpirySchedule memory s)
+        internal
+        view
+        returns (bool found, uint256 slot)
+    {
+        uint256 interval = expirationIntervalSeconds();
+        if (_expirationAt >= s.anchorTime) {
+            uint256 ahead = _expirationAt - s.anchorTime;
+            if (ahead % interval == 0) return (true, s.anchorSlot + ahead / interval);
         }
+        if (_expirationAt >= s.prevAnchorTime) {
+            uint256 ahead = _expirationAt - s.prevAnchorTime;
+            if (ahead % interval == 0) {
+                slot = s.prevAnchorSlot + ahead / interval;
+                if (slot < s.anchorSlot) return (true, slot);
+            }
+        }
+        uint256 stored = slotOfPinnedExpiry[_expirationAt];
+        if (stored == 0) return (false, 0);
+        return (true, stored - 1);
+    }
+
+    /// @dev Whether a slot of the tradable window is still unpinned (normally not): the first
+    ///      state-changing call after a roll pins it, so a listed date never depends on anyone
+    ///      calling `pinExpiry`.
+    function _pinIsDue(ExpirySchedule memory s) internal view returns (bool) {
+        return s.pinnedCount <= _currentSlot(s) + futureExpirationDatesCount - 1;
+    }
+
+    /// @dev Pin every slot of the tradable window that is not pinned yet.
+    function _pinWindow() internal {
+        ExpirySchedule memory s = expirySchedule;
+        while (_pinIsDue(s)) {
+            _pinNext(s);
+        }
+        expirySchedule = s;
+    }
+
+    /// @dev Pin slot `s.pinnedCount` and advance `s` in memory (the caller stores it). A shift
+    ///      re-anchors the chain at the pinned date.
+    function _pinNext(ExpirySchedule memory s) internal returns (uint256 expiry) {
+        uint256 slot = s.pinnedCount;
+        uint256 previous = slot == 0 ? 0 : _expiryOfSlot(slot - 1, s);
+        uint256 chain = slot == 0 ? firstFutureExpirationDate : previous + expirationIntervalSeconds();
+        uint256 eta = chain > block.timestamp ? markOracle.halvingEta() : 0;
+        expiry = _chainedExpiry(slot, previous, eta);
+        pinnedExpiryOf[slot] = expiry;
+        slotOfPinnedExpiry[expiry] = slot + 1;
+        if (expiry != chain) {
+            s.prevAnchorSlot = s.anchorSlot;
+            s.prevAnchorTime = s.anchorTime;
+            s.anchorSlot = uint32(slot);
+            s.anchorTime = uint64(expiry);
+        }
+        s.pinnedCount = uint32(slot + 1);
+        emit ExpiryPinned(slot, expiry, eta, expiry != chain);
+    }
+
+    /// @dev Largest point of the daily lattice at `firstFutureExpirationDate`'s time of day that is
+    ///      at or before `_t`.
+    function _alignDown(uint256 _t) internal view returns (uint256) {
+        uint256 day = SECONDS_PER_DAY;
+        return _t - ((_t % day) + day - (firstFutureExpirationDate % day)) % day;
+    }
+
+    /// @dev The dates of the tradable window from the schedule. A slot not pinned yet (only while
+    ///      no pin has run since it rolled in: pins run one slot ahead) shows the chain's date, which
+    ///      the pin may still move clear of the halving.
+    function _windowExpiries() internal view returns (uint256[] memory dates) {
+        ExpirySchedule memory s = expirySchedule;
+        uint256 len = futureExpirationDatesCount;
+        uint256 first = _currentSlot(s);
+        dates = new uint256[](len);
+        for (uint256 i = 0; i < len;) {
+            dates[i] = _expiryOfSlot(first + i, s);
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @dev The date slot `_slot` gets from `_previous` (the date of slot `_slot − 1`, unused for
+    ///      slot 0): the chain's date, moved out of the open no-go zone `(eta − Z, eta + Z)` when
+    ///      inside it, to the nearer edge rounded outward on the daily lattice. A date at or before
+    ///      the estimate moves earlier unless that would not leave it strictly ahead of its
+    ///      predecessor (or of now), in which case it moves later, which always is.
+    function _chainedExpiry(uint256 _slot, uint256 _previous, uint256 _eta) internal view returns (uint256 expiry) {
+        expiry = _slot == 0 ? firstFutureExpirationDate : _previous + expirationIntervalSeconds();
+        if (expiry <= block.timestamp) return expiry;
+        uint256 z = NO_GO_HALF_WIDTH;
+        if (_eta <= z || expiry <= _eta - z || expiry >= _eta + z) return expiry;
+        if (expiry <= _eta) {
+            uint256 earlier = _alignDown(_eta - z);
+            if (earlier > block.timestamp && (_slot == 0 || earlier > _previous)) return earlier;
+        }
+        return _alignDown(_eta + z + SECONDS_PER_DAY - 1);
     }
 
     function _setOrderExpirationActive(address _participant, uint256 _expirationAt, bool _active) private {
-        uint256 absoluteIndex = (_expirationAt - firstFutureExpirationDate) / expirationIntervalSeconds();
+        (bool found, uint256 absoluteIndex) = _slotOfExpiry(_expirationAt, expirySchedule);
+        if (!found) return;
         uint256 page = absoluteIndex >> 8;
         uint256 bit = 1 << (absoluteIndex & 0xff);
         if (_active) {
@@ -1022,13 +1181,12 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         view
         returns (uint256[] memory expirationAts, uint256 count)
     {
+        ExpirySchedule memory s = expirySchedule;
         uint256 len = futureExpirationDatesCount;
         expirationAts = new uint256[](len);
-        uint256 absoluteIndex = _getCurrentExpirationAtIndex();
+        uint256 absoluteIndex = _currentSlot(s);
         uint256 page = absoluteIndex >> 8;
         uint256 word = participantOrderExpirationBitmap[_participant][page];
-        uint256 expirationAt = _activeExpirationAt(absoluteIndex, 0);
-        uint256 interval = expirationIntervalSeconds();
 
         for (uint256 i = 0; i < len;) {
             uint256 nextPage = absoluteIndex >> 8;
@@ -1037,7 +1195,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
                 word = participantOrderExpirationBitmap[_participant][page];
             }
             if (word & (1 << (absoluteIndex & 0xff)) != 0) {
-                expirationAts[count] = expirationAt;
+                expirationAts[count] = _expiryOfSlot(absoluteIndex, s);
                 unchecked {
                     ++count;
                 }
@@ -1045,7 +1203,6 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
             unchecked {
                 ++i;
                 ++absoluteIndex;
-                expirationAt += interval;
             }
         }
     }
@@ -1054,13 +1211,12 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         return _expirationAt > block.timestamp && _isListedExpirationAt(_expirationAt);
     }
 
-    /// @dev On the delivery grid and inside the tradable window; does not check maturity.
+    /// @dev A pinned delivery date inside the tradable window; does not check maturity.
     function _isListedExpirationAt(uint256 _expirationAt) internal view returns (bool) {
-        if (_expirationAt < firstFutureExpirationDate) return false;
-        uint256 interval = expirationIntervalSeconds();
-        uint256 elapsedFromFirst = _expirationAt - firstFutureExpirationDate;
-        if (elapsedFromFirst % interval != 0) return false;
-        return elapsedFromFirst <= (futureExpirationDatesCount - 1 + _getCurrentExpirationAtIndex()) * interval;
+        ExpirySchedule memory s = expirySchedule;
+        (bool found, uint256 slot) = _slotOfExpiry(_expirationAt, s);
+        if (!found || slot >= s.pinnedCount) return false;
+        return slot <= futureExpirationDatesCount - 1 + _currentSlot(s);
     }
 
     function expirationIntervalSeconds() internal pure returns (uint256) {

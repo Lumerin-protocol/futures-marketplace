@@ -6,8 +6,9 @@ import { addrUrl, txUrl } from "../lib/explorer.ts";
 import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts";
 import { verifyContract } from "../lib/verify.ts";
 import { writeAndWait } from "../lib/writeContract.ts";
+import { resolveBookLib } from "./lib/book-lib.ts";
 
-const TARGET_CODE_VERSION = "6.17.0";
+const TARGET_CODE_VERSION = "6.18.0";
 
 /** Minimal AggregatorV3 slice used to sanity-check HashpriceUSD before deploy. */
 const aggregatorV3Abi = [
@@ -125,8 +126,10 @@ async function main() {
     collateralVault: collateralVaultAddress,
   });
   await logPrompt("Proceed?");
+  const libraries = await resolveBookLib(viem, 5);
   const futuresImpl = await viem.deployContract("HashPowerFutures", [collateralVaultAddress], {
     confirmations: 5,
+    libraries,
   });
   logStep("Deployed", addrUrl(pc, futuresImpl.address));
   const implementationVersion = await futuresImpl.read.VERSION();
@@ -138,6 +141,7 @@ async function main() {
   if (
     !(await verifyContract(futuresImpl.address, [collateralVaultAddress], undefined, {
       contract: "contracts/HashPowerFutures.sol:HashPowerFutures",
+      libraries,
     }))
   ) {
     throw new Error(`Basescan did not verify implementation ${futuresImpl.address}`);

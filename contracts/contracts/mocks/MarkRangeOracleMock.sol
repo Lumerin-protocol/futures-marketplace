@@ -10,9 +10,15 @@ import { IMarkRangeOracle } from "../interfaces/IMarkRangeOracle.sol";
 ///         venue through a plain `PriceFeedMock` without the Bitcoin oracle chain.
 contract MarkRangeOracleMock is IMarkRangeOracle {
     AggregatorV3Interface public immutable index;
+    /// @notice Settable halving estimate; 0 (the default) means no halving in sight, so no date moves.
+    uint256 public halvingEta;
 
     constructor(AggregatorV3Interface _index) {
         index = _index;
+    }
+
+    function setHalvingEta(uint256 _halvingEta) external {
+        halvingEta = _halvingEta;
     }
 
     function hashpriceUsd() external view returns (address) {

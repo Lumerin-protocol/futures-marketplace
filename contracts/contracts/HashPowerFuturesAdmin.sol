@@ -8,10 +8,11 @@ import { IMarkRangeOracle } from "./interfaces/IMarkRangeOracle.sol";
 import { HashPowerFuturesAdminModule } from "./HashPowerFuturesAdminModule.sol";
 
 /// @title HashPowerFuturesAdmin — owner-only governance surface for {HashPowerFutures}
-/// @notice Every entry point here is `onlyOwner`, plus the UUPS upgrade authorization
-///         hook. Splitting them out keeps {HashPowerFutures} to the permissionless surface —
-///         trading, liquidation and views — so a reader can tell at a glance which
-///         calls a counterparty can make and which only governance can.
+/// @notice Every entry point here is `onlyOwner` (checked in the module), plus the UUPS upgrade
+///         authorization hook, with one exception: `pinExpiry`, permissionless, whose body also
+///         lives in the module for bytecode size. Splitting them out keeps {HashPowerFutures} to
+///         the permissionless surface — trading, liquidation and views — so a reader can tell at
+///         a glance which calls a counterparty can make and which only governance can.
 ///         Apart from `setOracle` (which `initialize` calls) the bodies live in
 ///         {HashPowerFuturesAdminModule}, so the implementation fits EIP-170: each entry point
 ///         here forwards its calldata there by delegatecall, in the proxy's storage, and the
@@ -79,6 +80,13 @@ abstract contract HashPowerFuturesAdmin is HashPowerFuturesBase {
     }
 
     // ── Wiring ────────────────────────────────────────────────────────────────
+
+    /// @notice See {HashPowerFuturesAdminModule-pinExpiry}. Permissionless: the module checks
+    ///         nothing but the schedule.
+    function pinExpiry() external returns (uint256 slot, uint256 expiry) {
+        (slot, expiry);
+        _delegateToAdminModule();
+    }
 
     /// @notice See {HashPowerFuturesAdminModule-setOracle}. `initialize` reaches it through
     ///      `_delegateCallAdminModule`, since a stub forwards the transaction's own calldata.

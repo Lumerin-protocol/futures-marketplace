@@ -105,7 +105,9 @@ describe("HashPowerFutures.forceCancelOrders on orders predating the 6.10 aggreg
     const data = await networkHelpers.loadFixture(legacyBookFixture);
     const { futures, collateralVault } = data.contracts;
     const { owner } = data.accounts;
-    const implementation = await viem.deployContract("HashPowerFutures", [collateralVault.address]);
+    const implementation = await viem.deployContract("HashPowerFutures", [collateralVault.address], {
+      libraries: { FuturesBookLib: data.contracts.bookLib.address },
+    });
     const cancelAll = encodeFunctionData({
       abi: implementation.abi,
       functionName: "forceCancelOrders",

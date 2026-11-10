@@ -38,8 +38,9 @@ describe("Futures - dependency validation", function () {
     const token = await viem.deployContract("TokenDecimalsMock", [18]);
     const vault = await deployVault(token.address);
 
+    const bookLib = await viem.deployContract("FuturesBookLib", []);
     await assert.rejects(
-      viem.deployContract("HashPowerFutures", [vault.address]),
+      viem.deployContract("HashPowerFutures", [vault.address], { libraries: { FuturesBookLib: bookLib.address } }),
       /UnsupportedTokenDecimals/,
     );
   });

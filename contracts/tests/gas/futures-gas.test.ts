@@ -202,6 +202,8 @@ async function benchmarkViews() {
     ["UPGRADE_INTERFACE_VERSION()", "UPGRADE_INTERFACE_VERSION"],
     ["VERSION()", "VERSION"],
     ["collectedFeesBalance()", "collectedFeesBalance"],
+    ["NO_GO_HALF_WIDTH()", "NO_GO_HALF_WIDTH"],
+    ["deliverySchedule()", "deliverySchedule"],
     ["expirationIntervalDays()", "expirationIntervalDays"],
     ["firstFutureExpirationDate()", "firstFutureExpirationDate"],
     ["futureExpirationDatesCount()", "futureExpirationDatesCount"],
@@ -1002,7 +1004,9 @@ async function benchmarkAdminAndLifecycle() {
     const data = await fresh();
     const { futures, collateralVault } = data.contracts;
     const { owner, pc } = data.accounts;
-    const implementation = await viem.deployContract("HashPowerFutures", [collateralVault.address]);
+    const implementation = await viem.deployContract("HashPowerFutures", [collateralVault.address], {
+      libraries: { FuturesBookLib: data.contracts.bookLib.address },
+    });
     await recordTransaction(
       pc,
       "upgradeToAndCall(address,bytes)",
@@ -1036,8 +1040,58 @@ async function benchmarkAdminAndLifecycle() {
   }
 }
 
+/**
+ * The delivery schedule (N28): `pinExpiry` for the slot past the window, on the plain chain and
+ * shifted clear of a halving estimate on it, and the first order after a roll pinning the new
+ * slot inline against an order on an already pinned window.
+ */
+async function benchmarkDeliverySchedule() {
+  const day = 86_400n;
+  {
+    const data = await fresh();
+    const { futures, markOracle } = data.contracts;
+    const { seller, pc } = data.accounts;
+    const dates = await futures.read.getExpirationDates();
+    const last = dates[dates.length - 1];
+    await recordTransaction(
+      pc,
+      "pinExpiry()",
+      "slot past the window, on the chain",
+      futures.write.pinExpiry({ account: seller.account }),
+    );
+    // Roll one slot so the next one becomes pinnable, with the halving estimated on its chain
+    // date (`last` + 60 days): the pin moves it 15 days.
+    await networkHelpers.time.increaseTo(dates[0] + 1n);
+    await markOracle.write.setHalvingEta([last + 60n * day], { account: seller.account, chain: seller.chain });
+    await recordTransaction(
+      pc,
+      "pinExpiry()",
+      "slot past the window, shifted clear of the halving",
+      futures.write.pinExpiry({ account: seller.account }),
+    );
+  }
+  {
+    const data = await fresh();
+    const { futures, hashpriceUsd } = data.contracts;
+    const { seller, pc } = data.accounts;
+    await fund(data, [seller]);
+    const dates = await futures.read.getExpirationDates();
+    // Roll one slot without pinning: the first order afterwards pins the new slot itself.
+    await networkHelpers.time.increaseTo(dates[0] + 1n);
+    await refreshHashprice(hashpriceUsd);
+    const price = await futures.read.getMarketPrice();
+    await recordTransaction(
+      pc,
+      "createOrder(uint256,uint256,int256,uint8)",
+      "first order after a roll, pins the new slot inline",
+      futures.write.createOrder([price, dates[1], -1n, TimeInForce.GTC], { account: seller.account }),
+    );
+  }
+}
+
 describe("Futures gas benchmark", () => {
   it("records deterministic receipt gas, view estimates, and complete ABI coverage", async () => {
+    await benchmarkDeliverySchedule();
     await benchmarkViews();
     await benchmarkScaledRiskViews();
     await benchmarkOrderPlacement();
@@ -1049,7 +1103,7 @@ describe("Futures gas benchmark", () => {
 
     const snapshot = gas.snapshot();
     const coverage = assertAbiFunctionCoverage(HashPowerFuturesAbi, snapshot, exclusions);
-    assert.equal(coverage.covered.length, 71);
+    assert.equal(coverage.covered.length, 74);
     assert.deepEqual(coverage.excluded, [
       "initialize(address,uint8,uint8,uint256)",
       "proxiableUUID()",

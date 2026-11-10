@@ -84,6 +84,11 @@ export const contractErrors = [
   },
   {
     "inputs": [],
+    "name": "NothingToPin",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "UnsupportedTokenDecimals",
     "type": "error"
   },
