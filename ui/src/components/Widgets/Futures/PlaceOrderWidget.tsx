@@ -30,7 +30,7 @@ import {
   handleNumericIntegerInput,
 } from "../../Forms/Shared/AmountInputForm";
 import { feeReserverFor, useMakerTakerFees } from "../../../hooks/data/useMakerTakerFees";
-import type { OrderVenue } from "../../../lib/orderMargin";
+import type { OrderBook } from "../../../lib/orderMargin";
 import type { AmountMode } from "./PerpsOrderFormFields";
 import {
   AmountInputWrapper,
@@ -169,7 +169,15 @@ export const PlaceOrderWidget = ({
     [perpsCollection?.makerFeeBps, perpsCollection?.takerFeeBps],
   );
   const reserveFee = contractMode === "perpetual" ? perpsFeeFor : futuresFeeFor;
-  const orderVenue: OrderVenue = contractMode === "perpetual" ? "perps" : "futures";
+  // The book the order would rest on. Without a selected expiry the futures quote
+  // prices the order on a book of its own at the live mark.
+  const orderBook: OrderBook =
+    contractMode === "perpetual"
+      ? { venue: "perps" }
+      : {
+          venue: "futures",
+          expirationAt: externalExpirationAt !== undefined ? BigInt(externalExpirationAt) : 0n,
+        };
 
   // Calculate price step from contract specs
   const priceStep = contractSpecsQuery.data?.data?.minimumPriceIncrement
@@ -447,7 +455,7 @@ export const PlaceOrderWidget = ({
       {
         place: [
           {
-            venue: orderVenue,
+            ...orderBook,
             price: priceInWei,
             quantity: isBuy ? absQuantity : -absQuantity,
           },
@@ -509,7 +517,7 @@ export const PlaceOrderWidget = ({
     const px = getEffectivePrice(isBuy ? "buy" : "sell");
     if (px <= 0) return undefined;
     const funded = orderMargin.maxQuantity({
-      venue: orderVenue,
+      ...orderBook,
       price: BigInt(Math.round(px * PAYMENT_TOKEN_SCALE_NUM)),
       isBuy,
       reserveFee,

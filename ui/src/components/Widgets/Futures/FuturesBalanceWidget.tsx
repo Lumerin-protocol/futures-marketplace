@@ -43,6 +43,7 @@ interface FuturesBalanceWidgetProps {
   isRefreshingRealizedPnL?: boolean;
   balanceQuery: BalanceQueryResult;
   accountBalance?: AccountBalance;
+  accountDebt: bigint | null;
   /** Account-wide liquidation level, quoted in the Danger status line. */
   liqPrice?: bigint;
 }
@@ -53,7 +54,8 @@ const ALL_VENUES_HINT = "Across all venues (Futures and Perpetuals)";
 const REALIZED_PNL_HINT = `${ALL_VENUES_HINT}. ${REALIZED_PNL_FEES_HINT} Perpetuals funding is not included.`;
 
 const EQUITY_HINT = "Balance plus unrealized PnL across all venues.";
-const MARGIN_USED_HINT = "Initial margin held for open positions and resting orders.";
+const MARGIN_USED_HINT =
+  "Initial margin for open positions, resting orders, funding owed, and account debt.";
 const AVAILABLE_HINT =
   "Withdrawable and usable for new positions. Unrealized gains are not available until realized.";
 const MARGIN_RATIO_HINT =
@@ -166,6 +168,7 @@ export const FuturesBalanceWidget = ({
   isRefreshingRealizedPnL = false,
   balanceQuery,
   accountBalance,
+  accountDebt,
   liqPrice,
 }: FuturesBalanceWidgetProps) => {
   const { address } = useAccount();
@@ -290,6 +293,14 @@ export const FuturesBalanceWidget = ({
                 </GaugeCell>
               </MetricColumn>
             </MetricsGrid>
+
+            {accountDebt !== null && accountDebt > 0n && (
+              <AccountDebtNote>
+                <span>Account debt</span>
+                <strong>{amount(accountDebt)} USDC</strong>
+                <small>Included in margin. Later gains repay it before they are credited.</small>
+              </AccountDebtNote>
+            )}
 
             <ActionButtons>
               <ActionButton onClick={depositModal.open}>Deposit</ActionButton>
@@ -425,6 +436,30 @@ const MetricValue = styled.span`
   font-weight: 600;
   color: ${tokens.text.onDark};
   line-height: 1.2;
+`;
+
+const AccountDebtNote = styled.div`
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.15rem 0.5rem;
+  padding: 0.35rem 0.5rem;
+  background-color: ${tokens.perps.highlightBg};
+  border: 1px solid ${tokens.perps.highlightBorderSoft};
+  border-radius: 6px;
+  color: ${tokens.trading.warning};
+  font-size: 0.68rem;
+  line-height: 1.35;
+
+  strong {
+    font-family: monospace;
+    font-weight: 600;
+  }
+
+  small {
+    grid-column: 1 / -1;
+    color: ${tokens.text.secondary};
+    font-size: 0.62rem;
+  }
 `;
 
 const ActionButtons = styled.div`

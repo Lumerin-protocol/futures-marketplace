@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  multicall3@0.0.0: f161cbee6da2788494364d99cafb2d9c802738f56fb89426eebbc0a14a4f4a8f
+  multicall3@0.0.0: 18a2c3663de95ffd165a73f5fffc966e6377a4e99f20f103443174ce5623a1e4
 
 importers:
 
@@ -33,11 +33,14 @@ importers:
         specifier: ^4.0.1
         version: 4.0.1(typescript@5.9.3)(zod@3.25.76)
       collateral-margin:
-        specifier: github:Lumerin-protocol/collateral-margin#d4b3dac6a33caea52dae62c8aee1061372df91d3
-        version: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/d4b3dac6a33caea52dae62c8aee1061372df91d3
+        specifier: github:Lumerin-protocol/collateral-margin#1002e15262b12e249876ad5efbc6e2c39a0a6f96
+        version: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/1002e15262b12e249876ad5efbc6e2c39a0a6f96
+      hashprice-oracle:
+        specifier: github:Lumerin-protocol/hashprice-oracle#70e5a697f61077d60cef91b1079bb87be8c91030
+        version: https://codeload.github.com/Lumerin-protocol/hashprice-oracle/tar.gz/70e5a697f61077d60cef91b1079bb87be8c91030
       multicall3:
         specifier: github:mds1/multicall3
-        version: https://codeload.github.com/mds1/multicall3/tar.gz/b667d67ecfa5361a81e8f110234ce242613b0012(patch_hash=f161cbee6da2788494364d99cafb2d9c802738f56fb89426eebbc0a14a4f4a8f)
+        version: https://codeload.github.com/mds1/multicall3/tar.gz/b667d67ecfa5361a81e8f110234ce242613b0012(patch_hash=18a2c3663de95ffd165a73f5fffc966e6377a4e99f20f103443174ce5623a1e4)
       solidity-linked-list:
         specifier: 6.5.0
         version: 6.5.0
@@ -1016,8 +1019,8 @@ packages:
   ci-info@2.0.0:
     resolution: {integrity: sha512-5tK7EtrZ0N+OLFMthtqOj4fI2Jeb88C4CAZPu25LDVUgXJ0A3Js4PMGqrn0JU1W0Mh1/Z8wZzYPxqUrXeBboCQ==}
 
-  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/d4b3dac6a33caea52dae62c8aee1061372df91d3:
-    resolution: {gitHosted: true, tarball: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/d4b3dac6a33caea52dae62c8aee1061372df91d3}
+  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/1002e15262b12e249876ad5efbc6e2c39a0a6f96:
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/1002e15262b12e249876ad5efbc6e2c39a0a6f96}
     version: 1.0.0
 
   color-convert@2.0.1:
@@ -1203,6 +1206,10 @@ packages:
 
   hash.js@1.1.7:
     resolution: {integrity: sha512-taOaskGt4z4SOANNseOviYDvjEJinIkRgmp7LbKP2YTTmVxWBl87s/uzK9r+44BclBSp2X7K1hqeNfz9JbBeXA==}
+
+  hashprice-oracle@https://codeload.github.com/Lumerin-protocol/hashprice-oracle/tar.gz/70e5a697f61077d60cef91b1079bb87be8c91030:
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/Lumerin-protocol/hashprice-oracle/tar.gz/70e5a697f61077d60cef91b1079bb87be8c91030}
+    version: 1.0.0
 
   hmac-drbg@1.0.1:
     resolution: {integrity: sha512-Tti3gMqLdZfhOQY1Mzf/AanLiqh1WTiJgEj26ZuYQ9fbkLomzGchCws4FyrSd4VkpBfiNhaE1On+lOz894jvXg==}
@@ -2977,7 +2984,7 @@ snapshots:
 
   ci-info@2.0.0: {}
 
-  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/d4b3dac6a33caea52dae62c8aee1061372df91d3: {}
+  collateral-margin@https://codeload.github.com/Lumerin-protocol/collateral-margin/tar.gz/1002e15262b12e249876ad5efbc6e2c39a0a6f96: {}
 
   color-convert@2.0.1:
     dependencies:
@@ -3258,6 +3265,8 @@ snapshots:
       inherits: 2.0.4
       minimalistic-assert: 1.0.1
 
+  hashprice-oracle@https://codeload.github.com/Lumerin-protocol/hashprice-oracle/tar.gz/70e5a697f61077d60cef91b1079bb87be8c91030: {}
+
   hmac-drbg@1.0.1:
     dependencies:
       hash.js: 1.1.7
@@ -3403,7 +3412,7 @@ snapshots:
 
   ms@2.1.3: {}
 
-  multicall3@https://codeload.github.com/mds1/multicall3/tar.gz/b667d67ecfa5361a81e8f110234ce242613b0012(patch_hash=f161cbee6da2788494364d99cafb2d9c802738f56fb89426eebbc0a14a4f4a8f): {}
+  multicall3@https://codeload.github.com/mds1/multicall3/tar.gz/b667d67ecfa5361a81e8f110234ce242613b0012(patch_hash=18a2c3663de95ffd165a73f5fffc966e6377a4e99f20f103443174ce5623a1e4): {}
 
   ndjson@2.0.0:
     dependencies:

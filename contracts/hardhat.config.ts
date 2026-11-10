@@ -35,6 +35,9 @@ export default defineConfig({
       "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol",
       "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol",
       "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol",
+      "hashprice-oracle/contracts/contracts/HashpriceGlideUSD.sol",
+      "hashprice-oracle/contracts/contracts/HashpriceUSD.sol",
+      "hashprice-oracle/contracts/contracts/mocks/HashpriceBTCMock.sol",
       "collateral-margin/contracts/contracts/CollateralVault.sol",
       "collateral-margin/contracts/contracts/PortfolioMarginEngine.sol",
       "collateral-margin/contracts/contracts/Points.sol",
@@ -51,16 +54,6 @@ export default defineConfig({
         settings: {
           optimizer: { enabled: true, runs: 200 },
           viaIR: true,
-        },
-      },
-      {
-        // multicall3 has a strict `pragma solidity 0.8.12;`
-        version: "0.8.12",
-        settings: {
-          optimizer: {
-            enabled: true,
-            runs: 10_000_000,
-          },
         },
       },
     ],

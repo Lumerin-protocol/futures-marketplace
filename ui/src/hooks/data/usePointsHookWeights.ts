@@ -7,10 +7,11 @@ import { withErrors } from "../../lib/withErrors";
 ///   - `WEIGHT_SCALE` — fixed-point denominator for the weights.
 ///   - `wTaker` — weight applied to taker volume.
 ///   - `wMaker` — weight applied to maker volume.
+///   - `minFee` — smallest fee a fill side must pay to earn anything.
 ///
 /// The hook address is resolved via `useFuturesHook`, so this read is gated
 /// until that address is available. Points for a given trade are computed as:
-///   points = weight * size / WEIGHT_SCALE
+///   points = weight * size / WEIGHT_SCALE  (see `fillPoints`)
 export function usePointsHookWeights() {
   const { data: hookAddress } = useFuturesHook();
 
@@ -31,6 +32,11 @@ export function usePointsHookWeights() {
         abi: withErrors(PointsHookAbi),
         functionName: "wMaker",
       },
+      {
+        address: hookAddress,
+        abi: withErrors(PointsHookAbi),
+        functionName: "minFee",
+      },
     ],
     query: {
       enabled: !!hookAddress,
@@ -44,6 +50,7 @@ export function usePointsHookWeights() {
   const weightScale = result.data?.[0]?.result as bigint | undefined;
   const wTaker = result.data?.[1]?.result as bigint | undefined;
   const wMaker = result.data?.[2]?.result as bigint | undefined;
+  const minFee = result.data?.[3]?.result as bigint | undefined;
 
   return {
     ...result,
@@ -51,5 +58,6 @@ export function usePointsHookWeights() {
     weightScale,
     wTaker,
     wMaker,
+    minFee,
   };
 }

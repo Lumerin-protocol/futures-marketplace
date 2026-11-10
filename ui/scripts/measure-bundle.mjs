@@ -25,7 +25,8 @@ function attributeFile(jsPath) {
     const byLine = [];
     eachMapping(tracer, (m) => {
       const i = m.generatedLine - 1;
-      (byLine[i] ??= []).push(m);
+      byLine[i] ??= [];
+      byLine[i].push(m);
     });
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -56,16 +57,14 @@ function attributeFile(jsPath) {
 function staticImports(code) {
   const out = [];
   const re = /(?:^|[\n;{}])\s*import\s*(?:type\s+)?(?:[^'"\n]*?\s*from\s*)?["']([^"']+)["']/g;
-  let m;
-  while ((m = re.exec(code))) out.push(m[1]);
+  for (const m of code.matchAll(re)) out.push(m[1]);
   return out;
 }
 
 function dynamicImports(code) {
   const out = [];
   const re = /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g;
-  let m;
-  while ((m = re.exec(code))) out.push(m[1]);
+  for (const m of code.matchAll(re)) out.push(m[1]);
   return out;
 }
 
@@ -142,8 +141,7 @@ export function measureBundle() {
     if (/from\s+["']next-yak["']/.test(text)) inventory.yakImportFiles += 1;
     const local = new Set();
     const re = /from\s+["']@mui\/material(?:\/([A-Za-z0-9]+))?["']/g;
-    let m;
-    while ((m = re.exec(text))) {
+    for (const m of text.matchAll(re)) {
       const name = m[1];
       if (!name || name === "styles") continue;
       local.add(name);

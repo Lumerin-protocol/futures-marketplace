@@ -15,16 +15,21 @@ export type VerifyOpts = {
   /** Fully qualified name, e.g. `contracts/HashPowerFutures.sol:HashPowerFutures`. */
   contract?: string;
   force?: boolean;
+  /** Linked external libraries by name, e.g. `{ FuturesBookLib: "0x…" }`. */
+  libraries?: Record<string, string>;
 };
 
-/// Verify on each provider in turn. Never throws — failures are logged so the
-/// deploy script can keep going.
+/// Verify on each provider in turn. Never throws — failures are logged so a
+/// caller can decide whether Basescan has to succeed.
+///
+/// Returns whether Etherscan (Basescan) verification succeeded or was already
+/// done. Blockscout and Sourcify are best-effort and do not affect the result.
 export async function verifyContract(
   address: string,
   constructorArgs?: readonly unknown[],
   providers: readonly Provider[] = DEFAULT_PROVIDERS,
   opts: VerifyOpts = {},
-) {
+): Promise<boolean> {
   // hardhat-verify defaults to the built-in `production` profile (runs=200, no
   // viaIR). Deploy/compile use `default` (viaIR + our optimizer settings).
   // Force `default` so the compiler input matches on-chain bytecode.
@@ -41,20 +46,45 @@ export async function verifyContract(
     constructorArgs: normalizedArgs as unknown[],
     contract: opts.contract,
     force: opts.force,
+    libraries: opts.libraries,
   };
 
+  let etherscanOk = !providers.includes("etherscan");
   for (const provider of providers) {
     console.log(`\nVerifying ${args.address} on ${provider}...`);
     try {
-      await hreVerify({ ...args, provider }, hre);
+      await verifyOnceIndexed({ ...args, provider });
       console.log(`  ${provider}: verified.`);
+      if (provider === "etherscan") etherscanOk = true;
     } catch (err) {
       const msg = (err as Error).message ?? String(err);
       if (msg.includes("Already Verified") || msg.includes("already been verified")) {
         console.log(`  ${provider}: already verified.`);
+        if (provider === "etherscan") etherscanOk = true;
       } else {
         console.warn(`  ${provider}: verification failed — ${msg}`);
       }
+    }
+  }
+  return etherscanOk;
+}
+
+const INDEX_RETRY_MS = 15_000;
+const INDEX_TIMEOUT_MS = 300_000;
+
+/// An explorer indexes a new contract a minute or so after it is mined and
+/// until then reports that the address has no bytecode.
+async function verifyOnceIndexed(args: VerifyContractArgs): Promise<void> {
+  const deadline = Date.now() + INDEX_TIMEOUT_MS;
+  for (;;) {
+    try {
+      await hreVerify(args, hre);
+      return;
+    } catch (err) {
+      const msg = (err as Error).message ?? String(err);
+      if (!msg.includes("does not have bytecode") || Date.now() > deadline) throw err;
+      console.log(`  ${args.provider}: not indexed yet; retrying in ${INDEX_RETRY_MS / 1000}s`);
+      await new Promise((resolve) => setTimeout(resolve, INDEX_RETRY_MS));
     }
   }
 }

@@ -154,7 +154,7 @@ export const SendCollateralForm: FC<SendCollateralFormProps> = ({
           />
         </InputWrapper>
         <AmountInputForm
-          control={form.control as Control<{ amount: string }>}
+          control={form.control as unknown as Control<{ amount: string }>}
           label="Transfer Amount"
           additionalValidate={validateBalance}
           onMaxClick={handleMaxClick}

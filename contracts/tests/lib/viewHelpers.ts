@@ -8,8 +8,10 @@ type FuturesReader = {
     getOrderAggregateAtExpiration: (args: readonly [Address, bigint]) => Promise<{
       buyQty: bigint;
       sellQty: bigint;
-      buyValue: bigint;
-      sellValue: bigint;
+      buyPQ: bigint;
+      buyP2Q: bigint;
+      sellPQ: bigint;
+      sellP2Q: bigint;
     }>;
     getUserPosition: (
       args: readonly [Address, bigint],
@@ -38,13 +40,15 @@ export async function getUserOrders(futures: FuturesReader, user: Address): Prom
 /** Summed active-window order aggregate (replaces removed `getOrderAggregate`). */
 export async function getOrderAggregate(futures: FuturesReader, user: Address) {
   const expirationAts = await futures.read.getExpirationDates();
-  const aggregate = { buyQty: 0n, sellQty: 0n, buyValue: 0n, sellValue: 0n };
+  const aggregate = { buyQty: 0n, sellQty: 0n, buyPQ: 0n, buyP2Q: 0n, sellPQ: 0n, sellP2Q: 0n };
   for (const expirationAt of expirationAts) {
     const part = await futures.read.getOrderAggregateAtExpiration([user, expirationAt]);
     aggregate.buyQty += part.buyQty;
     aggregate.sellQty += part.sellQty;
-    aggregate.buyValue += part.buyValue;
-    aggregate.sellValue += part.sellValue;
+    aggregate.buyPQ += part.buyPQ;
+    aggregate.buyP2Q += part.buyP2Q;
+    aggregate.sellPQ += part.sellPQ;
+    aggregate.sellP2Q += part.sellP2Q;
   }
   return aggregate;
 }

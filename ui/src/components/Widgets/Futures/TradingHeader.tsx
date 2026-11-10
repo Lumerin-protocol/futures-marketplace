@@ -5,6 +5,8 @@ import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
 import { DetailedSpecsModal } from "./DetailedSpecsModal";
 import { useSettlementPrice } from "../../../hooks/data/useSettlementPrice";
+import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
+import { useFuturesMarkRange, usePerpsMarkPrice } from "../../../hooks/data/useMarks";
 import { formatHashratePHPS, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { describeLiquidationLevel } from "../../../lib/liquidation";
 import { MarketSelector } from "./MarketSelector";
@@ -82,6 +84,40 @@ export const TradingHeader = ({
     settlementPriceRaw && settlementPriceRaw > 0n
       ? (Number(settlementPriceRaw) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)
       : null;
+  // The selected market's mark, shown only where it departs from the index: a futures date
+  // settling after the next halving (or inside the window around it), perps on the glide.
+  const { data: indexPrice } = useGetMarketPrice();
+  const markRange = useFuturesMarkRange(
+    contractMode === "futures" && selectedExpirationAt ? BigInt(selectedExpirationAt) : undefined,
+  );
+  const { mark: perpsMark } = usePerpsMarkPrice(contractMode === "perpetual");
+  const formatPrice = (raw: bigint) => (Number(raw) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+  const markStat = (() => {
+    const index = indexPrice as bigint | undefined;
+    if (index === undefined) return null;
+    if (contractMode === "perpetual") {
+      if (perpsMark === undefined || perpsMark === index) return null;
+      return {
+        value: formatPrice(perpsMark),
+        tooltip:
+          "Perps marks at the halving glide: the index stepping down to its post-halving level over the week before the halving. Longs are paid the decline as drift, so holding through it is neutral.",
+      };
+    }
+    const { low, high } = markRange;
+    if (low === undefined || high === undefined || (low === index && high === index)) return null;
+    if (low === high) {
+      return {
+        value: formatPrice(low),
+        tooltip:
+          "This date settles after the next halving: positions and orders on it are valued at this post-halving mark, not at the index.",
+      };
+    }
+    return {
+      value: `${formatPrice(low)} – ${formatPrice(high)}`,
+      tooltip:
+        "The next halving may fall either side of this date: longs and bids are valued at the low (post-halving) mark, shorts and asks at the high (the index).",
+    };
+  })();
   const hasLiquidation = isUnderwater || liqPrice !== undefined;
   const liquidationTooltip = describeLiquidationLevel({
     price: liqPrice,
@@ -107,6 +143,19 @@ export const TradingHeader = ({
       </StatItem>
     </Tooltip>
   );
+
+  const renderMarkStat = () =>
+    markStat && (
+      <>
+        <Divider />
+        <Tooltip title={markStat.tooltip} arrow>
+          <StatItem>
+            <StatValue>{markStat.value}</StatValue>
+            <StatLabel>Mark</StatLabel>
+          </StatItem>
+        </Tooltip>
+      </>
+    );
 
   /// The account's liquidation price, sitting next to Hash Price so the mark can
   /// be read against it directly. Margin is pooled across every futures and
@@ -230,6 +279,7 @@ export const TradingHeader = ({
             <>
               <DesktopMarketStats>
                 {renderHashPriceStat()}
+                {renderMarkStat()}
                 {renderLiquidationStat()}
               </DesktopMarketStats>
               {renderMobileMarketStat()}
@@ -249,6 +299,7 @@ export const TradingHeader = ({
             <>
               <DesktopMarketStats>
                 {renderHashPriceStat()}
+                {renderMarkStat()}
                 {renderLiquidationStat()}
               </DesktopMarketStats>
               {renderMobileMarketStat()}

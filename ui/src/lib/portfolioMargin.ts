@@ -10,7 +10,7 @@
 
 import {
   mmSurplus,
-  netDeltaWad,
+  netExposure,
   solveLiquidationThresholds as solveThresholds,
   type AccountSnapshot,
   type MMParams,
@@ -56,11 +56,12 @@ export function solveLiquidationThresholds(
  * The single threshold to present as "the" liquidation price.
  *
  * Net exposure picks the side: a net long is hurt by a fall, a net short by a
- * rise. That is how a liquidation price reads on every other venue, and it
+ * rise. Exposure, not contracts: each leg at its own mark, as the engine stresses it,
+ * so a long on a post-halving date counts for half a short at the index. That is how a liquidation price reads on every other venue, and it
  * keeps us from leading with the stress-driven level on the profitable side.
  *
  * Two cases need care, and in both we fall back rather than report no risk:
- * - A delta-neutral book still has thresholds. `netDelta == 0` makes the perp
+ * - An exposure-neutral book still has thresholds. Zero net exposure makes the perp
  *   and futures PnL slopes cancel, but resting orders are stressed per side and
  *   fill losses are clamped independently, so the requirement still moves with
  *   price. With no directional bias, take whichever level is nearer the mark.
@@ -84,8 +85,8 @@ export function pickLiquidationLevel(
   if (down === undefined) return up;
   if (up === undefined) return down;
 
-  const netDelta = netDeltaWad(snap, params);
-  if (netDelta > 0n) return down;
-  if (netDelta < 0n) return up;
+  const exposure = netExposure(snap, params, currentPrice);
+  if (exposure > 0n) return down;
+  if (exposure < 0n) return up;
   return currentPrice - down.price <= up.price - currentPrice ? down : up;
 }
