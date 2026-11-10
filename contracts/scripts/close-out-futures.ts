@@ -1,5 +1,5 @@
 import hre from "hardhat";
-import { type Address, type PublicClient, getAddress, parseAbi, parseAbiItem } from "viem";
+import { type Address, type Hex, type PublicClient, getAddress, parseAbi, parseAbiItem } from "viem";
 import { requireAddress, readOptionalBigInt, requireEnvsSet } from "../lib/env.ts";
 import { addrUrl, txUrl } from "../lib/explorer.ts";
 import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts";
@@ -23,6 +23,7 @@ const RETIRED_FUTURES_ABI = parseAbi([
   "function settlePositions(address[], uint256[])",
   "function forceClosePositions(address[], uint256[])",
   "function resetState(address[])",
+  "function removeOutdatedOrders(bytes32[]) returns (uint256)",
 ]);
 const ORDER_CREATED = parseAbiItem(
   "event OrderCreated(bytes32 indexed orderId, address indexed participant, uint256 price, int256 quantity, uint256 expirationAt)",
@@ -38,7 +39,7 @@ const DEFAULT_BATCH_SIZE = 20;
 const DEFAULT_CHUNK = 10_000n;
 const READ_CONCURRENCY = 16;
 
-type Leg = OrderSlot & { netQuantity: bigint; orders: number };
+type Leg = OrderSlot & { netQuantity: bigint; orders: number; orderIds: readonly Hex[] };
 
 /** Every (participant, expiry) pair that ever held an order or a fill. */
 async function scanLegs(pc: PublicClient, futures: Address, fromBlock: bigint, toBlock: bigint) {
@@ -75,7 +76,7 @@ async function readLegs(pc: PublicClient, futures: Address, slots: readonly Orde
       pc.readContract({ address: futures, abi: RETIRED_FUTURES_ABI, functionName: "getUserPosition", args, blockNumber }),
       pc.readContract({ address: futures, abi: RETIRED_FUTURES_ABI, functionName: "getUserOrdersAtExpiration", args, blockNumber }),
     ]);
-    return { ...slot, netQuantity: position.netQuantity, orders: orders.length };
+    return { ...slot, netQuantity: position.netQuantity, orders: orders.length, orderIds: orders };
   });
 }
 
@@ -116,7 +117,11 @@ async function main() {
   const open = legs.filter((l) => l.netQuantity !== 0n);
   const matured = open.filter((l) => l.expirationAt <= block.timestamp);
   const live = open.filter((l) => l.expirationAt > block.timestamp);
-  const ordered = [...new Set(legs.filter((l) => l.orders > 0).map((l) => l.participant))];
+  // `resetState` only clears orders on live dates; expired ones are inert and need `removeOutdatedOrders`.
+  const ordered = [
+    ...new Set(legs.filter((l) => l.orders > 0 && l.expirationAt > block.timestamp).map((l) => l.participant)),
+  ];
+  const outdated = legs.filter((l) => l.expirationAt <= block.timestamp).flatMap((l) => l.orderIds);
   const fundBefore = await pc.readContract({ address: vault, abi: VAULT_ABI, functionName: "insuranceFundBalance" });
   logInfo("close-out plan", {
     Futures: addrUrl(pc, futures),
@@ -126,12 +131,16 @@ async function main() {
     "Legs scanned": legs.length,
     "Matured legs to settle": matured.length,
     "Open legs to force-close": live.length,
-    "Users with orders": ordered.length,
+    "Users with orders on live dates": ordered.length,
+    "Expired orders": outdated.length,
     "Resting orders": legs.reduce((s, l) => s + l.orders, 0),
     "Insurance fund": fundBefore,
   });
-  for (const l of open) {
-    logStep(`${l.participant} @ ${new Date(Number(l.expirationAt) * 1000).toISOString()}`, `position ${l.netQuantity}`);
+  for (const l of legs.filter((l) => l.netQuantity !== 0n || l.orders > 0)) {
+    logStep(
+      `${l.participant} @ ${new Date(Number(l.expirationAt) * 1000).toISOString()}`,
+      `position ${l.netQuantity}, ${l.orders} order(s)`,
+    );
   }
 
   if (!execute) {
@@ -140,6 +149,8 @@ async function main() {
   }
 
   await logPrompt("Settle matured legs, force-close open legs, then reset the orders?");
+  // A load-balanced RPC can report a head older than the receipts, so verify at the last receipt.
+  let after = block.number;
   const send = async (functionName: "settlePositions" | "forceClosePositions", batch: Leg[]) => {
     const hash = await deployer.writeContract({
       address: futures,
@@ -149,6 +160,7 @@ async function main() {
     });
     const receipt = await pc.waitForTransactionReceipt({ hash });
     if (receipt.status !== "success") throw new Error(`${functionName} reverted: ${txUrl(pc, hash)}`);
+    after = receipt.blockNumber;
     logStep(`${functionName}(${batch.length})`, txUrl(pc, hash));
   };
   for (const batch of chunk(matured, batchSize)) await send("settlePositions", batch);
@@ -157,10 +169,17 @@ async function main() {
     const hash = await deployer.writeContract({ address: futures, abi: RETIRED_FUTURES_ABI, functionName: "resetState", args: [batch] });
     const receipt = await pc.waitForTransactionReceipt({ hash });
     if (receipt.status !== "success") throw new Error(`resetState reverted: ${txUrl(pc, hash)}`);
+    after = receipt.blockNumber;
     logStep(`resetState(${batch.length})`, txUrl(pc, hash));
   }
+  for (const batch of chunk(outdated, batchSize)) {
+    const hash = await deployer.writeContract({ address: futures, abi: RETIRED_FUTURES_ABI, functionName: "removeOutdatedOrders", args: [batch] });
+    const receipt = await pc.waitForTransactionReceipt({ hash });
+    if (receipt.status !== "success") throw new Error(`removeOutdatedOrders reverted: ${txUrl(pc, hash)}`);
+    after = receipt.blockNumber;
+    logStep(`removeOutdatedOrders(${batch.length})`, txUrl(pc, hash));
+  }
 
-  const after = await pc.getBlockNumber();
   const left = (await readLegs(pc, futures, slots, after)).filter((l) => l.netQuantity !== 0n || l.orders > 0);
   if (left.length > 0) throw new Error(`${left.length} leg(s) still hold a position or orders`);
   const fundAfter = await pc.readContract({ address: vault, abi: VAULT_ABI, functionName: "insuranceFundBalance", blockNumber: after });
