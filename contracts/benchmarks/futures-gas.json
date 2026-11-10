@@ -660,7 +660,7 @@
     },
     {
       "function": "setOracle(address)",
-      "gas": "99101",
+      "gas": "99123",
       "id": "setOracle(address)::set the glide feed",
       "kind": "transaction",
       "scenario": "set the glide feed"
