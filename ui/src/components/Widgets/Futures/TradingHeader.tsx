@@ -5,8 +5,7 @@ import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
 import { DetailedSpecsModal } from "./DetailedSpecsModal";
 import { useSettlementPrice } from "../../../hooks/data/useSettlementPrice";
-import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
-import { useFuturesMarkRange, usePerpsMarkPrice } from "../../../hooks/data/useMarks";
+import { useHeaderMark } from "../../../hooks/data/useMarks";
 import { formatHashratePHPS, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { describeLiquidationLevel } from "../../../lib/liquidation";
 import { MarketSelector } from "./MarketSelector";
@@ -87,14 +86,11 @@ export const TradingHeader = ({
       : null;
   // The selected market's mark, shown only where it departs from the index: a futures date
   // settling after the next halving (or inside the window around it), perps on the glide.
-  const { data: indexPrice } = useGetMarketPrice();
-  const markRange = useFuturesMarkRange(
-    contractMode === "futures" && selectedExpirationAt ? BigInt(selectedExpirationAt) : undefined,
-  );
-  const { mark: perpsMark } = usePerpsMarkPrice(contractMode === "perpetual");
+  // Index and mark are one multicall, so a poll cannot catch one of them mid-update
+  // and flash this stat on a market where they are equal.
+  const { index, low, high, perpsMark } = useHeaderMark(contractMode, selectedExpirationAt);
   const formatPrice = (raw: bigint) => (Number(raw) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
   const markStat = (() => {
-    const index = indexPrice as bigint | undefined;
     if (index === undefined) return null;
     if (contractMode === "perpetual") {
       if (perpsMark === undefined || perpsMark === index) return null;
@@ -104,7 +100,6 @@ export const TradingHeader = ({
           "Perps marks at the halving glide: the index stepping down to its post-halving level over the week before the halving. Longs are paid the decline as drift, so holding through it is neutral.",
       };
     }
-    const { low, high } = markRange;
     if (low === undefined || high === undefined || (low === index && high === index)) return null;
     if (low === high) {
       return {
