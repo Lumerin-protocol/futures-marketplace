@@ -6,8 +6,8 @@ import {
   type Instrument,
   PAIR_SYMBOL,
   PERPETUAL_INSTRUMENT,
-  formatExpirationShort,
   formatInstrumentLabel,
+  formatInstrumentSuffix,
   formatTimeToExpiry,
   instrumentKey,
   instrumentKindLabel,
@@ -77,7 +77,7 @@ export const MarketSelector = ({
                 <>
                   <TriggerPair>{PAIR_SYMBOL} —</TriggerPair>
                   <TriggerSuffix>
-                    {selected.mode === "perpetual" ? "Perp" : formatExpirationShort(selected.expirationAt)}
+                    {formatInstrumentSuffix(selected)}
                   </TriggerSuffix>
                 </>
               ) : (
@@ -115,7 +115,7 @@ export const MarketSelector = ({
    a pick, so an accent ring would sit in the header until the user clicked
    elsewhere. */
 const MarketSelect = styled(Select)`
-  /* One width for Perp and every expiry, sized to the pair plus the longest
+  /* One width for Perpetual and every expiry, sized to the pair plus the longest
      date at the same size. Also floors the menu off the trigger so its rows
      do not reflow narrower than the trigger they dropped out of. */
   width: 26rem;

@@ -55,15 +55,14 @@ export function formatTimeToExpiry(expirationAt: number, now = Date.now()): stri
   return hours >= 1 ? `${hours}h` : "<1h";
 }
 
-/**
- * `"Hashprice/USDC — Perp"` / `"Hashprice/USDC — 15 Oct 2026"`. Singular "Perp"
- * is the ticker convention for a single perpetual instrument (Aevo, Drift,
- * Vertex, Paradex all use `-PERP`); the plural names the product, not a market.
- */
+/** The part after the pair: `"Perpetual"` or `"15 Oct 2026"`. */
+export function formatInstrumentSuffix(instrument: Instrument): string {
+  return instrument.mode === "perpetual" ? "Perpetual" : formatExpirationShort(instrument.expirationAt);
+}
+
+/** `"Hashprice/USDC — Perpetual"` / `"Hashprice/USDC — 15 Oct 2026"`. */
 export function formatInstrumentLabel(instrument: Instrument): string {
-  return instrument.mode === "perpetual"
-    ? `${PAIR_SYMBOL} — Perp`
-    : `${PAIR_SYMBOL} — ${formatExpirationShort(instrument.expirationAt)}`;
+  return `${PAIR_SYMBOL} — ${formatInstrumentSuffix(instrument)}`;
 }
 
 /** Product name for the selector's secondary line. */
