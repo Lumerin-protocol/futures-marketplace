@@ -4,8 +4,10 @@ import HpdxLogomark from "../../../images/icons/hpdx-logomark.svg?react";
 import { tokens } from "../../../styles/tokens";
 import {
   type Instrument,
+  PAIR_SYMBOL,
   PERPETUAL_INSTRUMENT,
   formatInstrumentLabel,
+  formatInstrumentSuffix,
   formatTimeToExpiry,
   instrumentKey,
   instrumentKindLabel,
@@ -71,7 +73,16 @@ export const MarketSelector = ({
           <TriggerLogo aria-hidden />
           <TriggerValue>
             <TriggerLabel>
-              {selected ? formatInstrumentLabel(selected) : "Loading markets…"}
+              {selected ? (
+                <>
+                  <TriggerPair>{PAIR_SYMBOL} —</TriggerPair>
+                  <TriggerSuffix>
+                    {formatInstrumentSuffix(selected)}
+                  </TriggerSuffix>
+                </>
+              ) : (
+                "Loading markets…"
+              )}
             </TriggerLabel>
             <TriggerMeta>{selected ? describe(selected) : "Futures"}</TriggerMeta>
           </TriggerValue>
@@ -104,9 +115,12 @@ export const MarketSelector = ({
    a pick, so an accent ring would sit in the header until the user clicked
    elsewhere. */
 const MarketSelect = styled(Select)`
-  /* Also floors the menu off the trigger width so the rows do not reflow
-     narrower than the trigger they dropped out of. */
-  min-width: 350px;
+  /* One width for Perpetual and every expiry, sized to the pair plus the longest
+     date at the same size. Also floors the menu off the trigger so its rows
+     do not reflow narrower than the trigger they dropped out of. */
+  width: 25rem;
+  min-width: 25rem;
+  max-width: 25rem;
   flex-shrink: 0;
 
   .select-trigger {
@@ -115,8 +129,8 @@ const MarketSelect = styled(Select)`
   }
 
   /* MOBILE-ONLY (see FuturesMobileLayout): shares its row with the chart toggle,
-     so the desktop floor is dropped and the padding tightens rather than pushing
-     that toggle off the edge — 350px alone would overflow a phone. */
+     so the desktop width is dropped and the padding tightens rather than pushing
+     that toggle off the edge — the fixed desktop width would overflow a phone. */
   @media (max-width: 768px) {
     /* min-width alone is not enough while desktop flex-shrink remains disabled.
        Give the selector the flexible part of the row and let its label ellipsize
@@ -160,6 +174,10 @@ const TriggerValue = styled.span`
 /* A step above the 1rem/600 the header stats use, so the instrument reads as the
    page's subject and the stats as facts about it. */
 const TriggerLabel = styled.span`
+  display: flex;
+  align-items: baseline;
+  gap: 0.35em;
+  min-width: 0;
   font-size: 1.15rem;
   font-weight: 700;
   line-height: 1.15;
@@ -168,8 +186,23 @@ const TriggerLabel = styled.span`
 
   @media (max-width: 768px) {
     font-size: 0.9375rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  }
+`;
+
+const TriggerPair = styled.span`
+  flex-shrink: 0;
+`;
+
+/* Same size as the pair. The fixed trigger absorbs a longer date. A phone row
+   shares its width with the chart toggle, so the date steps down there instead
+   of losing the year. */
+const TriggerSuffix = styled.span`
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  @media (max-width: 768px) {
+    font-size: 0.75em;
   }
 `;
 
