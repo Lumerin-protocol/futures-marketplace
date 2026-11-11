@@ -116,11 +116,11 @@ export const MarketSelector = ({
    elsewhere. */
 const MarketSelect = styled(Select)`
   /* One width for Perp and every expiry, sized to the pair plus the longest
-     date at the smaller suffix size. Also floors the menu off the trigger so
-     its rows do not reflow narrower than the trigger they dropped out of. */
-  width: 23.75rem;
-  min-width: 23.75rem;
-  max-width: 23.75rem;
+     date at the same size. Also floors the menu off the trigger so its rows
+     do not reflow narrower than the trigger they dropped out of. */
+  width: 26rem;
+  min-width: 26rem;
+  max-width: 26rem;
   flex-shrink: 0;
 
   .select-trigger {
@@ -193,15 +193,17 @@ const TriggerPair = styled.span`
   flex-shrink: 0;
 `;
 
-/* The expiry is the only part of the label that changes length. A step under
-   the pair, so a long date fits the fixed trigger instead of widening it. */
+/* Same size as the pair. The fixed trigger absorbs a longer date. A phone row
+   shares its width with the chart toggle, so the date steps down there instead
+   of losing the year. */
 const TriggerSuffix = styled.span`
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 0.75em;
-  font-weight: 600;
-  letter-spacing: 0;
+
+  @media (max-width: 768px) {
+    font-size: 0.75em;
+  }
 `;
 
 const TriggerMeta = styled.span`
