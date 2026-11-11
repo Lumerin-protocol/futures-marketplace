@@ -11,6 +11,7 @@ import { useOrderMargin } from "../../../hooks/data/useOrderMargin";
 import type { AccountBalance, ContractMode } from "../../../types/types";
 import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
+import { ColumnHeader } from "./ColumnHeader";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -114,9 +115,9 @@ export const OrdersListWidget = ({ orders, isLoading, participantData, accountBa
                 <tr>
                   <th>Contract Expiration</th>
                   <th>Side</th>
-                  <th>Price (USDC)</th>
-                  <th>Filled / Quantity</th>
-                  <th>Margin</th>
+                  <ColumnHeader hint="orderPrice">Price (USDC)</ColumnHeader>
+                  <ColumnHeader hint="filledOverQuantity">Filled / Quantity</ColumnHeader>
+                  <ColumnHeader hint="marginOrder">Margin</ColumnHeader>
                   <th>Time</th>
                   <th>Actions</th>
                 </tr>

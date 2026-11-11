@@ -10,7 +10,8 @@ import { useSessionTrades } from "../../../hooks/data/useSessionTrades";
 import type { PositionBookPosition } from "../../../hooks/data/getUserFuturesPositions";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { getTxUrl } from "../../../lib/indexer";
-import { REALIZED_PNL_FEES_HINT, realizedPnlAfterFees } from "../../../lib/portfolioPnl";
+import { realizedPnlAfterFees } from "../../../lib/portfolioPnl";
+import { ColumnHeader } from "./ColumnHeader";
 import type { ContractMode } from "../../../types/types";
 
 export interface FuturesTradesModalSelection {
@@ -231,10 +232,10 @@ export const FuturesTradesModal = ({
                 <tr>
                   <th>Created</th>
                   <th>Side</th>
-                  <th>Price (USDC)</th>
-                  <th>Quantity</th>
+                  <ColumnHeader hint="tradePrice">Price (USDC)</ColumnHeader>
+                  <ColumnHeader hint="quantity">Quantity</ColumnHeader>
                   {/* <th>Counterparty</th> */}
-                  <th title={REALIZED_PNL_FEES_HINT}>Realized PnL</th>
+                  <ColumnHeader hint="realizedPnl">Realized PnL</ColumnHeader>
                   <th>Tx Hash</th>
                 </tr>
               </thead>
