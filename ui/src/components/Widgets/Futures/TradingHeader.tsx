@@ -18,6 +18,7 @@ import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { ContractMode } from "../../../types/types";
 import { EastIcon } from "../../icons";
+import { PRICE_CHANGE_INTEGER_DIGITS, reservedSigned } from "./priceChangeFormat";
 
 interface TradingHeaderProps {
   contractMode: ContractMode;
@@ -209,16 +210,20 @@ export const TradingHeader = ({
     </Tooltip>
   );
 
+  /// Tabular figures in fixed slots: a tick must not change this width and push
+  /// the stats beside the index.
   const renderPriceChange = () => {
     if (!priceChange) return null;
     const isUp = priceChange.delta >= 0;
-    const sign = isUp ? "+" : "";
-    const pctText = priceChange.pct != null ? ` (${sign}${priceChange.pct.toFixed(2)}%)` : "";
     return (
       <PriceChange $up={isUp}>
-        {isUp ? "▲" : "▼"} {sign}
-        {priceChange.delta.toFixed(2)}
-        {pctText}
+        <ChangeGlyph>{isUp ? "▲" : "▼"}</ChangeGlyph>
+        <SignedFigure value={priceChange.delta} />
+        {priceChange.pct != null && (
+          <PctGroup>
+            (<SignedFigure value={priceChange.pct} />%)
+          </PctGroup>
+        )}
       </PriceChange>
     );
   };
@@ -427,11 +432,64 @@ const StatValue = styled.span`
 `;
 
 const PriceChange = styled.span<{ $up: boolean }>`
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35em;
   margin-left: 0.4rem;
   font-size: 0.65rem;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   color: ${(props) => (props.$up ? tokens.trading.long : tokens.trading.short)};
 `;
+
+const ChangeGlyph = styled.span`
+  display: inline-block;
+  width: 1em;
+  text-align: center;
+  flex: none;
+`;
+
+const Figure = styled.span`
+  display: inline-flex;
+  align-items: baseline;
+  flex: none;
+`;
+
+const Sign = styled.span`
+  display: inline-block;
+  width: 1ch;
+  text-align: left;
+  flex: none;
+`;
+
+const Ints = styled.span`
+  display: inline-block;
+  min-width: ${PRICE_CHANGE_INTEGER_DIGITS}ch;
+  text-align: right;
+  flex: none;
+`;
+
+const Frac = styled.span`
+  display: inline-block;
+  width: 2ch;
+  text-align: left;
+  flex: none;
+`;
+
+const PctGroup = styled.span`
+  flex: none;
+`;
+
+const SignedFigure = ({ value }: { value: number }) => {
+  const { sign, ints, frac } = reservedSigned(value, PRICE_CHANGE_INTEGER_DIGITS);
+  return (
+    <Figure>
+      <Sign>{sign}</Sign>
+      <Ints>{ints}</Ints>.<Frac>{frac}</Frac>
+    </Figure>
+  );
+};
 
 const StatLabel = styled.span`
   font-size: 0.6rem;
