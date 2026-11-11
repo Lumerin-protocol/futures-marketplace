@@ -35,17 +35,17 @@ import { useOrderMargin } from "../../../hooks/data/useOrderMargin";
 import { DateTimeCell } from "../../DateTimeCell";
 import { LoadMoreButton } from "../../LoadMoreButton";
 import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE } from "../../../lib/units";
+import { formatFundingAndTradingFees } from "../../../lib/feeDisplay";
 import { getTxUrl } from "../../../lib/indexer";
 import {
   LiquidationChip,
   formatLiquidatedQty,
   LIQUIDATION_ROW_BG,
 } from "../../../lib/liquidation";
-import { REALIZED_PNL_FEES_HINT, realizedPnlAfterFees } from "../../../lib/portfolioPnl";
+import { realizedPnlAfterFees } from "../../../lib/portfolioPnl";
+import { ColumnHeader } from "./ColumnHeader";
 
 type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "POSITION_HISTORY" | "ORDER_HISTORY";
-
-const SESSION_REALIZED_PNL_HINT = `${REALIZED_PNL_FEES_HINT} Funding is not included.`;
 
 interface PerpsOrdersPositionsTabWidgetProps {
   participantAddress?: `0x${string}`;
@@ -412,8 +412,8 @@ const PerpsOpenOrdersTable = ({
           <tr>
             <th>Created</th>
             <th>Side</th>
-            <th>Price (USDC)</th>
-            <th>Filled / Size (USDC)</th>
+            <ColumnHeader hint="orderPrice">Price (USDC)</ColumnHeader>
+            <ColumnHeader hint="filledOverSize">Filled / Size (USDC)</ColumnHeader>
             <th>Status</th>
             <th>Actions</th>
           </tr>
@@ -648,8 +648,8 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, hasMore = false, isFetching
           <tr>
             <th>Created</th>
             <th>Side</th>
-            <th>Price (USDC)</th>
-            <th>Filled / Size (USDC)</th>
+            <ColumnHeader hint="orderPrice">Price (USDC)</ColumnHeader>
+            <ColumnHeader hint="filledOverSize">Filled / Size (USDC)</ColumnHeader>
             <th>Status</th>
             <th>Updated</th>
           </tr>
@@ -708,12 +708,6 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
     return (Number(absQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
   };
 
-  const formatFees = (fundingFees: bigint, tradingFees: bigint) => {
-    const funding = (Number(fundingFees) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-    const trading = (Number(tradingFees) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-    return `${funding} / ${trading}`;
-  };
-
   // Calculate unrealized PnL: (currentMarketPrice - entryPrice) * netQuantity
   const calculateUnrealizedPnL = (entryPrice: bigint, netQuantity: bigint): bigint => {
     if (!marketPrice || netQuantity === 0n) return 0n;
@@ -731,10 +725,6 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
     positionMargin === undefined
       ? "—"
       : `${(Number(positionMargin < 0n ? -positionMargin : 0n) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} USDC`;
-  const marginTooltip =
-    "Initial margin this position accounts for — how much the account's requirement " +
-    "would fall if it were closed. Collateral is pooled across futures and perps, so a " +
-    "leg that hedges the rest of the book can account for none of it.";
 
   const openPositions = [...positionSessions]
     .filter((session) => session.status === "OPEN")
@@ -765,12 +755,12 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
               <th>Opened At</th>
               <th>Side</th>
               <th>Status</th>
-              <th>Entry Price</th>
-              <th>Size / Max Size</th>
-              <th title={marginTooltip}>Margin</th>
-              <th>Fees (F/T)</th>
-              <th>Unrealized PnL</th>
-              <th title={SESSION_REALIZED_PNL_HINT}>Realized PnL</th>
+              <ColumnHeader hint="entryPrice">Entry Price</ColumnHeader>
+              <ColumnHeader hint="sizeOverMax">Size / Max Size</ColumnHeader>
+              <ColumnHeader hint="marginPerps">Margin</ColumnHeader>
+              <ColumnHeader hint="feesFT">Fees (F/T)</ColumnHeader>
+              <ColumnHeader hint="unrealizedPnl">Unrealized PnL</ColumnHeader>
+              <ColumnHeader hint="realizedPnlSession">Realized PnL</ColumnHeader>
               <th>Actions</th>
             </tr>
           </thead>
@@ -820,8 +810,8 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
                     {" / "}
                     {((Number(session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(session.maxQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}
                   </td>
-                  <td title={marginTooltip}>{positionMarginLabel}</td>
-                  <td>{formatFees(session.fundingFees, session.tradingFees)}</td>
+                  <td>{positionMarginLabel}</td>
+                  <td>{formatFundingAndTradingFees(session.fundingFees, session.tradingFees)}</td>
                   <td>
                     <PnLText $isPositive={unrealizedPnlValue >= 0}>
                       {unrealizedPnlValue >= 0 ? "+" : ""}{unrealizedPnlValue.toFixed(2)} USDC
@@ -884,12 +874,6 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, hasMore = fals
     return (Number(absQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
   };
 
-  const formatFees = (fundingFees: bigint, tradingFees: bigint) => {
-    const funding = (Number(fundingFees) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-    const trading = (Number(tradingFees) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-    return `${funding} / ${trading}`;
-  };
-
   const formatStatus = (status: string) => {
     return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
   };
@@ -935,11 +919,11 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, hasMore = fals
               <th>Opened At</th>
               <th>Status</th>
               <th>Side</th>
-              <th>Entry Price (USDC)</th>
-              <th>Close Price (USDC)</th>
-              <th>Size (USDC)</th>
-              <th>Fees (F/T)</th>
-              <th title={SESSION_REALIZED_PNL_HINT}>Realized PnL</th>
+              <ColumnHeader hint="entryPrice">Entry Price (USDC)</ColumnHeader>
+              <ColumnHeader hint="closePrice">Close Price (USDC)</ColumnHeader>
+              <ColumnHeader hint="sizeUsdc">Size (USDC)</ColumnHeader>
+              <ColumnHeader hint="feesFT">Fees (F/T)</ColumnHeader>
+              <ColumnHeader hint="realizedPnlSession">Realized PnL</ColumnHeader>
               <th>Actions</th>
             </tr>
           </thead>
@@ -989,7 +973,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, hasMore = fals
                   <td>{formatPrice(session.entryPrice)}</td>
                   <td>{session.closePrice ? formatPrice(session.closePrice) : "-"}</td>
                   <td>{((Number(session.closePrice ?? session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(session.closedQuantity < 0n ? -session.closedQuantity : session.closedQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}</td>
-                  <td>{formatFees(session.fundingFees, session.tradingFees)}</td>
+                  <td>{formatFundingAndTradingFees(session.fundingFees, session.tradingFees)}</td>
                   <td>
                     <PnLText $isPositive={realizedPnlValue >= 0}>
                       {realizedPnlValue >= 0 ? "+" : ""}{realizedPnlValue.toFixed(2)} USDC
@@ -1078,11 +1062,11 @@ const PerpsTradesTable = ({ trades, isLoading, hasMore = false, isFetchingMore, 
           <tr>
             <th>Time</th>
             <th>Side</th>
-            <th>Trade Price</th>
-            <th>Size (USDC)</th>
-            <th>Entry Price After</th>
-            <th>Trading Fee</th>
-            <th title={REALIZED_PNL_FEES_HINT}>Realized PnL</th>
+            <ColumnHeader hint="tradePrice">Trade Price</ColumnHeader>
+            <ColumnHeader hint="sizeUsdc">Size (USDC)</ColumnHeader>
+            <ColumnHeader hint="entryPriceAfter">Entry Price After</ColumnHeader>
+            <ColumnHeader hint="tradingFee">Trading Fee</ColumnHeader>
+            <ColumnHeader hint="realizedPnl">Realized PnL</ColumnHeader>
             <th>Tx Hash</th>
           </tr>
         </thead>
@@ -1191,11 +1175,11 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
               <tr>
                 <th>Time</th>
                 <th>Side</th>
-                <th>Trade Price</th>
-                <th>Size (USDC)</th>
-                <th>Entry Price After</th>
-                <th>Trading Fee</th>
-                <th title={REALIZED_PNL_FEES_HINT}>Realized PnL</th>
+                <ColumnHeader hint="tradePrice">Trade Price</ColumnHeader>
+                <ColumnHeader hint="sizeUsdc">Size (USDC)</ColumnHeader>
+                <ColumnHeader hint="entryPriceAfter">Entry Price After</ColumnHeader>
+                <ColumnHeader hint="tradingFee">Trading Fee</ColumnHeader>
+                <ColumnHeader hint="realizedPnl">Realized PnL</ColumnHeader>
                 <th>Tx Hash</th>
               </tr>
             </thead>

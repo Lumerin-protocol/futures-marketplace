@@ -17,7 +17,8 @@ import { LoadMoreButton } from "../../LoadMoreButton";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { getTxUrl } from "../../../lib/indexer";
 import { LiquidationChip, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
-import { REALIZED_PNL_FEES_HINT, realizedPnlAfterFees } from "../../../lib/portfolioPnl";
+import { realizedPnlAfterFees } from "../../../lib/portfolioPnl";
+import { ColumnHeader } from "./ColumnHeader";
 import { ClosePositionForm, type ClosablePosition } from "../../Forms/ClosePositionForm";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { ModalItem } from "../../Modal";
@@ -339,10 +340,10 @@ const FuturesTradesTable = ({
             <th>Time</th>
             <th>Contract Expiration</th>
             <th>Side</th>
-            <th>Price (USDC)</th>
-            <th>Quantity</th>
-            <th>Trading Fee</th>
-            <th title={REALIZED_PNL_FEES_HINT}>Realized PnL</th>
+            <ColumnHeader hint="tradePrice">Price (USDC)</ColumnHeader>
+            <ColumnHeader hint="quantity">Quantity</ColumnHeader>
+            <ColumnHeader hint="tradingFee">Trading Fee</ColumnHeader>
+            <ColumnHeader hint="realizedPnl">Realized PnL</ColumnHeader>
             <th>Tx Hash</th>
           </tr>
         </thead>
