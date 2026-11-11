@@ -118,9 +118,9 @@ const MarketSelect = styled(Select)`
   /* One width for Perpetual and every expiry, sized to the pair plus the longest
      date at the same size. Also floors the menu off the trigger so its rows
      do not reflow narrower than the trigger they dropped out of. */
-  width: 26rem;
-  min-width: 26rem;
-  max-width: 26rem;
+  width: 25rem;
+  min-width: 25rem;
+  max-width: 25rem;
   flex-shrink: 0;
 
   .select-trigger {
