@@ -65,14 +65,18 @@ export default defineConfig(({ mode }) => {
     },
     define: processEnvDefineMap,
     plugins: [
-      // Inject version into HTML meta tag for easy verification
+      // Inject version + canonical for Search Console / crawlers
       {
-        name: 'html-transform',
+        name: "html-transform",
         transformIndexHtml(html) {
-          const appVersion = env.REACT_APP_VERSION || pkg.version || 'unknown';
+          const appVersion = env.REACT_APP_VERSION || pkg.version || "unknown";
+          const canonicalOrigin = (env.REACT_APP_URL || "").replace(/\/$/, "");
+          const canonicalTag = canonicalOrigin
+            ? `\t<link rel="canonical" href="${canonicalOrigin}/" />\n`
+            : "";
           return html.replace(
-            '</head>',
-            `\t<meta name="application-version" content="${appVersion}" />\n</head>`
+            "</head>",
+            `${canonicalTag}\t<meta name="application-version" content="${appVersion}" />\n</head>`,
           );
         },
       },
