@@ -44,10 +44,12 @@ import {
 } from "../useRecentTrades";
 import { mapPerpsExposure, type PerpsExposureRow } from "../pnl/exposure";
 import {
-  mapPerpsFundingTotals,
-  PERPS_FUNDING_TOTALS_QK,
-  type PerpsFundingTotalsRow,
-} from "../perps/usePerpsFundingTotals";
+  fundingNet,
+  mapPerpsFundingWindow,
+  PERPS_FUNDING_WINDOW_QK,
+  type PerpsFundingWindowRows,
+  type PerpsSettlementTotalsRow,
+} from "../perps/usePerpsFundingWindow";
 import {
   LIQUIDATIONS_FIRST,
   type LiquidationRow,
@@ -78,7 +80,7 @@ const VENUE_ID = "perpetual";
  * Every field is optional: which of them the response carries depends on which
  * groups were due, so each one is guarded at the fan-out below.
  */
-interface PerpsSnapshotResponse {
+interface PerpsSnapshotResponse extends Omit<PerpsFundingWindowRows, "me"> {
   _meta: { block: { number: number; timestamp: number } };
   collection?: PerpsCollectionRow[];
   book?: PerpsPriceLevelRow[];
@@ -86,7 +88,7 @@ interface PerpsSnapshotResponse {
   myOrders?: PerpsOrderRow[];
   sessions?: PositionSessionRow[];
   liquidations?: LiquidationRow[];
-  me?: (PerpsExposureRow & PerpsFundingTotalsRow & { realizedPnl: string }) | null;
+  me?: (PerpsExposureRow & PerpsSettlementTotalsRow & { realizedPnl: string }) | null;
   realizedBaseline?: { cumulativeRealizedPnl: string }[];
   feesInWindow?: WindowFeeRow[];
 }
@@ -120,6 +122,10 @@ const slicesForTick = (groups: readonly TickGroup[]) => {
       perpsSlices.sessions,
       perpsSlices.liquidations,
       perpsSlices.me,
+      perpsSlices.fundingPaidBaseline,
+      perpsSlices.fundingReceivedBaseline,
+      perpsSlices.driftPaidBaseline,
+      perpsSlices.driftReceivedBaseline,
       perpsSlices.realizedBaseline,
       perpsSlices.feesInWindow,
     );
@@ -248,12 +254,8 @@ export const fetchPerpsSnapshot = async (
         mapPerpsExposure(response.me, QUANTITY_SCALE),
         startedAt,
       );
-      writeIfChanged(
-        qc,
-        [PERPS_FUNDING_TOTALS_QK, address],
-        mapPerpsFundingTotals(response.me),
-        startedAt,
-      );
+      const settlements = mapPerpsFundingWindow(response);
+      writeIfChanged(qc, [PERPS_FUNDING_WINDOW_QK, address, cutoff], settlements, startedAt);
 
       // A missing `User` row means the account has never traded this venue.
       const realized = response.me
@@ -269,7 +271,7 @@ export const fetchPerpsSnapshot = async (
               cutoff,
               subgraphUrl: process.env.REACT_APP_SUBGRAPH_PERPS_URL,
             }),
-          )
+          ) + fundingNet(settlements)
         : 0n;
       writeIfChanged(
         qc,

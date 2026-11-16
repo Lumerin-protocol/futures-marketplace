@@ -86,8 +86,9 @@ export const REALIZED_PNL_FEES_HINT = "Net of trading and liquidation fees.";
  * indexer signs them, positive when paid and negative for a rebate; `null` is a
  * fee that does not apply, such as `liquidationFee` on an ordinary trade.
  *
- * Perps funding is not netted: windowing it for the 30-day header would mean
- * paging every funding settlement in the window.
+ * Perps funding is not a fee and is not netted here; callers add it, signed
+ * positive when received. Perps drift needs nothing: the indexer folds it into
+ * the entry, so `realizedPnl` already holds it.
  */
 export function realizedPnlAfterFees(realizedPnl: bigint, ...fees: (bigint | null)[]): bigint {
   let net = realizedPnl;

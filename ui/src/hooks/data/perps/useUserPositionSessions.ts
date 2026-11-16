@@ -53,6 +53,7 @@ export const mapUserPositionSessions = (
     closedQuantity: BigInt(session.closedQuantity),
     liquidatedQuantity: BigInt(session.liquidatedQuantity),
     fundingFees: BigInt(session.fundingFees),
+    driftPayments: BigInt(session.driftPayments),
     id: session.id,
     lastTradeAt: session.lastTradeAt,
     maxQuantity: BigInt(session.maxQuantity),
@@ -78,7 +79,11 @@ export type PositionSession = {
   entryPrice: bigint;
   closedQuantity: bigint;
   liquidatedQuantity: bigint;
+  /// Settled funding; positive = received. Not inside `realizedPnl`.
   fundingFees: bigint;
+  /// Settled drift; positive = received. Already inside `realizedPnl` and
+  /// `entryPrice`: the contract folds it into the entry value.
+  driftPayments: bigint;
   id: string;
   lastTradeAt: string;
   maxQuantity: bigint;
@@ -120,6 +125,7 @@ export type PositionSessionRow = {
   closedQuantity: string;
   liquidatedQuantity: string;
   fundingFees: string;
+  driftPayments: string;
   id: string;
   lastTradeAt: string;
   maxQuantity: string;

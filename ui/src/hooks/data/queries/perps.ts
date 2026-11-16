@@ -57,6 +57,7 @@ const PERPS_POSITION_SESSION_FIELDS = `
   closedQuantity
   liquidatedQuantity
   fundingFees
+  driftPayments
   id
   lastTradeAt
   maxQuantity
@@ -83,6 +84,32 @@ const PERPS_SESSION_TRADE_FIELDS = `
   liquidationFee
   transactionHash
 `;
+
+/**
+ * One settlement collection's running `total` as of the window's start: the
+ * part of `me`'s lifetime total that predates the window, like
+ * `realizedBaseline`.
+ *
+ * Ordered by the total rather than by time. It never decreases, so the largest
+ * value before the cutoff is the latest one even when several settlements share
+ * a block, which a timestamp sort would pick between arbitrarily. Paid and
+ * received are separate totals, so each gets its own row.
+ */
+const settlementBaseline = (alias: string, collection: string, total: string): Slice => ({
+  alias,
+  group: "account",
+  cacheKey: `["PerpsFundingWindow", address, cutoff]`,
+  vars: { address: "ID!", cutoff: "BigInt!" },
+  field: `
+    ${alias}: ${collection}(
+      where: { user: $address, timestamp_lt: $cutoff }
+      orderBy: ${total}
+      orderDirection: desc
+      first: 1
+    ) {
+      ${total}
+    }`,
+});
 
 // ---------------------------------------------------------------------------
 // Slices
@@ -183,8 +210,9 @@ export const perpsSlices = defineSlices({
 
   /**
    * One row serving four readers: open exposure, realized PnL, the account's
-   * net position and its lifetime funding. Perps has a single instrument, so the
-   * indexer keeps the running net quantity and average entry on `User` directly.
+   * net position and its lifetime funding and drift. Perps has a single
+   * instrument, so the indexer keeps the running net quantity and average entry
+   * on `User` directly.
    */
   me: {
     alias: "me",
@@ -198,8 +226,31 @@ export const perpsSlices = defineSlices({
       realizedPnl
       totalFundingPaid
       totalFundingReceived
+      totalDriftPaid
+      totalDriftReceived
     }`,
   },
+
+  fundingPaidBaseline: settlementBaseline(
+    "fundingPaidBaseline",
+    "fundingSettlements",
+    "cumulativeFundingPaid",
+  ),
+  fundingReceivedBaseline: settlementBaseline(
+    "fundingReceivedBaseline",
+    "fundingSettlements",
+    "cumulativeFundingReceived",
+  ),
+  driftPaidBaseline: settlementBaseline(
+    "driftPaidBaseline",
+    "driftSettlements",
+    "cumulativeDriftPaid",
+  ),
+  driftReceivedBaseline: settlementBaseline(
+    "driftReceivedBaseline",
+    "driftSettlements",
+    "cumulativeDriftReceived",
+  ),
 
   realizedBaseline: commonSlices.realizedBaseline,
   feesInWindow: commonSlices.feesInWindow,
@@ -314,6 +365,15 @@ export const UserPerpsLiquidationsQuery = buildDocument("UserPerpsLiquidations",
 
 /** Open perps exposure. A subset of `me`, so it reuses the same slice. */
 export const PerpsOpenExposureQuery = buildDocument("PerpsOpenExposure", [perpsSlices.me]);
+
+/** Funding and drift settled inside the realized-PnL window. */
+export const PerpsFundingWindowQuery = buildDocument("PerpsFundingWindow", [
+  perpsSlices.me,
+  perpsSlices.fundingPaidBaseline,
+  perpsSlices.fundingReceivedBaseline,
+  perpsSlices.driftPaidBaseline,
+  perpsSlices.driftReceivedBaseline,
+]);
 
 export const UserPerpsOrdersExcludeStatusQuery = buildDocument("UserPerpsOrdersExcludeStatus", [
   perpsSlices.historyOrders,
