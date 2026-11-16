@@ -819,7 +819,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
                     </PnLText>
                   </td>
                   <td>
-                    <RealizedPnlCell value={realizedPnlValue} fundingFees={session.fundingFees} />
+                    <RealizedPnlCell value={realizedPnlValue} session={session} />
                   </td>
                   <td>
                     <ActionButtons>
@@ -850,12 +850,24 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
 };
 
 /**
- * A session's realized PnL, with the settled funding it leaves out. Funding
- * moves the balance like the PnL does, so the figure alone would not explain it.
+ * A session's realized PnL, with the settled funding it leaves out and the
+ * drift it already holds. Funding moves the balance like the PnL does, so the
+ * figure alone would not explain it; drift is folded into the entry, so the
+ * contract realizes it with the position.
  */
-const RealizedPnlCell = ({ value, fundingFees }: { value: number; fundingFees: bigint }) => (
+const RealizedPnlCell = ({ value, session }: { value: number; session: PositionSession }) => (
   <Tooltip
-    title={`Funding ${formatFundingAmount(fundingFees)} USDC, not included.`}
+    title={
+      <>
+        Funding {formatFundingAmount(session.fundingFees)} USDC, not included.
+        {session.driftPayments !== 0n && (
+          <>
+            <br />
+            Drift {formatFundingAmount(session.driftPayments)} USDC, included.
+          </>
+        )}
+      </>
+    }
     arrow
     placement="top"
     pinOnClick
@@ -991,7 +1003,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, hasMore = fals
                   <td>{((Number(session.closePrice ?? session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(session.closedQuantity < 0n ? -session.closedQuantity : session.closedQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}</td>
                   <td>{formatFundingAndTradingFees(session.fundingFees, session.tradingFees)}</td>
                   <td>
-                    <RealizedPnlCell value={realizedPnlValue} fundingFees={session.fundingFees} />
+                    <RealizedPnlCell value={realizedPnlValue} session={session} />
                   </td>
                   <td>
                     <ActionButtons>

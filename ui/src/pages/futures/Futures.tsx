@@ -28,7 +28,7 @@ import { usePerpsSnapshot } from "../../hooks/data/snapshot/perpsSnapshot";
 import { useMarginRisk } from "../../hooks/data/useMarginRisk";
 import { useGetMarketPrice } from "../../hooks/data/useGetMarketPrice";
 import { usePortfolioPnl } from "../../hooks/data/pnl/usePortfolioPnl";
-import { usePerpsFundingTotals } from "../../hooks/data/perps/usePerpsFundingTotals";
+import { usePerpsFundingWindow } from "../../hooks/data/perps/usePerpsFundingWindow";
 import { useGetFutureBalance } from "../../hooks/data/useGetFutureBalance";
 import { useFuturesPaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
 import { useFundingRate } from "../../hooks/data/perps/useFundingRate";
@@ -167,7 +167,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // one CollateralVault, so the portfolio header states the whole account
   // regardless of which trading tab is open.
   const { unrealized, realizedInWindow } = usePortfolioPnl(address);
-  const perpsFundingQuery = usePerpsFundingTotals(address);
+  const perpsSettlementsQuery = usePerpsFundingWindow(address);
 
   // Single shared balance — both Futures and Perps engines settle against the same CollateralVault,
   // so we always read `vault.balanceOf(account)` regardless of contract mode.
@@ -440,7 +440,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       realizedPnLInWindow={realizedInWindow.total}
       isLoadingRealizedPnL={realizedInWindow.isLoading}
       isRefreshingRealizedPnL={realizedInWindow.isRefreshing}
-      perpsFunding={perpsFundingQuery.data}
+      perpsSettlements={perpsSettlementsQuery.data}
       balanceQuery={balanceQuery}
       accountBalance={accountBalanceQuery}
       accountDebt={snapshot?.accountDebt ?? null}

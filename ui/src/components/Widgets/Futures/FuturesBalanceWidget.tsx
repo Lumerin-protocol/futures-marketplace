@@ -21,7 +21,10 @@ import { DepositForm } from "../../Forms/DepositForm";
 import { WithdrawalForm } from "../../Forms/WithdrawalForm";
 import { SendCollateralForm } from "../../Forms/SendCollateralForm";
 import type { AccountBalance } from "../../../types/types";
-import type { PerpsFundingTotals } from "../../../hooks/data/perps/usePerpsFundingTotals";
+import type {
+  PaidReceived,
+  PerpsFundingWindow,
+} from "../../../hooks/data/perps/usePerpsFundingWindow";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -42,8 +45,8 @@ interface FuturesBalanceWidgetProps {
   realizedPnLInWindow: bigint | null;
   isLoadingRealizedPnL?: boolean;
   isRefreshingRealizedPnL?: boolean;
-  /** Lifetime, not windowed: the indexer keeps only running totals. */
-  perpsFunding?: PerpsFundingTotals;
+  /** Perps funding and drift settled over the same window as the realized PnL. */
+  perpsSettlements?: PerpsFundingWindow;
   balanceQuery: BalanceQueryResult;
   accountBalance?: AccountBalance;
   accountDebt: bigint | null;
@@ -54,7 +57,7 @@ interface FuturesBalanceWidgetProps {
 // Both PnL figures cover the whole account, so they do not change when the user
 // switches trading tabs. Spelling that out avoids reading them as futures-only.
 const ALL_VENUES_HINT = "Across all venues (Futures and Perpetuals)";
-const REALIZED_PNL_HINT = `${ALL_VENUES_HINT}. ${REALIZED_PNL_FEES_HINT} Perpetuals funding is not included.`;
+const REALIZED_PNL_HINT = `${ALL_VENUES_HINT}. ${REALIZED_PNL_FEES_HINT} Perpetuals funding is not included; drift is.`;
 
 const EQUITY_HINT = "Balance plus unrealized PnL across all venues.";
 const MARGIN_USED_HINT =
@@ -74,15 +77,27 @@ const pnlColor = (pnl: bigint | null) => {
 const amount = (value: bigint | null): string | null =>
   value === null ? null : Number(formatValue(value, paymentToken).value).toFixed(2);
 
-/// The realized hint, plus the perps funding it leaves out once any has settled.
-const realizedPnlHint = (funding: PerpsFundingTotals | undefined): ReactNode => {
-  if (!funding || (funding.paid === 0n && funding.received === 0n)) return REALIZED_PNL_HINT;
+const settledAny = (totals: PaidReceived) => totals.paid !== 0n || totals.received !== 0n;
+
+/// One "paid …, received …" line of the realized hint, or nothing when the window settled none.
+const settlementLine = (label: string, totals: PaidReceived): ReactNode =>
+  settledAny(totals) && (
+    <>
+      <br />
+      {label}: paid {amount(totals.paid)}, received {amount(totals.received)} USDC.
+    </>
+  );
+
+/// The realized hint, plus the perps funding and drift settled in its window.
+const realizedPnlHint = (settlements: PerpsFundingWindow | undefined): ReactNode => {
+  if (!settlements || (!settledAny(settlements.funding) && !settledAny(settlements.drift))) {
+    return REALIZED_PNL_HINT;
+  }
   return (
     <>
       {REALIZED_PNL_HINT}
-      <br />
-      Perpetuals funding, all time: paid {amount(funding.paid)}, received{" "}
-      {amount(funding.received)} USDC.
+      {settlementLine("Perpetuals funding", settlements.funding)}
+      {settlementLine("Perpetuals drift", settlements.drift)}
     </>
   );
 };
@@ -182,7 +197,7 @@ export const FuturesBalanceWidget = ({
   realizedPnLInWindow,
   isLoadingRealizedPnL,
   isRefreshingRealizedPnL = false,
-  perpsFunding,
+  perpsSettlements,
   balanceQuery,
   accountBalance,
   accountDebt,
@@ -284,7 +299,7 @@ export const FuturesBalanceWidget = ({
                   </MetricValue>
                 </MetricCell>
                 <MetricCell>
-                  <HintedLabel hint={realizedPnlHint(perpsFunding)}>
+                  <HintedLabel hint={realizedPnlHint(perpsSettlements)}>
                     Realized PnL ({REALIZED_PNL_WINDOW_DAYS}D)
                   </HintedLabel>
                   <MetricValue>

@@ -18,9 +18,9 @@ export function formatFeeAmount(raw: bigint): string {
 }
 
 /**
- * Settled funding, in USDC, with the same marks as {@link formatFeeAmount}.
+ * Settled funding or drift, in USDC, with the same marks as {@link formatFeeAmount}.
  *
- * The perps indexer signs funding the other way from fees: positive when the
+ * The perps indexer signs both the other way from fees: positive when the
  * account received it.
  */
 export function formatFundingAmount(raw: bigint): string {

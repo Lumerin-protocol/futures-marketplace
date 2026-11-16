@@ -15,6 +15,7 @@ type RawPositionSession = {
   closedQuantity: string;
   liquidatedQuantity: string;
   fundingFees: string;
+  driftPayments: string;
   id: string;
   lastTradeAt: string;
   maxQuantity: string;
@@ -41,6 +42,7 @@ const mapSession = (session: RawPositionSession): PositionSession => ({
   closedQuantity: BigInt(session.closedQuantity),
   liquidatedQuantity: BigInt(session.liquidatedQuantity),
   fundingFees: BigInt(session.fundingFees),
+  driftPayments: BigInt(session.driftPayments),
   id: session.id,
   lastTradeAt: session.lastTradeAt,
   maxQuantity: BigInt(session.maxQuantity),

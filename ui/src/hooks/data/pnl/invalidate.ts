@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { PERPS_FUNDING_TOTALS_QK } from "../perps/usePerpsFundingTotals";
+import { PERPS_FUNDING_WINDOW_QK } from "../perps/usePerpsFundingWindow";
 import { PORTFOLIO_REALIZED_PNL_QK } from "./usePortfolioRealizedPnl";
 import { PORTFOLIO_OPEN_EXPOSURE_QK } from "./usePortfolioUnrealizedPnl";
 
@@ -13,13 +13,13 @@ import { PORTFOLIO_OPEN_EXPOSURE_QK } from "./usePortfolioUnrealizedPnl";
  * unrealized figure looks frozen rather than late.
  *
  * Every key is invalidated by prefix, which covers every venue and every
- * window cutoff without the caller knowing about either. Funding rides along
- * because every perps trade settles it first.
+ * window cutoff without the caller knowing about either. Funding and drift ride
+ * along because every perps trade settles them first.
  */
 export async function invalidatePortfolioPnl(queryClient: QueryClient): Promise<void> {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: [PORTFOLIO_OPEN_EXPOSURE_QK] }),
     queryClient.invalidateQueries({ queryKey: [PORTFOLIO_REALIZED_PNL_QK] }),
-    queryClient.invalidateQueries({ queryKey: [PERPS_FUNDING_TOTALS_QK] }),
+    queryClient.invalidateQueries({ queryKey: [PERPS_FUNDING_WINDOW_QK] }),
   ]);
 }

@@ -13,7 +13,7 @@ export const COLUMN_HINTS = {
   realizedPnl:
     "Net of trading and liquidation fees, in USDC. Positive is a gain.",
   realizedPnlSession:
-    "Net of trading and liquidation fees, in USDC. Positive is a gain. Funding is not included; hover a value to see it.",
+    "Net of trading and liquidation fees, in USDC. Positive is a gain. Drift is included and funding is not; hover a value to see both.",
   unrealizedPnl:
     "Open profit or loss at the current mark, in USDC. Positive is a gain. It settles only when the position closes.",
   feesFT:
