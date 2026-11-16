@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { formatFeeAmount, formatFundingAndTradingFees } from "./feeDisplay";
+import { formatFeeAmount, formatFundingAmount, formatFundingAndTradingFees } from "./feeDisplay";
 
 const usdc = (amount: number) => BigInt(Math.round(amount * 1e6));
 
@@ -17,8 +17,24 @@ describe("formatFeeAmount", () => {
   });
 });
 
+describe("formatFundingAmount", () => {
+  test("funding the account received is marked plus", () => {
+    expect(formatFundingAmount(usdc(0.4))).toBe("+0.40");
+  });
+
+  test("funding the account paid is marked minus", () => {
+    expect(formatFundingAmount(usdc(-0.4))).toBe("−0.40");
+  });
+
+  test("zero has no sign", () => {
+    expect(formatFundingAmount(0n)).toBe("0.00");
+  });
+});
+
 describe("formatFundingAndTradingFees", () => {
-  test("shows funding, then trading, on the same sign convention", () => {
-    expect(formatFundingAndTradingFees(usdc(1), usdc(-1))).toBe("−1.00 / +1.00");
+  test("marks both halves − paid, + received, from their opposite indexer signs", () => {
+    // Funding received, trading fee paid: both are money the account gained or lost.
+    expect(formatFundingAndTradingFees(usdc(1), usdc(1))).toBe("+1.00 / −1.00");
+    expect(formatFundingAndTradingFees(usdc(-1), usdc(-1))).toBe("−1.00 / +1.00");
   });
 });

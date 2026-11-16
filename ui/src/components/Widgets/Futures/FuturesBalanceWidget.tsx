@@ -21,6 +21,7 @@ import { DepositForm } from "../../Forms/DepositForm";
 import { WithdrawalForm } from "../../Forms/WithdrawalForm";
 import { SendCollateralForm } from "../../Forms/SendCollateralForm";
 import type { AccountBalance } from "../../../types/types";
+import type { PerpsFundingTotals } from "../../../hooks/data/perps/usePerpsFundingTotals";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -41,6 +42,8 @@ interface FuturesBalanceWidgetProps {
   realizedPnLInWindow: bigint | null;
   isLoadingRealizedPnL?: boolean;
   isRefreshingRealizedPnL?: boolean;
+  /** Lifetime, not windowed: the indexer keeps only running totals. */
+  perpsFunding?: PerpsFundingTotals;
   balanceQuery: BalanceQueryResult;
   accountBalance?: AccountBalance;
   accountDebt: bigint | null;
@@ -71,10 +74,23 @@ const pnlColor = (pnl: bigint | null) => {
 const amount = (value: bigint | null): string | null =>
   value === null ? null : Number(formatValue(value, paymentToken).value).toFixed(2);
 
+/// The realized hint, plus the perps funding it leaves out once any has settled.
+const realizedPnlHint = (funding: PerpsFundingTotals | undefined): ReactNode => {
+  if (!funding || (funding.paid === 0n && funding.received === 0n)) return REALIZED_PNL_HINT;
+  return (
+    <>
+      {REALIZED_PNL_HINT}
+      <br />
+      Perpetuals funding, all time: paid {amount(funding.paid)}, received{" "}
+      {amount(funding.received)} USDC.
+    </>
+  );
+};
+
 /// Every figure on this panel is derived rather than read straight off chain, so
 /// each one carries an explanation. A native `title` was too easy to miss for
 /// that: it waits about a second and renders in OS chrome rather than the app's.
-const HintedLabel = ({ hint, children }: { hint: string; children: ReactNode }) => (
+const HintedLabel = ({ hint, children }: { hint: ReactNode; children: ReactNode }) => (
   <Tooltip title={hint} arrow placement="top">
     <MetricLabel>{children}</MetricLabel>
   </Tooltip>
@@ -166,6 +182,7 @@ export const FuturesBalanceWidget = ({
   realizedPnLInWindow,
   isLoadingRealizedPnL,
   isRefreshingRealizedPnL = false,
+  perpsFunding,
   balanceQuery,
   accountBalance,
   accountDebt,
@@ -267,7 +284,7 @@ export const FuturesBalanceWidget = ({
                   </MetricValue>
                 </MetricCell>
                 <MetricCell>
-                  <HintedLabel hint={REALIZED_PNL_HINT}>
+                  <HintedLabel hint={realizedPnlHint(perpsFunding)}>
                     Realized PnL ({REALIZED_PNL_WINDOW_DAYS}D)
                   </HintedLabel>
                   <MetricValue>
