@@ -60,9 +60,14 @@ export function formatInstrumentSuffix(instrument: Instrument): string {
   return instrument.mode === "perpetual" ? "Perpetual" : formatExpirationShort(instrument.expirationAt);
 }
 
-/** `"Hashprice/USDC — Perpetual"` / `"Hashprice/USDC — 15 Oct 2026"`. */
+/**
+ * `"Hashprice/USDC — Perpetual"` / `"Hashprice/USDC — Futures 15 Oct 2026"`.
+ * A selector row has no product line under it, so a date alone would not say
+ * the row is a future.
+ */
 export function formatInstrumentLabel(instrument: Instrument): string {
-  return `${PAIR_SYMBOL} — ${formatInstrumentSuffix(instrument)}`;
+  const suffix = formatInstrumentSuffix(instrument);
+  return `${PAIR_SYMBOL} — ${instrument.mode === "perpetual" ? suffix : `Futures ${suffix}`}`;
 }
 
 /** Product name for the selector's secondary line. */

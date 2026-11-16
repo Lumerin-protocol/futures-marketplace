@@ -17,7 +17,7 @@ export enum AddressLength {
 }
 
 export enum PathName {
-  Landing = "/trade/futures",
+  Landing = "/trade/perpetual",
   Futures = "/trade/futures",
   Perpetual = "/trade/perpetual",
   Leaderboard = "/leaderboard",

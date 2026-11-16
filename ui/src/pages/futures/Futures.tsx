@@ -51,7 +51,7 @@ interface TradingPageProps {
   defaultMode?: ContractMode;
 }
 
-export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
+export const Futures: FC<TradingPageProps> = ({ defaultMode = "perpetual" }) => {
   const { isConnected, address } = useAccount();
   const { mode: modeParam } = useParams<{ mode: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
