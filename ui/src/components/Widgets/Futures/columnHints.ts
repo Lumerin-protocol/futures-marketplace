@@ -13,11 +13,11 @@ export const COLUMN_HINTS = {
   realizedPnl:
     "Net of trading and liquidation fees, in USDC. Positive is a gain.",
   realizedPnlSession:
-    "Net of trading and liquidation fees, in USDC. Positive is a gain. Drift is included and funding is not; hover a value to see both.",
+    "Net of trading and liquidation fees and funding, in USDC. Positive is a gain. Hover a value to see the funding in it.",
   unrealizedPnl:
     "Open profit or loss at the current mark, in USDC. Positive is a gain. It settles only when the position closes.",
   feesFT:
-    "F is the funding fee and T is the trading fee, both in USDC, written as funding / trading. − means you paid that fee; + means you received it.",
+    "F is funding and T is the trading fee, both in USDC, written as funding / trading. − means you paid it; + means you received it. Both are already in Realized PnL.",
   tradingFee:
     "Fee on this fill, in USDC. A positive amount was paid; a negative amount is a rebate.",
   filledOverQuantity: "Contracts filled so far, then the order's full size.",

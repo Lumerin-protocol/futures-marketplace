@@ -551,17 +551,18 @@ counting each fee when it is paid, so an opening trade shows its fee as a loss.
 - **Liquidation fees ride the session queries** as a filtered nested list,
   because `PositionSession.tradingFees` leaves them out. An empty list costs
   ~21 B per session, up to ~2.1 KB on the perps tick at its 100-session page.
-- **Perps funding is not netted.** Windowing it means paging settlements, and
-  one live account settles about every five minutes (3,007 rows in 30 days).
-  It stays in the positions tables' Fees (F/T) column.
+- **Perps funding is netted on the client too**, from the running totals on
+  `FundingSettlement` (one baseline row per side), and per session from
+  `fundingFees`. Drift needs nothing: the indexer folds it into the entry, so
+  `realizedPnl` already holds it. The UI shows the two as one "funding" figure.
 - Order-liquidation fees (`Order.liquidationFee`) belong to no trade and are in
   no realized figure.
 
 **To resolve:** in both indexers (perps lives in `derivatives-marketplace`), a
 running fee total snapshotted on `Trade` like `cumulativeRealizedPnl`, a
 lifetime total on `User`, and liquidation fees on `PositionSession`. The window
-then costs one baseline row, the nested list goes away, and funding can be
-netted the same way.
+then costs one baseline row and the nested list goes away, as it already has
+for perps funding.
 
 ---
 

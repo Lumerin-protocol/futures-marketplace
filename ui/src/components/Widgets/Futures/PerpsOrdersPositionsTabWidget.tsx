@@ -769,12 +769,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
             {openPositions.map((session) => {
               const displayQuantity = session.netQuantity;
               const isLong = session.isLong;
-              const realizedPnl = realizedPnlAfterFees(
-                session.realizedPnl,
-                session.tradingFees,
-                session.liquidationFees,
-              );
-              const realizedPnlValue = Number(realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
+              const realizedPnlValue = Number(sessionRealizedPnl(session)) / PAYMENT_TOKEN_SCALE_NUM;
               const unrealizedPnl = calculateUnrealizedPnL(session.entryPrice, displayQuantity);
               const unrealizedPnlValue = Number(unrealizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
 
@@ -812,7 +807,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
                     {((Number(session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(session.maxQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}
                   </td>
                   <td>{positionMarginLabel}</td>
-                  <td>{formatFundingAndTradingFees(session.fundingFees, session.tradingFees)}</td>
+                  <td>{formatFundingAndTradingFees(sessionFunding(session), session.tradingFees)}</td>
                   <td>
                     <PnLText $isPositive={unrealizedPnlValue >= 0}>
                       {unrealizedPnlValue >= 0 ? "+" : ""}{unrealizedPnlValue.toFixed(2)} USDC
@@ -849,25 +844,21 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
   );
 };
 
-/**
- * A session's realized PnL, with the settled funding it leaves out and the
- * drift it already holds. Funding moves the balance like the PnL does, so the
- * figure alone would not explain it; drift is folded into the entry, so the
- * contract realizes it with the position.
- */
+/// Funding and drift as one figure, positive when received. Drift only settles
+/// in the days before a halving, so it is shown as funding rather than apart.
+const sessionFunding = (session: PositionSession): bigint =>
+  session.fundingFees + session.driftPayments;
+
+/// The indexer's `realizedPnl` already holds drift, folded into the entry, but
+/// not funding, so funding is added here.
+const sessionRealizedPnl = (session: PositionSession): bigint =>
+  realizedPnlAfterFees(session.realizedPnl, session.tradingFees, session.liquidationFees) +
+  session.fundingFees;
+
+/** A session's realized PnL, with the funding inside it. */
 const RealizedPnlCell = ({ value, session }: { value: number; session: PositionSession }) => (
   <Tooltip
-    title={
-      <>
-        Funding {formatFundingAmount(session.fundingFees)} USDC, not included.
-        {session.driftPayments !== 0n && (
-          <>
-            <br />
-            Drift {formatFundingAmount(session.driftPayments)} USDC, included.
-          </>
-        )}
-      </>
-    }
+    title={`Includes funding ${formatFundingAmount(sessionFunding(session))} USDC.`}
     arrow
     placement="top"
     pinOnClick
@@ -958,12 +949,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, hasMore = fals
           <tbody>
             {displayedPositions.map((session) => {
               const isLong = session.isLong;
-              const realizedPnl = realizedPnlAfterFees(
-                session.realizedPnl,
-                session.tradingFees,
-                session.liquidationFees,
-              );
-              const realizedPnlValue = Number(realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
+              const realizedPnlValue = Number(sessionRealizedPnl(session)) / PAYMENT_TOKEN_SCALE_NUM;
               const wasLiquidated = session.liquidatedQuantity > 0n;
 
               return (
@@ -1001,7 +987,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, hasMore = fals
                   <td>{formatPrice(session.entryPrice)}</td>
                   <td>{session.closePrice ? formatPrice(session.closePrice) : "-"}</td>
                   <td>{((Number(session.closePrice ?? session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(session.closedQuantity < 0n ? -session.closedQuantity : session.closedQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}</td>
-                  <td>{formatFundingAndTradingFees(session.fundingFees, session.tradingFees)}</td>
+                  <td>{formatFundingAndTradingFees(sessionFunding(session), session.tradingFees)}</td>
                   <td>
                     <RealizedPnlCell value={realizedPnlValue} session={session} />
                   </td>

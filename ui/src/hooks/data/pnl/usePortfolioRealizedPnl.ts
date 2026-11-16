@@ -11,6 +11,7 @@ import { graphqlRequest } from "../graphql";
 import { aggregateVenuePnl, type VenuePnlAggregate } from "./aggregate";
 import { VenueRealizedPnlQuery } from "../queries/futures";
 import { PNL_VENUES, type ConfiguredPnlVenue } from "./venues";
+import { fetchPerpsFundingWindow, fundingNet } from "../perps/usePerpsFundingWindow";
 import {
   FEES_FIRST_CURSOR,
   FEES_PAGE_SIZE,
@@ -50,19 +51,25 @@ const fetchVenueRealizedPnl = async (
       ? BigInt(response.realizedBaseline[0].cumulativeRealizedPnl)
       : null;
 
-  return realizedPnlAfterFees(
-    realizedPnlSinceBaseline(BigInt(response.me.realizedPnl), baseline),
-    await totalWindowFees(response.feesInWindow, {
+  const [fees, funding] = await Promise.all([
+    totalWindowFees(response.feesInWindow, {
       address: address.toLowerCase(),
       cutoff,
       subgraphUrl: venue.subgraphUrl,
     }),
+    venue.id === "perpetual"
+      ? fetchPerpsFundingWindow(address, cutoff).then(fundingNet)
+      : Promise.resolve(0n),
+  ]);
+  return (
+    realizedPnlAfterFees(realizedPnlSinceBaseline(BigInt(response.me.realizedPnl), baseline), fees) +
+    funding
   );
 };
 
 /**
  * The account's realized PnL over the trailing window, net of the fees paid in
- * it, summed across venues.
+ * it and, on perps, of the funding settled in it, summed across venues.
  *
  * The PnL costs each venue two rows: its lifetime total and the cumulative
  * snapshot carried by the newest trade before the window. That is what makes the

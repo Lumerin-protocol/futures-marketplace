@@ -14,14 +14,24 @@ export interface PaidReceived {
 }
 
 /**
- * Perps funding and drift settled inside the realized-PnL window. Funding moves
- * the balance outside realized PnL; drift is folded into the entry, so it is
- * already inside it.
+ * Perps funding and drift settled inside the realized-PnL window. The indexer
+ * folds drift into the entry, so its realized PnL already holds drift but not
+ * funding; the UI adds funding, and shows the two as one "funding" figure.
  */
 export interface PerpsFundingWindow {
   funding: PaidReceived;
   drift: PaidReceived;
 }
+
+/// What realized PnL has to add to the indexer's figure: funding, net.
+export const fundingNet = (window: PerpsFundingWindow): bigint =>
+  window.funding.received - window.funding.paid;
+
+/// Funding and drift as the single figure the UI shows.
+export const fundingWithDrift = (window: PerpsFundingWindow): PaidReceived => ({
+  paid: window.funding.paid + window.drift.paid,
+  received: window.funding.received + window.drift.received,
+});
 
 export type PerpsSettlementTotalsRow = {
   totalFundingPaid: string;
@@ -65,7 +75,7 @@ export const mapPerpsFundingWindow = (rows: PerpsFundingWindowRows): PerpsFundin
   };
 };
 
-const fetchPerpsFundingWindow = async (address: `0x${string}`, cutoff: number) => {
+export const fetchPerpsFundingWindow = async (address: `0x${string}`, cutoff: number) => {
   const response = await graphqlRequest<PerpsFundingWindowRows>(
     PerpsFundingWindowQuery,
     { address: address.toLowerCase(), cutoff: String(cutoff) },

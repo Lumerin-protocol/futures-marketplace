@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../graphql", () => ({ graphqlRequest: vi.fn() }));
 
-const { mapPerpsFundingWindow } = await import("./usePerpsFundingWindow");
+const { fundingNet, fundingWithDrift, mapPerpsFundingWindow } = await import(
+  "./usePerpsFundingWindow"
+);
 
 const me = {
   totalFundingPaid: "20",
@@ -41,5 +43,17 @@ describe("mapPerpsFundingWindow", () => {
       funding: { paid: 0n, received: 0n },
       drift: { paid: 0n, received: 0n },
     });
+  });
+});
+
+describe("funding figures", () => {
+  const window = { funding: { paid: 5n, received: 2n }, drift: { paid: 1n, received: 3n } };
+
+  it("adds only funding to realized PnL, since drift is already in it", () => {
+    expect(fundingNet(window)).toBe(-3n);
+  });
+
+  it("shows funding and drift as one figure", () => {
+    expect(fundingWithDrift(window)).toEqual({ paid: 6n, received: 5n });
   });
 });

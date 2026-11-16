@@ -21,9 +21,10 @@ import { DepositForm } from "../../Forms/DepositForm";
 import { WithdrawalForm } from "../../Forms/WithdrawalForm";
 import { SendCollateralForm } from "../../Forms/SendCollateralForm";
 import type { AccountBalance } from "../../../types/types";
-import type {
-  PaidReceived,
-  PerpsFundingWindow,
+import {
+  fundingWithDrift,
+  type PaidReceived,
+  type PerpsFundingWindow,
 } from "../../../hooks/data/perps/usePerpsFundingWindow";
 
 interface BalanceQueryResult {
@@ -57,7 +58,7 @@ interface FuturesBalanceWidgetProps {
 // Both PnL figures cover the whole account, so they do not change when the user
 // switches trading tabs. Spelling that out avoids reading them as futures-only.
 const ALL_VENUES_HINT = "Across all venues (Futures and Perpetuals)";
-const REALIZED_PNL_HINT = `${ALL_VENUES_HINT}. ${REALIZED_PNL_FEES_HINT} Perpetuals funding is not included; drift is.`;
+const REALIZED_PNL_HINT = `${ALL_VENUES_HINT}. ${REALIZED_PNL_FEES_HINT} Perpetuals funding is included.`;
 
 const EQUITY_HINT = "Balance plus unrealized PnL across all venues.";
 const MARGIN_USED_HINT =
@@ -77,27 +78,15 @@ const pnlColor = (pnl: bigint | null) => {
 const amount = (value: bigint | null): string | null =>
   value === null ? null : Number(formatValue(value, paymentToken).value).toFixed(2);
 
-const settledAny = (totals: PaidReceived) => totals.paid !== 0n || totals.received !== 0n;
-
-/// One "paid …, received …" line of the realized hint, or nothing when the window settled none.
-const settlementLine = (label: string, totals: PaidReceived): ReactNode =>
-  settledAny(totals) && (
-    <>
-      <br />
-      {label}: paid {amount(totals.paid)}, received {amount(totals.received)} USDC.
-    </>
-  );
-
-/// The realized hint, plus the perps funding and drift settled in its window.
+/// The realized hint, plus the perps funding settled in its window, drift counted in.
 const realizedPnlHint = (settlements: PerpsFundingWindow | undefined): ReactNode => {
-  if (!settlements || (!settledAny(settlements.funding) && !settledAny(settlements.drift))) {
-    return REALIZED_PNL_HINT;
-  }
+  const funding: PaidReceived | undefined = settlements && fundingWithDrift(settlements);
+  if (!funding || (funding.paid === 0n && funding.received === 0n)) return REALIZED_PNL_HINT;
   return (
     <>
       {REALIZED_PNL_HINT}
-      {settlementLine("Perpetuals funding", settlements.funding)}
-      {settlementLine("Perpetuals drift", settlements.drift)}
+      <br />
+      Perpetuals funding: paid {amount(funding.paid)}, received {amount(funding.received)} USDC.
     </>
   );
 };

@@ -44,6 +44,7 @@ import {
 } from "../useRecentTrades";
 import { mapPerpsExposure, type PerpsExposureRow } from "../pnl/exposure";
 import {
+  fundingNet,
   mapPerpsFundingWindow,
   PERPS_FUNDING_WINDOW_QK,
   type PerpsFundingWindowRows,
@@ -253,12 +254,8 @@ export const fetchPerpsSnapshot = async (
         mapPerpsExposure(response.me, QUANTITY_SCALE),
         startedAt,
       );
-      writeIfChanged(
-        qc,
-        [PERPS_FUNDING_WINDOW_QK, address, cutoff],
-        mapPerpsFundingWindow(response),
-        startedAt,
-      );
+      const settlements = mapPerpsFundingWindow(response);
+      writeIfChanged(qc, [PERPS_FUNDING_WINDOW_QK, address, cutoff], settlements, startedAt);
 
       // A missing `User` row means the account has never traded this venue.
       const realized = response.me
@@ -274,7 +271,7 @@ export const fetchPerpsSnapshot = async (
               cutoff,
               subgraphUrl: process.env.REACT_APP_SUBGRAPH_PERPS_URL,
             }),
-          )
+          ) + fundingNet(settlements)
         : 0n;
       writeIfChanged(
         qc,
