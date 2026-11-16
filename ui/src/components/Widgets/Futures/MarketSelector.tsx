@@ -95,11 +95,7 @@ export const MarketSelector = ({
           <MenuItem value={key} key={key}>
             <OptionRow>
               <span>{formatInstrumentLabel(option)}</span>
-              <OptionMeta>
-                {option.mode === "perpetual"
-                  ? instrumentKindLabel(option)
-                  : formatTimeToExpiry(option.expirationAt)}
-              </OptionMeta>
+              <OptionMeta>{describe(option)}</OptionMeta>
             </OptionRow>
           </MenuItem>
         );
