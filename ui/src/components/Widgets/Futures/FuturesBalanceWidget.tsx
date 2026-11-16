@@ -86,7 +86,7 @@ const realizedPnlHint = (settlements: PerpsFundingWindow | undefined): ReactNode
     <>
       {REALIZED_PNL_HINT}
       <br />
-      Perpetuals funding: paid {amount(funding.paid)}, received {amount(funding.received)} USDC.
+      Perpetuals funding settled: paid {amount(funding.paid)}, received {amount(funding.received)} USDC.
     </>
   );
 };

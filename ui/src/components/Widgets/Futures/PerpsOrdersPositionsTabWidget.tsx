@@ -855,10 +855,12 @@ const sessionRealizedPnl = (session: PositionSession): bigint =>
   realizedPnlAfterFees(session.realizedPnl, session.tradingFees, session.liquidationFees) +
   session.fundingFees;
 
-/** A session's realized PnL, with the funding inside it. */
+/// "Settled", not "included": funding is realized as it settles, but drift sits
+/// in the entry until the position is reduced, so an open session's realized
+/// PnL may not hold all of it yet.
 const RealizedPnlCell = ({ value, session }: { value: number; session: PositionSession }) => (
   <Tooltip
-    title={`Includes funding ${formatFundingAmount(sessionFunding(session))} USDC.`}
+    title={`Funding settled: ${formatFundingAmount(sessionFunding(session))} USDC.`}
     arrow
     placement="top"
     pinOnClick
