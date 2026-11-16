@@ -44,6 +44,11 @@ import {
 } from "../useRecentTrades";
 import { mapPerpsExposure, type PerpsExposureRow } from "../pnl/exposure";
 import {
+  mapPerpsFundingTotals,
+  PERPS_FUNDING_TOTALS_QK,
+  type PerpsFundingTotalsRow,
+} from "../perps/usePerpsFundingTotals";
+import {
   LIQUIDATIONS_FIRST,
   type LiquidationRow,
   mapLiquidations,
@@ -81,7 +86,7 @@ interface PerpsSnapshotResponse {
   myOrders?: PerpsOrderRow[];
   sessions?: PositionSessionRow[];
   liquidations?: LiquidationRow[];
-  me?: (PerpsExposureRow & { realizedPnl: string }) | null;
+  me?: (PerpsExposureRow & PerpsFundingTotalsRow & { realizedPnl: string }) | null;
   realizedBaseline?: { cumulativeRealizedPnl: string }[];
   feesInWindow?: WindowFeeRow[];
 }
@@ -241,6 +246,12 @@ export const fetchPerpsSnapshot = async (
         qc,
         [PORTFOLIO_OPEN_EXPOSURE_QK, VENUE_ID, address],
         mapPerpsExposure(response.me, QUANTITY_SCALE),
+        startedAt,
+      );
+      writeIfChanged(
+        qc,
+        [PERPS_FUNDING_TOTALS_QK, address],
+        mapPerpsFundingTotals(response.me),
         startedAt,
       );
 

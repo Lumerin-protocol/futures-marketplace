@@ -182,9 +182,9 @@ export const perpsSlices = defineSlices({
   },
 
   /**
-   * One row serving three readers: open exposure, realized PnL and the
-   * account's net position. Perps has a single instrument, so the indexer keeps
-   * the running net quantity and average entry on `User` directly.
+   * One row serving four readers: open exposure, realized PnL, the account's
+   * net position and its lifetime funding. Perps has a single instrument, so the
+   * indexer keeps the running net quantity and average entry on `User` directly.
    */
   me: {
     alias: "me",
@@ -196,6 +196,8 @@ export const perpsSlices = defineSlices({
       netQuantity
       aggregatedEntryPrice
       realizedPnl
+      totalFundingPaid
+      totalFundingReceived
     }`,
   },
 

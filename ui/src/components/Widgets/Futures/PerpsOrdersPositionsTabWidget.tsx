@@ -35,7 +35,8 @@ import { useOrderMargin } from "../../../hooks/data/useOrderMargin";
 import { DateTimeCell } from "../../DateTimeCell";
 import { LoadMoreButton } from "../../LoadMoreButton";
 import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE } from "../../../lib/units";
-import { formatFundingAndTradingFees } from "../../../lib/feeDisplay";
+import { formatFundingAmount, formatFundingAndTradingFees } from "../../../lib/feeDisplay";
+import { Tooltip } from "../../Tooltip";
 import { getTxUrl } from "../../../lib/indexer";
 import {
   LiquidationChip,
@@ -818,9 +819,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
                     </PnLText>
                   </td>
                   <td>
-                    <PnLText $isPositive={realizedPnlValue >= 0}>
-                      {realizedPnlValue >= 0 ? "+" : ""}{realizedPnlValue.toFixed(2)} USDC
-                    </PnLText>
+                    <RealizedPnlCell value={realizedPnlValue} fundingFees={session.fundingFees} />
                   </td>
                   <td>
                     <ActionButtons>
@@ -849,6 +848,23 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
     </>
   );
 };
+
+/**
+ * A session's realized PnL, with the settled funding it leaves out. Funding
+ * moves the balance like the PnL does, so the figure alone would not explain it.
+ */
+const RealizedPnlCell = ({ value, fundingFees }: { value: number; fundingFees: bigint }) => (
+  <Tooltip
+    title={`Funding ${formatFundingAmount(fundingFees)} USDC, not included.`}
+    arrow
+    placement="top"
+    pinOnClick
+  >
+    <HintedPnLText $isPositive={value >= 0}>
+      {value >= 0 ? "+" : ""}{value.toFixed(2)} USDC
+    </HintedPnLText>
+  </Tooltip>
+);
 
 // Perps Position History Table Component
 interface PerpsPositionHistoryTableProps {
@@ -975,9 +991,7 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, hasMore = fals
                   <td>{((Number(session.closePrice ?? session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(session.closedQuantity < 0n ? -session.closedQuantity : session.closedQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}</td>
                   <td>{formatFundingAndTradingFees(session.fundingFees, session.tradingFees)}</td>
                   <td>
-                    <PnLText $isPositive={realizedPnlValue >= 0}>
-                      {realizedPnlValue >= 0 ? "+" : ""}{realizedPnlValue.toFixed(2)} USDC
-                    </PnLText>
+                    <RealizedPnlCell value={realizedPnlValue} fundingFees={session.fundingFees} />
                   </td>
                   <td>
                     <ActionButtons>
@@ -1460,6 +1474,15 @@ const PnLText = styled.span<{ $isPositive: boolean; $isZero?: boolean }>`
         ? tokens.trading.long
         : tokens.trading.short};
   font-weight: 600;
+`;
+
+/** Underlined like the hinted column headers, so the value reads as hoverable too. */
+const HintedPnLText = styled(PnLText)`
+  cursor: help;
+  white-space: nowrap;
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
 `;
 
 const TxLink = styled.a`
