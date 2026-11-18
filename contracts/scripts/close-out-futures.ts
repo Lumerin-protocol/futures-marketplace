@@ -1,8 +1,18 @@
+import { OperationType } from "@safe-global/types-kit";
 import hre from "hardhat";
-import { type Address, type Hex, type PublicClient, getAddress, parseAbi, parseAbiItem } from "viem";
+import {
+  type Address,
+  type Hex,
+  type PublicClient,
+  encodeFunctionData,
+  getAddress,
+  parseAbi,
+  parseAbiItem,
+} from "viem";
 import { requireAddress, readOptionalBigInt, requireEnvsSet } from "../lib/env.ts";
 import { addrUrl, txUrl } from "../lib/explorer.ts";
 import { logInfo, logPrompt, logStep, logSuccess, logTitle } from "../lib/log.ts";
+import { SafeWallet } from "../lib/safe.ts";
 import {
   type OrderSlot,
   chunk,
@@ -14,9 +24,13 @@ import {
 // settlement price, open legs close at the mark through the insurance fund, then every order is
 // cleared. 6.8.0's `resetState` also zeroes positions without paying their PnL, so it only runs
 // once every leg is flat. Dry run unless EXECUTE=true.
+// When the deployer does not own the venue, EXECUTE=true still sends the permissionless
+// `settlePositions` and `removeOutdatedOrders`, proposes `forceClosePositions` then `resetState` to
+// the owner Safe (SAFE_OWNER_ADDRESS), and VERIFY_ONLY=true checks the result once they executed.
 const RETIRED_VERSION = "6.8.0";
 const RETIRED_FUTURES_ABI = parseAbi([
   "function VERSION() view returns (string)",
+  "function owner() view returns (address)",
   "function BACKSTOP() view returns (address)",
   "function getUserPosition(address, uint256) view returns ((int256 netQuantity, int256 netEntryValue))",
   "function getUserOrdersAtExpiration(address, uint256) view returns (bytes32[])",
@@ -98,7 +112,11 @@ async function main() {
   }
   const block = await pc.getBlock();
   if (!(await pc.readContract({ address: vault, abi: VAULT_ABI, functionName: "halted", blockNumber: block.number }))) {
-    throw new Error("The vault is not halted; run collateral-margin's vault-halt.ts first");
+    // A Safe halt proposed at a lower nonce executes first, but orders placed until then are not reset.
+    if (process.env.QUEUE_BEHIND_HALT !== "true") {
+      throw new Error("The vault is not halted; run collateral-margin's vault-halt.ts first");
+    }
+    logStep("Warning", "vault not halted; proposals queue behind the Safe halt");
   }
 
   const startBlock =
@@ -143,42 +161,75 @@ async function main() {
     );
   }
 
+  if (process.env.VERIFY_ONLY === "true") {
+    const left = legs.filter((l) => l.netQuantity !== 0n || l.orders > 0);
+    if (left.length > 0) throw new Error(`${left.length} leg(s) still hold a position or orders`);
+    logSuccess(`No positions or orders left on ${futures} at block ${block.number}`);
+    return;
+  }
   if (!execute) {
     logSuccess("Dry run; set EXECUTE=true to send");
     return;
   }
 
-  await logPrompt("Settle matured legs, force-close open legs, then reset the orders?");
+  const owner = getAddress(await pc.readContract({ address: futures, abi: RETIRED_FUTURES_ABI, functionName: "owner" }));
+  const safe =
+    owner === getAddress(deployer.account.address)
+      ? undefined
+      : (() => {
+          const { SAFE_OWNER_ADDRESS, SAFE_API_KEY } = requireEnvsSet("SAFE_OWNER_ADDRESS", "SAFE_API_KEY");
+          if (getAddress(SAFE_OWNER_ADDRESS) !== owner) {
+            throw new Error(`SAFE_OWNER_ADDRESS ${SAFE_OWNER_ADDRESS} is not the futures owner ${owner}`);
+          }
+          return new SafeWallet(owner, deployer, SAFE_API_KEY);
+        })();
+
+  await logPrompt(
+    safe
+      ? `Settle matured legs and remove expired orders, then propose force-close and order reset to Safe ${owner}?`
+      : "Settle matured legs, force-close open legs, then reset the orders?",
+  );
   // A load-balanced RPC can report a head older than the receipts, so verify at the last receipt.
   let after = block.number;
-  const send = async (functionName: "settlePositions" | "forceClosePositions", batch: Leg[]) => {
-    const hash = await deployer.writeContract({
-      address: futures,
-      abi: RETIRED_FUTURES_ABI,
-      functionName,
-      args: [batch.map((l) => l.participant), batch.map((l) => l.expirationAt)],
-    });
+  type Call =
+    | { functionName: "settlePositions" | "forceClosePositions"; args: readonly [Address[], bigint[]] }
+    | { functionName: "resetState"; args: readonly [Address[]] }
+    | { functionName: "removeOutdatedOrders"; args: readonly [Hex[]] };
+  const send = async (call: Call, count: number) => {
+    const data = encodeFunctionData({ abi: RETIRED_FUTURES_ABI, ...call });
+    const hash = await deployer.sendTransaction({ to: futures, data });
     const receipt = await pc.waitForTransactionReceipt({ hash });
-    if (receipt.status !== "success") throw new Error(`${functionName} reverted: ${txUrl(pc, hash)}`);
+    if (receipt.status !== "success") throw new Error(`${call.functionName} reverted: ${txUrl(pc, hash)}`);
     after = receipt.blockNumber;
-    logStep(`${functionName}(${batch.length})`, txUrl(pc, hash));
+    logStep(`${call.functionName}(${count})`, txUrl(pc, hash));
   };
-  for (const batch of chunk(matured, batchSize)) await send("settlePositions", batch);
-  for (const batch of chunk(live, batchSize)) await send("forceClosePositions", batch);
-  for (const batch of chunk(ordered, batchSize)) {
-    const hash = await deployer.writeContract({ address: futures, abi: RETIRED_FUTURES_ABI, functionName: "resetState", args: [batch] });
-    const receipt = await pc.waitForTransactionReceipt({ hash });
-    if (receipt.status !== "success") throw new Error(`resetState reverted: ${txUrl(pc, hash)}`);
-    after = receipt.blockNumber;
-    logStep(`resetState(${batch.length})`, txUrl(pc, hash));
+  const legArgs = (batch: Leg[]) => [batch.map((l) => l.participant), batch.map((l) => l.expirationAt)] as const;
+
+  for (const batch of chunk(matured, batchSize)) await send({ functionName: "settlePositions", args: legArgs(batch) }, batch.length);
+  for (const batch of chunk(outdated, batchSize)) await send({ functionName: "removeOutdatedOrders", args: [batch] }, batch.length);
+  if (safe) {
+    const proposals = [
+      ...chunk(live, batchSize).map((batch) => ({ functionName: "forceClosePositions" as const, args: legArgs(batch), count: batch.length })),
+      ...chunk(ordered, batchSize).map((batch) => ({ functionName: "resetState" as const, args: [batch] as const, count: batch.length })),
+    ];
+    for (const { count, ...call } of proposals) {
+      const safeTxHash = await safe.proposeTransaction({
+        to: futures,
+        value: "0",
+        data: encodeFunctionData({ abi: RETIRED_FUTURES_ABI, ...call }),
+        operation: OperationType.Call,
+      });
+      logStep(`${call.functionName}(${count})`, safe.getSafeUITxUrl(safeTxHash));
+    }
+    logSuccess(
+      proposals.length > 0
+        ? "Proposed; execute them in nonce order, then re-run with VERIFY_ONLY=true"
+        : "Nothing for the Safe; re-run with VERIFY_ONLY=true",
+    );
+    return;
   }
-  for (const batch of chunk(outdated, batchSize)) {
-    const hash = await deployer.writeContract({ address: futures, abi: RETIRED_FUTURES_ABI, functionName: "removeOutdatedOrders", args: [batch] });
-    const receipt = await pc.waitForTransactionReceipt({ hash });
-    if (receipt.status !== "success") throw new Error(`removeOutdatedOrders reverted: ${txUrl(pc, hash)}`);
-    after = receipt.blockNumber;
-    logStep(`removeOutdatedOrders(${batch.length})`, txUrl(pc, hash));
-  }
+  for (const batch of chunk(live, batchSize)) await send({ functionName: "forceClosePositions", args: legArgs(batch) }, batch.length);
+  for (const batch of chunk(ordered, batchSize)) await send({ functionName: "resetState", args: [batch] }, batch.length);
 
   const left = (await readLegs(pc, futures, slots, after)).filter((l) => l.netQuantity !== 0n || l.orders > 0);
   if (left.length > 0) throw new Error(`${left.length} leg(s) still hold a position or orders`);

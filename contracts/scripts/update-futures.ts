@@ -135,10 +135,15 @@ async function main() {
   }
 
   // Listed only once halted, so no user can place an order the cancellation would miss.
-  const { snapshot, slots } = await discoverAt(
-    await ensureVaultHalted(pc, vaultAddress, deployer, proposer),
-  );
-  const legs = await legsWithOrders(pc, futuresAddress, slots, readConcurrency, snapshot.number);
+  // SKIP_ORDER_SCAN=true plans no cancellation: only for a book already verified empty while halted.
+  const haltedAt = await ensureVaultHalted(pc, vaultAddress, deployer, proposer);
+  const skipOrderScan = process.env.SKIP_ORDER_SCAN === "true";
+  const { snapshot, slots }: Awaited<ReturnType<typeof discoverAt>> = skipOrderScan
+    ? { snapshot: await pc.getBlock({ blockNumber: haltedAt }), slots: [] }
+    : await discoverAt(haltedAt);
+  const legs = skipOrderScan
+    ? []
+    : await legsWithOrders(pc, futuresAddress, slots, readConcurrency, snapshot.number);
   const cancelBatches = chunk(
     legs,
     readPositiveInteger("FORCE_CANCEL_BATCH_SIZE", DEFAULT_FORCE_CANCEL_BATCH_SIZE),
