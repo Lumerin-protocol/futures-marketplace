@@ -18,7 +18,7 @@
     "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 --version-label 0 futures",
     "setup-local": "pnpm prepare-local && pnpm codegen && pnpm build && pnpm create-local && pnpm deploy-local",
     "test": "pnpm test:integration",
-    "test:unit": "graph test",
+    "test:unit": "graph test -v 0.6.0",
     "indexer": "docker compose --env-file ../config/dev.env --env-file ../.env up",
     "test:integration": "hardhat test nodejs",
     "test:integration:debug": "MATCHSTICK_VERBOSE=true hardhat test nodejs",
