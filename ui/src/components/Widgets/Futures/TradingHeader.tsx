@@ -5,6 +5,7 @@ import { useModal } from "../../../hooks/useModal";
 import { ModalItem } from "../../Modal";
 import { DetailedSpecsModal } from "./DetailedSpecsModal";
 import { useSettlementPrice } from "../../../hooks/data/useSettlementPrice";
+import { useHeaderMark } from "../../../hooks/data/useMarks";
 import { formatHashratePHPS, PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { describeLiquidationLevel } from "../../../lib/liquidation";
 import { MarketSelector } from "./MarketSelector";
@@ -16,6 +17,7 @@ import type { GetResponse } from "../../../gateway/interfaces";
 import type { FuturesContractSpecs } from "../../../hooks/data/useFuturesContractSpecs";
 import type { ContractMode } from "../../../types/types";
 import { EastIcon } from "../../icons";
+import { PRICE_CHANGE_INTEGER_DIGITS, reservedSigned } from "./priceChangeFormat";
 
 interface TradingHeaderProps {
   contractMode: ContractMode;
@@ -82,6 +84,36 @@ export const TradingHeader = ({
     settlementPriceRaw && settlementPriceRaw > 0n
       ? (Number(settlementPriceRaw) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)
       : null;
+  // The selected market's mark, shown only where it departs from the index: a futures date
+  // settling after the next halving (or inside the window around it), perps on the glide.
+  // Index and mark are one multicall, so a poll cannot catch one of them mid-update
+  // and flash this stat on a market where they are equal.
+  const { index, low, high, perpsMark } = useHeaderMark(contractMode, selectedExpirationAt);
+  const formatPrice = (raw: bigint) => (Number(raw) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
+  const markStat = (() => {
+    if (index === undefined) return null;
+    if (contractMode === "perpetual") {
+      if (perpsMark === undefined || perpsMark === index) return null;
+      return {
+        value: formatPrice(perpsMark),
+        tooltip:
+          "Perps marks at the halving glide: the index stepping down to its post-halving level over the week before the halving. Longs are paid the decline as drift, so holding through it is neutral.",
+      };
+    }
+    if (low === undefined || high === undefined || (low === index && high === index)) return null;
+    if (low === high) {
+      return {
+        value: formatPrice(low),
+        tooltip:
+          "This date settles after the next halving: positions and orders on it are valued at this post-halving mark, not at the index.",
+      };
+    }
+    return {
+      value: `${formatPrice(low)} – ${formatPrice(high)}`,
+      tooltip:
+        "The next halving may fall either side of this date: longs and bids are valued at the low (post-halving) mark, shorts and asks at the high (the index).",
+    };
+  })();
   const hasLiquidation = isUnderwater || liqPrice !== undefined;
   const liquidationTooltip = describeLiquidationLevel({
     price: liqPrice,
@@ -107,6 +139,19 @@ export const TradingHeader = ({
       </StatItem>
     </Tooltip>
   );
+
+  const renderMarkStat = () =>
+    markStat && (
+      <>
+        <Divider />
+        <Tooltip title={markStat.tooltip} arrow>
+          <StatItem>
+            <StatValue>{markStat.value}</StatValue>
+            <StatLabel>Mark</StatLabel>
+          </StatItem>
+        </Tooltip>
+      </>
+    );
 
   /// The account's liquidation price, sitting next to Hash Price so the mark can
   /// be read against it directly. Margin is pooled across every futures and
@@ -160,16 +205,20 @@ export const TradingHeader = ({
     </Tooltip>
   );
 
+  /// Tabular figures in fixed slots: a tick must not change this width and push
+  /// the stats beside the index.
   const renderPriceChange = () => {
     if (!priceChange) return null;
     const isUp = priceChange.delta >= 0;
-    const sign = isUp ? "+" : "";
-    const pctText = priceChange.pct != null ? ` (${sign}${priceChange.pct.toFixed(2)}%)` : "";
     return (
       <PriceChange $up={isUp}>
-        {isUp ? "▲" : "▼"} {sign}
-        {priceChange.delta.toFixed(2)}
-        {pctText}
+        <ChangeGlyph>{isUp ? "▲" : "▼"}</ChangeGlyph>
+        <SignedFigure value={priceChange.delta} />
+        {priceChange.pct != null && (
+          <PctGroup>
+            (<SignedFigure value={priceChange.pct} />%)
+          </PctGroup>
+        )}
       </PriceChange>
     );
   };
@@ -230,6 +279,7 @@ export const TradingHeader = ({
             <>
               <DesktopMarketStats>
                 {renderHashPriceStat()}
+                {renderMarkStat()}
                 {renderLiquidationStat()}
               </DesktopMarketStats>
               {renderMobileMarketStat()}
@@ -249,6 +299,7 @@ export const TradingHeader = ({
             <>
               <DesktopMarketStats>
                 {renderHashPriceStat()}
+                {renderMarkStat()}
                 {renderLiquidationStat()}
               </DesktopMarketStats>
               {renderMobileMarketStat()}
@@ -376,11 +427,64 @@ const StatValue = styled.span`
 `;
 
 const PriceChange = styled.span<{ $up: boolean }>`
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35em;
   margin-left: 0.4rem;
   font-size: 0.65rem;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   color: ${(props) => (props.$up ? tokens.trading.long : tokens.trading.short)};
 `;
+
+const ChangeGlyph = styled.span`
+  display: inline-block;
+  width: 1em;
+  text-align: center;
+  flex: none;
+`;
+
+const Figure = styled.span`
+  display: inline-flex;
+  align-items: baseline;
+  flex: none;
+`;
+
+const Sign = styled.span`
+  display: inline-block;
+  width: 1ch;
+  text-align: left;
+  flex: none;
+`;
+
+const Ints = styled.span`
+  display: inline-block;
+  min-width: ${PRICE_CHANGE_INTEGER_DIGITS}ch;
+  text-align: right;
+  flex: none;
+`;
+
+const Frac = styled.span`
+  display: inline-block;
+  width: 2ch;
+  text-align: left;
+  flex: none;
+`;
+
+const PctGroup = styled.span`
+  flex: none;
+`;
+
+const SignedFigure = ({ value }: { value: number }) => {
+  const { sign, ints, frac } = reservedSigned(value, PRICE_CHANGE_INTEGER_DIGITS);
+  return (
+    <Figure>
+      <Sign>{sign}</Sign>
+      <Ints>{ints}</Ints>.<Frac>{frac}</Frac>
+    </Figure>
+  );
+};
 
 const StatLabel = styled.span`
   font-size: 0.6rem;

@@ -48,10 +48,16 @@ createAppKit({
   //   },
   // },
   metadata: {
-    name: "Lumerin Marketplace",
-    description: "Buy, sell, and own hashpower through your Web3 wallet",
+    name: "HashPower Derivatives Exchange",
+    description: "Decentralized derivatives market for Bitcoin hashrate",
     url: process.env.REACT_APP_URL, // origin must match your domain & subdomain
-    icons: ["https://avatars.githubusercontent.com/u/179229932"],
+    icons: [`${process.env.REACT_APP_URL?.replace(/\/$/, "")}/favicon.svg`],
+  },
+  // AppKit's default face is KHTeka with no generic fallback. Safari does not
+  // apply that @font-face inside the modal and paints Times. Inter is already
+  // loaded by the app; the generic families cover Safari if it is not ready.
+  themeVariables: {
+    "--apkt-font-family": "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
   },
   features: {
     swaps: true,
@@ -61,5 +67,13 @@ createAppKit({
     analytics: true, // Optional - defaults to your Cloud configuration
   },
 });
+
+// A custom --apkt-font-family makes AppKit 1.8 skip every bundled @font-face,
+// including KHTekaMono, and this version has no theme variable for the mono
+// face. Addresses in the modal would fall back to Times on Safari.
+const appKitMonoFont = document.createElement("style");
+appKitMonoFont.textContent =
+  `:root { --apkt-fontFamily-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }`;
+document.head.appendChild(appKitMonoFont);
 
 export const config = wagmiAdapter.wagmiConfig;

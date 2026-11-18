@@ -125,27 +125,19 @@ describe("Delivery Date Management", () => {
     }
   });
 
-  it("should update expiration dates when count is decreased", async () => {
-    const { contracts, accounts } = await networkHelpers.loadFixture(deployFuturesFixture);
+  it("should reject lowering the future expiration dates count", async () => {
+    const { contracts, accounts, config } = await networkHelpers.loadFixture(deployFuturesFixture);
     const { futures } = contracts;
     const { owner } = accounts;
 
-    await futures.write.setFutureExpirationDatesCount([5], { account: owner.account });
-
-    const newCount = 2;
-    await futures.write.setFutureExpirationDatesCount([newCount], { account: owner.account });
-
-    const updatedDeliveryDates = await futures.read.getExpirationDates();
-    assert.equal(updatedDeliveryDates.length, newCount);
-
-    const firstFutureExpirationDate = await futures.read.firstFutureExpirationDate();
-    const expirationIntervalDays = await futures.read.expirationIntervalDays();
-    const expirationIntervalSeconds = BigInt(expirationIntervalDays) * 86400n;
-
-    for (let i = 0; i < updatedDeliveryDates.length; i++) {
-      const expectedDate = firstFutureExpirationDate + expirationIntervalSeconds * BigInt(i);
-      assert.equal(updatedDeliveryDates[i], expectedDate);
-    }
+    await viem.assertions.revertWithCustomError(
+      futures.write.setFutureExpirationDatesCount([config.futureExpirationDatesCount - 1], {
+        account: owner.account,
+      }),
+      futures,
+      "ValueOutOfRange",
+    );
+    assert.equal(await futures.read.futureExpirationDatesCount(), config.futureExpirationDatesCount);
   });
 
   it("should return correct expiration dates array when time has passed", async () => {

@@ -22,6 +22,13 @@ interface TooltipProps {
   placement?: Placement;
   disableHoverListener?: boolean;
   /**
+   * Stay open after a click or tap until a second press, an outside press, or a
+   * scroll. Hover still opens and closes the bubble on its own. A tap never
+   * hovers, and the mouse events a touch synthesizes would otherwise close the
+   * bubble on the same press that opened it.
+   */
+  pinOnClick?: boolean;
+  /**
    * Styles the wrapper span. MUI attached its listeners to the child itself, so
    * a child that was a flex item stayed one; here the wrapper is the flex item,
    * and a caller whose child must grow (`flex: 1`) sizes the wrapper through
@@ -78,11 +85,14 @@ export const Tooltip = ({
   arrow = false,
   placement = "bottom",
   disableHoverListener = false,
+  pinOnClick = false,
   className,
 }: TooltipProps) => {
   const wrapRef = useRef<HTMLSpanElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const pinned = useRef(false);
+  const pinnedAt = useRef(0);
   const tooltipId = useId();
 
   // `mounted` keeps the bubble in the tree through its exit transition;
@@ -99,11 +109,29 @@ export const Tooltip = ({
     timer.current = setTimeout(() => setMounted(true), ENTER_DELAY_MS);
   };
 
-  const hide = useCallback(() => {
+  const dismiss = useCallback(() => {
+    pinned.current = false;
     clearTimeout(timer.current);
     setEntered(false);
     timer.current = setTimeout(() => setMounted(false), TRANSITION_MS);
   }, []);
+
+  const hide = useCallback(() => {
+    if (pinned.current) return;
+    dismiss();
+  }, [dismiss]);
+
+  const togglePinned = () => {
+    if (!pinOnClick || empty) return;
+    if (pinned.current) {
+      dismiss();
+      return;
+    }
+    pinned.current = true;
+    pinnedAt.current = Date.now();
+    clearTimeout(timer.current);
+    setMounted(true);
+  };
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
@@ -184,13 +212,32 @@ export const Tooltip = ({
 
   useEffect(() => {
     if (!mounted) return;
-    window.addEventListener("scroll", hide, true);
-    window.addEventListener("resize", hide);
-    return () => {
-      window.removeEventListener("scroll", hide, true);
-      window.removeEventListener("resize", hide);
+    // Focusing a header can scroll it into view on the same tap that opened
+    // the bubble. That scroll is not the user moving the table, so a freshly
+    // pinned hint survives it; a later scroll still dismisses.
+    const onScroll = () => {
+      if (pinned.current && Date.now() - pinnedAt.current < 400) return;
+      dismiss();
     };
-  }, [mounted, hide]);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", dismiss);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", dismiss);
+    };
+  }, [mounted, dismiss]);
+
+  useEffect(() => {
+    if (!mounted || !pinOnClick) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!pinned.current) return;
+      const target = event.target;
+      if (target instanceof Node && wrapRef.current?.contains(target)) return;
+      dismiss();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [mounted, pinOnClick, dismiss]);
 
   const child = cloneElement(children, {
     "aria-describedby": mounted && !empty ? tooltipId : undefined,
@@ -205,6 +252,10 @@ export const Tooltip = ({
         onMouseLeave={hide}
         onFocus={show}
         onBlur={hide}
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          togglePinned();
+        }}
       >
         {child}
       </Wrap>

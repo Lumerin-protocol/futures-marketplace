@@ -6,7 +6,7 @@ import { useAccount } from "wagmi";
 import { useModal } from "../../../hooks/useModal";
 import { RefreshableValue } from "../../RefreshableValue";
 import { formatValue, paymentToken } from "../../../lib/units";
-import { REALIZED_PNL_WINDOW_DAYS } from "../../../lib/portfolioPnl";
+import { REALIZED_PNL_FEES_HINT, REALIZED_PNL_WINDOW_DAYS } from "../../../lib/portfolioPnl";
 import {
   formatMarginRatio,
   marginStatusCopy,
@@ -19,7 +19,13 @@ import { PrimaryButton } from "../../Forms/FormButtons/Buttons.styled";
 import { ModalItem } from "../../Modal";
 import { DepositForm } from "../../Forms/DepositForm";
 import { WithdrawalForm } from "../../Forms/WithdrawalForm";
+import { SendCollateralForm } from "../../Forms/SendCollateralForm";
 import type { AccountBalance } from "../../../types/types";
+import {
+  fundingWithDrift,
+  type PaidReceived,
+  type PerpsFundingWindow,
+} from "../../../hooks/data/perps/usePerpsFundingWindow";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -40,8 +46,11 @@ interface FuturesBalanceWidgetProps {
   realizedPnLInWindow: bigint | null;
   isLoadingRealizedPnL?: boolean;
   isRefreshingRealizedPnL?: boolean;
+  /** Perps funding and drift settled over the same window as the realized PnL. */
+  perpsSettlements?: PerpsFundingWindow;
   balanceQuery: BalanceQueryResult;
   accountBalance?: AccountBalance;
+  accountDebt: bigint | null;
   /** Account-wide liquidation level, quoted in the Danger status line. */
   liqPrice?: bigint;
 }
@@ -49,9 +58,11 @@ interface FuturesBalanceWidgetProps {
 // Both PnL figures cover the whole account, so they do not change when the user
 // switches trading tabs. Spelling that out avoids reading them as futures-only.
 const ALL_VENUES_HINT = "Across all venues (Futures and Perpetuals)";
+const REALIZED_PNL_HINT = `${ALL_VENUES_HINT}. ${REALIZED_PNL_FEES_HINT} Perpetuals funding is included.`;
 
 const EQUITY_HINT = "Balance plus unrealized PnL across all venues.";
-const MARGIN_USED_HINT = "Initial margin held for open positions and resting orders.";
+const MARGIN_USED_HINT =
+  "Initial margin for open positions, resting orders, funding owed, and account debt.";
 const AVAILABLE_HINT =
   "Withdrawable and usable for new positions. Unrealized gains are not available until realized.";
 const MARGIN_RATIO_HINT =
@@ -67,10 +78,23 @@ const pnlColor = (pnl: bigint | null) => {
 const amount = (value: bigint | null): string | null =>
   value === null ? null : Number(formatValue(value, paymentToken).value).toFixed(2);
 
+/// The realized hint, plus the perps funding settled in its window, drift counted in.
+const realizedPnlHint = (settlements: PerpsFundingWindow | undefined): ReactNode => {
+  const funding: PaidReceived | undefined = settlements && fundingWithDrift(settlements);
+  if (!funding || (funding.paid === 0n && funding.received === 0n)) return REALIZED_PNL_HINT;
+  return (
+    <>
+      {REALIZED_PNL_HINT}
+      <br />
+      Perpetuals funding settled: paid {amount(funding.paid)}, received {amount(funding.received)} USDC.
+    </>
+  );
+};
+
 /// Every figure on this panel is derived rather than read straight off chain, so
 /// each one carries an explanation. A native `title` was too easy to miss for
 /// that: it waits about a second and renders in OS chrome rather than the app's.
-const HintedLabel = ({ hint, children }: { hint: string; children: ReactNode }) => (
+const HintedLabel = ({ hint, children }: { hint: ReactNode; children: ReactNode }) => (
   <Tooltip title={hint} arrow placement="top">
     <MetricLabel>{children}</MetricLabel>
   </Tooltip>
@@ -162,13 +186,16 @@ export const FuturesBalanceWidget = ({
   realizedPnLInWindow,
   isLoadingRealizedPnL,
   isRefreshingRealizedPnL = false,
+  perpsSettlements,
   balanceQuery,
   accountBalance,
+  accountDebt,
   liqPrice,
 }: FuturesBalanceWidgetProps) => {
   const { address } = useAccount();
   const depositModal = useModal();
   const withdrawalModal = useModal();
+  const sendModal = useModal();
 
   const handleDepositSuccess = () => {
     balanceQuery.refetch();
@@ -178,6 +205,11 @@ export const FuturesBalanceWidget = ({
   const handleWithdrawalSuccess = () => {
     balanceQuery.refetch();
     withdrawalModal.close();
+  };
+
+  const handleSendSuccess = () => {
+    balanceQuery.refetch();
+    sendModal.close();
   };
 
   const { tier, ratioPercent, belowIM, isError } = marginRisk;
@@ -256,7 +288,7 @@ export const FuturesBalanceWidget = ({
                   </MetricValue>
                 </MetricCell>
                 <MetricCell>
-                  <HintedLabel hint={ALL_VENUES_HINT}>
+                  <HintedLabel hint={realizedPnlHint(perpsSettlements)}>
                     Realized PnL ({REALIZED_PNL_WINDOW_DAYS}D)
                   </HintedLabel>
                   <MetricValue>
@@ -283,9 +315,18 @@ export const FuturesBalanceWidget = ({
               </MetricColumn>
             </MetricsGrid>
 
+            {accountDebt !== null && accountDebt > 0n && (
+              <AccountDebtNote>
+                <span>Account debt</span>
+                <strong>{amount(accountDebt)} USDC</strong>
+                <small>Included in margin. Later gains repay it before they are credited.</small>
+              </AccountDebtNote>
+            )}
+
             <ActionButtons>
               <ActionButton onClick={depositModal.open}>Deposit</ActionButton>
               <ActionButton onClick={withdrawalModal.open}>Withdraw</ActionButton>
+              <ActionButton onClick={sendModal.open}>Transfer</ActionButton>
             </ActionButtons>
 
             {/* One note at a time. Caution begins exactly where balance drops
@@ -313,6 +354,17 @@ export const FuturesBalanceWidget = ({
       <ModalItem open={withdrawalModal.isOpen} setOpen={withdrawalModal.setOpen}>
         <WithdrawalForm
           closeForm={handleWithdrawalSuccess}
+          lockedAmount={marginRisk.im}
+          isLoadingLockedAmount={marginRisk.isLoading}
+          isLockedAmountError={marginRisk.isError}
+          lockedTooltip={MARGIN_USED_HINT}
+          balanceQuery={balanceQuery}
+        />
+      </ModalItem>
+
+      <ModalItem open={sendModal.isOpen} setOpen={sendModal.setOpen}>
+        <SendCollateralForm
+          closeForm={handleSendSuccess}
           lockedAmount={marginRisk.im}
           isLoadingLockedAmount={marginRisk.isLoading}
           isLockedAmountError={marginRisk.isError}
@@ -407,16 +459,46 @@ const MetricValue = styled.span`
   line-height: 1.2;
 `;
 
+const AccountDebtNote = styled.div`
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.15rem 0.5rem;
+  padding: 0.35rem 0.5rem;
+  background-color: ${tokens.perps.highlightBg};
+  border: 1px solid ${tokens.perps.highlightBorderSoft};
+  border-radius: 6px;
+  color: ${tokens.trading.warning};
+  font-size: 0.68rem;
+  line-height: 1.35;
+
+  strong {
+    font-family: monospace;
+    font-weight: 600;
+  }
+
+  small {
+    grid-column: 1 / -1;
+    color: ${tokens.text.secondary};
+    font-size: 0.62rem;
+  }
+`;
+
 const ActionButtons = styled.div`
   display: flex;
   gap: 0.5rem;
 `;
 
 const ActionButton = styled(PrimaryButton)`
-  flex: 1;
-  padding: 0.45rem 0.5rem;
-  font-size: 0.8rem;
+  flex: 1 1 0;
+  padding: 0.4rem 0.35rem;
+  font-size: 0.75rem;
   min-width: 0;
+  /* Shared Button styles add margin-right on siblings; spacing is via gap only. */
+  margin-right: 0;
+
+  &:not(:last-child) {
+    margin-right: 0;
+  }
 `;
 
 // Pushed to the foot of its column so the dial lines up with Margin Used

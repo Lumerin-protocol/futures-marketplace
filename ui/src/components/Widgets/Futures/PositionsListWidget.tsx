@@ -12,11 +12,7 @@ import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { FuturesTradesModal, type FuturesTradesModalSelection } from "./FuturesTradesModal";
 import type { ClosablePosition } from "../../Forms/ClosePositionForm";
 import { LiquidationChip, formatLiquidatedQty } from "../../../lib/liquidation";
-
-const MARGIN_HINT =
-  "Initial margin this delivery date accounts for — how much the account's requirement " +
-  "would fall without it. Collateral is pooled across every expiry and the perps venue, " +
-  "so these do not add up to Margin Used, and a hedging leg accounts for none of it.";
+import { ColumnHeader } from "./ColumnHeader";
 
 interface BalanceQueryResult {
   data: bigint | undefined;
@@ -240,10 +236,10 @@ export const PositionsListWidget = ({
               <th>Contract Expiration</th>
               <th>Side</th>
               <th>Status</th>
-              <th>Price (USDC)</th>
-              <th>Quantity</th>
-              <th title={MARGIN_HINT}>Margin</th>
-              <th>Unrealized PnL (USDC)</th>
+              <ColumnHeader hint="positionPrice">Price (USDC)</ColumnHeader>
+              <ColumnHeader hint="quantity">Quantity</ColumnHeader>
+              <ColumnHeader hint="marginFutures">Margin</ColumnHeader>
+              <ColumnHeader hint="unrealizedPnl">Unrealized PnL (USDC)</ColumnHeader>
               <th>Time</th>
               <th>Action</th>
             </tr>
@@ -291,7 +287,7 @@ export const PositionsListWidget = ({
                       </td>
                       <td>{formatPrice(groupedPosition.pricePerDay)}</td>
                       <td>{Math.abs(groupedPosition.netQuantity)}</td>
-                      <td title={MARGIN_HINT}>
+                      <td>
                         {formatMargin(calculateMargin(groupedPosition.expirationAt))}
                       </td>
                       <td>

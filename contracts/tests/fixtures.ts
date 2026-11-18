@@ -31,6 +31,7 @@ export async function deployContract<ContractName extends keyof ContractAbis>(
   publicClient: PublicClient,
   artifactPath: string,
   args: unknown[] = [],
+  libraries: Record<string, Address> = {},
 ): Promise<ContractInstance<ContractName>> {
   // Load artifact dynamically
   const { readFile } = await import("node:fs/promises");
@@ -38,7 +39,11 @@ export async function deployContract<ContractName extends keyof ContractAbis>(
   const artifact = JSON.parse(content);
 
   const abi = artifact.abi as Abi;
-  const bytecode = (artifact.bytecode?.object ?? artifact.bytecode) as `0x${string}`;
+  const bytecode = linkBytecode(
+    (artifact.bytecode?.object ?? artifact.bytecode) as `0x${string}`,
+    artifact.linkReferences ?? {},
+    libraries,
+  );
 
   // Deploy contract
   const { deployContract: viemDeploy } = await import("viem/actions");
@@ -65,6 +70,53 @@ export async function deployContract<ContractName extends keyof ContractAbis>(
     abi,
     client: { public: publicClient, wallet: walletClient, chain: walletClient.chain },
   }) as unknown as ContractInstance<ContractName>;
+}
+
+/**
+ * Fill a Hardhat artifact's library placeholders with deployed addresses. `linkReferences` is
+ * `{ [source]: { [library]: [{ start, length }] } }` with byte offsets into the creation code.
+ */
+export function linkBytecode(
+  bytecode: `0x${string}`,
+  linkReferences: Record<string, Record<string, { start: number; length: number }[]>>,
+  libraries: Record<string, Address>,
+): `0x${string}` {
+  let code = bytecode.slice(2);
+  for (const refs of Object.values(linkReferences)) {
+    for (const [name, positions] of Object.entries(refs)) {
+      const address = libraries[name];
+      if (address === undefined) throw new Error(`Library ${name} is not linked`);
+      const hex = address.slice(2).toLowerCase().padStart(40, "0");
+      for (const { start, length } of positions) {
+        code = code.slice(0, start * 2) + hex + code.slice((start + length) * 2);
+      }
+    }
+  }
+  return `0x${code}`;
+}
+
+/**
+ * `HashPowerFutures` links `FuturesBookLib` (its off-chain book views). Deploys the library and
+ * the implementation; callers that need the library address for their own deploy get it back.
+ */
+export async function deployFuturesImplementation(
+  walletClient: WalletClient,
+  publicClient: PublicClient,
+  vault: Address,
+) {
+  const bookLib = await deployContract<"FuturesBookLib">(
+    walletClient,
+    publicClient,
+    "../artifacts/contracts/libs/FuturesBookLib.sol/FuturesBookLib.json",
+  );
+  const implementation = await deployContract<"HashPowerFutures">(
+    walletClient,
+    publicClient,
+    "../artifacts/contracts/HashPowerFutures.sol/HashPowerFutures.json",
+    [vault],
+    { FuturesBookLib: bookLib.address },
+  );
+  return { bookLib, implementation };
 }
 
 const _BITCOIN_DECIMALS = 8;
@@ -202,11 +254,17 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
   });
   await collateralVault.write.depositInsuranceFund([collateralAmount], { account: owner.account });
 
-  const futuresImpl = await deployContract<"HashPowerFutures">(
+  const { bookLib, implementation: futuresImpl } = await deployFuturesImplementation(
     walletClient,
     pc,
-    "../artifacts/contracts/HashPowerFutures.sol/HashPowerFutures.json",
-    [collateralVault.address],
+    collateralVault.address,
+  );
+  // Every expiry marks at the index feed, as `HashpriceGlideUSD` does before the halving window.
+  const markOracle = await deployContract<"MarkRangeOracleMock">(
+    walletClient,
+    pc,
+    "../artifacts/contracts/mocks/MarkRangeOracleMock.sol/MarkRangeOracleMock.json",
+    [hashpriceUsd.address],
   );
   const futuresProxy = await deployContract<"ERC1967Proxy">(
     walletClient,
@@ -218,7 +276,7 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
         abi: futuresImpl.abi,
         functionName: "initialize",
         args: [
-          hashpriceUsd.address,
+          markOracle.address,
           liquidationMarginPercent,
           futureExpirationDatesCount,
           firstFutureExpirationDate,
@@ -327,6 +385,8 @@ export async function deployOnlyFuturesFixture(conn: NetworkConnection, data: To
     contracts: {
       usdcMock,
       hashpriceUsd,
+      markOracle,
+      bookLib,
       futures,
       collateralVault,
       portfolioMarginEngine,

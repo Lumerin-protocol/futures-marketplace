@@ -10,6 +10,7 @@ import { Analytics } from "./components/Analytics";
 import { DefaultLayout } from "./components/Layouts/DefaultLayout";
 import { Web3ProviderLazy } from "./Web3ProviderLazy";
 import { PageSpinner } from "./components/Spinner.styled";
+import { PathName } from "./types/types";
 
 const Futures = safeLazy(() => import("./pages/futures/Futures").then((module) => ({ default: module.Futures })));
 const Leaderboard = safeLazy(() =>
@@ -39,7 +40,7 @@ export const Router: FC = () => {
               </Web3ProviderLazy>
             }
           />
-          <Route path="/" element={<Navigate to="/trade/futures" replace />} />
+          <Route path="/" element={<Navigate to={PathName.Landing} replace />} />
           <Route path="/futures" element={<Navigate to="/trade/futures" replace />} />
           <Route path="/perpetual" element={<Navigate to="/trade/perpetual" replace />} />
           <Route
@@ -50,7 +51,7 @@ export const Router: FC = () => {
               </Web3ProviderLazy>
             }
           />
-          <Route path="*" element={<Navigate to="/trade/futures" replace />} />
+          <Route path="*" element={<Navigate to={PathName.Landing} replace />} />
         </Routes>
       </Suspense>
     </DefaultLayout>

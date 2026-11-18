@@ -22,6 +22,8 @@ export interface OpenPositionLeg {
   /** Set once the venue pins a price for this leg, which freezes its PnL. */
   settlementPrice: bigint | null;
   quantityScale: bigint;
+  /** The futures expiry the leg settles at, whose mark range values it; perps have none. */
+  expirationAt?: bigint;
 }
 
 export interface ExposureContext {
@@ -41,6 +43,7 @@ const OPEN_SESSIONS_LIMIT = 200;
 export interface FuturesExposureRow {
   netQuantity: string;
   entryPrice: string;
+  expirationAt?: string;
   expiration: { settlementPrice: string | null } | null;
 }
 
@@ -63,6 +66,7 @@ export const mapFuturesExposure = (
       entryPrice: BigInt(session.entryPrice),
       settlementPrice: settlementPrice !== null ? BigInt(settlementPrice) : null,
       quantityScale,
+      expirationAt: session.expirationAt !== undefined ? BigInt(session.expirationAt) : undefined,
     };
   });
 

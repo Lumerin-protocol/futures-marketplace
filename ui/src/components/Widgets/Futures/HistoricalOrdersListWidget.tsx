@@ -5,6 +5,7 @@ import { DateTimeCell } from "../../DateTimeCell";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { LoadMoreButton } from "../../LoadMoreButton";
 import { LiquidationChip, formatLiquidatedQty, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
+import { ColumnHeader } from "./ColumnHeader";
 
 interface HistoricalOrdersListWidgetProps {
   orders: HistoricalOrder[];
@@ -84,8 +85,8 @@ export const HistoricalOrdersListWidget = ({
             <tr>
               <th>Contract Expiration</th>
               <th>Side</th>
-              <th>Price (USDC)</th>
-              <th>Quantity</th>
+              <ColumnHeader hint="orderPrice">Price (USDC)</ColumnHeader>
+              <ColumnHeader hint="quantity">Quantity</ColumnHeader>
               <th>Status</th>
               <th>Created</th>
               <th>Updated</th>

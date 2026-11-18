@@ -265,6 +265,27 @@ resource "aws_s3_object" "apex_hold" {
   content_type = "text/html; charset=utf-8"
 }
 
+# robots.txt + sitemap for the hold bucket (used once apex DNS points here).
+resource "aws_s3_object" "apex_hold_robots" {
+  count        = var.create_core && var.apex_site == "hold" ? 1 : 0
+  provider     = aws.use1
+  bucket       = aws_s3_bucket.apex_hold[0].id
+  key          = "robots.txt"
+  source       = "${path.module}/manage/apex-hold-robots.txt"
+  etag         = filemd5("${path.module}/manage/apex-hold-robots.txt")
+  content_type = "text/plain; charset=utf-8"
+}
+
+resource "aws_s3_object" "apex_hold_sitemap" {
+  count        = var.create_core && var.apex_site == "hold" ? 1 : 0
+  provider     = aws.use1
+  bucket       = aws_s3_bucket.apex_hold[0].id
+  key          = "sitemap.xml"
+  source       = "${path.module}/manage/apex-hold-sitemap.xml"
+  etag         = filemd5("${path.module}/manage/apex-hold-sitemap.xml")
+  content_type = "application/xml"
+}
+
 check "apex_site_beta_has_alias" {
   assert {
     condition     = var.apex_site != "beta" || var.beta_alias.create

@@ -79,8 +79,8 @@ monitoring = {
   create_metric_filters     = true
   create_synthetics_canary  = true  # Canary only in production
   notifications_enabled     = true  # Disabled to reduce noise in dev
-  dev_alerts_topic_name     = "titanio-dev-dev-alerts"
-  devops_alerts_topic_name  = "titanio-dev-dev-alerts"
+  dev_alerts_topic_name     = "titanio-dev-hpdx-alerts"
+  devops_alerts_topic_name  = "titanio-dev-hpdx-alerts"
   dashboard_period          = 300
 }
 

@@ -92,8 +92,8 @@ monitoring = {
   create_metric_filters     = true
   create_synthetics_canary  = true  # Enable when services deployed (true for production)
   notifications_enabled     = true  # Enable when services deployed (true for production)
-  dev_alerts_topic_name     = "titanio-lmn-dev-alerts"      # Slack
-  devops_alerts_topic_name  = "titanio-lmn-devops-alerts"   # Cell phone (critical)
+  dev_alerts_topic_name     = "titanio-lmn-hpdx-alerts"      # Slack
+  devops_alerts_topic_name  = "titanio-lmn-hpdx-page"   # Cell phone (critical)
   dashboard_period          = 300
 }
 

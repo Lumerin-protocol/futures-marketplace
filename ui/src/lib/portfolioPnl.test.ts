@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vitest";
 import {
   REALIZED_PNL_WINDOW_DAYS,
+  realizedPnlAfterFees,
   realizedPnlSinceBaseline,
+  sumTradeFees,
   sumUnrealizedPnl,
   windowCutoffSeconds,
   type UnrealizedLeg,
@@ -103,5 +105,52 @@ describe("realizedPnlSinceBaseline", () => {
 
   test("a window with no closes reports zero, not the lifetime total", () => {
     expect(realizedPnlSinceBaseline(usdc(500), usdc(500))).toBe(0n);
+  });
+});
+
+describe("realizedPnlAfterFees", () => {
+  test("takes the fees out of a gain", () => {
+    expect(realizedPnlAfterFees(usdc(19.2), usdc(7.84))).toBe(usdc(11.36));
+  });
+
+  test("deepens a loss by the fees paid", () => {
+    expect(realizedPnlAfterFees(usdc(-3.76), usdc(0.31))).toBe(usdc(-4.07));
+  });
+
+  test("an opening fill realizes a loss of its fee", () => {
+    expect(realizedPnlAfterFees(0n, usdc(0.48))).toBe(usdc(-0.48));
+  });
+
+  test("a rebate adds to the figure", () => {
+    expect(realizedPnlAfterFees(usdc(10), usdc(-0.5))).toBe(usdc(10.5));
+  });
+
+  test("trading and liquidation fees both come out", () => {
+    expect(realizedPnlAfterFees(usdc(-50), usdc(1), usdc(20))).toBe(usdc(-71));
+  });
+
+  test("a fee that does not apply is skipped", () => {
+    expect(realizedPnlAfterFees(usdc(5), usdc(1), null)).toBe(usdc(4));
+  });
+});
+
+describe("sumTradeFees", () => {
+  test("no trades cost nothing", () => {
+    expect(sumTradeFees([])).toBe(0n);
+  });
+
+  test("adds trading and liquidation fees across rows", () => {
+    const rows = [
+      { tradingFee: "480200", liquidationFee: null },
+      { tradingFee: "0", liquidationFee: "20000000" },
+      { tradingFee: "-100000", liquidationFee: null },
+    ];
+    expect(sumTradeFees(rows)).toBe(480200n + 20000000n - 100000n);
+  });
+
+  test("reads rows that select only the liquidation fee", () => {
+    expect(sumTradeFees([{ liquidationFee: "1500000" }, { liquidationFee: "500000" }])).toBe(
+      2000000n,
+    );
   });
 });

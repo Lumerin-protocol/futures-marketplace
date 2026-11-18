@@ -21,6 +21,7 @@ export class SafeWallet {
   private readonly safeAddr: `0x${string}`;
   private readonly wallet: WalletClient<Transport, Chain, Account>;
   private safeSigner?: Safe;
+  private nextNonce?: number;
 
   constructor(
     address: `0x${string}`,
@@ -51,6 +52,14 @@ export class SafeWallet {
 
   async proposeTransaction(data: MetaTransactionData): Promise<string> {
     const signer = await this.initSigner();
+    const queuedNonce = Number(
+      await this.safeApiKit.getNextNonce(getAddress(this.safeAddr)),
+    );
+    if (!Number.isInteger(queuedNonce) || queuedNonce < 0) {
+      throw new Error(`Safe API returned an invalid next nonce: ${queuedNonce}`);
+    }
+    const nonce =
+      this.nextNonce !== undefined ? Math.max(this.nextNonce, queuedNonce) : queuedNonce;
     const safeTransaction = await signer.createTransaction({
       transactions: [
         {
@@ -58,7 +67,9 @@ export class SafeWallet {
           ...(data.to ? { to: getAddress(data.to) } : {}),
         },
       ],
+      options: { nonce },
     });
+    this.nextNonce = nonce + 1;
 
     const safeTxHash = await signer.getTransactionHash(safeTransaction);
     const signature = await signer.signHash(safeTxHash);

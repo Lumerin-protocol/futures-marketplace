@@ -160,7 +160,8 @@ describe("Futures - points hook wiring", function () {
 
       const oracle = await viem.deployContract("PriceFeedMock", [8, "HashpriceUSD"]);
       await oracle.write.setPrice([initialOraclePrice]);
-      await futures.write.setOracle([oracle.address], { account: owner.account });
+      const marks = await viem.deployContract("MarkRangeOracleMock", [oracle.address]);
+      await futures.write.setOracle([marks.address], { account: owner.account });
 
       const hook = await viem.deployContract("MutatingPointsHook", [
         oracle.address,

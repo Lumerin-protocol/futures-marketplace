@@ -15,6 +15,7 @@ type RawPerpsSessionTrade = {
   tradePrice: string;
   tradeQuantity: string;
   tradingFee: string;
+  liquidationFee: string | null;
   transactionHash: string;
 };
 
@@ -32,6 +33,7 @@ const toTrade = (trade: RawPerpsSessionTrade): Trade => ({
   tradePrice: BigInt(trade.tradePrice),
   tradeQuantity: BigInt(trade.tradeQuantity),
   tradingFee: BigInt(trade.tradingFee),
+  liquidationFee: trade.liquidationFee != null ? BigInt(trade.liquidationFee) : null,
   transactionHash: trade.transactionHash,
 });
 

@@ -21,9 +21,6 @@ export const Button = styled.button`
   font-weight: 500;
   font-family: "Inter", sans-serif;
   transition: background-color 150ms ease, border-color 150ms ease;
-  &:not(:last-child) {
-    margin-right: 1rem;
-  }
 `;
 
 export const DisabledButton = styled(Button)`

@@ -35,12 +35,16 @@ import { useOrderMargin } from "../../../hooks/data/useOrderMargin";
 import { DateTimeCell } from "../../DateTimeCell";
 import { LoadMoreButton } from "../../LoadMoreButton";
 import { PAYMENT_TOKEN_SCALE_NUM, QUANTITY_SCALE } from "../../../lib/units";
+import { formatFundingAmount, formatFundingAndTradingFees } from "../../../lib/feeDisplay";
+import { Tooltip } from "../../Tooltip";
 import { getTxUrl } from "../../../lib/indexer";
 import {
   LiquidationChip,
   formatLiquidatedQty,
   LIQUIDATION_ROW_BG,
 } from "../../../lib/liquidation";
+import { realizedPnlAfterFees } from "../../../lib/portfolioPnl";
+import { ColumnHeader } from "./ColumnHeader";
 
 type TabType = "OPEN_ORDERS" | "POSITIONS" | "TRADES" | "POSITION_HISTORY" | "ORDER_HISTORY";
 
@@ -409,8 +413,8 @@ const PerpsOpenOrdersTable = ({
           <tr>
             <th>Created</th>
             <th>Side</th>
-            <th>Price (USDC)</th>
-            <th>Filled / Size (USDC)</th>
+            <ColumnHeader hint="orderPrice">Price (USDC)</ColumnHeader>
+            <ColumnHeader hint="filledOverSize">Filled / Size (USDC)</ColumnHeader>
             <th>Status</th>
             <th>Actions</th>
           </tr>
@@ -645,8 +649,8 @@ const PerpsOrderHistoryTable = ({ orders, isLoading, hasMore = false, isFetching
           <tr>
             <th>Created</th>
             <th>Side</th>
-            <th>Price (USDC)</th>
-            <th>Filled / Size (USDC)</th>
+            <ColumnHeader hint="orderPrice">Price (USDC)</ColumnHeader>
+            <ColumnHeader hint="filledOverSize">Filled / Size (USDC)</ColumnHeader>
             <th>Status</th>
             <th>Updated</th>
           </tr>
@@ -705,12 +709,6 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
     return (Number(absQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
   };
 
-  const formatFees = (fundingFees: bigint, tradingFees: bigint) => {
-    const funding = (Number(fundingFees) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-    const trading = (Number(tradingFees) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-    return `${funding} / ${trading}`;
-  };
-
   // Calculate unrealized PnL: (currentMarketPrice - entryPrice) * netQuantity
   const calculateUnrealizedPnL = (entryPrice: bigint, netQuantity: bigint): bigint => {
     if (!marketPrice || netQuantity === 0n) return 0n;
@@ -728,10 +726,6 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
     positionMargin === undefined
       ? "—"
       : `${(Number(positionMargin < 0n ? -positionMargin : 0n) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2)} USDC`;
-  const marginTooltip =
-    "Initial margin this position accounts for — how much the account's requirement " +
-    "would fall if it were closed. Collateral is pooled across futures and perps, so a " +
-    "leg that hedges the rest of the book can account for none of it.";
 
   const openPositions = [...positionSessions]
     .filter((session) => session.status === "OPEN")
@@ -762,12 +756,12 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
               <th>Opened At</th>
               <th>Side</th>
               <th>Status</th>
-              <th>Entry Price</th>
-              <th>Size / Max Size</th>
-              <th title={marginTooltip}>Margin</th>
-              <th>Fees (F/T)</th>
-              <th>Unrealized PnL</th>
-              <th>Realized PnL</th>
+              <ColumnHeader hint="entryPrice">Entry Price</ColumnHeader>
+              <ColumnHeader hint="sizeOverMax">Size / Max Size</ColumnHeader>
+              <ColumnHeader hint="marginPerps">Margin</ColumnHeader>
+              <ColumnHeader hint="feesFT">Fees (F/T)</ColumnHeader>
+              <ColumnHeader hint="unrealizedPnl">Unrealized PnL</ColumnHeader>
+              <ColumnHeader hint="realizedPnlSession">Realized PnL</ColumnHeader>
               <th>Actions</th>
             </tr>
           </thead>
@@ -775,7 +769,7 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
             {openPositions.map((session) => {
               const displayQuantity = session.netQuantity;
               const isLong = session.isLong;
-              const realizedPnlValue = Number(session.realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
+              const realizedPnlValue = Number(sessionRealizedPnl(session)) / PAYMENT_TOKEN_SCALE_NUM;
               const unrealizedPnl = calculateUnrealizedPnL(session.entryPrice, displayQuantity);
               const unrealizedPnlValue = Number(unrealizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
 
@@ -812,17 +806,15 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
                     {" / "}
                     {((Number(session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(session.maxQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}
                   </td>
-                  <td title={marginTooltip}>{positionMarginLabel}</td>
-                  <td>{formatFees(session.fundingFees, session.tradingFees)}</td>
+                  <td>{positionMarginLabel}</td>
+                  <td>{formatFundingAndTradingFees(sessionFunding(session), session.tradingFees)}</td>
                   <td>
                     <PnLText $isPositive={unrealizedPnlValue >= 0}>
                       {unrealizedPnlValue >= 0 ? "+" : ""}{unrealizedPnlValue.toFixed(2)} USDC
                     </PnLText>
                   </td>
                   <td>
-                    <PnLText $isPositive={realizedPnlValue >= 0}>
-                      {realizedPnlValue >= 0 ? "+" : ""}{realizedPnlValue.toFixed(2)} USDC
-                    </PnLText>
+                    <RealizedPnlCell value={realizedPnlValue} session={session} />
                   </td>
                   <td>
                     <ActionButtons>
@@ -852,6 +844,33 @@ const PerpsPositionsTable = ({ positionSessions, isLoading, marketPrice, onClose
   );
 };
 
+/// Funding and drift as one figure, positive when received. Drift only settles
+/// in the days before a halving, so it is shown as funding rather than apart.
+const sessionFunding = (session: PositionSession): bigint =>
+  session.fundingFees + session.driftPayments;
+
+/// The indexer's `realizedPnl` already holds drift, folded into the entry, but
+/// not funding, so funding is added here.
+const sessionRealizedPnl = (session: PositionSession): bigint =>
+  realizedPnlAfterFees(session.realizedPnl, session.tradingFees, session.liquidationFees) +
+  session.fundingFees;
+
+/// "Settled", not "included": funding is realized as it settles, but drift sits
+/// in the entry until the position is reduced, so an open session's realized
+/// PnL may not hold all of it yet.
+const RealizedPnlCell = ({ value, session }: { value: number; session: PositionSession }) => (
+  <Tooltip
+    title={`Funding settled: ${formatFundingAmount(sessionFunding(session))} USDC.`}
+    arrow
+    placement="top"
+    pinOnClick
+  >
+    <HintedPnLText $isPositive={value >= 0}>
+      {value >= 0 ? "+" : ""}{value.toFixed(2)} USDC
+    </HintedPnLText>
+  </Tooltip>
+);
+
 // Perps Position History Table Component
 interface PerpsPositionHistoryTableProps {
   positionSessions: PositionSession[];
@@ -874,12 +893,6 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, hasMore = fals
     }
     const absQuantity = quantity < 0n ? -quantity : quantity;
     return (Number(absQuantity) / PAYMENT_TOKEN_SCALE_NUM).toFixed(6);
-  };
-
-  const formatFees = (fundingFees: bigint, tradingFees: bigint) => {
-    const funding = (Number(fundingFees) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-    const trading = (Number(tradingFees) / PAYMENT_TOKEN_SCALE_NUM).toFixed(2);
-    return `${funding} / ${trading}`;
   };
 
   const formatStatus = (status: string) => {
@@ -927,18 +940,18 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, hasMore = fals
               <th>Opened At</th>
               <th>Status</th>
               <th>Side</th>
-              <th>Entry Price (USDC)</th>
-              <th>Close Price (USDC)</th>
-              <th>Size (USDC)</th>
-              <th>Fees (F/T)</th>
-              <th>Realized PnL</th>
+              <ColumnHeader hint="entryPrice">Entry Price (USDC)</ColumnHeader>
+              <ColumnHeader hint="closePrice">Close Price (USDC)</ColumnHeader>
+              <ColumnHeader hint="sizeUsdc">Size (USDC)</ColumnHeader>
+              <ColumnHeader hint="feesFT">Fees (F/T)</ColumnHeader>
+              <ColumnHeader hint="realizedPnlSession">Realized PnL</ColumnHeader>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {displayedPositions.map((session) => {
               const isLong = session.isLong;
-              const realizedPnlValue = Number(session.realizedPnl) / PAYMENT_TOKEN_SCALE_NUM;
+              const realizedPnlValue = Number(sessionRealizedPnl(session)) / PAYMENT_TOKEN_SCALE_NUM;
               const wasLiquidated = session.liquidatedQuantity > 0n;
 
               return (
@@ -976,11 +989,9 @@ const PerpsPositionHistoryTable = ({ positionSessions, isLoading, hasMore = fals
                   <td>{formatPrice(session.entryPrice)}</td>
                   <td>{session.closePrice ? formatPrice(session.closePrice) : "-"}</td>
                   <td>{((Number(session.closePrice ?? session.entryPrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(session.closedQuantity < 0n ? -session.closedQuantity : session.closedQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}</td>
-                  <td>{formatFees(session.fundingFees, session.tradingFees)}</td>
+                  <td>{formatFundingAndTradingFees(sessionFunding(session), session.tradingFees)}</td>
                   <td>
-                    <PnLText $isPositive={realizedPnlValue >= 0}>
-                      {realizedPnlValue >= 0 ? "+" : ""}{realizedPnlValue.toFixed(2)} USDC
-                    </PnLText>
+                    <RealizedPnlCell value={realizedPnlValue} session={session} />
                   </td>
                   <td>
                     <ActionButtons>
@@ -1065,52 +1076,56 @@ const PerpsTradesTable = ({ trades, isLoading, hasMore = false, isFetchingMore, 
           <tr>
             <th>Time</th>
             <th>Side</th>
-            <th>Trade Price</th>
-            <th>Size (USDC)</th>
-            <th>Entry Price After</th>
-            <th>Trading Fee</th>
-            <th>Realized PnL</th>
+            <ColumnHeader hint="tradePrice">Trade Price</ColumnHeader>
+            <ColumnHeader hint="sizeUsdc">Size (USDC)</ColumnHeader>
+            <ColumnHeader hint="entryPriceAfter">Entry Price After</ColumnHeader>
+            <ColumnHeader hint="tradingFee">Trading Fee</ColumnHeader>
+            <ColumnHeader hint="realizedPnl">Realized PnL</ColumnHeader>
             <th>Tx Hash</th>
           </tr>
         </thead>
         <tbody>
-          {displayedTrades.map((trade) => (
-            <TableRow
-              key={trade.id}
-              style={trade.isLiquidation ? { backgroundColor: LIQUIDATION_ROW_BG } : undefined}
-            >
-              <td><DateTimeCell timestamp={trade.timestamp} /></td>
-              <td>
-                <SideCell>
-                  <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
-                    {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
-                  </TypeBadge>
-                  {trade.isLiquidation && <LiquidationChip>Liquidation</LiquidationChip>}
-                </SideCell>
-              </td>
-              <td>{formatPrice(trade.tradePrice)}</td>
-              <td>{((Number(trade.tradePrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(trade.tradeQuantity < 0n ? -trade.tradeQuantity : trade.tradeQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}</td>
-              <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
-              <td>{formatPrice(trade.tradingFee)}</td>
-              <td>
-                <PnLText
-                  $isPositive={Number(trade.realizedPnl) >= 0}
-                  $isZero={Number(trade.realizedPnl) === 0}
-                >
-                  {formatPnL(trade.realizedPnl)}
-                </PnLText>
-              </td>
-              <td>
-                <TxLink 
-                  href={getTxUrl(trade.transactionHash as `0x${string}`)} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                >
-                  {trade.transactionHash.slice(0, 6)}...{trade.transactionHash.slice(-4)}
-                </TxLink>
-              </td>
-            </TableRow>
-          ))}
+          {displayedTrades.map((trade) => {
+            const realizedPnl = realizedPnlAfterFees(
+              trade.realizedPnl,
+              trade.tradingFee,
+              trade.liquidationFee,
+            );
+            return (
+              <TableRow
+                key={trade.id}
+                style={trade.isLiquidation ? { backgroundColor: LIQUIDATION_ROW_BG } : undefined}
+              >
+                <td><DateTimeCell timestamp={trade.timestamp} /></td>
+                <td>
+                  <SideCell>
+                    <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
+                      {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
+                    </TypeBadge>
+                    {trade.isLiquidation && <LiquidationChip>Liquidation</LiquidationChip>}
+                  </SideCell>
+                </td>
+                <td>{formatPrice(trade.tradePrice)}</td>
+                <td>{((Number(trade.tradePrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(trade.tradeQuantity < 0n ? -trade.tradeQuantity : trade.tradeQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}</td>
+                <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
+                <td>{formatPrice(trade.tradingFee)}</td>
+                <td>
+                  <PnLText $isPositive={realizedPnl >= 0n} $isZero={realizedPnl === 0n}>
+                    {formatPnL(realizedPnl)}
+                  </PnLText>
+                </td>
+                <td>
+                  <TxLink 
+                    href={getTxUrl(trade.transactionHash as `0x${string}`)} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                  >
+                    {trade.transactionHash.slice(0, 6)}...{trade.transactionHash.slice(-4)}
+                  </TxLink>
+                </td>
+              </TableRow>
+            );
+          })}
         </tbody>
       </Table>
       <LoadMoreButton hasMore={hasMore} isLoading={isFetchingMore} onClick={onLoadMore} />
@@ -1174,46 +1189,50 @@ const TradeDetailsModal = ({ session, onClose }: TradeDetailsModalProps) => {
               <tr>
                 <th>Time</th>
                 <th>Side</th>
-                <th>Trade Price</th>
-                <th>Size (USDC)</th>
-                <th>Entry Price After</th>
-                <th>Trading Fee</th>
-                <th>Realized PnL</th>
+                <ColumnHeader hint="tradePrice">Trade Price</ColumnHeader>
+                <ColumnHeader hint="sizeUsdc">Size (USDC)</ColumnHeader>
+                <ColumnHeader hint="entryPriceAfter">Entry Price After</ColumnHeader>
+                <ColumnHeader hint="tradingFee">Trading Fee</ColumnHeader>
+                <ColumnHeader hint="realizedPnl">Realized PnL</ColumnHeader>
                 <th>Tx Hash</th>
               </tr>
             </thead>
             <tbody>
-              {displayedTrades.map((trade) => (
-                <TableRow key={trade.id}>
-                  <td><DateTimeCell timestamp={trade.timestamp} /></td>
-                  <td>
-                    <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
-                      {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
-                    </TypeBadge>
-                  </td>
-                  <td>{formatPrice(trade.tradePrice)}</td>
-                  <td>{((Number(trade.tradePrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(trade.tradeQuantity < 0n ? -trade.tradeQuantity : trade.tradeQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}</td>
-                  <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
-                  <td>{formatPrice(trade.tradingFee)}</td>
-                  <td>
-                    <PnLText
-                      $isPositive={Number(trade.realizedPnl) >= 0}
-                      $isZero={Number(trade.realizedPnl) === 0}
-                    >
-                      {formatPnL(trade.realizedPnl)}
-                    </PnLText>
-                  </td>
-                  <td>
-                    <TxLink 
-                      href={getTxUrl(trade.transactionHash as `0x${string}`)} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                    >
-                      {trade.transactionHash.slice(0, 6)}...{trade.transactionHash.slice(-4)}
-                    </TxLink>
-                  </td>
-                </TableRow>
-              ))}
+              {displayedTrades.map((trade) => {
+                const realizedPnl = realizedPnlAfterFees(
+                  trade.realizedPnl,
+                  trade.tradingFee,
+                  trade.liquidationFee,
+                );
+                return (
+                  <TableRow key={trade.id}>
+                    <td><DateTimeCell timestamp={trade.timestamp} /></td>
+                    <td>
+                      <TypeBadge $type={trade.tradeQuantity >= 0n ? "Long" : "Short"}>
+                        {trade.tradeQuantity >= 0n ? "Buy" : "Sell"}
+                      </TypeBadge>
+                    </td>
+                    <td>{formatPrice(trade.tradePrice)}</td>
+                    <td>{((Number(trade.tradePrice) / PAYMENT_TOKEN_SCALE_NUM) * (Number(trade.tradeQuantity < 0n ? -trade.tradeQuantity : trade.tradeQuantity) / PAYMENT_TOKEN_SCALE_NUM)).toFixed(2)}</td>
+                    <td>{formatPrice(trade.aggregatedEntryPriceAfter)}</td>
+                    <td>{formatPrice(trade.tradingFee)}</td>
+                    <td>
+                      <PnLText $isPositive={realizedPnl >= 0n} $isZero={realizedPnl === 0n}>
+                        {formatPnL(realizedPnl)}
+                      </PnLText>
+                    </td>
+                    <td>
+                      <TxLink 
+                        href={getTxUrl(trade.transactionHash as `0x${string}`)} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                      >
+                        {trade.transactionHash.slice(0, 6)}...{trade.transactionHash.slice(-4)}
+                      </TxLink>
+                    </td>
+                  </TableRow>
+                );
+              })}
             </tbody>
           </TradesTable>
         </TradesTableContainer>
@@ -1455,6 +1474,15 @@ const PnLText = styled.span<{ $isPositive: boolean; $isZero?: boolean }>`
         ? tokens.trading.long
         : tokens.trading.short};
   font-weight: 600;
+`;
+
+/** Underlined like the hinted column headers, so the value reads as hoverable too. */
+const HintedPnLText = styled(PnLText)`
+  cursor: help;
+  white-space: nowrap;
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
 `;
 
 const TxLink = styled.a`

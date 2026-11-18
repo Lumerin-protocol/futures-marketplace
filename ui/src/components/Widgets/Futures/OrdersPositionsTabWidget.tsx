@@ -17,6 +17,8 @@ import { LoadMoreButton } from "../../LoadMoreButton";
 import { PAYMENT_TOKEN_SCALE_NUM } from "../../../lib/units";
 import { getTxUrl } from "../../../lib/indexer";
 import { LiquidationChip, LIQUIDATION_ROW_BG } from "../../../lib/liquidation";
+import { realizedPnlAfterFees } from "../../../lib/portfolioPnl";
+import { ColumnHeader } from "./ColumnHeader";
 import { ClosePositionForm, type ClosablePosition } from "../../Forms/ClosePositionForm";
 import { useGetMarketPrice } from "../../../hooks/data/useGetMarketPrice";
 import { ModalItem } from "../../Modal";
@@ -338,16 +340,21 @@ const FuturesTradesTable = ({
             <th>Time</th>
             <th>Contract Expiration</th>
             <th>Side</th>
-            <th>Price (USDC)</th>
-            <th>Quantity</th>
-            <th>Trading Fee</th>
-            <th>Realized PnL</th>
+            <ColumnHeader hint="tradePrice">Price (USDC)</ColumnHeader>
+            <ColumnHeader hint="quantity">Quantity</ColumnHeader>
+            <ColumnHeader hint="tradingFee">Trading Fee</ColumnHeader>
+            <ColumnHeader hint="realizedPnl">Realized PnL</ColumnHeader>
             <th>Tx Hash</th>
           </tr>
         </thead>
         <tbody>
           {displayedTrades.map((trade) => {
             const isLong = trade.tradeQuantity >= 0;
+            const realizedPnl = realizedPnlAfterFees(
+              trade.realizedPnl,
+              trade.tradingFee,
+              trade.liquidationFee,
+            );
             return (
               <TableRow
                 key={trade.id}
@@ -369,11 +376,8 @@ const FuturesTradesTable = ({
                 <td>{Math.abs(trade.tradeQuantity)}</td>
                 <td>{formatPrice(trade.tradingFee)}</td>
                 <td>
-                  <PnLText
-                    $isPositive={Number(trade.realizedPnl) >= 0}
-                    $isZero={Number(trade.realizedPnl) === 0}
-                  >
-                    {formatPnL(trade.realizedPnl)}
+                  <PnLText $isPositive={realizedPnl >= 0n} $isZero={realizedPnl === 0n}>
+                    {formatPnL(realizedPnl)}
                   </PnLText>
                 </td>
                 <td>

@@ -8,6 +8,7 @@ import { EnumerableSet } from "@openzeppelin/contracts/utils/structs/EnumerableS
 import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import { StructuredLinkedList } from "solidity-linked-list/contracts/StructuredLinkedList.sol";
 import { Versionable } from "./interfaces/Versionable.sol";
+import { IMarkRangeOracle } from "./interfaces/IMarkRangeOracle.sol";
 import { ICollateralVault } from "collateral-margin/contracts/contracts/interfaces/ICollateralVault.sol";
 import { IPortfolioMarginEngine } from "collateral-margin/contracts/contracts/interfaces/IPortfolioMarginEngine.sol";
 import { IPointsHook } from "collateral-margin/contracts/contracts/interfaces/IPointsHook.sol";
@@ -27,8 +28,9 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     mapping(bytes32 => Order) internal orders;
     /// @dev Dead after v3 reset: former bilateral lot mapping. Slot retained for upgrade safety.
     mapping(bytes32 => LegacyLot) internal positions;
-    mapping(uint256 => mapping(uint256 => StructuredLinkedList.List)) private expirationAtPriceOrdersLongIdQueue;
-    mapping(uint256 => mapping(uint256 => StructuredLinkedList.List)) private expirationAtPriceOrdersShortIdQueue;
+    /// @dev `internal` (not `private`) since 6.18 so the venue can hand them to `FuturesBookLib`.
+    mapping(uint256 => mapping(uint256 => StructuredLinkedList.List)) internal expirationAtPriceOrdersLongIdQueue;
+    mapping(uint256 => mapping(uint256 => StructuredLinkedList.List)) internal expirationAtPriceOrdersShortIdQueue;
     /// @dev Dead after v3: former bilateral lot index. Slot retained.
     mapping(address => EnumerableSet.Bytes32Set) internal participantPositionIdsIndex;
     mapping(address => EnumerableSet.Bytes32Set) internal participantOrderIdsIndex;
@@ -123,6 +125,9 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     /// @dev Dead — former vault. Moved to immutable.
     address private __gap16;
 
+    /// @notice Pre-6.10 cached totals for a participant's resting orders at one expiry.
+    /// @dev Dead since 6.10, superseded by {RestingOrderAggregate}. Kept only so the legacy
+    ///      mapping's type, and therefore the storage layout, is unchanged.
     struct OrderAggregate {
         uint256 buyQty;
         uint256 sellQty;
@@ -130,8 +135,9 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         uint256 sellValue;
     }
 
+    /// @dev Dead since 6.10. Never read or written; slot retained for proxy storage compatibility.
     mapping(address => mapping(uint256 => OrderAggregate)) internal participantExpirationAtOrderAggregate;
-    /// @dev Dead after v4.3: former order-expiration set used only by resetState. Slot retained.
+    /// @dev Dead after v4.3: former order-expiration set used only by the removed `resetState`. Slot retained.
     mapping(address => EnumerableSet.UintSet) private participantOrderExpirationAts;
     /// @dev Canonical resting-order index for v4.3+: bounded independently per delivery date.
     ///      The legacy global `participantOrderIdsIndex` remains in-place for upgrade cleanup only.
@@ -139,6 +145,62 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     /// @dev One bit per absolute delivery index. Reads mask this to the current window, so
     ///      historical bits never require a keeper sweep and never increase risk-view gas.
     mapping(address => mapping(uint256 => uint256)) internal participantOrderExpirationBitmap;
+
+    /// @notice Canonical cached totals for a participant's remaining resting orders at one
+    ///         expiry, per side: the quantity and the first two price moments.
+    /// @dev A moment is a quantity-weighted sum of a power of price, `Σ q·p^k`. The quantity is
+    ///      the zeroth; the first gives a side's average price and the second its spread, which
+    ///      yields the side's distance from any mark in constant time — the inputs of
+    ///      `MathLib.fillLossBound`. The spread is what stops a deep decoy hiding a marketable
+    ///      order.
+    struct RestingOrderAggregate {
+        /// Σ |qty| over resting bids at the expiry, in whole contracts.
+        uint256 buyQty;
+        /// Σ |qty| over resting asks at the expiry, in whole contracts.
+        uint256 sellQty;
+        /// First moment of resting bids at the expiry, Σ price·qty. Price in token decimals.
+        uint256 buyPQ;
+        /// Second moment of resting bids at the expiry, Σ price²·qty.
+        uint256 buyP2Q;
+        /// First moment of resting asks at the expiry, Σ price·|qty|.
+        uint256 sellPQ;
+        /// Second moment of resting asks at the expiry, Σ price²·|qty|.
+        uint256 sellP2Q;
+    }
+
+    /// @dev Appended at the storage tail in 6.10. Never move above `participantOrderExpirationBitmap`.
+    ///      Starts empty on upgrade, so an upgrade from before 6.10 runs `forceCancelOrders` for
+    ///      every user with resting orders. A pre-6.10 order removed any other way (cancel, fill,
+    ///      `removeOutdatedOrders`) would underflow it.
+    mapping(address => mapping(uint256 => RestingOrderAggregate)) internal participantExpirationAtRestingOrderAggregate;
+
+    /// @notice Per-expiry mark ranges (`HashpriceGlideUSD`). `setOracle` adopts it together with
+    ///         its index as `priceOracle`, which settlement reads.
+    /// @dev Appended at the storage tail in 6.17. Empty after an upgrade until `setOracle` runs,
+    ///      and every mark read reverts meanwhile; `update-futures.ts` sets it while halted.
+    IMarkRangeOracle public markOracle;
+
+    /// @dev The delivery schedule in one slot, so hot paths resolve dates with one read and
+    ///      arithmetic. Slots `[0, pinnedCount)` have pinned dates. Dates form a chain 30 days
+    ///      apart that a shift re-anchors: a slot `k >= anchorSlot` is at
+    ///      `anchorTime + (k − anchorSlot) × interval`, one in `[prevAnchorSlot, anchorSlot)` at
+    ///      `prevAnchorTime + (k − prevAnchorSlot) × interval`, and an older one (only when two
+    ///      shifts fall inside one window) in `pinnedExpiryOf`. Before any shift both anchors are
+    ///      `(0, firstFutureExpirationDate)`, the plain grid.
+    struct ExpirySchedule {
+        uint32 pinnedCount;
+        uint32 anchorSlot;
+        uint64 anchorTime;
+        uint32 prevAnchorSlot;
+        uint64 prevAnchorTime;
+    }
+
+    /// @dev Appended at the storage tail in 6.18 with the two mappings below; `initialize` sets it.
+    ExpirySchedule internal expirySchedule;
+    /// @dev Every pinned slot's date, and the inverse (slot + 1, so 0 means not a date). Read only
+    ///      for dates outside the two anchored regimes.
+    mapping(uint256 => uint256) internal pinnedExpiryOf;
+    mapping(uint256 => uint256) internal slotOfPinnedExpiry;
 
     // immutable
     ICollateralVault public immutable vault;
@@ -157,6 +219,19 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     uint8 public constant QUANTITY_DECIMALS = 0;
     uint8 public constant MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION = 100;
     uint256 public constant MAX_PRICE_LEVELS_PER_SIDE = 200;
+    /// @notice Largest |quantity| a single order may carry, in whole contracts.
+    /// @dev Two overflow bounds rest on it. The margin engine lifts summed order quantity to
+    ///      WAD (×1e18 from whole contracts) and stresses it as int256, so the sum across
+    ///      every listed expiry must stay below 2^255. And with `MAX_PRICE` and
+    ///      `MAX_ORDERS_PER_PARTICIPANT_PER_EXPIRATION` it keeps `MathLib.fillLossBound`'s
+    ///      `qty · Σq(p−m)²` within uint256.
+    uint256 public constant MAX_ORDER_QUANTITY = 1e12;
+    /// @notice Largest price any calculation accepts, in token decimals ($10,000 per contract,
+    ///         ~20x the all-time hashprice high): order prices and the oracle mark alike.
+    /// @dev Keeps every price-derived `int256` (entry value, PnL, fees) far below 2^255, so the
+    ///      plain casts can never wrap, and keeps the `Σ price²·qty` order moment and
+    ///      `MathLib.fillLossBound` within uint256. A feed above it reverts like a stale one.
+    uint256 public constant MAX_PRICE = 1e10;
     uint256 internal constant BPS = 10_000; // Basis points denominator
     /// @notice Hard ceiling on |makerFeeBps| and |takerFeeBps|: 100 bps (1%).
     /// @dev Keeps a trading fee at most a fifth of the 5% MM spot shock, so the argument
@@ -165,8 +240,14 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     ///      accept 327%.
     int16 internal constant MAX_FEE_BPS = 100;
     uint32 internal constant SECONDS_PER_DAY = 3600 * 24;
-    uint256 public constant MAX_ORACLE_STALENESS = 3600; // 1 hour
+    uint256 public constant MAX_ORACLE_STALENESS = 7200; // 2 hours: hashprice updates only on a Bitcoin block
     uint8 public constant EXPIRATION_INTERVAL_DAYS = 30;
+    /// @notice Half-width of the no-go zone around the estimated halving (`markOracle.halvingEta()`):
+    ///         a delivery date that would fall closer than this to the estimate when its slot is
+    ///         pinned is listed at the nearer edge of the zone instead, so no date is ever valued on
+    ///         both sides of the halving or steps across its window. Half the interval, so at most
+    ///         one date per halving moves, by at most this much.
+    uint256 public constant NO_GO_HALF_WIDTH = 15 days;
     /// @notice Minimum price increment for orders: $0.01 in USDC (6 decimals).
     uint256 public constant minimumPriceIncrement = 0.01e6;
 
@@ -273,6 +354,10 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     event LiquidationFeeBpsUpdated(uint16 newLiquidationFeeBps);
     event LiquidatorShareBpsUpdated(uint16 newLiquidatorShareBps);
     event OracleUpdated(address newOracle);
+    event MarkOracleUpdated(address markOracle);
+    /// @notice Slot `slot` got its delivery date: the chain's date, or the nearer edge of the no-go
+    ///         zone around `halvingEta` when the chain's date fell inside it (`shifted`).
+    event ExpiryPinned(uint256 indexed slot, uint256 expiry, uint256 halvingEta, bool shifted);
     event PortfolioMarginUpdated(address newPortfolioMargin);
     event HookUpdated(address indexed hook);
 
@@ -323,6 +408,8 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     error PositionMatured();
     /// @notice `forceClosePositions` runs only while the vault is halted.
     error NotHalted();
+    /// @notice Every slot up to one past the tradable window is already pinned.
+    error NothingToPin();
 
     /// @param _vault The shared collateral vault. Its `collateralToken()` provides the underlying ERC20.
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -354,14 +441,18 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         internal
     {
         uint256 absQty = M.abs(_quantity);
-        OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_participant][_expirationAt];
+        RestingOrderAggregate storage aggregate =
+            participantExpirationAtRestingOrderAggregate[_participant][_expirationAt];
         bool wasEmpty = aggregate.buyQty == 0 && aggregate.sellQty == 0;
+        uint256 pq = _price * absQty;
         if (_quantity > 0) {
             aggregate.buyQty += absQty;
-            aggregate.buyValue += _price * absQty;
+            aggregate.buyPQ += pq;
+            aggregate.buyP2Q += pq * _price;
         } else {
             aggregate.sellQty += absQty;
-            aggregate.sellValue += _price * absQty;
+            aggregate.sellPQ += pq;
+            aggregate.sellP2Q += pq * _price;
         }
         if (wasEmpty) {
             _setOrderExpirationActive(_participant, _expirationAt, true);
@@ -375,13 +466,17 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         uint256 _absQty,
         bool _isBuy
     ) internal {
-        OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_participant][_expirationAt];
+        RestingOrderAggregate storage aggregate =
+            participantExpirationAtRestingOrderAggregate[_participant][_expirationAt];
+        uint256 pq = _price * _absQty;
         if (_isBuy) {
             aggregate.buyQty -= _absQty;
-            aggregate.buyValue -= _price * _absQty;
+            aggregate.buyPQ -= pq;
+            aggregate.buyP2Q -= pq * _price;
         } else {
             aggregate.sellQty -= _absQty;
-            aggregate.sellValue -= _price * _absQty;
+            aggregate.sellPQ -= pq;
+            aggregate.sellP2Q -= pq * _price;
         }
         if (aggregate.buyQty == 0 && aggregate.sellQty == 0) {
             _setOrderExpirationActive(_participant, _expirationAt, false);
@@ -395,7 +490,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         returns (uint256 total)
     {
         if (_net == 0) return 0;
-        OrderAggregate storage aggregate = participantExpirationAtOrderAggregate[_user][_expirationAt];
+        RestingOrderAggregate storage aggregate = participantExpirationAtRestingOrderAggregate[_user][_expirationAt];
         return _net > 0 ? aggregate.sellQty : aggregate.buyQty;
     }
 
@@ -695,10 +790,46 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
 
     // ── Internal helpers: cancel / reduce / book upkeep ───────────────────────
 
+    /// @dev Unindex a resting order and announce it cancelled. Callers own the authorization
+    ///      decision; this only performs the removal. Pass `_subtractAggregate = false` only
+    ///      when the caller clears the expiry's whole aggregate afterwards.
+    function _dropRestingOrder(bytes32 _orderId, bool _subtractAggregate) internal {
+        Order storage order = orders[_orderId];
+        address participant = order.participant;
+        uint256 expirationAt = order.expirationAt;
+        uint256 price = order.price;
+        bool isBuy = order.quantity > 0;
+        if (_subtractAggregate) {
+            _decreaseOrderAggregate(participant, expirationAt, price, M.abs(order.quantity), isBuy);
+        }
+        _unlinkRestingOrder(_orderId, expirationAt, price, participant, isBuy, true);
+        emit OrderCancelled(_orderId, participant);
+    }
+
+    /// @dev Empty a participant's aggregate at one expiry and mark the expiry order-free.
+    function _clearOrderAggregate(address _participant, uint256 _expirationAt) internal {
+        delete participantExpirationAtRestingOrderAggregate[_participant][_expirationAt];
+        _setOrderExpirationActive(_participant, _expirationAt, false);
+    }
+
     /// @param cleanupPriceLevel When true, drop the price ladder entry if the queue is empty.
     ///        Match walks a whole level and cleans once at the end (pass false); cancel /
     ///        liquidate / admin remove a single order and must clean immediately (pass true).
     function _removeRestingOrder(
+        bytes32 orderId,
+        uint256 expirationAt,
+        uint256 price,
+        address participant,
+        bool isBuy,
+        bool cleanupPriceLevel
+    ) internal {
+        _decreaseOrderAggregate(participant, expirationAt, price, M.abs(orders[orderId].quantity), isBuy);
+        _unlinkRestingOrder(orderId, expirationAt, price, participant, isBuy, cleanupPriceLevel);
+    }
+
+    /// @dev Take an order out of its queue and its owner's indexes, and delete it. Leaves the
+    ///      aggregate to the caller.
+    function _unlinkRestingOrder(
         bytes32 orderId,
         uint256 expirationAt,
         uint256 price,
@@ -713,7 +844,6 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         }
         participantOrderIdsIndex[participant].remove(orderId);
         participantExpirationAtOrderIdsIndex[participant][expirationAt].remove(orderId);
-        _decreaseOrderAggregate(participant, expirationAt, price, M.abs(orders[orderId].quantity), isBuy);
         delete orders[orderId];
     }
 
@@ -827,7 +957,8 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         // Soft path: never revert on a bad round — points just drop the bonus.
         if (answer <= 0 || updatedAt == 0 || updatedAt > block.timestamp) return 0;
         if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) return 0;
-        return _getMarketPrice(uint256(answer));
+        uint256 price = _getMarketPrice(uint256(answer));
+        return price > MAX_PRICE ? 0 : price;
     }
 
     function _notifyLiquidation(address _liquidator, uint256 _fee) internal {
@@ -838,12 +969,19 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
 
     // ── Internal helpers: margin / liquidation ────────────────────────────────
 
-    /// @dev The backstop inherits the liquidated quantity (same sign as the user's position) so
+    /// @dev The one path that closes a user's leg outside the book (liquidation and
+    ///      `forceClosePositions`): closes `_signedClose` (same sign as the leg) at `_mark`,
+    ///      realizing the exact entry-value slice against the fund, and the backstop inherits it so
     ///      positions keep summing to zero per expiry: the user's counterparties are untouched and
-    ///      the backstop now faces them. Goes through `_applyFill`, so an opposite backstop leg nets and
-    ///      realizes against the fund; what it cannot pay is recorded as `BadDebt` by the vault.
-    ///      No margin check: the backstop is a ledger for protocol exposure, not a margined trader.
-    function _handOffToBackstop(address _user, uint256 _expirationAt, int256 _signedClose, uint256 _mark) internal {
+    ///      the backstop now faces them. Both sides go through `_applyFill`, so an opposite backstop
+    ///      leg nets and realizes against the fund; what it cannot pay is recorded as `BadDebt` by
+    ///      the vault. No fee and no margin check: the backstop is a ledger for protocol exposure,
+    ///      not a margined trader.
+    function _closeToBackstop(address _user, uint256 _expirationAt, int256 _signedClose, uint256 _mark)
+        internal
+        returns (int256 pnl)
+    {
+        pnl = _applyFill(_user, -_signedClose, _mark, _expirationAt, false);
         _applyFill(BACKSTOP, _signedClose, _mark, _expirationAt, false);
         emit BackstopAssigned(_user, _expirationAt, _signedClose, _mark);
     }
@@ -864,6 +1002,13 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         return M.roundToNearest(scaled, minimumPriceIncrement);
     }
 
+    /// @dev Hard-validated oracle mark in venue units. Capped at `MAX_PRICE` like order prices,
+    ///      so every price-derived cast and product stays in range.
+    function _marketPrice() internal view returns (uint256 price) {
+        price = _getMarketPrice(_getPrice());
+        if (price > MAX_PRICE) revert InvalidOracle();
+    }
+
     function _activePricesSlice(StructuredLinkedList.List storage priceList, uint256 _maxLevels)
         internal
         view
@@ -880,21 +1025,161 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         return out;
     }
 
-    function _getCurrentExpirationAtIndex() internal view returns (uint256) {
-        if (block.timestamp > firstFutureExpirationDate) {
-            return (block.timestamp - firstFutureExpirationDate) / expirationIntervalSeconds() + 1;
+    // ── Internal helpers: delivery schedule ───────────────────────────────────
+    //
+    // Dates are a chain 30 days apart that a shift re-anchors. Every read below works from the
+    // packed `expirySchedule` word (one SLOAD per transaction, warm afterwards) and arithmetic;
+    // the per-slot tables are touched only for dates outside the two anchored regimes.
+
+    /// @dev First slot whose date is still ahead (the tradable window starts here). Same boundary
+    ///      semantics as the former grid arithmetic: a date equal to `block.timestamp` has rolled.
+    function _currentSlot(ExpirySchedule memory s) internal view returns (uint256) {
+        uint256 interval = expirationIntervalSeconds();
+        if (block.timestamp > s.anchorTime) {
+            return s.anchorSlot + (block.timestamp - s.anchorTime) / interval + 1;
         }
-        return 0;
+        if (block.timestamp > s.prevAnchorTime) {
+            uint256 slot = s.prevAnchorSlot + (block.timestamp - s.prevAnchorTime) / interval + 1;
+            return slot < s.anchorSlot ? slot : s.anchorSlot;
+        }
+        // Both anchors ahead (two shifts inside one window): walk back over the pinned dates.
+        uint256 k = s.prevAnchorSlot;
+        while (k > 0 && pinnedExpiryOf[k - 1] > block.timestamp) {
+            unchecked {
+                --k;
+            }
+        }
+        return k;
     }
 
-    function _activeExpirationAt(uint256 _currentIndex, uint256 _offset) internal view returns (uint256) {
-        unchecked {
-            return firstFutureExpirationDate + expirationIntervalSeconds() * (_currentIndex + _offset);
+    /// @dev The date of a pinned slot. For a slot past `pinnedCount` this is the chain's default,
+    ///      which a pin may still move; such a slot never holds orders.
+    function _expiryOfSlot(uint256 _slot, ExpirySchedule memory s) internal view returns (uint256) {
+        uint256 interval = expirationIntervalSeconds();
+        if (_slot >= s.anchorSlot) return s.anchorTime + (_slot - s.anchorSlot) * interval;
+        if (_slot >= s.prevAnchorSlot) return s.prevAnchorTime + (_slot - s.prevAnchorSlot) * interval;
+        return pinnedExpiryOf[_slot];
+    }
+
+    /// @dev The slot a date belongs to, if it is or can become a delivery date: on the current
+    ///      regime's chain, on the previous one below the anchor, or pinned earlier. The grid date
+    ///      of a shifted slot matches none of these.
+    function _slotOfExpiry(uint256 _expirationAt, ExpirySchedule memory s)
+        internal
+        view
+        returns (bool found, uint256 slot)
+    {
+        uint256 interval = expirationIntervalSeconds();
+        if (_expirationAt >= s.anchorTime) {
+            uint256 ahead = _expirationAt - s.anchorTime;
+            if (ahead % interval == 0) return (true, s.anchorSlot + ahead / interval);
         }
+        if (_expirationAt >= s.prevAnchorTime) {
+            uint256 ahead = _expirationAt - s.prevAnchorTime;
+            if (ahead % interval == 0) {
+                slot = s.prevAnchorSlot + ahead / interval;
+                if (slot < s.anchorSlot) return (true, slot);
+            }
+        }
+        uint256 stored = slotOfPinnedExpiry[_expirationAt];
+        if (stored == 0) return (false, 0);
+        return (true, stored - 1);
+    }
+
+    /// @dev Whether a slot of the tradable window is still unpinned (normally not): the first
+    ///      state-changing call after a roll pins it, so a listed date never depends on anyone
+    ///      calling `pinExpiry`.
+    function _pinIsDue(ExpirySchedule memory s) internal view returns (bool) {
+        return s.pinnedCount <= _currentSlot(s) + futureExpirationDatesCount - 1;
+    }
+
+    /// @dev Start the delivery chain on the plain grid at `_first`, with nothing pinned yet.
+    function _startExpirySchedule(uint256 _first) internal {
+        if (_first > type(uint64).max) {
+            revert ValueOutOfRange(0, int256(uint256(type(uint64).max)));
+        }
+        uint64 first = uint64(_first);
+        expirySchedule = ExpirySchedule({
+            pinnedCount: 0,
+            anchorSlot: 0,
+            anchorTime: first,
+            prevAnchorSlot: 0,
+            prevAnchorTime: first
+        });
+    }
+
+    /// @dev Pin every slot of the tradable window that is not pinned yet.
+    function _pinWindow() internal {
+        ExpirySchedule memory s = expirySchedule;
+        while (_pinIsDue(s)) {
+            _pinNext(s);
+        }
+        expirySchedule = s;
+    }
+
+    /// @dev Pin slot `s.pinnedCount` and advance `s` in memory (the caller stores it). A shift
+    ///      re-anchors the chain at the pinned date.
+    function _pinNext(ExpirySchedule memory s) internal returns (uint256 expiry) {
+        uint256 slot = s.pinnedCount;
+        uint256 previous = slot == 0 ? 0 : _expiryOfSlot(slot - 1, s);
+        uint256 chain = slot == 0 ? firstFutureExpirationDate : previous + expirationIntervalSeconds();
+        uint256 eta = chain > block.timestamp ? markOracle.halvingEta() : 0;
+        expiry = _chainedExpiry(slot, previous, eta);
+        pinnedExpiryOf[slot] = expiry;
+        slotOfPinnedExpiry[expiry] = slot + 1;
+        if (expiry != chain) {
+            s.prevAnchorSlot = s.anchorSlot;
+            s.prevAnchorTime = s.anchorTime;
+            s.anchorSlot = uint32(slot);
+            s.anchorTime = uint64(expiry);
+        }
+        s.pinnedCount = uint32(slot + 1);
+        emit ExpiryPinned(slot, expiry, eta, expiry != chain);
+    }
+
+    /// @dev Largest point of the daily lattice at `firstFutureExpirationDate`'s time of day that is
+    ///      at or before `_t`.
+    function _alignDown(uint256 _t) internal view returns (uint256) {
+        uint256 day = SECONDS_PER_DAY;
+        return _t - ((_t % day) + day - (firstFutureExpirationDate % day)) % day;
+    }
+
+    /// @dev The dates of the tradable window from the schedule. A slot not pinned yet (only while
+    ///      no pin has run since it rolled in: pins run one slot ahead) shows the chain's date, which
+    ///      the pin may still move clear of the halving.
+    function _windowExpiries() internal view returns (uint256[] memory dates) {
+        ExpirySchedule memory s = expirySchedule;
+        uint256 len = futureExpirationDatesCount;
+        uint256 first = _currentSlot(s);
+        dates = new uint256[](len);
+        for (uint256 i = 0; i < len;) {
+            dates[i] = _expiryOfSlot(first + i, s);
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @dev The date slot `_slot` gets from `_previous` (the date of slot `_slot − 1`, unused for
+    ///      slot 0): the chain's date, moved out of the open no-go zone `(eta − Z, eta + Z)` when
+    ///      inside it, to the nearer edge rounded outward on the daily lattice. A date at or before
+    ///      the estimate moves earlier unless that would not leave it strictly ahead of its
+    ///      predecessor (or of now), in which case it moves later, which always is.
+    function _chainedExpiry(uint256 _slot, uint256 _previous, uint256 _eta) internal view returns (uint256 expiry) {
+        expiry = _slot == 0 ? firstFutureExpirationDate : _previous + expirationIntervalSeconds();
+        if (expiry <= block.timestamp) return expiry;
+        uint256 z = NO_GO_HALF_WIDTH;
+        if (_eta <= z || expiry <= _eta - z || expiry >= _eta + z) return expiry;
+        if (expiry <= _eta) {
+            uint256 earlier = _alignDown(_eta - z);
+            if (earlier > block.timestamp && (_slot == 0 || earlier > _previous)) return earlier;
+        }
+        return _alignDown(_eta + z + SECONDS_PER_DAY - 1);
     }
 
     function _setOrderExpirationActive(address _participant, uint256 _expirationAt, bool _active) private {
-        uint256 absoluteIndex = (_expirationAt - firstFutureExpirationDate) / expirationIntervalSeconds();
+        (bool found, uint256 absoluteIndex) = _slotOfExpiry(_expirationAt, expirySchedule);
+        if (!found) return;
         uint256 page = absoluteIndex >> 8;
         uint256 bit = 1 << (absoluteIndex & 0xff);
         if (_active) {
@@ -911,13 +1196,12 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         view
         returns (uint256[] memory expirationAts, uint256 count)
     {
+        ExpirySchedule memory s = expirySchedule;
         uint256 len = futureExpirationDatesCount;
         expirationAts = new uint256[](len);
-        uint256 absoluteIndex = _getCurrentExpirationAtIndex();
+        uint256 absoluteIndex = _currentSlot(s);
         uint256 page = absoluteIndex >> 8;
         uint256 word = participantOrderExpirationBitmap[_participant][page];
-        uint256 expirationAt = _activeExpirationAt(absoluteIndex, 0);
-        uint256 interval = expirationIntervalSeconds();
 
         for (uint256 i = 0; i < len;) {
             uint256 nextPage = absoluteIndex >> 8;
@@ -926,7 +1210,7 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
                 word = participantOrderExpirationBitmap[_participant][page];
             }
             if (word & (1 << (absoluteIndex & 0xff)) != 0) {
-                expirationAts[count] = expirationAt;
+                expirationAts[count] = _expiryOfSlot(absoluteIndex, s);
                 unchecked {
                     ++count;
                 }
@@ -934,7 +1218,6 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
             unchecked {
                 ++i;
                 ++absoluteIndex;
-                expirationAt += interval;
             }
         }
     }
@@ -943,13 +1226,12 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
         return _expirationAt > block.timestamp && _isListedExpirationAt(_expirationAt);
     }
 
-    /// @dev On the delivery grid and inside the tradable window; does not check maturity.
+    /// @dev A pinned delivery date inside the tradable window; does not check maturity.
     function _isListedExpirationAt(uint256 _expirationAt) internal view returns (bool) {
-        if (_expirationAt < firstFutureExpirationDate) return false;
-        uint256 interval = expirationIntervalSeconds();
-        uint256 elapsedFromFirst = _expirationAt - firstFutureExpirationDate;
-        if (elapsedFromFirst % interval != 0) return false;
-        return elapsedFromFirst <= (futureExpirationDatesCount - 1 + _getCurrentExpirationAtIndex()) * interval;
+        ExpirySchedule memory s = expirySchedule;
+        (bool found, uint256 slot) = _slotOfExpiry(_expirationAt, s);
+        if (!found || slot >= s.pinnedCount) return false;
+        return slot <= futureExpirationDatesCount - 1 + _currentSlot(s);
     }
 
     function expirationIntervalSeconds() internal pure returns (uint256) {
@@ -974,6 +1256,50 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     function _validateOracleRound(int256 answer, uint256 updatedAt) internal view {
         if (answer <= 0 || updatedAt == 0 || updatedAt > block.timestamp) revert InvalidOracle();
         if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) revert OracleStale();
+    }
+
+    /// @dev Mark ranges of live expiries in venue units: longs and bids at `low`, shorts and asks
+    ///      at `high`. Validated like the index: a stale or out-of-bounds range reverts.
+    function _markRanges(uint256[] memory _expirationAts)
+        internal
+        view
+        returns (uint256[] memory low, uint256[] memory high)
+    {
+        uint256 n = _expirationAts.length;
+        if (n == 0) return (_expirationAts, _expirationAts);
+        uint256 updatedAt;
+        (low, high, updatedAt) = markOracle.markRangesAt(_expirationAts);
+        if (low.length != n || high.length != n) revert InvalidOracle();
+        _validateOracleRound(int256(low[0]), updatedAt);
+        for (uint256 i = 0; i < n; i++) {
+            (low[i], high[i]) = _venueRange(low[i], high[i]);
+        }
+    }
+
+    /// @dev The mark range of one live expiry.
+    function _markRange(uint256 _expirationAt) internal view returns (uint256 low, uint256 high) {
+        uint256 updatedAt;
+        (low, high, updatedAt) = markOracle.markRangeAt(_expirationAt);
+        _validateOracleRound(int256(low), updatedAt);
+        return _venueRange(low, high);
+    }
+
+    /// @dev One oracle range in venue units, each end bounded like the index.
+    function _venueRange(uint256 _low, uint256 _high) private view returns (uint256 low, uint256 high) {
+        low = _boundedMarketPrice(_low);
+        high = _boundedMarketPrice(_high);
+        if (low > high) revert InvalidOracle();
+    }
+
+    /// @dev The mark of one live expiry for the side being valued (long: `low`, short: `high`).
+    function _sideMark(uint256 _expirationAt, bool _isLong) internal view returns (uint256) {
+        (uint256 low, uint256 high) = _markRange(_expirationAt);
+        return _isLong ? low : high;
+    }
+
+    function _boundedMarketPrice(uint256 _raw) internal view returns (uint256 price) {
+        price = _getMarketPrice(_raw);
+        if (price == 0 || price > MAX_PRICE) revert InvalidOracle();
     }
 
     function _getPrice() internal view returns (uint256) {
@@ -1007,11 +1333,11 @@ abstract contract HashPowerFuturesBase is UUPSUpgradeable, OwnableUpgradeable, V
     }
 
     function _validateQty(int256 _qty) internal pure {
-        if (_qty == 0) revert InvalidQty();
+        if (_qty == 0 || M.abs(_qty) > MAX_ORDER_QUANTITY) revert InvalidQty();
     }
 
     function _validatePrice(uint256 _price) internal pure {
-        if (_price == 0) revert InvalidPrice();
+        if (_price == 0 || _price > MAX_PRICE) revert InvalidPrice();
         if (_price % minimumPriceIncrement != 0) revert InvalidPrice();
     }
 

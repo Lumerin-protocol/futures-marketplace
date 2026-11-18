@@ -35,6 +35,9 @@ export default defineConfig({
       "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol",
       "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol",
       "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol",
+      "hashprice-oracle/contracts/contracts/HashpriceGlideUSD.sol",
+      "hashprice-oracle/contracts/contracts/HashpriceUSD.sol",
+      "hashprice-oracle/contracts/contracts/mocks/HashpriceBTCMock.sol",
       "collateral-margin/contracts/contracts/CollateralVault.sol",
       "collateral-margin/contracts/contracts/PortfolioMarginEngine.sol",
       "collateral-margin/contracts/contracts/Points.sol",
@@ -53,17 +56,18 @@ export default defineConfig({
           viaIR: true,
         },
       },
-      {
-        // multicall3 has a strict `pragma solidity 0.8.12;`
-        version: "0.8.12",
+    ],
+    // The futures proxy is already deployed without viaIR. Keep it pinned
+    // when the implementation compiler moves.
+    overrides: {
+      "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol": {
+        version: "0.8.30",
         settings: {
-          optimizer: {
-            enabled: true,
-            runs: 10_000_000,
-          },
+          optimizer: { enabled: true, runs: 200 },
+          evmVersion: "paris",
         },
       },
-    ],
+    },
   },
   verify: {
     etherscan: {

@@ -158,8 +158,10 @@ variable "monitoring" {
     create_metric_filters    = bool
     create_synthetics_canary = bool   # Synthetics canary for UI (production only)
     notifications_enabled    = bool   # Set false to disable SNS notifications (alarms still visible in console)
-    dev_alerts_topic_name    = string # Slack notifications
-    devops_alerts_topic_name = string # Cell phone (critical, prod only)
+    # Topic *names* looked up with data.aws_sns_topic (foundation-core).
+    # titanio-{env}-hpdx-alerts (Slack) / titanio-{env}-hpdx-page (SMS/email, LMN).
+    dev_alerts_topic_name    = string
+    devops_alerts_topic_name = string
     dashboard_period         = number
   })
   default = {

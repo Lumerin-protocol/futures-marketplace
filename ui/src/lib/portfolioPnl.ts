@@ -72,3 +72,44 @@ export function realizedPnlSinceBaseline(
 ): bigint {
   return lifetimeRealizedPnl - (baseline ?? 0n);
 }
+
+/** Hover text for every per-trade and per-position "Realized PnL" figure. */
+export const REALIZED_PNL_FEES_HINT = "Net of trading and liquidation fees.";
+
+/**
+ * Realized PnL after the fees paid for it.
+ *
+ * Both indexers report `realizedPnl` as price PnL alone, `(exit − entry) ×
+ * closed quantity`, and book each fee on a field of its own, while the contract
+ * takes the fees out of the balance at every fill. A fee counts when it is paid,
+ * so an opening fill realizes a loss of its fee. Fees are signed the way the
+ * indexer signs them, positive when paid and negative for a rebate; `null` is a
+ * fee that does not apply, such as `liquidationFee` on an ordinary trade.
+ *
+ * Perps funding is not a fee and is not netted here; callers add it, signed
+ * positive when received. Perps drift needs nothing: the indexer folds it into
+ * the entry, so `realizedPnl` already holds it.
+ */
+export function realizedPnlAfterFees(realizedPnl: bigint, ...fees: (bigint | null)[]): bigint {
+  let net = realizedPnl;
+  for (const fee of fees) {
+    if (fee !== null) net -= fee;
+  }
+  return net;
+}
+
+/**
+ * Total fees across trade rows as the subgraph returns them, as decimal strings.
+ * `tradingFee` may be left out of the selection, and `liquidationFee` is null
+ * except on a forced close.
+ */
+export function sumTradeFees(
+  trades: readonly { tradingFee?: string; liquidationFee?: string | null }[],
+): bigint {
+  let total = 0n;
+  for (const trade of trades) {
+    if (trade.tradingFee != null) total += BigInt(trade.tradingFee);
+    if (trade.liquidationFee != null) total += BigInt(trade.liquidationFee);
+  }
+  return total;
+}

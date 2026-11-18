@@ -28,6 +28,7 @@ import { usePerpsSnapshot } from "../../hooks/data/snapshot/perpsSnapshot";
 import { useMarginRisk } from "../../hooks/data/useMarginRisk";
 import { useGetMarketPrice } from "../../hooks/data/useGetMarketPrice";
 import { usePortfolioPnl } from "../../hooks/data/pnl/usePortfolioPnl";
+import { usePerpsFundingWindow } from "../../hooks/data/perps/usePerpsFundingWindow";
 import { useGetFutureBalance } from "../../hooks/data/useGetFutureBalance";
 import { useFuturesPaymentTokenBalance } from "../../hooks/data/usePaymentTokenBalance";
 import { useFundingRate } from "../../hooks/data/perps/useFundingRate";
@@ -50,12 +51,19 @@ interface TradingPageProps {
   defaultMode?: ContractMode;
 }
 
-export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
+export const Futures: FC<TradingPageProps> = ({ defaultMode = "perpetual" }) => {
   const { isConnected, address } = useAccount();
   const { mode: modeParam } = useParams<{ mode: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const previousAddressRef = useRef<string | undefined>(undefined);
+  // WalletConnect clears `address` for a moment while it reconnects. Remember
+  // the last real account so that flicker does not remount the order form or
+  // the portfolio panel. A switch between two addresses still changes the key,
+  // which drops typed order state and any modal left open for the old account.
+  // Market data (chart, book, price) is not keyed and stays on screen.
+  const accountKeyRef = useRef(address);
+  if (address) accountKeyRef.current = address;
+  const accountKey = accountKeyRef.current ?? "disconnected";
   // Below 768px the page renders the mobile-only compound layout (order book
   // beside the place-order form, chart collapsed) instead of the desktop grid.
   const isMobileTradingLayout = useIsMobileTradingLayout();
@@ -105,23 +113,6 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
     },
     [navigate],
   );
-
-  // Reload the page only when the user genuinely switches to a different wallet
-  // account. `address` from useAccount() flickers undefined <-> 0x... while
-  // WalletConnect is connecting/reconnecting, so we ignore falsy values and
-  // only react to a transition between two distinct defined addresses.
-  useEffect(() => {
-    if (!address) return;
-    const normalized = address.toLowerCase();
-    if (previousAddressRef.current === undefined) {
-      previousAddressRef.current = normalized;
-      return;
-    }
-    if (previousAddressRef.current !== normalized) {
-      previousAddressRef.current = normalized;
-      window.location.reload();
-    }
-  }, [address]);
 
   const [chartTimePeriod, setChartTimePeriod] = useState<TimePeriod>("5d");
   const hashrateQuery = useHashrateIndexData({ timePeriod: chartTimePeriod });
@@ -176,6 +167,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // one CollateralVault, so the portfolio header states the whole account
   // regardless of which trading tab is open.
   const { unrealized, realizedInWindow } = usePortfolioPnl(address);
+  const perpsSettlementsQuery = usePerpsFundingWindow(address);
 
   // Single shared balance — both Futures and Perps engines settle against the same CollateralVault,
   // so we always read `vault.balanceOf(account)` regardless of contract mode.
@@ -223,7 +215,8 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   // Account-wide liquidation prices, solved off the same portfolio margin model
   // the Futures contract liquidates on. Cross-product, so there is one pair per
   // account (not per position) and a hedged book can have thresholds on both sides.
-  const { liqPrice, liqDirection, alreadyUnderwater } = useLiquidationThresholds(address);
+  const { liqPrice, liqDirection, alreadyUnderwater, snapshot } =
+    useLiquidationThresholds(address);
 
   // Everything the account portfolio panel reads, off the IPortfolioMarginEngine
   // resolved via the Futures contract. `im` is also the single source of truth
@@ -438,6 +431,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
 
   const balanceNode = (
     <FuturesBalanceWidget
+      key={`balance:${accountKey}`}
       marginRisk={marginRisk}
       liqPrice={liqPrice}
       unrealizedPnL={unrealized.total}
@@ -446,13 +440,16 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       realizedPnLInWindow={realizedInWindow.total}
       isLoadingRealizedPnL={realizedInWindow.isLoading}
       isRefreshingRealizedPnL={realizedInWindow.isRefreshing}
+      perpsSettlements={perpsSettlementsQuery.data}
       balanceQuery={balanceQuery}
       accountBalance={accountBalanceQuery}
+      accountDebt={snapshot?.accountDebt ?? null}
     />
   );
 
   const placeOrderNode = (
     <PlaceOrderWidget
+      key={`order:${accountKey}`}
       externalPrice={selectedPrice}
       externalAmount={selectedAmount}
       externalExpirationAt={selectedExpirationAt}
@@ -476,6 +473,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
   const tablesNode = isConnected ? (
     contractMode === "perpetual" ? (
       <PerpsOrdersPositionsTabWidget
+        key={`positions:${accountKey}`}
         participantAddress={address}
         marketPrice={marketPrice}
         positionSessions={positionSessionsQuery.data?.positionSessions || []}
@@ -488,6 +486,7 @@ export const Futures: FC<TradingPageProps> = ({ defaultMode = "futures" }) => {
       />
     ) : (
       <OrdersPositionsTabWidget
+        key={`positions:${accountKey}`}
         orders={participantData?.data?.orders || []}
         positions={positionBookData?.data?.positions || []}
         ordersLoading={isParticipantLoading}

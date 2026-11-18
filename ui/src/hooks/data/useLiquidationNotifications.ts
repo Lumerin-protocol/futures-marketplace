@@ -43,6 +43,7 @@ export function useLiquidationNotifications(address?: `0x${string}`) {
   const { futures, perps } = useUserLiquidations(address);
   const [notifications, setNotifications] = useState<LiquidationNotification[]>([]);
   const initializedFor = useRef<string | null>(null);
+  const seenAddress = useRef(address);
 
   const liquidations = useMemo<LiquidationNotification[]>(
     () => [...(perps.data ?? []), ...(futures.data ?? [])],
@@ -50,6 +51,22 @@ export function useLiquidationNotifications(address?: `0x${string}`) {
   );
 
   useEffect(() => {
+    // A switch from one account to another never passes through a missing
+    // address, and the incoming feeds are often still pending, so the clear
+    // below would not run in time. Drop the previous account's toasts first.
+    // A checksum-only change is the same account and keeps what is on screen.
+    if (seenAddress.current !== address) {
+      const previous = seenAddress.current;
+      seenAddress.current = address;
+      if (
+        previous &&
+        address &&
+        previous.toLowerCase() !== address.toLowerCase()
+      ) {
+        setNotifications([]);
+      }
+    }
+
     if (!address) {
       setNotifications([]);
       initializedFor.current = null;

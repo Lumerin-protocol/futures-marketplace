@@ -1,5 +1,6 @@
 import { graphqlRequest } from "../graphql";
 import { sessionIsLong } from "../../../lib/positionDirection";
+import { sumTradeFees } from "../../../lib/portfolioPnl";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { UserPositionSessionsQuery } from "../queries/perps";
 import { snapshotFedQueryOptions } from "../snapshot/config";
@@ -52,6 +53,7 @@ export const mapUserPositionSessions = (
     closedQuantity: BigInt(session.closedQuantity),
     liquidatedQuantity: BigInt(session.liquidatedQuantity),
     fundingFees: BigInt(session.fundingFees),
+    driftPayments: BigInt(session.driftPayments),
     id: session.id,
     lastTradeAt: session.lastTradeAt,
     maxQuantity: BigInt(session.maxQuantity),
@@ -60,6 +62,7 @@ export const mapUserPositionSessions = (
     realizedPnl: BigInt(session.realizedPnl),
     status: session.status,
     tradingFees: BigInt(session.tradingFees),
+    liquidationFees: sumTradeFees(session.liquidationFees),
     user: {
       id: session.user.id,
     },
@@ -76,7 +79,11 @@ export type PositionSession = {
   entryPrice: bigint;
   closedQuantity: bigint;
   liquidatedQuantity: bigint;
+  /// Settled funding; positive = received. Not inside `realizedPnl`.
   fundingFees: bigint;
+  /// Settled drift; positive = received. Already inside `realizedPnl` and
+  /// `entryPrice`: the contract folds it into the entry value.
+  driftPayments: bigint;
   id: string;
   lastTradeAt: string;
   maxQuantity: bigint;
@@ -86,6 +93,8 @@ export type PositionSession = {
   realizedPnl: bigint;
   status: string;
   tradingFees: bigint;
+  /// Liquidation fees the session paid, which `tradingFees` leaves out.
+  liquidationFees: bigint;
   user: {
     id: string;
   };
@@ -105,6 +114,8 @@ export type Trade = {
   tradePrice: bigint;
   tradeQuantity: bigint;
   tradingFee: bigint;
+  /// Null unless the trade was a forced close.
+  liquidationFee: bigint | null;
   transactionHash: string;
 };
 
@@ -114,6 +125,7 @@ export type PositionSessionRow = {
   closedQuantity: string;
   liquidatedQuantity: string;
   fundingFees: string;
+  driftPayments: string;
   id: string;
   lastTradeAt: string;
   maxQuantity: string;
@@ -122,6 +134,8 @@ export type PositionSessionRow = {
   realizedPnl: string;
   status: string;
   tradingFees: string;
+  /// See `SESSION_LIQUIDATION_FEES`. Empty unless the session was liquidated.
+  liquidationFees: { liquidationFee: string }[];
   user: {
     id: string;
   };

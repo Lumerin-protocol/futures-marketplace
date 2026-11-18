@@ -4,7 +4,7 @@
     "testnet": {
       "chainId": 84532,
       "network": "base-sepolia",
-      "startBlock": 44398891,
+      "startBlock": 57093163,
       "contracts": {
         "HashPowerFutures": "0x56d8d4a03a0f34b93B86E0b7941aFF29178D0479",
         "CollateralVault": "0x54A79e2a5C60ACe37b280eBbCda51b4E903d25F0",
@@ -19,8 +19,16 @@
     "mainnet": {
       "chainId": 8453,
       "network": "base",
-      "contracts": {},
-      "subgraphs": {}
+      "startBlock": 59180307,
+      "contracts": {
+        "HashPowerFutures": "0xf97a1bbfb5e061ef73dad8ebf25939d93639fb7f",
+        "CollateralVault": "0x0730422E49B76A2D36d51304ACEcbe4f444821F8",
+        "PortfolioMarginEngine": "0x5F047CCE438ae7796140506a5edf3D711034aaF3",
+        "CollateralToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+      },
+      "subgraphs": {
+        "futures": "https://api.goldsky.com/api/public/project_cmmz5dm4l7ocp01xng61y5nwr/subgraphs/hpow-futures/lmn-latest/gn"
+      }
     }
   }
 }
