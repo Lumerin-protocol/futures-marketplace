@@ -19,8 +19,16 @@
     "mainnet": {
       "chainId": 8453,
       "network": "base",
-      "contracts": {},
-      "subgraphs": {}
+      "startBlock": 59180307,
+      "contracts": {
+        "HashPowerFutures": "0xf97a1bbfb5e061ef73dad8ebf25939d93639fb7f",
+        "CollateralVault": "0x0730422E49B76A2D36d51304ACEcbe4f444821F8",
+        "PortfolioMarginEngine": "0x5F047CCE438ae7796140506a5edf3D711034aaF3",
+        "CollateralToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+      },
+      "subgraphs": {
+        "futures": "https://api.goldsky.com/api/public/project_cmmz5dm4l7ocp01xng61y5nwr/subgraphs/hpow-futures/lmn-latest/gn"
+      }
     }
   }
 }
