@@ -10,6 +10,10 @@ beta_alias = {
 
 apex_site = "hold"
 
+# Geo block for the trading UI. Attached to the beta distribution, which also
+# receives hashpower.exchange when apex_site flips to "beta".
+exchange_geo_block = true
+
 ecs_cluster = {
   create  = true
   protect = false

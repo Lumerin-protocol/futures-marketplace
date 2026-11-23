@@ -94,8 +94,9 @@ resource "aws_cloudfront_distribution" "beta_alias" {
     origin_id                = "${var.account_shortname}-${local.s3_cf_origin}-beta"
   }
 
+  # Trading app during hold. At cutover the apex alias is added here; the ACL stays.
   http_version        = "http2and3"
-  web_acl_id          = data.aws_wafv2_web_acl.bedrock_waf_cloudfront.arn
+  web_acl_id          = var.exchange_geo_block ? aws_wafv2_web_acl.exchange[0].arn : data.aws_wafv2_web_acl.bedrock_waf_cloudfront.arn
   retain_on_delete    = false
   enabled             = true
   is_ipv6_enabled     = true
@@ -139,6 +140,8 @@ resource "aws_cloudfront_distribution" "beta_alias" {
     response_page_path    = "/index.html"
   }
 
+  # SPA fallback for a missing object. A WAF block is not rewritten.
+  # CloudFront geo_restriction returns a 403 that this rule would turn back into the app.
   custom_error_response {
     error_caching_min_ttl = "300"
     error_code            = "403"

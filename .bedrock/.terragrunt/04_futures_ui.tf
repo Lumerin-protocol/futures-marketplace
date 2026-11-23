@@ -95,8 +95,10 @@ resource "aws_cloudfront_distribution" "marketplace" {
     origin_id                = local.marketplace_origin_id
   }
   depends_on = [aws_s3_object.apex_hold]
+  # Hold page keeps the shared ACL. This distribution uses the exchange ACL
+  # when it serves the app (apex_site "app") and exchange_geo_block is on.
   http_version     = "http2and3"
-  web_acl_id       = data.aws_wafv2_web_acl.bedrock_waf_cloudfront.arn
+  web_acl_id       = var.exchange_geo_block && var.apex_site != "hold" ? aws_wafv2_web_acl.exchange[0].arn : data.aws_wafv2_web_acl.bedrock_waf_cloudfront.arn
   retain_on_delete = true
   enabled          = true
   is_ipv6_enabled  = true
@@ -162,6 +164,8 @@ resource "aws_cloudfront_distribution" "marketplace" {
     response_code         = "200"
     response_page_path    = "/index.html"
   }
+  # SPA fallback for a missing object. A WAF block is not rewritten.
+  # CloudFront geo_restriction returns a 403 that this rule would turn back into the app.
   custom_error_response {
     error_caching_min_ttl = "300"
     error_code            = "403"
@@ -180,6 +184,140 @@ resource "aws_cloudfront_origin_access_control" "marketplace" {
   signing_protocol                  = "sigv4"
 }
 
+################################
+# Exchange geo block
+#
+# App-specific CLOUDFRONT Web ACL. The shared waf-bedrock-cloudfront ACL stays
+# on the hold page and on every other site.
+#
+# Which distribution serves the trading app:
+#   apex_site "app"  — marketplace distribution (dev leaves exchange_geo_block off)
+#   apex_site "hold" — beta distribution
+#   apex_site "beta" — same beta distribution; the apex alias is added there
+# Cutover does not move this ACL.
+################################
+locals {
+  # ISO 3166-1 alpha-2. US territories are separate codes from US.
+  exchange_blocked_countries = ["PR", "GU", "VI", "AS", "MP", "CU", "IR", "KP", "SY"] # US
+  # ISO 3166-2 suffixes. Labels are awswaf:clientip:geo:region:<country>-<region>.
+  # The geo match rule below labels every request it inspects, including non-matches.
+  # Crimean addresses that MaxMind codes as Russia are not covered; Russia is not blocked.
+  exchange_blocked_regions = ["UA-43", "UA-40", "UA-14", "UA-09", "UA-65", "UA-23"] #CA-ON
+}
+
+resource "aws_wafv2_web_acl" "exchange" {
+  count       = var.create_core && var.exchange_geo_block ? 1 : 0
+  provider    = aws.use1
+  name        = "${var.account_shortname}-exchange"
+  description = "Geo block for the hashpower.exchange trading UI"
+  scope       = "CLOUDFRONT"
+
+  default_action {
+    allow {}
+  }
+
+  custom_response_body {
+    key          = "geo_restricted"
+    content      = file("${path.module}/manage/geo-restricted.html")
+    content_type = "TEXT_HTML"
+  }
+
+  rule {
+    name     = "BlockRestrictedCountries"
+    priority = 0
+    action {
+      block {
+        custom_response {
+          custom_response_body_key = "geo_restricted"
+          response_code            = 403
+        }
+      }
+    }
+    statement {
+      geo_match_statement {
+        country_codes = local.exchange_blocked_countries
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "BlockRestrictedCountries"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  rule {
+    name     = "BlockRestrictedRegions"
+    priority = 1
+    action {
+      block {
+        custom_response {
+          custom_response_body_key = "geo_restricted"
+          response_code            = 403
+        }
+      }
+    }
+    statement {
+      or_statement {
+        dynamic "statement" {
+          for_each = local.exchange_blocked_regions
+          content {
+            label_match_statement {
+              scope = "LABEL"
+              key   = "awswaf:clientip:geo:region:${statement.value}"
+            }
+          }
+        }
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "BlockRestrictedRegions"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "exchange-geo"
+    sampled_requests_enabled   = true
+  }
+
+  tags = merge(
+    var.default_tags,
+    var.foundation_tags,
+    {
+      Name       = "${var.account_shortname}-exchange"
+      Capability = "Web Application Firewall",
+    },
+  )
+}
+
+# Blocked requests only, into the account WAF log group that already exists for waf-bedrock-cloudfront.
+data "aws_cloudwatch_log_group" "bedrock_waf" {
+  count    = var.create_core && var.exchange_geo_block ? 1 : 0
+  provider = aws.use1
+  name     = "aws-waf-logs-bedrock-use1-1"
+}
+
+resource "aws_wafv2_web_acl_logging_configuration" "exchange" {
+  count                   = var.create_core && var.exchange_geo_block ? 1 : 0
+  provider                = aws.use1
+  log_destination_configs = [data.aws_cloudwatch_log_group.bedrock_waf[0].arn]
+  resource_arn            = aws_wafv2_web_acl.exchange[0].arn
+
+  logging_filter {
+    default_behavior = "DROP"
+    filter {
+      behavior    = "KEEP"
+      requirement = "MEETS_ALL"
+      condition {
+        action_condition {
+          action = "BLOCK"
+        }
+      }
+    }
+  }
+}
 
 ################################
 # Apex hold — static page CI must not overwrite

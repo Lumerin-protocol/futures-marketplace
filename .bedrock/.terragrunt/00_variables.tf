@@ -33,6 +33,13 @@ variable "apex_site" {
   }
 }
 
+# Off on dev. On for the trading UI (beta distribution during hold; same distribution after the apex moves there).
+variable "exchange_geo_block" {
+  description = "Attach the exchange geo-block Web ACL to the distribution that serves the trading app. Follows that distribution when apex_site changes; does not apply to the hold page."
+  type        = bool
+  default     = false
+}
+
 variable "ecs_cluster" {
   description = "ECS Cluster Variables"
   type        = map(any)
