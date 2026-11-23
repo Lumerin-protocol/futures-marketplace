@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { styled } from "next-yak";
 import { tokens } from "../../../styles/tokens";
+import { TESTIDS } from "../../../testids";
 import { useIsMobileTradingLayout } from "./mobile/mobileTradingLayout";
 import type { OrderBookRow } from "./ClassicOrderBook";
 import { computeBookCenter, formatMidOrderPrice, formatMidPrice } from "./orderBookHelpers";
@@ -194,6 +195,10 @@ export const PerpsVolumeOrderBook = ({
           $side={side}
           $empty
           $compact={isMobile}
+          data-testid={TESTIDS.orderBookRow}
+          data-side={side}
+          data-price={formatPrice(level.price)}
+          data-quantity={0}
           onClick={() => onRowClick?.(formatPrice(level.price), null)}
         >
           <PriceCol $side={side}>{formatPrice(level.price)}</PriceCol>
@@ -235,6 +240,10 @@ export const PerpsVolumeOrderBook = ({
         $side={side}
         $highlight={level.highlight}
         $compact={isMobile}
+        data-testid={TESTIDS.orderBookRow}
+        data-side={side}
+        data-price={formatPrice(level.price)}
+        data-quantity={level.units}
         onClick={() => onRowClick?.(formatPrice(level.price), level.units)}
         onMouseEnter={showTooltip}
         onMouseMove={showTooltip}
@@ -306,6 +315,9 @@ export const PerpsVolumeOrderBook = ({
       <CenterRow
         ref={centerRef}
         $clickable={center.mid != null}
+        data-testid={TESTIDS.orderBookCenter}
+        data-best-bid={center.bestBid ?? undefined}
+        data-best-ask={center.bestAsk ?? undefined}
         onClick={() => {
           if (center.mid != null) {
             onRowClick?.(formatMidOrderPrice(center.mid, minimumPriceIncrement), null);

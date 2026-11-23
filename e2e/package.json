@@ -1,0 +1,28 @@
+{
+  "name": "hpdx-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Playwright end-to-end tests for the HPDX trading UI in ../ui",
+  "type": "module",
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "test:smoke": "playwright test tests/00-smoke.spec.ts tests/10-connect.spec.ts",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "report": "playwright show-report reports/playwright-report",
+    "install:browsers": "playwright install chromium",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "viem": "^2.54.0",
+    "zod": "^4.1.0"
+  }
+}

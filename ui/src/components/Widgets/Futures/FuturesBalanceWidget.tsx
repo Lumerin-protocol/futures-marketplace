@@ -21,6 +21,7 @@ import { DepositForm } from "../../Forms/DepositForm";
 import { WithdrawalForm } from "../../Forms/WithdrawalForm";
 import { SendCollateralForm } from "../../Forms/SendCollateralForm";
 import type { AccountBalance } from "../../../types/types";
+import { TESTIDS } from "../../../testids";
 import {
   fundingWithDrift,
   type PaidReceived,
@@ -220,7 +221,7 @@ export const FuturesBalanceWidget = ({
 
   return (
     <>
-      <PanelSection $tier={tier}>
+      <PanelSection $tier={tier} data-testid={TESTIDS.balance.widget}>
         {/* Header row */}
         <SectionHeader>
           <UsdcIcon style={{ width: "14px", flexShrink: 0 }} />
@@ -237,7 +238,7 @@ export const FuturesBalanceWidget = ({
               <MetricColumn>
                 <MetricCell>
                   <HintedLabel hint={EQUITY_HINT}>Equity</HintedLabel>
-                  <MetricValue>
+                  <MetricValue data-testid={TESTIDS.balance.equity}>
                     <RefreshableValue
                       isInitialLoading={marginRisk.isLoading}
                       isRefreshing={marginRisk.isRefreshing}
@@ -248,7 +249,7 @@ export const FuturesBalanceWidget = ({
                 </MetricCell>
                 <MetricCell>
                   <HintedLabel hint={ALL_VENUES_HINT}>Unrealized PnL</HintedLabel>
-                  <MetricValue>
+                  <MetricValue data-testid={TESTIDS.balance.unrealizedPnl}>
                     <RefreshableValue
                       isInitialLoading={isLoadingUnrealizedPnL}
                       isRefreshing={isRefreshingUnrealizedPnL}
@@ -260,7 +261,7 @@ export const FuturesBalanceWidget = ({
                 </MetricCell>
                 <MetricCell>
                   <HintedLabel hint={MARGIN_USED_HINT}>Margin Used</HintedLabel>
-                  <MetricValue>
+                  <MetricValue data-testid={TESTIDS.balance.marginUsed}>
                     <RefreshableValue
                       isInitialLoading={marginRisk.isLoading}
                       isRefreshing={marginRisk.isRefreshing}
@@ -274,7 +275,7 @@ export const FuturesBalanceWidget = ({
               <MetricColumn>
                 <MetricCell>
                   <HintedLabel hint={AVAILABLE_HINT}>Available</HintedLabel>
-                  <MetricValue>
+                  <MetricValue data-testid={TESTIDS.balance.available}>
                     <RefreshableValue
                       isInitialLoading={marginRisk.isLoading}
                       isRefreshing={marginRisk.isRefreshing}
@@ -291,7 +292,7 @@ export const FuturesBalanceWidget = ({
                   <HintedLabel hint={realizedPnlHint(perpsSettlements)}>
                     Realized PnL ({REALIZED_PNL_WINDOW_DAYS}D)
                   </HintedLabel>
-                  <MetricValue>
+                  <MetricValue data-testid={TESTIDS.balance.realizedPnl}>
                     <RefreshableValue
                       isInitialLoading={!!isLoadingRealizedPnL}
                       isRefreshing={isRefreshingRealizedPnL}

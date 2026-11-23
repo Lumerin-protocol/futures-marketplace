@@ -1,4 +1,5 @@
 import { tokens } from "../../../styles/tokens";
+import { TESTIDS } from "../../../testids";
 import { usePerpsSessionTrades } from "../../../hooks/data/perps/usePerpsSessionTrades";
 import { useState, useMemo, useEffect } from "react";
 import { styled } from "next-yak";
@@ -182,7 +183,7 @@ export const PerpsOrdersPositionsTabWidget = ({
 
       <Content>
         {activeTab === "OPEN_ORDERS" && (
-          <OrdersWrapper>
+          <OrdersWrapper data-testid={TESTIDS.ordersList}>
             <PerpsOpenOrdersTable
               orders={perpsOpenOrders}
               isLoading={perpsOpenOrdersLoading}
@@ -194,7 +195,7 @@ export const PerpsOrdersPositionsTabWidget = ({
           </OrdersWrapper>
         )}
         {activeTab === "POSITIONS" && (
-          <PositionsWrapper>
+          <PositionsWrapper data-testid={TESTIDS.positionsList}>
             <PerpsPositionsTable
               positionSessions={positionSessions}
               isLoading={positionSessionsLoading}
@@ -216,7 +217,7 @@ export const PerpsOrdersPositionsTabWidget = ({
           </TradesWrapper>
         )}
         {activeTab === "POSITION_HISTORY" && (
-          <PositionsWrapper>
+          <PositionsWrapper data-testid={TESTIDS.positionHistoryList}>
             <PerpsPositionHistoryTable
               positionSessions={positionHistoryQuery.data}
               isLoading={positionHistoryQuery.loading}

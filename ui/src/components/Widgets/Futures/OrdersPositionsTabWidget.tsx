@@ -1,4 +1,5 @@
 import { tokens } from "../../../styles/tokens";
+import { TESTIDS } from "../../../testids";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { styled } from "next-yak";
 import { SmallWidget } from "../../Cards/Cards.styled";
@@ -189,7 +190,7 @@ export const OrdersPositionsTabWidget = ({
 
       <Content>
         {/* Keep mounted while hidden so a close/modify tx modal survives tab changes. */}
-        <OrdersWrapper hidden={activeTab !== "OPEN_ORDERS"}>
+        <OrdersWrapper hidden={activeTab !== "OPEN_ORDERS"} data-testid={TESTIDS.ordersList}>
           <OrdersListWidget
             orders={orders}
             isLoading={ordersLoading}
@@ -200,7 +201,7 @@ export const OrdersPositionsTabWidget = ({
           />
         </OrdersWrapper>
         {activeTab === "POSITIONS" && (
-          <PositionsWrapper>
+          <PositionsWrapper data-testid={TESTIDS.positionsList}>
             <PositionsListWidget
               positions={positions}
               isLoading={positionsLoading}
@@ -223,7 +224,7 @@ export const OrdersPositionsTabWidget = ({
           </TradesWrapper>
         )}
         {activeTab === "POSITION_HISTORY" && (
-          <PositionsWrapper>
+          <PositionsWrapper data-testid={TESTIDS.positionHistoryList}>
             <HistoricalPositionsListWidget
               positions={historicalPositionsQuery.data}
               isLoading={historicalPositionsQuery.loading}
