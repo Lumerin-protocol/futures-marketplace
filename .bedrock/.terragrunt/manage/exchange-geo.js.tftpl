@@ -1,0 +1,49 @@
+// Sets hpdx_allowed on every response. Not HttpOnly: the page has to read it.
+// 1 = trading actions allowed. 0 = not allowed. A missing country header is 0
+// when classification is on. Dev publishes this with geoEnabled false and always sets 1.
+function handler(event) {
+  var response = event.response;
+  var headers = event.request.headers || {};
+  var country = headerValue(headers, "cloudfront-viewer-country");
+  var region = headerValue(headers, "cloudfront-viewer-country-region");
+  var allowed = true;
+  if (${geo_enabled}) {
+    allowed = !isRestricted(country, region);
+  }
+  if (!response.cookies) {
+    response.cookies = {};
+  }
+  response.cookies["hpdx_allowed"] = {
+    value: allowed ? "1" : "0",
+    attributes: "Secure; Path=/; SameSite=Lax; Max-Age=600"
+  };
+  return response;
+}
+
+function headerValue(headers, name) {
+  if (!headers[name] || !headers[name].value) {
+    return "";
+  }
+  return String(headers[name].value).toUpperCase();
+}
+
+function isRestricted(country, region) {
+  var countries = ${countries};
+  var regions = ${regions};
+  var i;
+  if (!country) {
+    return true;
+  }
+  for (i = 0; i < countries.length; i++) {
+    if (countries[i] === country) {
+      return true;
+    }
+  }
+  var key = country + ":" + region;
+  for (i = 0; i < regions.length; i++) {
+    if (regions[i] === key) {
+      return true;
+    }
+  }
+  return false;
+}

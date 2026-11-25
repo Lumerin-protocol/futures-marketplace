@@ -95,8 +95,10 @@ resource "aws_cloudfront_distribution" "marketplace" {
     origin_id                = local.marketplace_origin_id
   }
   depends_on = [aws_s3_object.apex_hold]
+  # Hold page keeps the shared ACL. This distribution uses the exchange ACL
+  # when it serves the app (apex_site "app") and exchange_geo_block is on.
   http_version     = "http2and3"
-  web_acl_id       = data.aws_wafv2_web_acl.bedrock_waf_cloudfront.arn
+  web_acl_id       = var.exchange_geo_block && var.apex_site != "hold" ? aws_wafv2_web_acl.exchange[0].arn : data.aws_wafv2_web_acl.bedrock_waf_cloudfront.arn
   retain_on_delete = true
   enabled          = true
   is_ipv6_enabled  = true
@@ -114,20 +116,31 @@ resource "aws_cloudfront_distribution" "marketplace" {
     allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods   = ["GET", "HEAD"]
     target_origin_id = local.marketplace_origin_id
-    forwarded_values {
-      query_string = false
-      cookies {
-        forward = "none"
+    # Hold page keeps the legacy cache settings. The trading app uses a cache policy
+    # so the geo function can see viewer country without splitting the cache by country.
+    dynamic "forwarded_values" {
+      for_each = local.exchange_marketplace_stamps_geo ? [] : [1]
+      content {
+        query_string = false
+        cookies {
+          forward = "none"
+        }
       }
     }
-    viewer_protocol_policy = "redirect-to-https" # "allow-all" was default or redirect-to-https
-    min_ttl                = 0
-    default_ttl            = 600
-    max_ttl                = 1200
-    # function_association {
-    #   event_type   = "viewer-request" 
-    #   function_arn = "arn:aws:cloudfront::434960487817:function/rewrite-gatsby-index"
-    # }
+    cache_policy_id          = local.exchange_marketplace_stamps_geo ? aws_cloudfront_cache_policy.exchange[0].id : null
+    origin_request_policy_id = local.exchange_marketplace_stamps_geo ? aws_cloudfront_origin_request_policy.exchange_geo[0].id : null
+    compress                 = local.exchange_marketplace_stamps_geo
+    viewer_protocol_policy   = "redirect-to-https" # "allow-all" was default or redirect-to-https
+    min_ttl                  = local.exchange_marketplace_stamps_geo ? null : 0
+    default_ttl              = local.exchange_marketplace_stamps_geo ? null : 600
+    max_ttl                  = local.exchange_marketplace_stamps_geo ? null : 1200
+    dynamic "function_association" {
+      for_each = local.exchange_marketplace_stamps_geo ? [1] : []
+      content {
+        event_type   = "viewer-response"
+        function_arn = aws_cloudfront_function.exchange_geo[0].arn
+      }
+    }
   }
   restrictions {
     geo_restriction {
@@ -162,6 +175,8 @@ resource "aws_cloudfront_distribution" "marketplace" {
     response_code         = "200"
     response_page_path    = "/index.html"
   }
+  # SPA fallback for a missing object. A WAF block is not rewritten.
+  # CloudFront geo_restriction returns a 403 that this rule would turn back into the app.
   custom_error_response {
     error_caching_min_ttl = "300"
     error_code            = "403"
@@ -180,6 +195,204 @@ resource "aws_cloudfront_origin_access_control" "marketplace" {
   signing_protocol                  = "sigv4"
 }
 
+################################
+# Exchange geo classification
+#
+# The trading app always loads. A viewer-response function sets hpdx_allowed
+# to 1 or 0 from CloudFront's viewer country headers. The WAF only counts, so the
+# block page is gone and the UI can show a banner.
+#
+# Which distribution serves the trading app:
+#   apex_site "app"  - marketplace distribution. Dev leaves exchange_geo_block off
+#                      and the function always sets hpdx_allowed=1.
+#   apex_site "hold" - beta distribution
+#   apex_site "beta" - same beta distribution; the apex alias is added there
+# Cutover does not move the function or the ACL.
+#
+# Do not apply the LMN change until the UI treats anything except hpdx_allowed=1 as not allowed.
+# Until that UI is on beta, count mode lets sanctioned countries use the app.
+################################
+locals {
+  exchange_marketplace_stamps_geo = var.apex_site != "hold"
+  # ISO 3166-1 alpha-2. US territories are separate codes from US.
+  exchange_blocked_countries = ["US", "PR", "GU", "VI", "AS", "MP", "CU", "IR", "KP", "SY"]
+  # CloudFront-Viewer-Country-Region is the subdivision only (ON, 43), not CA-ON.
+  # WAF labels are awswaf:clientip:geo:region:<country>-<region>.
+  # Crimean addresses that MaxMind codes as Russia are not covered; Russia is not blocked.
+  exchange_blocked_regions = [
+    { country = "CA", region = "ON" }, # Ontario
+    { country = "UA", region = "43" }, # Crimea
+    { country = "UA", region = "40" }, # Sevastopol
+    { country = "UA", region = "14" }, # Donetsk
+    { country = "UA", region = "09" }, # Luhansk
+    { country = "UA", region = "65" }, # Kherson
+    { country = "UA", region = "23" }, # Zaporizhzhia
+  ]
+}
+
+resource "aws_wafv2_web_acl" "exchange" {
+  count       = var.create_core && var.exchange_geo_block ? 1 : 0
+  provider    = aws.use1
+  name        = "${var.account_shortname}-exchange"
+  description = "Count restricted viewers of the hashpower.exchange trading UI. The page still loads."
+  scope       = "CLOUDFRONT"
+
+  default_action {
+    allow {}
+  }
+
+  rule {
+    name     = "CountRestrictedCountries"
+    priority = 0
+    action {
+      count {}
+    }
+    statement {
+      geo_match_statement {
+        country_codes = local.exchange_blocked_countries
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "CountRestrictedCountries"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  rule {
+    name     = "CountRestrictedRegions"
+    priority = 1
+    action {
+      count {}
+    }
+    statement {
+      or_statement {
+        dynamic "statement" {
+          for_each = local.exchange_blocked_regions
+          content {
+            label_match_statement {
+              scope = "LABEL"
+              key   = "awswaf:clientip:geo:region:${statement.value.country}-${statement.value.region}"
+            }
+          }
+        }
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "CountRestrictedRegions"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "exchange-geo"
+    sampled_requests_enabled   = true
+  }
+
+  tags = merge(
+    var.default_tags,
+    var.foundation_tags,
+    {
+      Name       = "${var.account_shortname}-exchange"
+      Capability = "Web Application Firewall",
+    },
+  )
+}
+
+# Counted requests only, into the account WAF log group that already exists for waf-bedrock-cloudfront.
+data "aws_cloudwatch_log_group" "bedrock_waf" {
+  count    = var.create_core && var.exchange_geo_block ? 1 : 0
+  provider = aws.use1
+  name     = "aws-waf-logs-bedrock-use1-1"
+}
+
+resource "aws_wafv2_web_acl_logging_configuration" "exchange" {
+  count                   = var.create_core && var.exchange_geo_block ? 1 : 0
+  provider                = aws.use1
+  log_destination_configs = [data.aws_cloudwatch_log_group.bedrock_waf[0].arn]
+  resource_arn            = aws_wafv2_web_acl.exchange[0].arn
+
+  logging_filter {
+    default_behavior = "DROP"
+    filter {
+      behavior    = "KEEP"
+      requirement = "MEETS_ALL"
+      condition {
+        action_condition {
+          action = "COUNT"
+        }
+      }
+    }
+  }
+}
+
+# Same TTLs as the old forwarded_values block. Query string and cookies stay out of the cache key.
+resource "aws_cloudfront_cache_policy" "exchange" {
+  count       = var.create_core ? 1 : 0
+  provider    = aws.use1
+  name        = "${var.account_shortname}-exchange-ui"
+  comment     = "Static exchange UI cache. Geo headers are not part of the key."
+  default_ttl = 600
+  max_ttl     = 1200
+  min_ttl     = 0
+
+  parameters_in_cache_key_and_forwarded_to_origin {
+    cookies_config {
+      cookie_behavior = "none"
+    }
+    headers_config {
+      header_behavior = "none"
+    }
+    query_strings_config {
+      query_string_behavior = "none"
+    }
+    enable_accept_encoding_brotli = true
+    enable_accept_encoding_gzip   = true
+  }
+}
+
+# Makes CloudFront-Viewer-Country available to the viewer-response function
+# without putting the viewer's country in the cache key.
+resource "aws_cloudfront_origin_request_policy" "exchange_geo" {
+  count    = var.create_core ? 1 : 0
+  provider = aws.use1
+  name     = "${var.account_shortname}-exchange-geo"
+  comment = "Viewer country headers for the hpdx_allowed cookie"
+
+  cookies_config {
+    cookie_behavior = "none"
+  }
+  headers_config {
+    header_behavior = "whitelist"
+    headers {
+      items = [
+        "CloudFront-Viewer-Country",
+        "CloudFront-Viewer-Country-Region",
+      ]
+    }
+  }
+  query_strings_config {
+    query_string_behavior = "none"
+  }
+}
+
+resource "aws_cloudfront_function" "exchange_geo" {
+  count    = var.create_core ? 1 : 0
+  provider = aws.use1
+  name     = "${var.account_shortname}-exchange-geo"
+  runtime  = "cloudfront-js-2.0"
+  comment  = "Set hpdx_allowed from the viewer country. 1 allows trading actions."
+  publish  = true
+  code = templatefile("${path.module}/manage/exchange-geo.js.tftpl", {
+    geo_enabled = var.exchange_geo_block
+    countries   = jsonencode(local.exchange_blocked_countries)
+    regions = jsonencode([
+      for pair in local.exchange_blocked_regions : "${pair.country}:${pair.region}"
+    ])
+  })
+}
 
 ################################
 # Apex hold — static page CI must not overwrite

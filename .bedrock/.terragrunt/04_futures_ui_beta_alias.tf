@@ -94,8 +94,9 @@ resource "aws_cloudfront_distribution" "beta_alias" {
     origin_id                = "${var.account_shortname}-${local.s3_cf_origin}-beta"
   }
 
+  # Trading app during hold. At cutover the apex alias is added here; the ACL stays.
   http_version        = "http2and3"
-  web_acl_id          = data.aws_wafv2_web_acl.bedrock_waf_cloudfront.arn
+  web_acl_id          = var.exchange_geo_block ? aws_wafv2_web_acl.exchange[0].arn : data.aws_wafv2_web_acl.bedrock_waf_cloudfront.arn
   retain_on_delete    = false
   enabled             = true
   is_ipv6_enabled     = true
@@ -105,19 +106,19 @@ resource "aws_cloudfront_distribution" "beta_alias" {
   price_class         = "PriceClass_100" # Cheapest tier; this is just an alias hostname
 
   default_cache_behavior {
-    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods   = ["GET", "HEAD"]
-    target_origin_id = "${var.account_shortname}-${local.s3_cf_origin}-beta"
-    forwarded_values {
-      query_string = false
-      cookies {
-        forward = "none"
-      }
+    allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods           = ["GET", "HEAD"]
+    target_origin_id         = "${var.account_shortname}-${local.s3_cf_origin}-beta"
+    cache_policy_id          = aws_cloudfront_cache_policy.exchange[0].id
+    origin_request_policy_id = aws_cloudfront_origin_request_policy.exchange_geo[0].id
+    compress                 = true
+    viewer_protocol_policy   = "redirect-to-https"
+    # TTLs live on the cache policy. Geo headers are on the origin request policy
+    # so they reach the viewer-response function without becoming a cache key.
+    function_association {
+      event_type   = "viewer-response"
+      function_arn = aws_cloudfront_function.exchange_geo[0].arn
     }
-    viewer_protocol_policy = "redirect-to-https"
-    min_ttl                = 0
-    default_ttl            = 600
-    max_ttl                = 1200
   }
 
   restrictions {
@@ -139,6 +140,8 @@ resource "aws_cloudfront_distribution" "beta_alias" {
     response_page_path    = "/index.html"
   }
 
+  # SPA fallback for a missing object. A WAF block is not rewritten.
+  # CloudFront geo_restriction returns a 403 that this rule would turn back into the app.
   custom_error_response {
     error_caching_min_ttl = "300"
     error_code            = "403"
