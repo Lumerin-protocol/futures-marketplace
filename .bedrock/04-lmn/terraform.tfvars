@@ -10,8 +10,9 @@ beta_alias = {
 
 apex_site = "hold"
 
-# Geo block for the trading UI. Attached to the beta distribution, which also
-# receives hashpower.exchange when apex_site flips to "beta".
+# Classify viewers on the beta distribution (the apex joins it at cutover).
+# Counts in the WAF and sets hpdx_allowed to 1 or 0. The app still loads.
+# Do not apply until the UI treats anything except hpdx_allowed=1 as not allowed.
 exchange_geo_block = true
 
 ecs_cluster = {

@@ -33,9 +33,11 @@ variable "apex_site" {
   }
 }
 
-# Off on dev. On for the trading UI (beta distribution during hold; same distribution after the apex moves there).
+# Off on dev: the edge still sets hpdx_allowed=1 so a fail-closed UI stays usable.
+# On for LMN: WAF counts the blocked geos and the edge sets hpdx_allowed=0 for them.
+# The ACL follows the trading-app distribution through the apex cutover.
 variable "exchange_geo_block" {
-  description = "Attach the exchange geo-block Web ACL to the distribution that serves the trading app. Follows that distribution when apex_site changes; does not apply to the hold page."
+  description = "Classify viewers on the trading-app distribution. The WAF counts blocked geos and a viewer-response function sets hpdx_allowed to 1 or 0. Does not apply to the hold page. Dev leaves this off and always receives hpdx_allowed=1."
   type        = bool
   default     = false
 }
