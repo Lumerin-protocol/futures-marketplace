@@ -65,7 +65,7 @@ export const PositionsListWidget = ({
         message = "Price feed is stale — settlement will be possible once the oracle refreshes.";
       } else if (/No open positions/i.test(raw)) {
         message = "Already settled.";
-      } else if (/User rejected|denied/i.test(raw)) {
+      } else       if (/User rejected|denied/i.test(raw)) {
         message = "Transaction rejected.";
       }
       setClaimError({ expirationAt, message });
