@@ -3,6 +3,7 @@ import { styled } from "next-yak";
 import { Router } from "./Router";
 import { AlertModalHost } from "./components/AlertModal";
 import useAnalytics from "./hooks/useAnalytics";
+import { TradingAccessProvider } from "./hooks/useTradingAccess";
 import { tokens } from "./styles/tokens";
 
 // No Web3Provider here on purpose: wagmi/@reown/appkit stays a lazy chunk
@@ -14,8 +15,10 @@ export const App: FC = () => {
   useAnalytics({ loadOn: "idle" });
   return (
     <AppRoot>
-      <Router />
-      <AlertModalHost />
+      <TradingAccessProvider>
+        <Router />
+        <AlertModalHost />
+      </TradingAccessProvider>
     </AppRoot>
   );
 };
